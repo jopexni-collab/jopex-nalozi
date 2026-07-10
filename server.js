@@ -55,12 +55,12 @@ function requireLoginOrApiKey(req, res, next) {
 }
 
 // ─── Javne rute (bez prijave) ─────────────────────────────────────────────
-app.use('/api/auth',   require('./routes/auth'));
-app.use('/api/config', require('./routes/config'));
+app.use('/api/auth',   require('./auth'));
+app.use('/api/config', require('./config'));
 
 // ─── Zaštićene rute (trebaju prijavu ili API ključ) ───────────────────────
-app.use('/api/zaposleni',   requireLoginOrApiKey, require('./routes/zaposleni'));
-app.use('/api/proizvodnja', requireLoginOrApiKey, require('./routes/proizvodnja'));
+app.use('/api/zaposleni',   requireLoginOrApiKey, require('./zaposleni'));
+app.use('/api/proizvodnja', requireLoginOrApiKey, require('./proizvodnja'));
 
 // ─── Statički fajlovi (web aplikacija) ───────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
