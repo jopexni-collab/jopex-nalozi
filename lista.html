@@ -295,7 +295,6 @@ async function popSave(){
   if(!popRow||!popField) return;
   const inp=document.getElementById('pop-inp');
   let val=inp.value;
-  if(inp.type==='checkbox') val=inp.checked;
   if(popField==='gotovo') val=val==='true';
   const body={[popField]:val};
   try{
@@ -304,7 +303,17 @@ async function popSave(){
       body:JSON.stringify(body),
     });
     if(!r.ok) throw new Error();
-    popRow[popField]=val; // lokalno update
+    popRow[popField]=val;
+    // Recalkuliraj broj_dana ako je promijenjen datum završetka
+    if(popField==='planirani_zavrsetak'){
+      if(val){
+        popRow.broj_dana=Math.round((new Date(val)-new Date())/(1000*60*60*24));
+      } else {
+        popRow.broj_dana=null;
+      }
+    }
+    // Ako je gotovo=true, poništi dane
+    if(popField==='gotovo') popRow.broj_dana=val?null:popRow.broj_dana;
     popClose();
     render();
   }catch(e){alert('Greška pri čuvanju.');}
