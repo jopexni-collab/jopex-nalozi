@@ -5,7 +5,7 @@ const path       = require('path');
 const session    = require('express-session');
 const pgSession  = require('connect-pg-simple')(session);
 const pool       = require('./db');
-const requireLogin = require('./requireLogin');
+const requireLogin = require('./middleware/requireLogin');
 
 const app = express();
 
@@ -40,18 +40,30 @@ app.use(session({
   },
 }));
 
-// ─── Javne rute (bez prijave) ─────────────────────────────────────────────
-app.use('/api/auth',   require('./auth'));
-// /api/config je javna da JoPeX HTML može povući materijale/kupce/obrade
-// i bez prijave (offline-first: keširaj pa koristi kad nema interneta)
-app.use('/api/config', require('./config'));
+// ─── Middleware koji dozvoljava pristup sa API ključem ILI sesijom ────────
+function requireLoginOrApiKey(req, res, next) {
+  // Sesija (web app korisnici)
+  if (req.session && req.session.user) return next();
+  // API ključ (JoPeX HTML lokalni fajl)
+  const apiKey = req.headers['x-api-key'] || req.query.api_key;
+  if (apiKey && apiKey === process.env.API_KEY) {
+    req.session = req.session || {};
+    req.session.user = { rola: 'admin', ime_prezime: 'JoPeX' };
+    return next();
+  }
+  return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+}
 
-// ─── Zaštićene rute (trebaju prijavu) ────────────────────────────────────
-app.use('/api/zaposleni',   requireLogin, require('./zaposleni'));
-app.use('/api/proizvodnja', requireLogin, require('./proizvodnja'));
+// ─── Javne rute (bez prijave) ─────────────────────────────────────────────
+app.use('/api/auth',   require('./routes/auth'));
+app.use('/api/config', require('./routes/config'));
+
+// ─── Zaštićene rute (trebaju prijavu ili API ključ) ───────────────────────
+app.use('/api/zaposleni',   requireLoginOrApiKey, require('./routes/zaposleni'));
+app.use('/api/proizvodnja', requireLoginOrApiKey, require('./routes/proizvodnja'));
 
 // ─── Statički fajlovi (web aplikacija) ───────────────────────────────────
-app.use(express.static(__dirname));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Zdravstvena provjera - koristi se za monitoring i za JoPeX da provjeri
 // da li je server dostupan prije slanja naloga
