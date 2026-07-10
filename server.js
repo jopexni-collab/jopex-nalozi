@@ -5,7 +5,7 @@ const path       = require('path');
 const session    = require('express-session');
 const pgSession  = require('connect-pg-simple')(session);
 const pool       = require('./db');
-const requireLogin = require('./middleware/requireLogin');
+const requireLogin = require('./requireLogin');
 
 const app = express();
 
