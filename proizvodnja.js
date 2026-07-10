@@ -1,7 +1,7 @@
 // routes/proizvodnja.js
 const express = require('express');
 const router = express.Router();
-const pool = require('./db');
+const pool = require('../db');
 
 // Finansijske kolone - vide ih samo admini
 const ADMIN_COLS = `
@@ -55,7 +55,7 @@ router.get('/:r_br', async (req, res) => {
 // Poziva se i iz web forme i iz JoPeX HTML (usvajanje ponude)
 router.post('/', async (req, res) => {
   const {
-    zadatak, prioritet, ugovorio_id, narucilac, materijal, status,
+    zadatak, prioritet, ugovorio_id, ugovorio: ugovorioIzReq, narucilac, materijal, status,
     pocetak, planirani_zavrsetak, napomena, link_skica, link_ponuda,
     ugovorena_suma, avans,
   } = req.body || {};
@@ -64,17 +64,14 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: '"zadatak" je obavezno polje.' });
 
   try {
-    // Validacija ugovorio_id (samo na serveru)
-    let ugovorioIme = null;
+    let ugovorioIme = ugovorioIzReq || null;
     if (ugovorio_id) {
       const emp = await pool.query(
         `SELECT ime_prezime FROM zaposleni
-         WHERE id = $1 AND moze_ugovarati = true AND aktivan = true`,
+         WHERE id = $1 AND aktivan = true`,
         [ugovorio_id]
       );
-      if (!emp.rows.length)
-        return res.status(400).json({ error: 'Osoba ne može biti "Ugovorio".' });
-      ugovorioIme = emp.rows[0].ime_prezime;
+      if (emp.rows.length) ugovorioIme = emp.rows[0].ime_prezime;
     }
 
     const r = await pool.query(
