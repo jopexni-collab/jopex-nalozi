@@ -5,259 +5,314 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Radni nalozi – JoPeX</title>
 <style>
-:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f3f5f8;--border:#dde3ea;--red:#c0392b;--green:#1f8a4c;}
-*{box-sizing:border-box;}
-body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);}
-header{background:var(--blue);color:#fff;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;}
-header h1{margin:0;font-size:17px;}
-header nav{display:flex;gap:12px;align-items:center;}
-header nav a{color:#fff;text-decoration:none;font-size:12.5px;opacity:.9;
-  border:1px solid rgba(255,255,255,.4);padding:5px 11px;border-radius:6px;}
-header nav a:hover{opacity:1;background:rgba(255,255,255,.12);}
-#who{font-size:12.5px;opacity:.8;}
-main{max-width:1600px;margin:18px auto;padding:0 14px;}
-.toolbar{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center;}
-.toolbar input,.toolbar select{font:inherit;font-size:13px;padding:7px 10px;
-  border:1px solid var(--border);border-radius:6px;background:#fff;}
-.toolbar input{min-width:220px;}
-#stat{font-size:12px;color:#6b7a8d;margin-left:auto;}
-.wrap{max-height:78vh;overflow:auto;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
-table{width:100%;border-collapse:collapse;background:#fff;font-size:12.5px;}
-th{background:#eef2f7;color:var(--dark);text-align:left;padding:9px 10px;
-   font-weight:700;white-space:nowrap;position:sticky;top:0;z-index:1;}
-td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle;}
-tr:hover td{background:#f8fafc;}
-td.r{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}
-td.note{max-width:240px;white-space:normal;color:#444;font-size:12px;}
-/* Status badge - normalni prikaz */
-.badge{display:inline-block;padding:3px 9px;border-radius:11px;font-size:11px;font-weight:600;white-space:nowrap;}
-.s1{background:#eceff3;color:#5a6577;}
-.s2{background:#dceafc;color:#1a5fa8;}
-.s3{background:#fef0d8;color:#a86a00;}
-.s4{background:#dcf3e3;color:#1f8a4c;}
-.s5{background:#fbdfdf;color:#b32a2a;}
-/* Status celija - klikabilna */
-td.status-cell{cursor:pointer;position:relative;}
-td.status-cell:hover .badge{outline:2px solid var(--blue);outline-offset:2px;}
-td.status-cell .hint{font-size:9px;color:#aaa;display:block;margin-top:2px;}
-/* Inline status select - pojavljuje se na klik */
-.status-select{
-  font:inherit;font-size:12px;padding:3px 6px;
-  border:2px solid var(--blue);border-radius:8px;
-  background:#fff;cursor:pointer;outline:none;
-  box-shadow:0 2px 8px rgba(26,95,168,.2);
+:root{
+  --blue:#1a5fa8;--dark:#134a85;--bg:#f3f5f8;--border:#d0d7de;
+  --red:#c0392b;--green:#1f8a4c;--orange:#e67e22;--yellow:#f39c12;
 }
-.saving{opacity:.5;pointer-events:none;}
-.saved-flash{animation:flash .6s ease;}
-@keyframes flash{0%{background:#dcf3e3;}100%{background:transparent;}}
-.late{color:var(--red);font-weight:700;}
-.empty{padding:40px;text-align:center;color:#6b7a8d;}
-a.lk{color:var(--blue);font-size:11.5px;text-decoration:none;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);font-size:12.5px;}
+
+/* HEADER */
+header{background:var(--blue);color:#fff;padding:11px 16px;display:flex;align-items:center;justify-content:space-between;}
+header h1{font-size:16px;font-weight:700;}
+header nav{display:flex;gap:10px;align-items:center;}
+header nav a{color:#fff;text-decoration:none;font-size:12px;opacity:.9;border:1px solid rgba(255,255,255,.4);padding:4px 10px;border-radius:5px;}
+header nav a:hover{opacity:1;background:rgba(255,255,255,.15);}
+#who{font-size:12px;opacity:.75;}
+
+/* TOOLBAR */
+.toolbar{display:flex;gap:8px;padding:8px 12px;background:#fff;border-bottom:1px solid var(--border);flex-wrap:wrap;align-items:center;}
+.toolbar input[type=text]{font:inherit;font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;min-width:200px;}
+#stat{font-size:11px;color:#6b7a8d;margin-left:auto;}
+.btn-reload{font:inherit;font-size:12px;padding:5px 10px;background:var(--blue);color:#fff;border:none;border-radius:4px;cursor:pointer;}
+.btn-reload:hover{background:var(--dark);}
+
+/* TABLE WRAPPER */
+.wrap{overflow:auto;height:calc(100vh - 100px);}
+table{border-collapse:collapse;width:max-content;min-width:100%;}
+
+/* HEADER ROW */
+thead th{
+  background:#1f3864;color:#fff;font-weight:600;font-size:12px;
+  padding:0;white-space:nowrap;position:sticky;top:0;z-index:10;
+  border-right:1px solid #2d4a7a;
+}
+.th-inner{
+  display:flex;flex-direction:column;
+  min-width:80px;
+}
+.th-label{padding:6px 8px;border-bottom:1px solid #2d4a7a;}
+.th-filter{padding:3px 4px;background:#162a52;}
+.th-filter select,.th-filter input{
+  width:100%;font:inherit;font-size:11px;padding:3px 4px;
+  background:#1e3566;color:#fff;border:1px solid #3a5590;border-radius:3px;
+}
+.th-filter select option{background:#1a2a4a;color:#fff;}
+
+/* DATA ROWS */
+tbody tr:hover td{background:#e8f0fe;}
+tbody tr:nth-child(even) td{background:#f8f9fc;}
+tbody tr:nth-child(even):hover td{background:#e8f0fe;}
+td{
+  padding:5px 8px;border-bottom:1px solid #e0e4ea;
+  border-right:1px solid #e8eaed;white-space:nowrap;
+  vertical-align:middle;
+}
+td.note{max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+td.num{text-align:right;font-variant-numeric:tabular-nums;}
+td.center{text-align:center;}
+
+/* CHIPS - Prioritet */
+.chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap;}
+.p-hitno{background:#fce8e6;color:#c0392b;border:1px solid #f4b8b4;}
+.p-normal{background:#e6f4ea;color:#1f8a4c;border:1px solid #b7dfbf;}
+.p-zakazano{background:#fef3e2;color:#e67e22;border:1px solid #f9d898;}
+
+/* CHIPS - Status */
+.s-nije{background:#fff9c4;color:#856404;border:1px solid #ffe066;}
+.s-radu{background:#dce6fc;color:#1a5fa8;border:1px solid #a8c0f0;}
+.s-kasni{background:#fce8e6;color:#c0392b;border:1px solid #f4b8b4;}
+.s-zavrseno{background:#e6f4ea;color:#1f8a4c;border:1px solid #b7dfbf;}
+.s-ceka{background:#e0f2f1;color:#00796b;border:1px solid #80cbc4;}
+.s-otkazano{background:#f3e5f5;color:#7b1fa2;border:1px solid #ce93d8;}
+.s-zakazano{background:#fef3e2;color:#e67e22;border:1px solid #f9d898;}
+
+/* CHIPS - Reklamacija */
+.r-da{background:#fce8e6;color:#c0392b;border:1px solid #f4b8b4;}
+.r-ne{background:#e6f4ea;color:#1f8a4c;border:1px solid #b7dfbf;}
+
+/* DANA - uslovno formatiranje */
+.dani-kasni{background:#fce8e6;color:#c0392b;font-weight:700;text-align:center;}
+.dani-blizu{background:#fff9c4;color:#856404;font-weight:700;text-align:center;}
+.dani-ok{background:#e6f4ea;color:#1f8a4c;font-weight:700;text-align:center;}
+.dani-prazno{text-align:center;color:#aaa;}
+
+/* GOTOVO checkbox */
+.gotovo-da{color:#1f8a4c;font-size:16px;text-align:center;}
+.gotovo-ne{color:#ccc;font-size:16px;text-align:center;}
+
+/* STATUS CELL - inline edit */
+td.status-cell{cursor:pointer;}
+td.status-cell:hover .chip{outline:2px solid var(--blue);outline-offset:1px;}
+.status-select{font:inherit;font-size:11px;padding:2px 4px;border:2px solid var(--blue);border-radius:6px;background:#fff;}
+
+/* LINK */
+a.lk{color:var(--blue);text-decoration:none;font-size:11px;}
 a.lk:hover{text-decoration:underline;}
+
+/* EMPTY */
+.empty{padding:40px;text-align:center;color:#6b7a8d;font-size:14px;}
 </style>
 </head>
 <body>
 <header>
-  <h1>📊 Radni nalozi</h1>
+  <h1>📋 Radni nalozi – JoPeX</h1>
   <nav>
     <span id="who"></span>
     <a href="index.html">+ Novi nalog</a>
     <a href="#" id="logout">Odjava</a>
   </nav>
 </header>
-<main>
-  <div class="toolbar">
-    <input type="text" id="search" placeholder="Pretraži (naručilac, napomena, materijal...)">
-    <select id="fStatus">
-      <option value="">Svi statusi</option>
-      <option>Nije Započeto</option><option>Zakazano</option><option>U radu</option>
-      <option>Čeka isporuku</option><option>Završeno</option><option>Otkazano</option>
-    </select>
-    <span id="stat"></span>
-  </div>
-  <div class="wrap">
-    <table>
-      <thead id="thead"></thead>
-      <tbody id="tbody"><tr><td colspan="20" class="empty">Učitavanje...</td></tr></tbody>
-    </table>
-  </div>
-</main>
+
+<div class="toolbar">
+  <input type="text" id="search" placeholder="🔍 Pretraži (naručilac, napomena, materijal...)">
+  <button class="btn-reload" onclick="load()">↺ Osvježi</button>
+  <span id="stat"></span>
+</div>
+
+<div class="wrap">
+<table>
+  <thead>
+    <tr>
+      <th><div class="th-inner"><div class="th-label">R.Br.</div><div class="th-filter"><input type="text" id="f-rbr" placeholder="filter..." oninput="render()"></div></div></th>
+      <th><div class="th-inner"><div class="th-label">Zadatak</div><div class="th-filter"><select id="f-zadatak" onchange="render()"><option value="">Sve</option><option>Kuhinjska ploča</option><option>Klupice, Step</option><option>Sto</option><option>Na Mjeru</option><option>Usluge WJ</option><option>Usluge Mašina</option></select></div></div></th>
+      <th><div class="th-inner"><div class="th-label">Prioritet</div><div class="th-filter"><select id="f-prioritet" onchange="render()"><option value="">Sve</option><option>Hitno</option><option>Normal</option><option>Zakazano</option></select></div></div></th>
+      <th><div class="th-inner"><div class="th-label">Ugovorio</div><div class="th-filter"><input type="text" id="f-ugovorio" placeholder="filter..." oninput="render()"></div></div></th>
+      <th><div class="th-inner"><div class="th-label">Naručilac</div><div class="th-filter"><input type="text" id="f-narucilac" placeholder="filter..." oninput="render()"></div></div></th>
+      <th><div class="th-inner"><div class="th-label">Materijal</div><div class="th-filter"><select id="f-materijal" onchange="render()"><option value="">Sve</option><option>Granit</option><option>Mermer</option><option>Tašto</option><option>Kvarc</option><option>Vještački</option><option>Keramika</option><option>Kombinovano</option></select></div></div></th>
+      <th><div class="th-inner"><div class="th-label">Status</div><div class="th-filter"><select id="f-status" onchange="render()"><option value="">Sve</option><option>Nije Započeto</option><option>Zakazano</option><option>U radu</option><option>Čeka isporuku</option><option>Završeno</option><option>Kasni</option><option>Otkazano</option></select></div></div></th>
+      <th><div class="th-inner"><div class="th-label">Početak</div><div class="th-filter"><input type="text" id="f-pocetak" placeholder="filter..." oninput="render()"></div></div></th>
+      <th><div class="th-inner"><div class="th-label">Plan. završetak</div><div class="th-filter"><input type="text" id="f-zavrsetak" placeholder="filter..." oninput="render()"></div></div></th>
+      <th><div class="th-inner" style="min-width:60px"><div class="th-label">Dana</div><div class="th-filter"><input type="text" id="f-dana" placeholder="npr. <0" oninput="render()"></div></div></th>
+      <th><div class="th-inner" style="min-width:50px"><div class="th-label">Gotovo</div><div class="th-filter"><select id="f-gotovo" onchange="render()"><option value="">Sve</option><option value="da">✓ Da</option><option value="ne">✗ Ne</option></select></div></div></th>
+      <th><div class="th-inner"><div class="th-label">Reklamacija</div><div class="th-filter"><select id="f-rek" onchange="render()"><option value="">Sve</option><option>DA</option><option>NE</option></select></div></div></th>
+      <th><div class="th-inner" style="min-width:200px"><div class="th-label">Napomena</div><div class="th-filter"><input type="text" id="f-napomena" placeholder="filter..." oninput="render()"></div></div></th>
+      <th><div class="th-inner"><div class="th-label">Skica</div><div class="th-filter"></div></div></th>
+      <th><div class="th-inner"><div class="th-label">Ponuda</div><div class="th-filter"></div></div></th>
+      <th id="th-fin-sum" style="display:none"><div class="th-inner"><div class="th-label">Ugovoreno</div><div class="th-filter"></div></div></th>
+      <th id="th-fin-av" style="display:none"><div class="th-inner"><div class="th-label">Avans</div><div class="th-filter"></div></div></th>
+      <th id="th-fin-nal" style="display:none"><div class="th-inner"><div class="th-label">Za naplatu</div><div class="th-filter"></div></div></th>
+    </tr>
+  </thead>
+  <tbody id="tbody">
+    <tr><td colspan="18" class="empty">Učitavanje...</td></tr>
+  </tbody>
+</table>
+</div>
 
 <script>
 const API = '';
-const STATUSI = ['Nije Započeto','Zakazano','U radu','Čeka isporuku','Završeno','Otkazano'];
+const STATUSI = ['Nije Započeto','Zakazano','U radu','Čeka isporuku','Završeno','Kasni','Otkazano'];
 let all = [], isAdmin = false;
 
-function sc(s){
-  return {'Nije Započeto':'s1','Zakazano':'s2','U radu':'s3',
-          'Čeka isporuku':'s3','Završeno':'s4','Otkazano':'s5'}[s]||'s1';
+function chipPrioritet(p){
+  const m={'Hitno':'p-hitno','Normal':'p-normal','Zakazano':'p-zakazano'};
+  return `<span class="chip ${m[p]||'p-normal'}">${esc(p||'Normal')}</span>`;
+}
+function chipStatus(s){
+  const m={
+    'Nije Započeto':'s-nije','U radu':'s-radu','Kasni':'s-kasni',
+    'Završeno':'s-zavrseno','Čeka isporuku':'s-ceka','Otkazano':'s-otkazano',
+    'Zakazano':'s-zakazano'
+  };
+  return `<span class="chip ${m[s]||'s-nije'}">${esc(s||'Nije Započeto')}</span>`;
+}
+function chipRek(r){
+  if(!r) return '';
+  return r==='DA'
+    ? `<span class="chip r-da">DA</span>`
+    : `<span class="chip r-ne">NE</span>`;
+}
+function daniCell(r){
+  if(r.gotovo) return `<td class="dani-prazno">—</td>`;
+  if(r.broj_dana==null||r.broj_dana==='') return `<td class="dani-prazno"></td>`;
+  const d=parseInt(r.broj_dana);
+  if(d<0) return `<td class="dani-kasni">${d}</td>`;
+  if(d<=5) return `<td class="dani-blizu">${d}</td>`;
+  return `<td class="dani-ok">${d}</td>`;
 }
 function fd(d){ if(!d) return ''; return new Date(d).toLocaleDateString('sr-Latn-BA',{day:'2-digit',month:'2-digit',year:'2-digit'}); }
 function fm(n){ return (parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function esc(s){ return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-function lk(u){ return u?`<a class="lk" href="${esc(u)}" target="_blank" rel="noopener">otvori ↗</a>`:''; }
+function lk(u){ return u?`<a class="lk" href="${esc(u)}" target="_blank" rel="noopener">↗</a>`:''; }
+function gv(id){ return (document.getElementById(id)||{}).value||''; }
 
-// ─── Inline status izmjena ────────────────────────────────────────────────
-// Klik na status ćeliju → badge se zamijeni select dropdownom
-// Promjena u dropdownu → PATCH na server → badge se vrati sa novim statusom
-function makeStatusCell(r) {
-  return `<td class="status-cell" data-rbr="${r.r_br}" data-status="${esc(r.status)}">
-    <span class="badge ${sc(r.status)}">${esc(r.status)}</span>
-    <span class="hint">klikni za promjenu</span>
-  </td>`;
+function filterRows(){
+  const q=gv('search').toLowerCase();
+  const fRbr=gv('f-rbr').toLowerCase();
+  const fZad=gv('f-zadatak');
+  const fPri=gv('f-prioritet');
+  const fUg=gv('f-ugovorio').toLowerCase();
+  const fNar=gv('f-narucilac').toLowerCase();
+  const fMat=gv('f-materijal');
+  const fSt=gv('f-status');
+  const fPoc=gv('f-pocetak').toLowerCase();
+  const fZav=gv('f-zavrsetak').toLowerCase();
+  const fGot=gv('f-gotovo');
+  const fRek=gv('f-rek');
+  const fNap=gv('f-napomena').toLowerCase();
+
+  return all.filter(r=>{
+    if(q&&![r.narucilac,r.napomena,r.materijal,r.ugovorio,r.zadatak].some(f=>f&&String(f).toLowerCase().includes(q))) return false;
+    if(fRbr&&!String(r.r_br).includes(fRbr)) return false;
+    if(fZad&&r.zadatak!==fZad) return false;
+    if(fPri&&r.prioritet!==fPri) return false;
+    if(fUg&&!(r.ugovorio||'').toLowerCase().includes(fUg)) return false;
+    if(fNar&&!(r.narucilac||'').toLowerCase().includes(fNar)) return false;
+    if(fMat&&r.materijal!==fMat) return false;
+    if(fSt&&r.status!==fSt) return false;
+    if(fPoc&&!fd(r.pocetak).includes(fPoc)) return false;
+    if(fZav&&!fd(r.planirani_zavrsetak).includes(fZav)) return false;
+    if(fGot==='da'&&!r.gotovo) return false;
+    if(fGot==='ne'&&r.gotovo) return false;
+    if(fRek&&r.reklamacija_dodatni_rad!==fRek) return false;
+    if(fNap&&!(r.napomena||'').toLowerCase().includes(fNap)) return false;
+    return true;
+  });
 }
 
-async function changeStatus(td, rBr, newStatus) {
+function makeStatusCell(r){
+  return `<td class="status-cell" data-rbr="${r.r_br}" data-status="${esc(r.status)}">${chipStatus(r.status)}</td>`;
+}
+
+async function changeStatus(td, rBr, newStatus){
   td.classList.add('saving');
-  try {
-    const res = await fetch(`${API}/api/proizvodnja/${rBr}`, {
-      method: 'PATCH',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({status: newStatus}),
+  try{
+    const res=await fetch(`${API}/api/proizvodnja/${rBr}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({status:newStatus}),
     });
-    if (!res.ok) throw new Error('Greška');
-    // Ažuriraj lokalne podatke
-    const row = all.find(r => r.r_br == rBr);
-    if (row) row.status = newStatus;
-    // Vrati badge sa novim statusom
-    td.dataset.status = newStatus;
-    td.innerHTML = `<span class="badge ${sc(newStatus)}">${esc(newStatus)}</span>
-      <span class="hint">klikni za promjenu</span>`;
-    td.classList.remove('saving');
-    td.classList.add('saved-flash');
-    // Ažuriraj filter stat
-    renderStat();
-  } catch(err) {
-    td.classList.remove('saving');
-    td.innerHTML = `<span class="badge ${sc(td.dataset.status)}">${esc(td.dataset.status)}</span>
-      <span class="hint" style="color:var(--red)">greška, pokušaj ponovo</span>`;
+    if(!res.ok) throw new Error();
+    const row=all.find(r=>r.r_br==rBr);
+    if(row) row.status=newStatus;
+    td.dataset.status=newStatus;
+    td.innerHTML=chipStatus(newStatus);
+  }catch(e){
+    td.innerHTML=chipStatus(td.dataset.status);
   }
 }
 
-// Delegirani event listener na tbody - efikasnije od listenera na svakoj ćeliji
-document.getElementById('tbody').addEventListener('click', function(e) {
-  const td = e.target.closest('td.status-cell');
-  if (!td) return;
-  // Ako je već otvoren select na ovoj ćeliji, ignoriši
-  if (td.querySelector('.status-select')) return;
-
-  const currentStatus = td.dataset.status;
-  const rBr = td.dataset.rbr;
-
-  // Zamijeni sadržaj sa select dropdownom
-  const opts = STATUSI.map(s =>
-    `<option value="${s}"${s===currentStatus?' selected':''}>${s}</option>`
-  ).join('');
-  td.innerHTML = `<select class="status-select" autofocus>
-    ${opts}
-  </select>`;
-
-  const sel = td.querySelector('.status-select');
+document.getElementById('tbody').addEventListener('click',function(e){
+  const td=e.target.closest('td.status-cell');
+  if(!td||td.querySelector('.status-select')) return;
+  const cur=td.dataset.status, rBr=td.dataset.rbr;
+  td.innerHTML=`<select class="status-select">${STATUSI.map(s=>`<option${s===cur?' selected':''}>${s}</option>`).join('')}</select>`;
+  const sel=td.querySelector('.status-select');
   sel.focus();
-
-  // Promjena vrijednosti → sačuvaj
-  sel.addEventListener('change', function() {
-    const newStatus = sel.value;
-    changeStatus(td, rBr, newStatus);
-  });
-
-  // Klik van dropdown-a → zatvori bez čuvanja
-  sel.addEventListener('blur', function() {
-    // Malo kašnjenje da change event može proći ako je izabrano
-    setTimeout(() => {
-      if (td.querySelector('.status-select')) {
-        td.innerHTML = `<span class="badge ${sc(currentStatus)}">${esc(currentStatus)}</span>
-          <span class="hint">klikni za promjenu</span>`;
-      }
-    }, 200);
-  });
+  sel.addEventListener('change',()=>changeStatus(td,rBr,sel.value));
+  sel.addEventListener('blur',()=>setTimeout(()=>{if(td.querySelector('.status-select'))td.innerHTML=chipStatus(cur);},200));
 });
 
-function renderStat() {
-  const q  = document.getElementById('search').value.trim().toLowerCase();
-  const sf = document.getElementById('fStatus').value;
-  let rows = all;
-  if (sf) rows = rows.filter(r => r.status === sf);
-  if (q)  rows = rows.filter(r =>
-    [r.narucilac,r.napomena,r.materijal,r.ugovorio,r.zadatak]
-      .some(f => f && String(f).toLowerCase().includes(q))
-  );
-  document.getElementById('stat').textContent = `${rows.length} od ${all.length} naloga`;
-  return rows;
-}
-
-function buildHeader() {
-  const base = ['R.Br.','Zadatak','Prioritet','Ugovorio','Naručilac','Materijal',
-                 'Status','Početak','Plan. završetak','Dana','Napomena','Skica','Ponuda'];
-  const fin  = ['Ugovoreno','Avans','Za naplatu'];
-  const cols = isAdmin ? [...base, ...fin] : base;
-  document.getElementById('thead').innerHTML =
-    '<tr>' + cols.map(c=>`<th>${c}</th>`).join('') + '</tr>';
-}
-
-function render() {
-  const rows = renderStat();
-
-  if (!rows.length) {
-    document.getElementById('tbody').innerHTML =
-      '<tr><td colspan="20" class="empty">Nema naloga.</td></tr>';
+function render(){
+  const rows=filterRows();
+  document.getElementById('stat').textContent=`${rows.length} od ${all.length} naloga`;
+  if(!rows.length){
+    document.getElementById('tbody').innerHTML=`<tr><td colspan="18" class="empty">Nema naloga.</td></tr>`;
     return;
   }
-
-  document.getElementById('tbody').innerHTML = rows.map(r => {
-    const base = `
-      <td>${r.r_br}</td>
-      <td>${esc(r.zadatak)}</td>
-      <td>${esc(r.prioritet)}</td>
-      <td>${esc(r.ugovorio)}</td>
-      <td>${esc(r.narucilac)}</td>
-      <td>${esc(r.materijal)}</td>
-      ${makeStatusCell(r)}
-      <td>${fd(r.pocetak)}</td>
-      <td>${fd(r.planirani_zavrsetak)}</td>
-      <td class="${r.broj_dana!=null&&r.broj_dana<0?'late':''}">${r.broj_dana??''}</td>
-      <td class="note">${esc(r.napomena)}</td>
-      <td>${lk(r.link_skica)}</td>
-      <td>${lk(r.link_ponuda)}</td>`;
-    const fin = isAdmin ? `
-      <td class="r">${fm(r.ugovorena_suma)}</td>
-      <td class="r">${fm(r.avans)}</td>
-      <td class="r">${fm(r.za_naplatu)}</td>` : '';
-    return `<tr>${base}${fin}</tr>`;
-  }).join('');
+  document.getElementById('tbody').innerHTML=rows.map(r=>`<tr>
+    <td class="num">${r.r_br}</td>
+    <td>${esc(r.zadatak)}</td>
+    <td>${chipPrioritet(r.prioritet)}</td>
+    <td>${esc(r.ugovorio)}</td>
+    <td>${esc(r.narucilac)}</td>
+    <td>${esc(r.materijal)}</td>
+    ${makeStatusCell(r)}
+    <td>${fd(r.pocetak)}</td>
+    <td>${fd(r.planirani_zavrsetak)}</td>
+    ${daniCell(r)}
+    <td class="center">${r.gotovo?'<span class="gotovo-da">✓</span>':'<span class="gotovo-ne">○</span>'}</td>
+    <td class="center">${chipRek(r.reklamacija_dodatni_rad)}</td>
+    <td class="note" title="${esc(r.napomena)}">${esc(r.napomena)}</td>
+    <td class="center">${lk(r.link_skica)}</td>
+    <td class="center">${lk(r.link_ponuda)}</td>
+    ${isAdmin?`<td class="num">${fm(r.ugovorena_suma)}</td><td class="num">${fm(r.avans)}</td><td class="num">${fm(r.za_naplatu)}</td>`:''}
+  </tr>`).join('');
 }
 
-async function checkAuth() {
-  try {
-    const r = await fetch(API + '/api/auth/me');
-    if (!r.ok) { location.href = 'login.html'; return; }
-    const u = await r.json();
-    isAdmin = u.rola === 'admin';
-    document.getElementById('who').textContent = '👤 ' + u.ime_prezime;
-    buildHeader();
+async function checkAuth(){
+  try{
+    const r=await fetch(API+'/api/auth/me');
+    if(!r.ok){location.href='login.html';return;}
+    const u=await r.json();
+    isAdmin=u.rola==='admin';
+    document.getElementById('who').textContent='👤 '+u.ime_prezime;
+    if(isAdmin){
+      document.getElementById('th-fin-sum').style.display='';
+      document.getElementById('th-fin-av').style.display='';
+      document.getElementById('th-fin-nal').style.display='';
+    }
     load();
-  } catch { location.href = 'login.html'; }
+  }catch{location.href='login.html';}
 }
 
-async function load() {
-  try {
-    const r = await fetch(API + '/api/proizvodnja');
-    if (!r.ok) { if(r.status===401){location.href='login.html';return;} throw new Error(); }
-    all = await r.json();
+async function load(){
+  try{
+    const r=await fetch(API+'/api/proizvodnja');
+    if(!r.ok){if(r.status===401){location.href='login.html';return;}throw new Error();}
+    all=await r.json();
     render();
-  } catch {
-    document.getElementById('tbody').innerHTML =
-      '<tr><td colspan="20" class="empty">Greška pri učitavanju.</td></tr>';
+  }catch{
+    document.getElementById('tbody').innerHTML=`<tr><td colspan="18" class="empty">Greška pri učitavanju.</td></tr>`;
   }
 }
 
-document.getElementById('logout').onclick = async e => {
+document.getElementById('logout').onclick=async e=>{
   e.preventDefault();
-  await fetch(API + '/api/auth/logout', {method:'POST'});
-  location.href = 'login.html';
+  await fetch(API+'/api/auth/logout',{method:'POST'});
+  location.href='login.html';
 };
-document.getElementById('search').addEventListener('input', render);
-document.getElementById('fStatus').addEventListener('change', render);
+document.getElementById('search').addEventListener('input',render);
 
 checkAuth();
 </script>
