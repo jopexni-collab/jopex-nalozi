@@ -1,7 +1,7 @@
 // routes/proizvodnja.js
 const express = require('express');
 const router = express.Router();
-const pool = require('../db');
+const pool = require('./db');
 
 // Finansijske kolone - vide ih samo admini
 const ADMIN_COLS = `
