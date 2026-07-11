@@ -53,6 +53,7 @@ td{
   white-space:normal;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;
   cursor:pointer;word-break:break-word;
 }
+td.locked{cursor:default;}
 td.num{text-align:right;white-space:nowrap;}
 td.center{text-align:center;white-space:nowrap;}
 
@@ -138,7 +139,17 @@ const PRIORITETI=['Normal','Hitno','Zakazano'];
 const ZADACI=['Kuhinjska ploča','Klupice, Step','Sto','Na Mjeru','Usluge WJ','Usluge Mašina'];
 const MATERIJALI=['Granit','Mermer','Tašto','Kvarc','Vještački','Keramika','Kombinovano','Obrada na mašini'];
 const REKLAMACIJE=['','NE','DA'];
-let all=[], isAdmin=false;
+let all=[], isAdmin=false, trenutniUser=null;
+
+function mozeEditovati(field){
+  if(!trenutniUser) return false;
+  if(isAdmin) return true;
+  const finPolja=['ugovorena_suma','avans','za_naplatu','naplata_detalji'];
+  if(finPolja.includes(field)) return false;
+  const statusPolja=['status','gotovo','reklamacija_dodatni_rad','nova_procjena'];
+  if(statusPolja.includes(field)) return trenutniUser.izmjena_statusa||false;
+  return trenutniUser.izmjena_naloga||false;
+}
 let popRow=null, popField=null, popTd=null;
 
 // ─── CHIPS ───────────────────────────────────────────────────────────────
@@ -193,7 +204,7 @@ function getCols(){
     {k:'ugovorio',l:'Ugovorio',w:110,filter:'text',render:r=>`<td>${esc(r.ugovorio)}</td>`,edit:{type:'text',field:'ugovorio',label:'Ugovorio'}},
     {k:'narucilac',l:'Naručilac',w:130,filter:'text',render:r=>`<td>${esc(r.narucilac)}</td>`,edit:{type:'text',field:'narucilac',label:'Naručilac'}},
     {k:'status',l:'Status',w:120,filter:'sel',opts:STATUSI,render:r=>`<td>${chipS(r.status)}</td>`,edit:{type:'select',opts:STATUSI,field:'status'}},
-    {k:'pocetak',l:'Ugovoreno',w:90,filter:'sel',opts:['Danas','Ova sedmica','Ovaj mjesec','Ova godina','Prošli mjesec','Prošla godina','Custom...'],render:r=>`<td>${fd(r.pocetak)}</td>`,edit:{type:'date',field:'pocetak',label:'Ugovoreno (datum)'}},
+    {k:'pocetak',l:'Ugovoreno',w:90,filter:null,render:r=>`<td>${fd(r.pocetak)}</td>`,edit:{type:'date',field:'pocetak',label:'Ugovoreno (datum)'}},
     {k:'planirani_zavrsetak',l:'Plan. završetak',w:110,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>`<td class="${zavrsClass(r)}">${fd(r.planirani_zavrsetak)}</td>`,edit:{type:'date',field:'planirani_zavrsetak',label:'Plan. završetak'}},
     {k:'broj_dana',l:'Dana',w:70,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>daniC(r),edit:null},
     {k:'nova_procjena',l:'Razlog kašnjenja',w:180,filter:'text',render:r=>`<td class="note" title="${esc(r.nova_procjena)}">${esc(r.nova_procjena)||''}</td>`,edit:{type:'textarea',field:'nova_procjena',label:'Razlog kašnjenja'}},
@@ -263,8 +274,37 @@ function initResize(){
 function filterRows(){
   const q=gv('search').toLowerCase();
   const cols=getCols();
+  const fPocetak=gv('f-pocetak');
   return all.filter(r=>{
     if(q&&![r.narucilac,r.napomena,r.materijal,r.ugovorio,r.zadatak].some(f=>f&&String(f).toLowerCase().includes(q))) return false;
+
+    // Filter za Ugovoreno (pocetak) - period
+    if(fPocetak){
+      if(!r.pocetak) return false;
+      const d=new Date(r.pocetak.split('T')[0]);
+      const danas=new Date(); danas.setHours(0,0,0,0);
+      if(fPocetak==='Danas'){
+        if(d.toDateString()!==danas.toDateString()) return false;
+      } else if(fPocetak==='Ova sedmica'){
+        const pon=new Date(danas); pon.setDate(danas.getDate()-((danas.getDay()+6)%7));
+        const ned=new Date(pon); ned.setDate(pon.getDate()+6);
+        if(d<pon||d>ned) return false;
+      } else if(fPocetak==='Ovaj mjesec'){
+        if(d.getMonth()!==danas.getMonth()||d.getFullYear()!==danas.getFullYear()) return false;
+      } else if(fPocetak==='Ova godina'){
+        if(d.getFullYear()!==danas.getFullYear()) return false;
+      } else if(fPocetak==='Prošli mjesec'){
+        const pm=new Date(danas.getFullYear(),danas.getMonth()-1,1);
+        if(d.getMonth()!==pm.getMonth()||d.getFullYear()!==pm.getFullYear()) return false;
+      } else if(fPocetak==='Prošla godina'){
+        if(d.getFullYear()!==danas.getFullYear()-1) return false;
+      } else if(fPocetak==='Custom...'){
+        const od=document.getElementById('filter-od')?document.getElementById('filter-od').value:'';
+        const do_=document.getElementById('filter-do')?document.getElementById('filter-do').value:'';
+        if(od&&d<new Date(od)) return false;
+        if(do_&&d>new Date(do_)) return false;
+      }
+    }
     for(const c of cols){
       if(!c.filter) continue;
       const fv=gv('f-'+c.k);
@@ -336,7 +376,14 @@ function render(){
   const cols=getCols();
   document.getElementById('stat').textContent=`${rows.length} / ${all.length} naloga`;
   if(!rows.length){document.getElementById('tbody').innerHTML=`<tr><td colspan="${cols.length}" class="empty">Nema naloga.</td></tr>`;return;}
-  document.getElementById('tbody').innerHTML=rows.map(r=>`<tr data-rbr="${r.r_br}">${cols.map(c=>c.render(r)).join('')}</tr>`).join('');
+  document.getElementById('tbody').innerHTML=rows.map(r=>`<tr data-rbr="${r.r_br}">${cols.map(c=>{
+    const cell=c.render(r);
+    // Dodaj locked klasu ako korisnik nema pravo editovati
+    if(c.edit&&!mozeEditovati(c.edit.field)){
+      return cell.replace('<td','<td class="locked"');
+    }
+    return cell;
+  }).join('')}</tr>`).join('');
 }
 
 // ─── INLINE EDIT POPUP ────────────────────────────────────────────────────
@@ -354,6 +401,7 @@ document.getElementById('tbody').addEventListener('click',function(e){
   const cols=getCols();
   const col=cols[thIdx];
   if(!col||!col.edit) return;
+  if(!mozeEditovati(col.edit.field)) return; // nema pravo
   openPop(td,row,col.edit);
 });
 
@@ -473,6 +521,7 @@ async function checkAuth(){
     if(!r.ok){location.href='login.html';return;}
     const u=await r.json();
     isAdmin=u.rola==='admin';
+    trenutniUser=u;
     document.getElementById('who').textContent='👤 '+u.ime_prezime;
     buildHeader();
     load();
