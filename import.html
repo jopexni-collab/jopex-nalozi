@@ -11,29 +11,27 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);font-size:13px
 header{background:var(--blue);color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;}
 header h1{font-size:15px;font-weight:700;}
 header a{color:#fff;text-decoration:none;font-size:12px;border:1px solid rgba(255,255,255,.4);padding:4px 10px;border-radius:4px;}
-main{max-width:900px;margin:24px auto;padding:0 16px;}
+main{max-width:960px;margin:24px auto;padding:0 16px;}
 .card{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);padding:24px;margin-bottom:20px;}
 .card h2{font-size:14px;color:var(--dark);margin-bottom:16px;border-bottom:1px solid #eee;padding-bottom:10px;}
 .drop-zone{border:2px dashed var(--border);border-radius:8px;padding:40px;text-align:center;cursor:pointer;transition:all .2s;color:#6b7a8d;}
 .drop-zone:hover,.drop-zone.over{border-color:var(--blue);background:#f0f4ff;color:var(--blue);}
 .drop-zone input{display:none;}
-.drop-zone p{margin-top:8px;font-size:12px;}
 .btn{font:inherit;font-size:13px;padding:8px 20px;border:none;border-radius:6px;cursor:pointer;}
 .btn-primary{background:var(--blue);color:#fff;}
 .btn-primary:hover{background:var(--dark);}
 .btn-primary:disabled{opacity:.5;cursor:not-allowed;}
-.preview{margin-top:16px;overflow:auto;max-height:300px;}
-table{width:100%;border-collapse:collapse;font-size:12px;}
-thead th{background:#1f3864;color:#fff;padding:6px 8px;text-align:left;position:sticky;top:0;}
-tbody td{padding:5px 8px;border-bottom:1px solid #eee;}
+.preview{margin-top:16px;overflow:auto;max-height:320px;}
+table{width:100%;border-collapse:collapse;font-size:11.5px;}
+thead th{background:#1f3864;color:#fff;padding:6px 8px;text-align:left;position:sticky;top:0;white-space:nowrap;}
+tbody td{padding:5px 8px;border-bottom:1px solid #eee;white-space:nowrap;}
 tbody tr:nth-child(even) td{background:#f8f9fc;}
 .msg{padding:10px 14px;border-radius:6px;margin-top:12px;font-size:13px;}
-.msg.ok{background:#e6f4ea;color:var(--green);border:1px solid #b7dfbf;}
-.msg.err{background:#fce8e6;color:var(--red);border:1px solid #f4b8b4;}
-.msg.info{background:#e8f0fe;color:var(--blue);border:1px solid #c5d8fc;}
-.progress{height:6px;background:#eee;border-radius:3px;margin-top:10px;overflow:hidden;}
-.progress-bar{height:100%;background:var(--blue);border-radius:3px;transition:width .3s;}
-.stat{font-size:12px;color:#6b7a8d;margin-top:6px;}
+.msg.ok{background:#e6f4ea;color:var(--green);}
+.msg.err{background:#fce8e6;color:var(--red);}
+.msg.info{background:#e8f0fe;color:var(--blue);}
+.progress{height:8px;background:#eee;border-radius:4px;margin-top:10px;}
+.progress-bar{height:100%;background:var(--blue);border-radius:4px;transition:width .3s;width:0%;}
 </style>
 </head>
 <body>
@@ -43,51 +41,44 @@ tbody tr:nth-child(even) td{background:#f8f9fc;}
 </header>
 <main>
   <div class="card">
-    <h2>1. Izaberi CSV fajl iz Google Sheets</h2>
+    <h2>Izaberi CSV fajl iz Google Sheets</h2>
     <div class="drop-zone" id="dropZone" onclick="document.getElementById('csvFile').click()">
-      <div style="font-size:40px">📄</div>
+      <div style="font-size:36px">📄</div>
       <div style="font-size:14px;font-weight:600;margin-top:8px">Klikni ili prevuci CSV fajl ovdje</div>
-      <p>Export iz Google Sheets: Datoteka → Preuzmi → CSV</p>
+      <p style="margin-top:6px;font-size:12px">Datoteka → Preuzmi → Vrijednosti razdvojene zarezima (.csv)</p>
       <input type="file" id="csvFile" accept=".csv">
     </div>
     <div id="preview-wrap" style="display:none">
       <div id="msg-parse"></div>
       <div class="preview" id="preview"></div>
-      <div style="margin-top:16px;display:flex;gap:10px;align-items:center">
-        <button class="btn btn-primary" id="btn-import" onclick="startImport()">
-          ✅ Importuj sve naloge
-        </button>
-        <span class="stat" id="stat-rows"></span>
+      <div style="margin-top:14px;display:flex;gap:12px;align-items:center">
+        <button class="btn btn-primary" id="btn-import" onclick="startImport()">✅ Importuj sve naloge</button>
+        <span id="stat-rows" style="font-size:12px;color:#6b7a8d;"></span>
       </div>
-      <div class="progress" id="progress-wrap" style="display:none">
-        <div class="progress-bar" id="progress-bar" style="width:0%"></div>
-      </div>
+      <div class="progress" id="pw" style="display:none"><div class="progress-bar" id="pb"></div></div>
       <div id="msg-import"></div>
     </div>
   </div>
 </main>
-
 <script>
 const API='';
 let parsedRows=[];
 
-// Enkoding fix - Windows-1250 / Latin2
-function fixEncoding(str){
-  return str; // već handlujemo kroz FileReader encoding
-}
-
 function parseCSV(text){
-  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  // Normalizuj line endings
+  const lines=text.split(/\r?\n/);
   if(!lines.length) return [];
-  // Parsiranje CSV sa mogućim navodnicima
   function parseLine(line){
     const cols=[];
     let cur='', inQ=false;
     for(let i=0;i<line.length;i++){
       const c=line[i];
-      if(c==='"'){inQ=!inQ;}
-      else if(c===','&&!inQ){cols.push(cur.trim());cur='';}
-      else{cur+=c;}
+      if(c==='"'){
+        if(inQ&&line[i+1]==='"'){cur+='"';i++;} // escaped quote
+        else inQ=!inQ;
+      } else if(c===','&&!inQ){
+        cols.push(cur.trim());cur='';
+      } else cur+=c;
     }
     cols.push(cur.trim());
     return cols;
@@ -95,108 +86,117 @@ function parseCSV(text){
   const header=parseLine(lines[0]);
   const rows=[];
   for(let i=1;i<lines.length;i++){
+    if(!lines[i].trim()) continue;
     const cols=parseLine(lines[i]);
-    if(cols.every(c=>!c.trim())) continue; // preskoči prazne redove
+    if(cols.every(c=>!c)) continue;
     const row={};
-    header.forEach((h,j)=>row[h]=(cols[j]||'').trim());
+    header.forEach((h,j)=>row[j]=(cols[j]||'').trim());
+    row._raw=cols;
     rows.push(row);
   }
   return rows;
 }
 
-function mapRow(row){
-  // Mapiranje kolona iz Google Sheets na naše kolone
-  const keys=Object.keys(row);
-  function get(...names){
-    for(const n of names){
-      const k=keys.find(k=>k.toLowerCase().replace(/[^a-z]/g,'').includes(n.toLowerCase().replace(/[^a-z]/g,'')));
-      if(k&&row[k]) return row[k];
-    }
-    return null;
-  }
-  
-  const gotovo=get('gotovo','done');
-  const mapped={
-    zadatak:     get('zadatak','task')||'',
-    prioritet:   get('prioritet','priority')||'Normal',
-    ugovorio:    get('ugovorio','ugovor')||'',
-    narucilac:   get('narucilac','kupac','klijent')||'',
-    materijal:   get('materijal','material')||'',
-    status:      get('status')||'Nije Započeto',
-    pocetak:     parseDate(get('pocetak','poetak','poöetak','start','datum')),
-    planirani_zavrsetak: parseDate(get('planirani','zavrsetak','zavretak','end','plan')),
-    gotovo:      gotovo==='TRUE'||gotovo==='DA'||gotovo==='1'||gotovo===true,
-    reklamacija_dodatni_rad: get('reklamacija','rek')||'',
-    napomena:    get('napomena','note','komentar')||'',
-    link_skica:  get('skica','link skica','dxf')||'',
-    link_ponuda: get('link,','ponuda link','link ponuda')||'',
-    ugovorena_suma: parseNum(get('ugovorena','suma','iznos')),
-    avans:       parseNum(get('avans')),
-  };
-  return mapped;
-}
-
 function parseDate(s){
   if(!s) return null;
-  // Pokušaj parsirati datum u različitim formatima
-  s=s.trim();
-  // DD.MM.YYYY ili DD/MM/YYYY
+  s=s.trim().replace(/\.$/,''); // ukloni tačku na kraju (10.07.26.)
+  // DD.MM.YY ili DD.MM.YYYY
   let m=s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{2,4})$/);
   if(m){
-    let y=parseInt(m[3]); if(y<100) y+=2000;
+    let y=parseInt(m[3]);
+    if(y<100) y+=2000;
     return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
   }
   // YYYY-MM-DD
-  m=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if(m) return s;
-  // MM/DD/YYYY (američki)
-  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if(m) return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  if(s.match(/^\d{4}-\d{2}-\d{2}$/)) return s;
   return null;
 }
 
 function parseNum(s){
   if(!s) return 0;
-  return parseFloat(String(s).replace(/[^\d.,]/g,'').replace(',','.')) || 0;
+  // Format: "1.234,56" ili "1234,56" ili "1234.56"
+  s=String(s).replace(/[""]/g,'').trim();
+  if(!s) return 0;
+  // Ako ima i tačku i zarez - tačka je separator hilj., zarez decimalni
+  if(s.includes('.') && s.includes(',')) s=s.replace(/\./g,'').replace(',','.');
+  // Samo zarez - zarez je decimalni
+  else if(s.includes(',')) s=s.replace(',','.');
+  return parseFloat(s)||0;
 }
 
-// Drag & Drop
+function parseBool(s){
+  if(!s) return false;
+  return s.toUpperCase()==='TRUE'||s==='1'||s.toUpperCase()==='DA';
+}
+
+// Mapiranje po poziciji kolone (0-based index)
+// 0=R.Br, 1=Zadatak, 2=Prioritet, 3=Ugovorio, 4=Narucilac, 5=Materijal
+// 6=Status, 7=Pocetak, 8=Plan.zavrsetak, 9=Broj dana, 10=Gotovo
+// 11=Reklamacija, 12=Napomena, 13=Link skica, 14=Link ponuda
+// 15=Ugovorena Suma, 16=Avans, 17=Za Naplatu
+function mapRow(row){
+  const c=row._raw||[];
+  const get=i=>(c[i]||'').trim();
+  return {
+    zadatak:              get(1)||'',
+    prioritet:            get(2)||'Normal',
+    ugovorio:             get(3)||'',
+    narucilac:            get(4)||'',
+    materijal:            get(5)||'',
+    status:               get(6)||'Nije Započeto',
+    pocetak:              parseDate(get(7)),
+    planirani_zavrsetak:  parseDate(get(8)),
+    gotovo:               parseBool(get(10)),
+    reklamacija_dodatni_rad: get(11)||'',
+    napomena:             get(12)||'',
+    link_skica:           get(13)||'',
+    link_ponuda:          get(14)||'',
+    ugovorena_suma:       parseNum(get(15)),
+    avans:                parseNum(get(16)),
+  };
+}
+
 const dz=document.getElementById('dropZone');
 dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
 dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
-dz.addEventListener('drop',e=>{
-  e.preventDefault();dz.classList.remove('over');
-  const f=e.dataTransfer.files[0];
-  if(f) loadFile(f);
-});
-document.getElementById('csvFile').addEventListener('change',e=>{
-  if(e.target.files[0]) loadFile(e.target.files[0]);
-});
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');loadFile(e.dataTransfer.files[0]);});
+document.getElementById('csvFile').addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
 
 function loadFile(file){
-  // Pokušaj UTF-8, pa Windows-1250
-  const reader=new FileReader();
-  reader.onload=e=>{
+  // Pokušaj UTF-8 prvo, pa Windows-1250
+  const r=new FileReader();
+  r.onload=e=>{
     let text=e.target.result;
-    processCSV(text);
+    // Provjeri da li je OK (ima šumova?)
+    if(text.includes('Ä') || text.includes('Å')){
+      // Čita ponovo kao Windows-1250
+      const r2=new FileReader();
+      r2.onload=e2=>processCSV(e2.target.result);
+      r2.readAsText(file,'windows-1250');
+    } else {
+      processCSV(text);
+    }
   };
-  reader.readAsText(file,'UTF-8');
+  r.readAsText(file,'UTF-8');
 }
 
 function processCSV(text){
-  const rows=parseCSV(text);
-  parsedRows=rows.map(mapRow);
-  
+  const raw=parseCSV(text);
+  // Preskoči header red i prazne
+  parsedRows=raw.filter(r=>{
+    const id=parseInt((r._raw||[])[0]);
+    return !isNaN(id)&&id>0;
+  }).map(mapRow);
+
   document.getElementById('stat-rows').textContent=`${parsedRows.length} naloga za import`;
-  
-  // Preview tabela
-  const cols=['zadatak','prioritet','narucilac','materijal','status','pocetak','planirani_zavrsetak'];
+
+  const cols=['zadatak','prioritet','narucilac','materijal','status','pocetak','planirani_zavrsetak','ugovorena_suma','avans'];
   document.getElementById('preview').innerHTML=`
     <table>
       <thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
-      <tbody>${parsedRows.slice(0,10).map(r=>`<tr>${cols.map(c=>`<td>${r[c]||''}</td>`).join('')}</tr>`).join('')}</tbody>
+      <tbody>${parsedRows.slice(0,15).map(r=>`<tr>${cols.map(c=>`<td>${r[c]??''}</td>`).join('')}</tr>`).join('')}</tbody>
     </table>
-    ${parsedRows.length>10?`<p style="color:#999;font-size:11px;padding:6px">... i još ${parsedRows.length-10} redova</p>`:''}
+    ${parsedRows.length>15?`<p style="color:#999;font-size:11px;padding:6px;text-align:center">... i još ${parsedRows.length-15} redova</p>`:''}
   `;
   document.getElementById('preview-wrap').style.display='block';
   document.getElementById('msg-parse').innerHTML=`<div class="msg info">✓ Učitano ${parsedRows.length} naloga. Provjeri preview pa klikni Import.</div>`;
@@ -205,14 +205,12 @@ function processCSV(text){
 async function startImport(){
   const btn=document.getElementById('btn-import');
   btn.disabled=true;
-  const pw=document.getElementById('progress-wrap');
-  const pb=document.getElementById('progress-bar');
+  document.getElementById('pw').style.display='block';
+  const pb=document.getElementById('pb');
   const mi=document.getElementById('msg-import');
-  pw.style.display='block';
-  
-  let ok=0, err=0;
+  let ok=0,err=0;
   for(let i=0;i<parsedRows.length;i++){
-    pb.style.width=Math.round((i/parsedRows.length)*100)+'%';
+    pb.style.width=Math.round(((i+1)/parsedRows.length)*100)+'%';
     try{
       const r=await fetch(`${API}/api/proizvodnja`,{
         method:'POST',
@@ -222,9 +220,8 @@ async function startImport(){
       if(r.ok) ok++; else err++;
     }catch(e){err++;}
   }
-  pb.style.width='100%';
   mi.innerHTML=`<div class="msg ${err?'err':'ok'}">
-    ✓ Importovano: <b>${ok}</b> naloga${err?` | ✗ Greška: <b>${err}</b>`:''}
+    ${err?'⚠':'✓'} Importovano: <b>${ok}</b> naloga${err?` | Greška: <b>${err}</b>`:''}
   </div>`;
   btn.disabled=false;
   if(!err) setTimeout(()=>location.href='lista.html',2000);
