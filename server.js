@@ -69,7 +69,7 @@ app.use((req, res, next) => {
   }
   next();
 });
-app.use(express.static(__dirname));
+app.use(express.static(__dirname, {etag:false, lastModified:false, maxAge:0}));
 
 // Zdravstvena provjera - koristi se za monitoring i za JoPeX da provjeri
 // da li je server dostupan prije slanja naloga
