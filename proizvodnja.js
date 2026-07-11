@@ -153,4 +153,20 @@ router.patch('/:r_br', async (req, res) => {
   }
 });
 
+// DELETE /api/proizvodnja/:r_br - brisanje naloga (samo admin)
+router.delete('/:r_br', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Nema pristupa.' });
+  try {
+    const r = await pool.query(
+      'DELETE FROM proizvodnja_jopex WHERE r_br=$1 RETURNING r_br',
+      [req.params.r_br]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Nije pronađen.' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Greška: ' + err.message });
+  }
+});
+
 module.exports = router;
