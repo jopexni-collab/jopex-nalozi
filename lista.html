@@ -294,8 +294,27 @@ function openPop(td,row,editCfg){
     fEl.innerHTML=`<select id="pop-inp"><option value="true"${val?' selected':''}>✓ Da</option><option value="false"${!val?' selected':''}>✗ Ne</option></select>`;
   } else if(editCfg.type==='date'){
     const dv=val?val.split('T')[0]:'';
-    fEl.innerHTML=`<input type="date" id="pop-inp" value="${dv}" style="font:inherit;width:100%;padding:5px 7px;border:1px solid #ccc;border-radius:4px;cursor:pointer;">`;
-    setTimeout(()=>{const el=document.getElementById('pop-inp');if(el){el.focus();try{el.showPicker();}catch(e){}}},50);
+    fEl.innerHTML=`
+      <input type="date" id="pop-cal" value="${dv}" style="font:inherit;width:100%;padding:5px 7px;border:1px solid #ccc;border-radius:4px;cursor:pointer;margin-bottom:4px;">
+      <input type="text" id="pop-inp" placeholder="ili ukucaj: 22.7 ili 22/7/28" value=""
+        style="font:inherit;width:100%;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:11px;color:#555;">
+      <div style="font-size:10px;color:#aaa;margin-top:2px;">Bez godine = ${new Date().getFullYear()}, dvocifrena = 20XX</div>`;
+    setTimeout(()=>{
+      const cal=document.getElementById('pop-cal');
+      const txt=document.getElementById('pop-inp');
+      // Text → kalendar (live preview)
+      txt.addEventListener('input',()=>{
+        const parts=txt.value.trim().split(/[.\\/]/).map(p=>p.trim());
+        if(parts.length>=2){
+          const d=parseInt(parts[0]),m=parseInt(parts[1]);
+          let y=parts[2]?parseInt(parts[2]):new Date().getFullYear();
+          if(y<100) y=2000+y;
+          if(d&&m&&y) cal.value=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        }
+      });
+      try{cal.showPicker();}catch(e){}
+      cal.focus();
+    },50);
   } else if(editCfg.type==='number'){
     fEl.innerHTML=`<input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
   } else {
@@ -314,9 +333,24 @@ async function popSave(){
   let val=inp.value.trim();
   if(popField==='gotovo') val=val==='true';
 
-  // Date input vraca YYYY-MM-DD direktno - nema parsiranja potrebno
-  if((popField==='pocetak'||popField==='planirani_zavrsetak')&&!val){
-    val=null; // prazno = obrisi datum
+  // Datum - čita text input ako je popunjen, inače kalendar
+  if(popField==='pocetak'||popField==='planirani_zavrsetak'){
+    const cal=document.getElementById('pop-cal');
+    const txt=document.getElementById('pop-inp');
+    const txtVal=txt?txt.value.trim():'';
+    if(txtVal){
+      // Parsiraj ručni unos
+      const parts=txtVal.split(/[.\\/]/).map(p=>p.trim());
+      if(parts.length>=2){
+        const d=parseInt(parts[0]),m=parseInt(parts[1]);
+        let y=parts[2]?parseInt(parts[2]):new Date().getFullYear();
+        if(y<100) y=2000+y;
+        if(d&&m&&y) val=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      }
+    } else {
+      val=cal?cal.value:val;
+    }
+    if(!val) val=null;
   }
   const body={[popField]:val};
   try{
