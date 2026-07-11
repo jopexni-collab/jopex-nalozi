@@ -54,6 +54,8 @@ td{
   cursor:pointer;word-break:break-word;
 }
 td.locked{cursor:default;}
+td.editable{background:#fffde7!important;}
+td.editable:hover{background:#fff9c4!important;}
 td.num{text-align:right;white-space:nowrap;}
 td.center{text-align:center;white-space:nowrap;}
 
@@ -378,9 +380,11 @@ function render(){
   if(!rows.length){document.getElementById('tbody').innerHTML=`<tr><td colspan="${cols.length}" class="empty">Nema naloga.</td></tr>`;return;}
   document.getElementById('tbody').innerHTML=rows.map(r=>`<tr data-rbr="${r.r_br}">${cols.map(c=>{
     const cell=c.render(r);
-    // Dodaj locked klasu ako korisnik nema pravo editovati
     if(c.edit&&!mozeEditovati(c.edit.field)){
       return cell.replace('<td','<td class="locked"');
+    }
+    if(c.edit&&mozeEditovati(c.edit.field)){
+      return cell.replace('<td','<td class="editable"');
     }
     return cell;
   }).join('')}</tr>`).join('');
