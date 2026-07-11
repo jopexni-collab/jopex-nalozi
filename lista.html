@@ -193,7 +193,7 @@ function getCols(){
     {k:'ugovorio',l:'Ugovorio',w:110,filter:'text',render:r=>`<td>${esc(r.ugovorio)}</td>`,edit:{type:'text',field:'ugovorio',label:'Ugovorio'}},
     {k:'narucilac',l:'Naručilac',w:130,filter:'text',render:r=>`<td>${esc(r.narucilac)}</td>`,edit:{type:'text',field:'narucilac',label:'Naručilac'}},
     {k:'status',l:'Status',w:120,filter:'sel',opts:STATUSI,render:r=>`<td>${chipS(r.status)}</td>`,edit:{type:'select',opts:STATUSI,field:'status'}},
-    {k:'pocetak',l:'Ugovoreno',w:80,filter:'text',render:r=>`<td>${fd(r.pocetak)}</td>`,edit:{type:'date',field:'pocetak',label:'Ugovoreno (datum)'}},
+    {k:'pocetak',l:'Ugovoreno',w:90,filter:'sel',opts:['Danas','Ova sedmica','Ovaj mjesec','Ova godina','Prošli mjesec','Prošla godina','Custom...'],render:r=>`<td>${fd(r.pocetak)}</td>`,edit:{type:'date',field:'pocetak',label:'Ugovoreno (datum)'}},
     {k:'planirani_zavrsetak',l:'Plan. završetak',w:110,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>`<td class="${zavrsClass(r)}">${fd(r.planirani_zavrsetak)}</td>`,edit:{type:'date',field:'planirani_zavrsetak',label:'Plan. završetak'}},
     {k:'broj_dana',l:'Dana',w:70,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>daniC(r),edit:null},
     {k:'nova_procjena',l:'Razlog kašnjenja',w:180,filter:'text',render:r=>`<td class="note" title="${esc(r.nova_procjena)}">${esc(r.nova_procjena)||''}</td>`,edit:{type:'textarea',field:'nova_procjena',label:'Razlog kašnjenja'}},
@@ -216,8 +216,27 @@ function buildHeader(){
   const cols=getCols();
   document.getElementById('thead').innerHTML='<tr>'+cols.map(c=>{
     let flt='';
-    if(c.filter==='text') flt=`<div class="th-filter"><input type="text" id="f-${c.k}" placeholder="..." oninput="render()"></div>`;
-    else if(c.filter==='sel') flt=`<div class="th-filter"><select id="f-${c.k}" onchange="render()"><option value="">Sve</option>${(c.opts||[]).map(o=>`<option>${esc(o)}</option>`).join('')}</select></div>`;
+    if(c.k==='pocetak'){
+      // Poseban filter: dropdown + Od/Do polja
+      flt=`<div class="th-filter">
+        <select id="f-pocetak" onchange="onPocetakFilter()" style="width:100%;font:inherit;font-size:10.5px;padding:2px 3px;background:#1e3566;color:#fff;border:1px solid #3a5590;border-radius:2px;">
+          <option value="">Sve</option>
+          <option>Danas</option><option>Ova sedmica</option><option>Ovaj mjesec</option>
+          <option>Ova godina</option><option>Prošli mjesec</option><option>Prošla godina</option>
+          <option>Custom...</option>
+        </select>
+        <div id="custom-od-do" style="display:none;margin-top:2px;">
+          <input type="date" id="filter-od" oninput="render()" placeholder="Od"
+            style="width:100%;font:inherit;font-size:10px;padding:2px 3px;background:#1e3566;color:#fff;border:1px solid #3a5590;border-radius:2px;margin-bottom:2px;">
+          <input type="date" id="filter-do" oninput="render()" placeholder="Do"
+            style="width:100%;font:inherit;font-size:10px;padding:2px 3px;background:#1e3566;color:#fff;border:1px solid #3a5590;border-radius:2px;">
+        </div>
+      </div>`;
+    } else if(c.filter==='text'){
+      flt=`<div class="th-filter"><input type="text" id="f-${c.k}" placeholder="..." oninput="render()"></div>`;
+    } else if(c.filter==='sel'){
+      flt=`<div class="th-filter"><select id="f-${c.k}" onchange="render()"><option value="">Sve</option>${(c.opts||[]).map(o=>`<option>${esc(o)}</option>`).join('')}</select></div>`;
+    }
     return`<th style="width:${c.w}px" data-key="${c.k}"><div class="th-inner"><div class="th-label">${c.l}</div>${flt}</div><div class="resize-handle"></div></th>`;
   }).join('')+'</tr>';
   initResize();
@@ -261,12 +280,55 @@ function filterRows(){
         else if(fv==='Više od mjesec'){if(d==null||d<=30) return false;}
         continue;
       }
+      // Posebna logika za Ugovoreno (pocetak) - filter po periodu
+      if(c.k==='pocetak'){
+        if(!r.pocetak) return false;
+        const d=new Date(r.pocetak.split('T')[0]);
+        const danas=new Date(); danas.setHours(0,0,0,0);
+        if(fv==='Danas'){
+          if(d.toDateString()!==danas.toDateString()) return false;
+        } else if(fv==='Ova sedmica'){
+          const pon=new Date(danas); pon.setDate(danas.getDate()-danas.getDay()+1);
+          const ned=new Date(pon); ned.setDate(pon.getDate()+6);
+          if(d<pon||d>ned) return false;
+        } else if(fv==='Ovaj mjesec'){
+          if(d.getMonth()!==danas.getMonth()||d.getFullYear()!==danas.getFullYear()) return false;
+        } else if(fv==='Ova godina'){
+          if(d.getFullYear()!==danas.getFullYear()) return false;
+        } else if(fv==='Prošli mjesec'){
+          const pm=new Date(danas.getFullYear(),danas.getMonth()-1,1);
+          if(d.getMonth()!==pm.getMonth()||d.getFullYear()!==pm.getFullYear()) return false;
+        } else if(fv==='Prošla godina'){
+          if(d.getFullYear()!==danas.getFullYear()-1) return false;
+        } else if(fv==='Custom...'){
+          const od=document.getElementById('filter-od').value;
+          const do_=document.getElementById('filter-do').value;
+          if(od&&d<new Date(od)) return false;
+          if(do_&&d>new Date(do_)) return false;
+        }
+        continue;
+      }
       const rv=String(r[c.k]||'');
       if(c.filter==='sel'&&rv!==fv) return false;
       if(c.filter==='text'&&!rv.toLowerCase().includes(fv.toLowerCase())) return false;
     }
     return true;
   });
+}
+
+function onPocetakFilter(){
+  const fv=gv('f-pocetak');
+  const odDo=document.getElementById('custom-od-do');
+  if(odDo) odDo.style.display=fv==='Custom...'?'block':'none';
+  render();
+}
+
+function clearCustomDate(){
+  const sel=document.getElementById('f-pocetak');
+  if(sel) sel.value='';
+  const odDo=document.getElementById('custom-od-do');
+  if(odDo) odDo.style.display='none';
+  render();
 }
 
 function render(){
