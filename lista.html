@@ -84,6 +84,19 @@ td.center{text-align:center;}
 .btn-cancel{background:#eee;color:#333;}
 .empty{padding:30px;text-align:center;color:#6b7a8d;}
 a.lk{color:var(--blue);text-decoration:none;}
+.nova-proc{cursor:pointer;color:#6b7a8d;}
+.nova-proc.ima-proc{color:#e67e22;font-weight:600;}
+.nova-proc:hover{background:#fef3e2!important;}
+#hist-pop{display:none;position:fixed;z-index:1001;background:#fff;
+  border:1px solid #e67e22;border-radius:6px;padding:10px 12px;
+  box-shadow:0 3px 12px rgba(0,0,0,.2);min-width:260px;}
+#hist-pop h4{font-size:12px;color:var(--dark);margin-bottom:8px;}
+.hist-close{float:right;cursor:pointer;color:#999;font-size:16px;line-height:1;}
+#hist-list{font-size:11px;}
+#hist-list div{padding:4px 0;border-bottom:1px solid #f0f0f0;}
+#hist-list .hist-datum{font-weight:700;color:#e67e22;}
+#hist-list .hist-ko{color:#6b7a8d;}
+#hist-list .hist-kad{color:#aaa;font-size:10px;}
 </style>
 </head>
 <body>
@@ -116,6 +129,13 @@ a.lk{color:var(--blue);text-decoration:none;}
     <button class="btn-save" onclick="popSave()">✓ Sačuvaj</button>
     <button class="btn-cancel" onclick="popClose()">✗ Otkaži</button>
   </div>
+</div>
+
+<!-- HISTORIJA PROCJENA POPUP -->
+<div id="hist-pop">
+  <span class="hist-close" onclick="histClose()">✕</span>
+  <h4>📅 Historija procjena završetka</h4>
+  <div id="hist-list"></div>
 </div>
 
 <script>
@@ -183,6 +203,7 @@ function getCols(){
     {k:'pocetak',l:'Početak',w:80,filter:'text',render:r=>`<td>${fd(r.pocetak)}</td>`,edit:{type:'date',field:'pocetak',label:'Početak'}},
     {k:'planirani_zavrsetak',l:'Plan. završetak',w:110,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>`<td class="${zavrsClass(r)}">${fd(r.planirani_zavrsetak)}</td>`,edit:{type:'date',field:'planirani_zavrsetak',label:'Plan. završetak'}},
     {k:'broj_dana',l:'Dana',w:70,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>daniC(r),edit:null},
+    {k:'nova_procjena',l:'Nova procjena',w:110,filter:null,render:r=>`<td class="nova-proc ${r.nova_procjena?'ima-proc':''}" data-rbr="${r.r_br}" title="${r.nova_procjena?'Klikni za historiju':''}">${r.nova_procjena?'📅 '+fd(r.nova_procjena):'—'}</td>`,edit:{type:'date',field:'nova_procjena',label:'Nova procjena završetka'}},
     {k:'gotovo',l:'Gotovo',w:65,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.gotovo?'✓':''}</td>`,edit:{type:'check',field:'gotovo',label:'Gotovo'}},
     {k:'reklamacija_dodatni_rad',l:'Rek.',w:60,filter:'sel',opts:['DA','NE'],render:r=>`<td class="center">${chipR(r.reklamacija_dodatni_rad)}</td>`,edit:{type:'select',opts:['','NE','DA'],field:'reklamacija_dodatni_rad',label:'Reklamacija'}},
     {k:'napomena',l:'Napomena (upute operateru)',w:220,filter:'text',render:r=>`<td class="note" title="${esc(r.napomena)}">${esc(r.napomena)}</td>`,edit:{type:'textarea',field:'napomena',label:'Napomena / upute operateru'}},
@@ -266,19 +287,62 @@ function render(){
 // ─── INLINE EDIT POPUP ────────────────────────────────────────────────────
 const pop=document.getElementById('inline-pop');
 
+// ─── HISTORIJA PROCJENA ───────────────────────────────────────────────────
+const histPop=document.getElementById('hist-pop');
+
 document.getElementById('tbody').addEventListener('click',function(e){
-  const td=e.target.closest('td');
+  const td=e.target.closest('td.nova-proc');
+  if(td){
+    const rBr=td.dataset.rbr;
+    openHist(td,rBr);
+    return;
+  }
+  const tdOther=e.target.closest('td');
   const tr=e.target.closest('tr[data-rbr]');
-  if(!td||!tr) return;
-  if(e.target.tagName==='A') return; // ne otvori editor na link
+  if(!tdOther||!tr) return;
+  if(e.target.tagName==='A') return;
+  if(tdOther.classList.contains('nova-proc')) return;
   const rBr=tr.dataset.rbr;
   const row=all.find(r=>r.r_br==rBr);
   if(!row) return;
-  const thIdx=Array.from(tr.children).indexOf(td);
+  const thIdx=Array.from(tr.children).indexOf(tdOther);
   const cols=getCols();
   const col=cols[thIdx];
   if(!col||!col.edit) return;
-  openPop(td,row,col.edit);
+  openPop(tdOther,row,col.edit);
+});
+
+async function openHist(td, rBr){
+  histClose();
+  const rect=td.getBoundingClientRect();
+  histPop.style.display='block';
+  histPop.style.left=Math.min(rect.left,window.innerWidth-280)+'px';
+  histPop.style.top=(rect.bottom+4)+'px';
+  document.getElementById('hist-list').innerHTML='<div style="color:#999;text-align:center;padding:8px">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/${rBr}/procjene`);
+    const lista=await r.json();
+    if(!lista.length){
+      document.getElementById('hist-list').innerHTML='<div style="color:#999;padding:8px;text-align:center">Nema historije promjena.</div>';
+      return;
+    }
+    document.getElementById('hist-list').innerHTML=lista.map(p=>`
+      <div>
+        <span class="hist-datum">${fd(p.datum_procjene)}</span>
+        <span class="hist-ko"> — ${esc(p.promijenio_ime)}</span>
+        <br><span class="hist-kad">${new Date(p.kreirano).toLocaleString('sr-Latn-BA')}</span>
+      </div>
+    `).join('');
+  }catch(e){
+    document.getElementById('hist-list').innerHTML='<div style="color:red;padding:8px">Greška pri učitavanju.</div>';
+  }
+}
+
+function histClose(){
+  histPop.style.display='none';
+}
+document.addEventListener('click',e=>{
+  if(!histPop.contains(e.target)&&!e.target.closest('td.nova-proc')) histClose();
 });
 
 function openPop(td,row,editCfg){
