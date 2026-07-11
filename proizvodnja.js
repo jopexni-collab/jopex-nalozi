@@ -86,7 +86,7 @@ router.post('/', async (req, res) => {
         ugovorio_id || null, ugovorioIme,
         narucilac || null, materijal || null,
         status || 'Nije Započeto',
-        pocetak || null, planirani_zavrsetak || null,
+        pocetak || new Date().toISOString().split('T')[0], planirani_zavrsetak || null,
         napomena || null, link_skica || null, link_ponuda || null,
         ugovorena_suma ?? 0, avans ?? 0,
       ]
