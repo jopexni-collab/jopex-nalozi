@@ -193,7 +193,7 @@ function getCols(){
     {k:'ugovorio',l:'Ugovorio',w:110,filter:'text',render:r=>`<td>${esc(r.ugovorio)}</td>`,edit:{type:'text',field:'ugovorio',label:'Ugovorio'}},
     {k:'narucilac',l:'Naručilac',w:130,filter:'text',render:r=>`<td>${esc(r.narucilac)}</td>`,edit:{type:'text',field:'narucilac',label:'Naručilac'}},
     {k:'status',l:'Status',w:120,filter:'sel',opts:STATUSI,render:r=>`<td>${chipS(r.status)}</td>`,edit:{type:'select',opts:STATUSI,field:'status'}},
-    {k:'pocetak',l:'Početak',w:80,filter:'text',render:r=>`<td>${fd(r.pocetak)}</td>`,edit:{type:'date',field:'pocetak',label:'Početak'}},
+    {k:'pocetak',l:'Ugovoreno',w:80,filter:'text',render:r=>`<td>${fd(r.pocetak)}</td>`,edit:{type:'date',field:'pocetak',label:'Ugovoreno (datum)'}},
     {k:'planirani_zavrsetak',l:'Plan. završetak',w:110,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>`<td class="${zavrsClass(r)}">${fd(r.planirani_zavrsetak)}</td>`,edit:{type:'date',field:'planirani_zavrsetak',label:'Plan. završetak'}},
     {k:'broj_dana',l:'Dana',w:70,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>daniC(r),edit:null},
     {k:'nova_procjena',l:'Razlog kašnjenja',w:180,filter:'text',render:r=>`<td class="note" title="${esc(r.nova_procjena)}">${esc(r.nova_procjena)||''}</td>`,edit:{type:'textarea',field:'nova_procjena',label:'Razlog kašnjenja'}},
@@ -369,12 +369,12 @@ async function popSave(){
   const body={[popField]:val};
 
   // Kad se stiklira Gotovo = true, automatski promijeni prioritet i status
-  if(popField==='gotovo'&&val===true){
+  if(popField==='gotovo'&&(val===true||val==='true')){
     body.prioritet='Normal';
     body.status='Čeka isporuku';
   }
   // Kad se odstiklira Gotovo = false, vrati na U radu
-  if(popField==='gotovo'&&val===false){
+  if(popField==='gotovo'&&(val===false||val==='false')){
     body.status='U radu';
   }
 
@@ -385,11 +385,11 @@ async function popSave(){
     });
     if(!r.ok) throw new Error();
     popRow[popField]=val;
-    if(popField==='gotovo'&&val===true){
+    if(popField==='gotovo'&&(val===true||val==='true')){
       popRow.prioritet='Normal';
       popRow.status='Čeka isporuku';
     }
-    if(popField==='gotovo'&&val===false){
+    if(popField==='gotovo'&&(val===false||val==='false')){
       popRow.status='U radu';
     }
     popClose();
