@@ -101,15 +101,12 @@ router.post('/', async (req, res) => {
 // PATCH /api/proizvodnja/:r_br - djelimično ažuriranje
 router.patch('/:r_br', async (req, res) => {
   const isAdmin = req.session?.user?.rola === 'admin';
-  const user = req.session?.user;
 
-  // Tehničke kolone - mijenjaju svi
   const ALLOWED_BASE = [
     'zadatak','prioritet','narucilac','materijal','status','pocetak',
     'planirani_zavrsetak','gotovo','reklamacija_dodatni_rad','napomena',
-    'link_skica','link_ponuda',
+    'link_skica','link_ponuda','nova_procjena',
   ];
-  // Finansijske kolone - mijenjaju samo admini
   const ALLOWED_ADMIN = [
     'ugovorena_suma','avans','naplata_detalji',
     'naplaceno_fakturisano','dodatni_rad_napomena',
@@ -118,21 +115,6 @@ router.patch('/:r_br', async (req, res) => {
   const allowed = isAdmin ? [...ALLOWED_BASE, ...ALLOWED_ADMIN] : ALLOWED_BASE;
   const sets = [], vals = [];
   let i = 1;
-
-  // Poseban slučaj: nova_procjena - bilježi historiju
-  if ('nova_procjena' in req.body) {
-    const novaDatum = req.body.nova_procjena;
-    sets.push(`nova_procjena = $${i++}`);
-    vals.push(novaDatum || null);
-    // Upiši u log
-    try {
-      await pool.query(
-        `INSERT INTO procjena_log (nalog_r_br, datum_procjene, promijenio_id, promijenio_ime)
-         VALUES ($1, $2, $3, $4)`,
-        [req.params.r_br, novaDatum || null, user?.id || null, user?.ime_prezime || 'Nepoznat']
-      );
-    } catch(logErr) { console.error('Log greška:', logErr.message); }
-  }
 
   for (const key of allowed) {
     if (key in req.body) { sets.push(`${key} = $${i++}`); vals.push(req.body[key]); }
@@ -168,21 +150,6 @@ router.patch('/:r_br', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Greška pri ažuriranju: ' + err.message });
-  }
-});
-
-// GET /api/proizvodnja/:r_br/procjene - historija promjena procjene završetka
-router.get('/:r_br/procjene', async (req, res) => {
-  try {
-    const r = await pool.query(
-      `SELECT datum_procjene, promijenio_ime, kreirano
-       FROM procjena_log WHERE nalog_r_br=$1
-       ORDER BY kreirano DESC`,
-      [req.params.r_br]
-    );
-    res.json(r.rows);
-  } catch (err) {
-    res.status(500).json({ error: 'Greška.' });
   }
 });
 
