@@ -59,6 +59,7 @@ app.use('/api/auth',   require('./auth'));
 app.use('/api/config', require('./config'));
 
 // ─── Zaštićene rute (trebaju prijavu ili API ključ) ───────────────────────
+app.use('/api/upload',     requireLoginOrApiKey, require('./upload'));
 app.use('/api/zaposleni',   requireLoginOrApiKey, require('./zaposleni'));
 app.use('/api/proizvodnja', requireLoginOrApiKey, require('./proizvodnja'));
 
@@ -67,10 +68,6 @@ app.use((req, res, next) => {
   if (req.path.endsWith('.html')) {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   }
-  next();
-});
-app.use((req,res,next)=>{
-  res.setHeader('Cache-Control','no-store');
   next();
 });
 app.use(express.static(__dirname));
@@ -88,4 +85,3 @@ app.listen(PORT, () => {
   console.log(`  Config:    http://localhost:${PORT}/api/config`);
   console.log(`  Web app:   http://localhost:${PORT}/login.html`);
 });
-// v2
