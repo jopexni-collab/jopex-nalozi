@@ -182,7 +182,7 @@ function getCols(){
     {k:'narucilac',l:'Naručilac',w:130,filter:'text',render:r=>`<td>${esc(r.narucilac)}</td>`,edit:{type:'text',field:'narucilac',label:'Naručilac'}},
     {k:'status',l:'Status',w:120,filter:'sel',opts:STATUSI,render:r=>`<td>${chipS(r.status)}</td>`,edit:{type:'select',opts:STATUSI,field:'status'}},
     {k:'pocetak',l:'Početak',w:80,filter:'text',render:r=>`<td>${fd(r.pocetak)}</td>`,edit:{type:'date',field:'pocetak',label:'Početak'}},
-    {k:'planirani_zavrsetak',l:'Plan. završetak',w:100,filter:'text',render:r=>`<td class="${zavrsClass(r)}">${fd(r.planirani_zavrsetak)}</td>`,edit:{type:'date',field:'planirani_zavrsetak',label:'Plan. završetak'}},
+    {k:'planirani_zavrsetak',l:'Plan. završetak',w:110,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>`<td class="${zavrsClass(r)}">${fd(r.planirani_zavrsetak)}</td>`,edit:{type:'date',field:'planirani_zavrsetak',label:'Plan. završetak'}},
     {k:'broj_dana',l:'Dana',w:70,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>daniC(r),edit:null},
     {k:'gotovo',l:'Gotovo',w:65,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.gotovo?'✓':''}</td>`,edit:{type:'check',field:'gotovo',label:'Gotovo'}},
     {k:'reklamacija_dodatni_rad',l:'Rek.',w:60,filter:'sel',opts:['DA','NE'],render:r=>`<td class="center">${chipR(r.reklamacija_dodatni_rad)}</td>`,edit:{type:'select',opts:['','NE','DA'],field:'reklamacija_dodatni_rad',label:'Reklamacija'}},
@@ -237,8 +237,8 @@ function filterRows(){
       if(!c.filter) continue;
       const fv=gv('f-'+c.k);
       if(!fv) continue;
-      // Posebna logika za broj_dana
-      if(c.k==='broj_dana'){
+      // Posebna logika za broj_dana i planirani_zavrsetak
+      if(c.k==='broj_dana'||c.k==='planirani_zavrsetak'){
         const d=getDani(r);
         if(fv==='Bez datuma'){if(d!=null) return false;}
         else if(fv==='Kasni'){if(d==null||d>=0) return false;}
@@ -294,8 +294,31 @@ function openPop(td,row,editCfg){
   } else if(editCfg.type==='check'){
     fEl.innerHTML=`<select id="pop-inp"><option value="true"${val?' selected':''}>✓ Da</option><option value="false"${!val?' selected':''}>✗ Ne</option></select>`;
   } else if(editCfg.type==='date'){
-    const dv=val?new Date(val).toISOString().split('T')[0]:'';
-    fEl.innerHTML=`<input type="date" id="pop-inp" value="${esc(dv)}">`;
+    const dv=val?val.split('T')[0]:'';
+    const [yy,mm,dd]=dv?dv.split('-'):['','',''];
+    fEl.innerHTML=`<div style="display:flex;gap:4px;align-items:center">
+      <input type="text" id="pop-dd" placeholder="DD" maxlength="2" value="${dd||''}" style="width:36px;text-align:center;font:inherit;padding:4px;border:1px solid #ccc;border-radius:3px;">
+      <span>.</span>
+      <input type="text" id="pop-mm" placeholder="MM" maxlength="2" value="${mm||''}" style="width:36px;text-align:center;font:inherit;padding:4px;border:1px solid #ccc;border-radius:3px;">
+      <span>.</span>
+      <input type="text" id="pop-yy" placeholder="GGGG" maxlength="4" value="${yy||''}" style="width:52px;text-align:center;font:inherit;padding:4px;border:1px solid #ccc;border-radius:3px;">
+    </div>
+    <input type="hidden" id="pop-inp" value="${dv}">`;
+    // Auto-fokus i auto-tab
+    setTimeout(()=>{
+      const dd2=document.getElementById('pop-dd');
+      const mm2=document.getElementById('pop-mm');
+      const yy2=document.getElementById('pop-yy');
+      const hi=document.getElementById('pop-inp');
+      function upd(){
+        const d=dd2.value.padStart(2,'0'),m=mm2.value.padStart(2,'0'),y=yy2.value;
+        if(d&&m&&y.length===4) hi.value=`${y}-${m}-${d}`;
+      }
+      dd2.addEventListener('input',()=>{upd();if(dd2.value.length===2)mm2.focus();});
+      mm2.addEventListener('input',()=>{upd();if(mm2.value.length===2)yy2.focus();});
+      yy2.addEventListener('input',()=>upd());
+      if(dd2) dd2.focus();
+    },50);
   } else if(editCfg.type==='number'){
     fEl.innerHTML=`<input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
   } else {
