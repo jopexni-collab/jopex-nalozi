@@ -50,11 +50,11 @@ tbody tr:hover td{background:#e8f0fe!important;}
 tbody tr:nth-child(even) td{background:#f5f7fa;}
 td{
   padding:3px 6px;border-bottom:1px solid #e8eaed;border-right:1px solid #eceef1;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;
-  cursor:pointer;
+  white-space:normal;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;
+  cursor:pointer;word-break:break-word;
 }
-td.num{text-align:right;}
-td.center{text-align:center;}
+td.num{text-align:right;white-space:nowrap;}
+td.center{text-align:center;white-space:nowrap;}
 
 /* CHIPS */
 .chip{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:600;white-space:nowrap;}
