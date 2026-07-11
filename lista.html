@@ -135,7 +135,10 @@ function chipR(r){return r==='DA'?'<span class="chip r-da">DA</span>':r==='NE'?'
 function getDani(r){
   if(r.gotovo) return null;
   if(r.planirani_zavrsetak && r.pocetak){
-    const diff=Math.round((new Date(r.planirani_zavrsetak)-new Date(r.pocetak))/(1000*60*60*24));
+    // Koristimo samo datumski dio (bez vremena) da izbjegnemo timezone probleme
+    const zav=new Date(r.planirani_zavrsetak.split('T')[0]);
+    const poc=new Date(r.pocetak.split('T')[0]);
+    const diff=Math.round((zav-poc)/(1000*60*60*24));
     return diff;
   }
   return null;
@@ -152,12 +155,17 @@ function daniC(r){
   return`<td class="center ${daniClass(d)}">${d}</td>`;
 }
 function zavrsClass(r){
-  // Boja ćelije datuma završetka zavisno od dana
   if(r.gotovo) return '';
   const d=getDani(r);
   return daniClass(d);
 }
-function fd(d){if(!d)return'';return new Date(d).toLocaleDateString('sr-Latn-BA',{day:'2-digit',month:'2-digit',year:'2-digit'});}
+function fd(d){
+  if(!d) return '';
+  // Uzmi samo datumski dio da izbjegnemo timezone pomak
+  const s=typeof d==='string'?d.split('T')[0]:new Date(d).toISOString().split('T')[0];
+  const [y,m,dd]=s.split('-');
+  return `${dd}.${m}.${y.slice(2)}`;
+}
 function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function lk(u){return u?`<a class="lk" href="${esc(u)}" target="_blank">↗</a>`:'';} 
@@ -302,14 +310,6 @@ async function popSave(){
     });
     if(!r.ok) throw new Error();
     popRow[popField]=val;
-    // Recalkuliraj broj_dana ako je promijenjen početak ili završetak
-    if(popField==='planirani_zavrsetak'||popField==='pocetak'){
-      if(popRow.planirani_zavrsetak&&popRow.pocetak){
-        popRow.broj_dana=Math.round((new Date(popRow.planirani_zavrsetak)-new Date(popRow.pocetak))/(1000*60*60*24));
-      } else {
-        popRow.broj_dana=null;
-      }
-    }
     popClose();
     render();
   }catch(e){alert('Greška pri čuvanju.');}
