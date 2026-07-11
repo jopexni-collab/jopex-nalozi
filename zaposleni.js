@@ -3,7 +3,6 @@ const router = express.Router();
 const pool = require('./db');
 const bcrypt = require('bcryptjs');
 
-// GET /api/zaposleni/ugovaraci - lista onih koji mogu ugovarati (javna ruta za JoPeX)
 router.get('/ugovaraci', async (req, res) => {
   try {
     const r = await pool.query(
@@ -16,7 +15,6 @@ router.get('/ugovaraci', async (req, res) => {
   }
 });
 
-// GET /api/zaposleni - lista svih zaposlenih (samo admin)
 router.get('/', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Nema pristupa.' });
@@ -32,7 +30,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// PATCH /api/zaposleni/:id - izmjena prava (samo admin)
 router.patch('/:id', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Nema pristupa.' });
@@ -56,7 +53,6 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-// POST /api/zaposleni/:id/lozinka - postavljanje lozinke (samo admin)
 router.post('/:id/lozinka', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Nema pristupa.' });
