@@ -10,7 +10,8 @@ router.post('/login', async (req, res) => {
     return res.status(400).json({ error: 'Email i lozinka su obavezni.' });
   try {
     const r = await pool.query(
-      `SELECT id, ime_prezime, email, lozinka, rola, aktivan
+      `SELECT id, ime_prezime, email, lozinka, rola, aktivan,
+              moze_ugovarati, unos_naloga, izmjena_statusa, izmjena_naloga
        FROM zaposleni WHERE LOWER(email) = LOWER($1)`,
       [String(email).trim()]
     );
@@ -23,8 +24,14 @@ router.post('/login', async (req, res) => {
     if (!ok)
       return res.status(401).json({ error: 'Pogrešan email ili lozinka.' });
     req.session.user = {
-      id: user.id, ime_prezime: user.ime_prezime,
-      email: user.email, rola: user.rola,
+      id: user.id,
+      ime_prezime: user.ime_prezime,
+      email: user.email,
+      rola: user.rola,
+      moze_ugovarati: user.moze_ugovarati,
+      unos_naloga: user.unos_naloga,
+      izmjena_statusa: user.izmjena_statusa,
+      izmjena_naloga: user.izmjena_naloga,
     };
     res.json({ ok: true, user: req.session.user });
   } catch (err) {
