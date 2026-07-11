@@ -134,10 +134,8 @@ function chipS(s){const m={'Nije Započeto':'s-nije','U radu':'s-radu',Kasni:'s-
 function chipR(r){return r==='DA'?'<span class="chip r-da">DA</span>':r==='NE'?'<span class="chip r-ne">NE</span>':'';}
 function getDani(r){
   if(r.gotovo) return null;
-  // Koristi broj_dana sa servera ili izracunaj lokalno
-  if(r.broj_dana!=null&&r.broj_dana!=='') return parseInt(r.broj_dana);
-  if(r.planirani_zavrsetak){
-    const diff=Math.round((new Date(r.planirani_zavrsetak)-new Date())/(1000*60*60*24));
+  if(r.planirani_zavrsetak && r.pocetak){
+    const diff=Math.round((new Date(r.planirani_zavrsetak)-new Date(r.pocetak))/(1000*60*60*24));
     return diff;
   }
   return null;
@@ -304,16 +302,14 @@ async function popSave(){
     });
     if(!r.ok) throw new Error();
     popRow[popField]=val;
-    // Recalkuliraj broj_dana ako je promijenjen datum završetka
-    if(popField==='planirani_zavrsetak'){
-      if(val){
-        popRow.broj_dana=Math.round((new Date(val)-new Date())/(1000*60*60*24));
+    // Recalkuliraj broj_dana ako je promijenjen početak ili završetak
+    if(popField==='planirani_zavrsetak'||popField==='pocetak'){
+      if(popRow.planirani_zavrsetak&&popRow.pocetak){
+        popRow.broj_dana=Math.round((new Date(popRow.planirani_zavrsetak)-new Date(popRow.pocetak))/(1000*60*60*24));
       } else {
         popRow.broj_dana=null;
       }
     }
-    // Ako je gotovo=true, poništi dane
-    if(popField==='gotovo') popRow.broj_dana=val?null:popRow.broj_dana;
     popClose();
     render();
   }catch(e){alert('Greška pri čuvanju.');}
