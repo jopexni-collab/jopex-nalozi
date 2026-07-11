@@ -176,17 +176,17 @@ function getCols(){
   const base=[
     {k:'r_br',l:'R.Br.',w:50,filter:'text',render:r=>`<td class="num">${r.r_br}</td>`,edit:null},
     {k:'zadatak',l:'Zadatak',w:130,filter:'sel',opts:ZADACI,render:r=>`<td>${esc(r.zadatak)}</td>`,edit:{type:'select',opts:ZADACI,field:'zadatak'}},
+    {k:'materijal',l:'Materijal',w:100,filter:'sel',opts:MATERIJALI,render:r=>`<td>${esc(r.materijal)}</td>`,edit:{type:'select',opts:MATERIJALI,field:'materijal'}},
     {k:'prioritet',l:'Prioritet',w:90,filter:'sel',opts:PRIORITETI,render:r=>`<td>${chipP(r.prioritet)}</td>`,edit:{type:'select',opts:PRIORITETI,field:'prioritet'}},
     {k:'ugovorio',l:'Ugovorio',w:110,filter:'text',render:r=>`<td>${esc(r.ugovorio)}</td>`,edit:{type:'text',field:'ugovorio',label:'Ugovorio'}},
     {k:'narucilac',l:'Naručilac',w:130,filter:'text',render:r=>`<td>${esc(r.narucilac)}</td>`,edit:{type:'text',field:'narucilac',label:'Naručilac'}},
-    {k:'materijal',l:'Materijal',w:100,filter:'sel',opts:MATERIJALI,render:r=>`<td>${esc(r.materijal)}</td>`,edit:{type:'select',opts:MATERIJALI,field:'materijal'}},
     {k:'status',l:'Status',w:120,filter:'sel',opts:STATUSI,render:r=>`<td>${chipS(r.status)}</td>`,edit:{type:'select',opts:STATUSI,field:'status'}},
     {k:'pocetak',l:'Početak',w:80,filter:'text',render:r=>`<td>${fd(r.pocetak)}</td>`,edit:{type:'date',field:'pocetak',label:'Početak'}},
     {k:'planirani_zavrsetak',l:'Plan. završetak',w:100,filter:'text',render:r=>`<td class="${zavrsClass(r)}">${fd(r.planirani_zavrsetak)}</td>`,edit:{type:'date',field:'planirani_zavrsetak',label:'Plan. završetak'}},
-    {k:'broj_dana',l:'Dana',w:55,filter:'text',render:r=>daniC(r),edit:null},
-    {k:'gotovo',l:'✓',w:40,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.gotovo?'✓':''}</td>`,edit:{type:'check',field:'gotovo',label:'Gotovo'}},
+    {k:'broj_dana',l:'Dana',w:70,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>daniC(r),edit:null},
+    {k:'gotovo',l:'Gotovo',w:65,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.gotovo?'✓':''}</td>`,edit:{type:'check',field:'gotovo',label:'Gotovo'}},
     {k:'reklamacija_dodatni_rad',l:'Rek.',w:60,filter:'sel',opts:['DA','NE'],render:r=>`<td class="center">${chipR(r.reklamacija_dodatni_rad)}</td>`,edit:{type:'select',opts:['','NE','DA'],field:'reklamacija_dodatni_rad',label:'Reklamacija'}},
-    {k:'napomena',l:'Napomena',w:200,filter:'text',render:r=>`<td class="note" title="${esc(r.napomena)}">${esc(r.napomena)}</td>`,edit:{type:'textarea',field:'napomena',label:'Napomena'}},
+    {k:'napomena',l:'Napomena (upute operateru)',w:220,filter:'text',render:r=>`<td class="note" title="${esc(r.napomena)}">${esc(r.napomena)}</td>`,edit:{type:'textarea',field:'napomena',label:'Napomena / upute operateru'}},
     {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center">${lk(r.link_skica)}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
     {k:'link_ponuda',l:'Ponuda',w:50,filter:null,render:r=>`<td class="center">${lk(r.link_ponuda)}</td>`,edit:{type:'text',field:'link_ponuda',label:'Link ponuda'}},
   ];
@@ -237,6 +237,17 @@ function filterRows(){
       if(!c.filter) continue;
       const fv=gv('f-'+c.k);
       if(!fv) continue;
+      // Posebna logika za broj_dana
+      if(c.k==='broj_dana'){
+        const d=getDani(r);
+        if(fv==='Bez datuma'){if(d!=null) return false;}
+        else if(fv==='Kasni'){if(d==null||d>=0) return false;}
+        else if(fv==='Danas i sutra'){if(d==null||d<0||d>1) return false;}
+        else if(fv==='Ova sedmica'){if(d==null||d<0||d>7) return false;}
+        else if(fv==='Ovaj mjesec'){if(d==null||d<0||d>30) return false;}
+        else if(fv==='Više od mjesec'){if(d==null||d<=30) return false;}
+        continue;
+      }
       const rv=String(r[c.k]||'');
       if(c.filter==='sel'&&rv!==fv) return false;
       if(c.filter==='text'&&!rv.toLowerCase().includes(fv.toLowerCase())) return false;
