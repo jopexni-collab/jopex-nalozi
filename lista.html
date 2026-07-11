@@ -220,6 +220,7 @@ function getCols(){
     {k:'ugovorena_suma',l:'Ugovoreno',w:90,filter:null,render:r=>`<td class="num">${fm(r.ugovorena_suma)}</td>`,edit:{type:'number',field:'ugovorena_suma',label:'Ugovorena suma (KM)'}},
     {k:'avans',l:'Avans',w:80,filter:null,render:r=>`<td class="num">${fm(r.avans)}</td>`,edit:{type:'number',field:'avans',label:'Avans (KM)'}},
     {k:'za_naplatu',l:'Za naplatu',w:90,filter:null,render:r=>`<td class="num">${fm(r.za_naplatu)}</td>`,edit:null},
+    {k:'_del',l:'',w:40,filter:null,render:r=>`<td class="center"><button onclick="obrisiNalog(${r.r_br},event)" style="background:none;border:none;cursor:pointer;font-size:14px;color:#c0392b;" title="Obriši nalog">🗑</button></td>`,edit:null},
   ]:[];
   return [...base,...fin];
 }
@@ -519,7 +520,16 @@ document.addEventListener('click',e=>{if(!pop.contains(e.target)&&e.target.tagNa
 document.addEventListener('keydown',e=>{if(e.key==='Escape')popClose();if(e.key==='Enter'&&pop.style.display!=='none'&&document.getElementById('pop-inp')&&document.getElementById('pop-inp').tagName!=='TEXTAREA')popSave();});
 
 // ─── AUTH & LOAD ──────────────────────────────────────────────────────────
-async function checkAuth(){
+async function obrisiNalog(rBr, e){
+  e.stopPropagation();
+  if(!confirm(`Obrisati nalog #${rBr}? Ova akcija je nepovratna!`)) return;
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/${rBr}`,{method:'DELETE'});
+    if(!r.ok) throw new Error();
+    all=all.filter(n=>n.r_br!=rBr);
+    render();
+  }catch(err){alert('Greška pri brisanju.');}
+}
   try{
     const r=await fetch(API+'/api/auth/me');
     if(!r.ok){location.href='login.html';return;}
