@@ -63,6 +63,12 @@ app.use('/api/zaposleni',   requireLoginOrApiKey, require('./zaposleni'));
 app.use('/api/proizvodnja', requireLoginOrApiKey, require('./proizvodnja'));
 
 // ─── Statički fajlovi (web aplikacija) ───────────────────────────────────
+app.use((req, res, next) => {
+  if (req.path.endsWith('.html')) {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  }
+  next();
+});
 app.use(express.static(__dirname));
 
 // Zdravstvena provjera - koristi se za monitoring i za JoPeX da provjeri
