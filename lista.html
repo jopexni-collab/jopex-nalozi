@@ -353,6 +353,7 @@ async function popSave(){
     if(!val) val=null;
   }
   const body={[popField]:val};
+  console.log('popSave:', popField, '=', val, 'body:', JSON.stringify(body));
   try{
     const r=await fetch(`${API}/api/proizvodnja/${popRow.r_br}`,{
       method:'PATCH',headers:{'Content-Type':'application/json'},
