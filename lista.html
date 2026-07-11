@@ -530,6 +530,8 @@ async function obrisiNalog(rBr, e){
     render();
   }catch(err){alert('Greška pri brisanju.');}
 }
+
+async function checkAuth(){
   try{
     const r=await fetch(API+'/api/auth/me');
     if(!r.ok){location.href='login.html';return;}
