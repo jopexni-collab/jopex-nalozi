@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Korisnici – JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f0f2f5;--border:#d0d7de;--green:#1f8a4c;--red:#c0392b;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);font-size:12.5px;}
+header{background:var(--blue);color:#fff;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;}
+header h1{font-size:14px;font-weight:700;}
+header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgba(255,255,255,.4);padding:3px 8px;border-radius:4px;margin-left:8px;}
+main{max-width:1100px;margin:20px auto;padding:0 14px;}
+.card{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden;}
+table{width:100%;border-collapse:collapse;}
+thead th{background:#1f3864;color:#fff;font-size:11.5px;font-weight:600;padding:8px 10px;text-align:left;white-space:nowrap;}
+tbody tr:hover td{background:#f0f4ff;}
+tbody tr:nth-child(even) td{background:#f8f9fc;}
+td{padding:7px 10px;border-bottom:1px solid #eee;vertical-align:middle;}
+td.ime{font-weight:600;}
+td.poz{font-size:11px;color:#6b7a8d;}
+
+/* CHECKBOX TOGGLE */
+.toggle{position:relative;display:inline-block;width:36px;height:20px;}
+.toggle input{opacity:0;width:0;height:0;}
+.slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;
+  background:#ccc;border-radius:20px;transition:.3s;}
+.slider:before{position:absolute;content:"";height:14px;width:14px;left:3px;bottom:3px;
+  background:#fff;border-radius:50%;transition:.3s;}
+input:checked+.slider{background:var(--green);}
+input:checked+.slider:before{transform:translateX(16px);}
+.toggle-cell{text-align:center;}
+
+/* BADGE */
+.badge-admin{display:inline-block;background:#fce8e6;color:#c0392b;
+  font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;}
+
+/* LOZINKA */
+.btn-loz{font:inherit;font-size:11px;padding:3px 8px;background:#eee;
+  border:1px solid #ddd;border-radius:4px;cursor:pointer;}
+.btn-loz:hover{background:#e0e0e0;}
+.btn-save-row{font:inherit;font-size:11px;padding:3px 10px;background:var(--blue);
+  color:#fff;border:none;border-radius:4px;cursor:pointer;display:none;}
+.saving{opacity:.5;pointer-events:none;}
+.saved{color:var(--green);font-size:11px;margin-left:4px;}
+
+/* MODAL */
+.modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;
+  background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center;}
+.modal.on{display:flex;}
+.modal-box{background:#fff;border-radius:8px;padding:24px;min-width:320px;box-shadow:0 4px 20px rgba(0,0,0,.2);}
+.modal-box h3{margin-bottom:16px;font-size:15px;color:var(--dark);}
+.modal-box input{width:100%;font:inherit;font-size:13px;padding:8px 10px;
+  border:1px solid var(--border);border-radius:5px;margin-bottom:12px;}
+.modal-btns{display:flex;gap:8px;}
+.modal-btns button{flex:1;font:inherit;font-size:12px;padding:7px;border-radius:5px;border:none;cursor:pointer;}
+.btn-primary{background:var(--blue);color:#fff;}
+.btn-sec{background:#eee;color:#333;}
+.msg{font-size:12px;margin-top:8px;padding:6px 10px;border-radius:4px;}
+.msg.ok{background:#e6f4ea;color:var(--green);}
+.msg.err{background:#fce8e6;color:var(--red);}
+</style>
+</head>
+<body>
+<header>
+  <h1>👥 Upravljanje korisnicima</h1>
+  <nav>
+    <a href="lista.html">← Nalozi</a>
+    <a href="#" id="logout">Izlaz</a>
+  </nav>
+</header>
+
+<main>
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Ime i prezime</th>
+          <th>Pozicija</th>
+          <th style="text-align:center">Admin</th>
+          <th style="text-align:center">Ugovara</th>
+          <th style="text-align:center">Unos naloga</th>
+          <th style="text-align:center">Mijenja status</th>
+          <th style="text-align:center">Mijenja nalog</th>
+          <th style="text-align:center">Aktivan</th>
+          <th>Lozinka</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="10" style="text-align:center;padding:30px;color:#999">Učitavanje...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<!-- Modal za lozinku -->
+<div class="modal" id="loz-modal">
+  <div class="modal-box">
+    <h3 id="loz-ime">Postavi lozinku</h3>
+    <input type="password" id="loz1" placeholder="Nova lozinka">
+    <input type="password" id="loz2" placeholder="Ponovi lozinku">
+    <div id="loz-msg"></div>
+    <div class="modal-btns" style="margin-top:8px">
+      <button class="btn-primary" onclick="saveLozinka()">Sačuvaj</button>
+      <button class="btn-sec" onclick="closeModal()">Otkaži</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API='';
+let korisnici=[], currentLozId=null;
+
+const PRAVA=[
+  {field:'rola',label:'Admin',type:'admin'},
+  {field:'moze_ugovarati',label:'Ugovara',type:'bool'},
+  {field:'unos_naloga',label:'Unos naloga',type:'bool'},
+  {field:'izmjena_statusa',label:'Mijenja status',type:'bool'},
+  {field:'izmjena_naloga',label:'Mijenja nalog',type:'bool'},
+  {field:'aktivan',label:'Aktivan',type:'bool'},
+];
+
+async function load(){
+  const r=await fetch(API+'/api/zaposleni');
+  if(!r.ok){alert('Greška pri učitavanju');return;}
+  korisnici=await r.json();
+  render();
+}
+
+function render(){
+  document.getElementById('tbody').innerHTML=korisnici.map(k=>`
+    <tr id="row-${k.id}">
+      <td class="ime">${esc(k.ime_prezime)}${k.rola==='admin'?'<span class="badge-admin">ADMIN</span>':''}</td>
+      <td class="poz">${esc(k.pozicija||'')}</td>
+      <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.rola==='admin'?'checked':''} onchange="togglePravo(${k.id},'rola',this.checked)"><span class="slider"></span></label></td>
+      <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_ugovarati?'checked':''} onchange="togglePravo(${k.id},'moze_ugovarati',this.checked)"><span class="slider"></span></label></td>
+      <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.unos_naloga?'checked':''} onchange="togglePravo(${k.id},'unos_naloga',this.checked)"><span class="slider"></span></label></td>
+      <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.izmjena_statusa?'checked':''} onchange="togglePravo(${k.id},'izmjena_statusa',this.checked)"><span class="slider"></span></label></td>
+      <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.izmjena_naloga?'checked':''} onchange="togglePravo(${k.id},'izmjena_naloga',this.checked)"><span class="slider"></span></label></td>
+      <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.aktivan?'checked':''} onchange="togglePravo(${k.id},'aktivan',this.checked)"><span class="slider"></span></label></td>
+      <td><button class="btn-loz" onclick="openLozinka(${k.id},'${esc(k.ime_prezime)}')">🔑 Postavi</button></td>
+      <td><span class="saved" id="saved-${k.id}"></span></td>
+    </tr>
+  `).join('');
+}
+
+async function togglePravo(id, field, value){
+  const body = field==='rola'
+    ? {rola: value?'admin':'proizvodnja'}
+    : {[field]: value};
+  try{
+    const r=await fetch(`${API}/api/zaposleni/${id}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body),
+    });
+    if(!r.ok) throw new Error();
+    const k=korisnici.find(k=>k.id===id);
+    if(k){
+      if(field==='rola') k.rola=value?'admin':'proizvodnja';
+      else k[field]=value;
+    }
+    const sv=document.getElementById('saved-'+id);
+    if(sv){sv.textContent='✓ Sačuvano';setTimeout(()=>sv.textContent='',2000);}
+  }catch(e){
+    alert('Greška pri čuvanju.');
+    load(); // reload da vrati staro stanje
+  }
+}
+
+function openLozinka(id, ime){
+  currentLozId=id;
+  document.getElementById('loz-ime').textContent='Postavi lozinku: '+ime;
+  document.getElementById('loz1').value='';
+  document.getElementById('loz2').value='';
+  document.getElementById('loz-msg').innerHTML='';
+  document.getElementById('loz-modal').classList.add('on');
+  document.getElementById('loz1').focus();
+}
+
+function closeModal(){
+  document.getElementById('loz-modal').classList.remove('on');
+  currentLozId=null;
+}
+
+async function saveLozinka(){
+  const l1=document.getElementById('loz1').value;
+  const l2=document.getElementById('loz2').value;
+  const msg=document.getElementById('loz-msg');
+  if(l1.length<6){msg.innerHTML='<div class="msg err">Lozinka mora imati najmanje 6 znakova.</div>';return;}
+  if(l1!==l2){msg.innerHTML='<div class="msg err">Lozinke se ne poklapaju.</div>';return;}
+  try{
+    const r=await fetch(`${API}/api/zaposleni/${currentLozId}/lozinka`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({lozinka:l1}),
+    });
+    if(!r.ok) throw new Error();
+    msg.innerHTML='<div class="msg ok">✓ Lozinka postavljena.</div>';
+    setTimeout(closeModal,1500);
+  }catch(e){
+    msg.innerHTML='<div class="msg err">Greška pri čuvanju.</div>';
+  }
+}
+
+function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+document.getElementById('logout').onclick=async e=>{
+  e.preventDefault();
+  await fetch(API+'/api/auth/logout',{method:'POST'});
+  location.href='login.html';
+};
+
+// Provjeri da li je admin
+fetch(API+'/api/auth/me').then(r=>{
+  if(!r.ok){location.href='login.html';return;}
+  return r.json();
+}).then(u=>{
+  if(!u||u.rola!=='admin'){location.href='lista.html';return;}
+  load();
+}).catch(()=>location.href='login.html');
+</script>
+</body></html>
