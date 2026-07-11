@@ -134,12 +134,11 @@ function chipS(s){const m={'Nije Započeto':'s-nije','U radu':'s-radu',Kasni:'s-
 function chipR(r){return r==='DA'?'<span class="chip r-da">DA</span>':r==='NE'?'<span class="chip r-ne">NE</span>':'';}
 function getDani(r){
   if(r.gotovo) return null;
-  if(r.planirani_zavrsetak && r.pocetak){
-    // Koristimo samo datumski dio (bez vremena) da izbjegnemo timezone probleme
+  if(r.planirani_zavrsetak){
     const zav=new Date(r.planirani_zavrsetak.split('T')[0]);
-    const poc=new Date(r.pocetak.split('T')[0]);
-    const diff=Math.round((zav-poc)/(1000*60*60*24));
-    return diff;
+    const danas=new Date();
+    danas.setHours(0,0,0,0);
+    return Math.round((zav-danas)/(1000*60*60*24));
   }
   return null;
 }
@@ -297,8 +296,8 @@ function openPop(td,row,editCfg){
     const dv=val?val.split('T')[0]:'';
     const [yy,mm,dd]=dv?dv.split('-'):['','',''];
     const shown=dv?`${dd}.${mm}.${yy}`:'';
-    fEl.innerHTML=`<input type="text" id="pop-inp" placeholder="DD.MM.GGGG" value="${shown}" style="font:inherit;width:100%;padding:5px 7px;border:1px solid #ccc;border-radius:4px;letter-spacing:1px;">
-    <div style="font-size:10px;color:#888;margin-top:3px;">Format: DD.MM.GGGG (npr. 15.07.2026)</div>`;
+    fEl.innerHTML=`<input type="text" id="pop-inp" placeholder="npr. 22.7 ili 22/07/26" value="${shown}" style="font:inherit;width:100%;padding:5px 7px;border:1px solid #ccc;border-radius:4px;">
+    <div style="font-size:10px;color:#888;margin-top:3px;">Format: DD.MM ili DD.MM.GG ili DD.MM.GGGG</div>`;
     setTimeout(()=>{const el=document.getElementById('pop-inp');if(el)el.focus();},50);
   } else if(editCfg.type==='number'){
     fEl.innerHTML=`<input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
@@ -315,12 +314,29 @@ function openPop(td,row,editCfg){
 async function popSave(){
   if(!popRow||!popField) return;
   const inp=document.getElementById('pop-inp');
-  let val=inp.value;
+  let val=inp.value.trim();
   if(popField==='gotovo') val=val==='true';
-  // Konvertuj DD.MM.GGGG u YYYY-MM-DD
-  if(typeof val==='string'&&val.match(/^\d{2}\.\d{2}\.\d{4}$/)){
-    const [dd,mm,yy]=val.split('.');
-    val=`${yy}-${mm}-${dd}`;
+
+  // Pametan datum parser
+  if((popField==='pocetak'||popField==='planirani_zavrsetak')&&typeof val==='string'&&val){
+    const today=new Date();
+    const cy=today.getFullYear(); // npr. 2026
+    // Razdvoji po . ili /
+    const parts=val.split(/[.\\/]/).map(p=>p.trim());
+    let dd=null,mm=null,yy=null;
+    if(parts.length>=2){
+      dd=parseInt(parts[0]);
+      mm=parseInt(parts[1]);
+      if(parts.length===3){
+        yy=parseInt(parts[2]);
+        if(yy<100) yy=2000+yy; // 26 → 2026, 28 → 2028
+      } else {
+        yy=cy; // bez godine = tekuća godina
+      }
+    }
+    if(dd&&mm&&yy){
+      val=`${yy}-${String(mm).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
+    }
   }
   const body={[popField]:val};
   try{
