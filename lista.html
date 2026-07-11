@@ -296,29 +296,10 @@ function openPop(td,row,editCfg){
   } else if(editCfg.type==='date'){
     const dv=val?val.split('T')[0]:'';
     const [yy,mm,dd]=dv?dv.split('-'):['','',''];
-    fEl.innerHTML=`<div style="display:flex;gap:4px;align-items:center">
-      <input type="text" id="pop-dd" placeholder="DD" maxlength="2" value="${dd||''}" style="width:36px;text-align:center;font:inherit;padding:4px;border:1px solid #ccc;border-radius:3px;">
-      <span>.</span>
-      <input type="text" id="pop-mm" placeholder="MM" maxlength="2" value="${mm||''}" style="width:36px;text-align:center;font:inherit;padding:4px;border:1px solid #ccc;border-radius:3px;">
-      <span>.</span>
-      <input type="text" id="pop-yy" placeholder="GGGG" maxlength="4" value="${yy||''}" style="width:52px;text-align:center;font:inherit;padding:4px;border:1px solid #ccc;border-radius:3px;">
-    </div>
-    <input type="hidden" id="pop-inp" value="${dv}">`;
-    // Auto-fokus i auto-tab
-    setTimeout(()=>{
-      const dd2=document.getElementById('pop-dd');
-      const mm2=document.getElementById('pop-mm');
-      const yy2=document.getElementById('pop-yy');
-      const hi=document.getElementById('pop-inp');
-      function upd(){
-        const d=dd2.value.padStart(2,'0'),m=mm2.value.padStart(2,'0'),y=yy2.value;
-        if(d&&m&&y.length===4) hi.value=`${y}-${m}-${d}`;
-      }
-      dd2.addEventListener('input',()=>{upd();if(dd2.value.length===2)mm2.focus();});
-      mm2.addEventListener('input',()=>{upd();if(mm2.value.length===2)yy2.focus();});
-      yy2.addEventListener('input',()=>upd());
-      if(dd2) dd2.focus();
-    },50);
+    const shown=dv?`${dd}.${mm}.${yy}`:'';
+    fEl.innerHTML=`<input type="text" id="pop-inp" placeholder="DD.MM.GGGG" value="${shown}" style="font:inherit;width:100%;padding:5px 7px;border:1px solid #ccc;border-radius:4px;letter-spacing:1px;">
+    <div style="font-size:10px;color:#888;margin-top:3px;">Format: DD.MM.GGGG (npr. 15.07.2026)</div>`;
+    setTimeout(()=>{const el=document.getElementById('pop-inp');if(el)el.focus();},50);
   } else if(editCfg.type==='number'){
     fEl.innerHTML=`<input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
   } else {
@@ -336,6 +317,11 @@ async function popSave(){
   const inp=document.getElementById('pop-inp');
   let val=inp.value;
   if(popField==='gotovo') val=val==='true';
+  // Konvertuj DD.MM.GGGG u YYYY-MM-DD
+  if(typeof val==='string'&&val.match(/^\d{2}\.\d{2}\.\d{4}$/)){
+    const [dd,mm,yy]=val.split('.');
+    val=`${yy}-${mm}-${dd}`;
+  }
   const body={[popField]:val};
   try{
     const r=await fetch(`${API}/api/proizvodnja/${popRow.r_br}`,{
