@@ -57,7 +57,7 @@ router.post('/', async (req, res) => {
   const {
     zadatak, prioritet, ugovorio_id, ugovorio: ugovorioIzReq, narucilac, materijal, status,
     pocetak, planirani_zavrsetak, napomena, link_skica, link_ponuda,
-    ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad,
+    ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad, r_br_import,
   } = req.body || {};
 
   if (!zadatak?.trim())
@@ -74,14 +74,35 @@ router.post('/', async (req, res) => {
       if (emp.rows.length) ugovorioIme = emp.rows[0].ime_prezime;
     }
 
-    const r = await pool.query(
-      `INSERT INTO proizvodnja_jopex
+    // Ako je import sa originalnim R.Br., upiši ga direktno
+    let insertQuery, insertVals;
+    if (r_br_import) {
+      insertQuery = `INSERT INTO proizvodnja_jopex
+        (r_br, zadatak, prioritet, ugovorio_id, ugovorio, narucilac, materijal,
+         status, pocetak, planirani_zavrsetak, napomena, link_skica,
+         link_ponuda, ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+       ON CONFLICT (r_br) DO NOTHING
+       RETURNING r_br, zadatak, narucilac, ugovorena_suma, status`;
+      insertVals = [
+        r_br_import,
+        zadatak, prioritet || 'Normal',
+        ugovorio_id || null, ugovorioIme,
+        narucilac || null, materijal || null,
+        status || 'Nije Započeto',
+        pocetak || null, planirani_zavrsetak || null,
+        napomena || null, link_skica || null, link_ponuda || null,
+        ugovorena_suma ?? 0, avans ?? 0,
+        gotovo || false, reklamacija_dodatni_rad || null,
+      ];
+    } else {
+      insertQuery = `INSERT INTO proizvodnja_jopex
         (zadatak, prioritet, ugovorio_id, ugovorio, narucilac, materijal,
          status, pocetak, planirani_zavrsetak, napomena, link_skica,
          link_ponuda, ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-       RETURNING r_br, zadatak, narucilac, ugovorena_suma, status`,
-      [
+       RETURNING r_br, zadatak, narucilac, ugovorena_suma, status`;
+      insertVals = [
         zadatak, prioritet || 'Normal',
         ugovorio_id || null, ugovorioIme,
         narucilac || null, materijal || null,
@@ -90,7 +111,9 @@ router.post('/', async (req, res) => {
         napomena || null, link_skica || null, link_ponuda || null,
         ugovorena_suma ?? 0, avans ?? 0,
         gotovo || false, reklamacija_dodatni_rad || null,
-      ]
+      ];
+    }
+    const r = await pool.query(insertQuery, insertVals);
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
