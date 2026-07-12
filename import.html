@@ -87,9 +87,20 @@ function parseNum(val){
   if(val===null||val===undefined||val==='') return 0;
   if(typeof val==='number') return val;
   let s=String(val).replace(/["""]/g,'').trim();
-  if(!s) return 0;
-  if(s.includes('.')&&s.includes(',')) s=s.replace(/\./g,'').replace(',','.');
-  else if(s.includes(',')&&!s.includes('.')) s=s.replace(',','.');
+  if(!s||s==='-') return 0;
+  // Detektuj format: ako ima i tačku i zarez
+  // Format 1.234,56 — tačka je separator hilj, zarez decimalni
+  if(s.includes(',') && s.includes('.')){
+    // Provjeri koja je zadnja: ako je zarez zadnji — decimalni separator
+    if(s.lastIndexOf(',')>s.lastIndexOf('.'))
+      s=s.replace(/\./g,'').replace(',','.');
+    else
+      s=s.replace(/,/g,'');
+  } else if(s.includes(',')&&!s.includes('.')){
+    // Samo zarez — decimalni separator
+    s=s.replace(',','.');
+  }
+  // Tačka jedino kao decimalni separator — ostavi
   return parseFloat(s)||0;
 }
 
@@ -108,7 +119,9 @@ function mapRow(cols){
   // [9]=Broj dana, [10]=Gotovo, [11]=Reklamacija, [12]=Napomena
   // [13]=Link skica, [14]=Link ponuda, [15]=Ugovorena Suma, [16]=Avans
   const g=i=>(cols[i]!==undefined&&cols[i]!==null)?cols[i]:'';
+  const rBr=parseInt(g(0))||null;
   return {
+    _r_br:                rBr,
     zadatak:              String(g(1)||'').trim()||'',
     prioritet:            String(g(2)||'Normal').trim()||'Normal',
     ugovorio:             String(g(3)||'').trim(),
@@ -191,7 +204,7 @@ async function startImport(){
     try{
       const r=await fetch(`${API}/api/proizvodnja`,{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(parsedRows[i]),
+        body:JSON.stringify({...parsedRows[i], r_br_import: parsedRows[i]._r_br}),
       });
       if(r.ok) ok++; else err++;
     }catch(e){err++;}
