@@ -87,19 +87,17 @@ function parseNum(val){
   if(val===null||val===undefined||val==='') return 0;
   if(typeof val==='number') return val;
   let s=String(val).replace(/["""]/g,'').trim();
-  // Format 1.234,56
+  if(!s) return 0;
   if(s.includes('.')&&s.includes(',')) s=s.replace(/\./g,'').replace(',','.');
-  else if(s.includes(',')) s=s.replace(',','.');
+  else if(s.includes(',')&&!s.includes('.')) s=s.replace(',','.');
   return parseFloat(s)||0;
 }
 
 function parseBool(val){
+  if(val===false||val===0||val===''||val===null||val===undefined) return false;
   if(val===true||val===1) return true;
-  if(typeof val==='string'){
-    const v=val.toUpperCase().trim();
-    return v==='TRUE'||v==='DA'||v==='1'||v==='YES';
-  }
-  return false;
+  const v=String(val).toUpperCase().trim();
+  return v==='TRUE'||v==='DA'||v==='1'||v==='YES';
 }
 
 function mapRow(cols){
@@ -140,7 +138,7 @@ function loadFile(file){
     const wb=XLSX.read(data,{type:'array',cellDates:false});
     const ws=wb.Sheets[wb.SheetNames[0]];
     // Čitaj kao array of arrays
-    const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});
+    const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
     processData(aoa);
   };
   r.readAsArrayBuffer(file);
@@ -159,7 +157,7 @@ function processData(aoa){
     if(isNaN(rbr)||rbr<=0) continue; // preskoči prazne i header
     rows.push(mapRow(cols));
   }
-  parsedRows=rows;
+  parsedRows=rows.reverse(); // okreni - importuj od najstarijeg prema najnovijem
 
   document.getElementById('stat-rows').textContent=`${parsedRows.length} naloga za import`;
 
