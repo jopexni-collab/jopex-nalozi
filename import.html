@@ -94,9 +94,11 @@ function parseNum(val){
 }
 
 function parseBool(val){
-  if(val===false||val===0||val===''||val===null||val===undefined) return false;
-  if(val===true||val===1) return true;
+  if(val===null||val===undefined||val==='') return false;
+  if(typeof val==='boolean') return val;
+  if(typeof val==='number') return val===1;
   const v=String(val).toUpperCase().trim();
+  if(v==='FALSE'||v==='NE'||v==='0'||v==='NO') return false;
   return v==='TRUE'||v==='DA'||v==='1'||v==='YES';
 }
 
@@ -164,7 +166,7 @@ function processData(aoa){
   const previewCols=[
     {l:'Zadatak',f:'zadatak'},{l:'Prioritet',f:'prioritet'},{l:'Naručilac',f:'narucilac'},
     {l:'Status',f:'status'},{l:'Ugovoreno',f:'pocetak'},{l:'Plan. završetak',f:'planirani_zavrsetak'},
-    {l:'Gotovo',f:'gotovo'},{l:'Iznos KM',f:'ugovorena_suma'},{l:'Avans',f:'avans'}
+    {l:'Gotovo ✓',f:'gotovo'},{l:'Iznos KM',f:'ugovorena_suma'},{l:'Avans',f:'avans'}
   ];
   document.getElementById('preview').innerHTML=`
     <table>
