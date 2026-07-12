@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Import CSV – JoPeX</title>
+<title>Import – JoPeX</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{--blue:#1a5fa8;--dark:#134a85;--bg:#f0f2f5;--border:#d0d7de;--green:#1f8a4c;--red:#c0392b;}
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -19,7 +20,6 @@ main{max-width:960px;margin:24px auto;padding:0 16px;}
 .drop-zone input{display:none;}
 .btn{font:inherit;font-size:13px;padding:8px 20px;border:none;border-radius:6px;cursor:pointer;}
 .btn-primary{background:var(--blue);color:#fff;}
-.btn-primary:hover{background:var(--dark);}
 .btn-primary:disabled{opacity:.5;cursor:not-allowed;}
 .preview{margin-top:16px;overflow:auto;max-height:320px;}
 table{width:100%;border-collapse:collapse;font-size:11.5px;}
@@ -36,17 +36,17 @@ tbody tr:nth-child(even) td{background:#f8f9fc;}
 </head>
 <body>
 <header>
-  <h1>📥 Import CSV naloga</h1>
+  <h1>📥 Import naloga iz Excel/CSV</h1>
   <a href="lista.html">← Radni nalozi</a>
 </header>
 <main>
   <div class="card">
-    <h2>Izaberi CSV fajl iz Google Sheets</h2>
-    <div class="drop-zone" id="dropZone" onclick="document.getElementById('csvFile').click()">
-      <div style="font-size:36px">📄</div>
-      <div style="font-size:14px;font-weight:600;margin-top:8px">Klikni ili prevuci CSV fajl ovdje</div>
-      <p style="margin-top:6px;font-size:12px">Datoteka → Preuzmi → Vrijednosti razdvojene zarezima (.csv)</p>
-      <input type="file" id="csvFile" accept=".csv">
+    <h2>Izaberi Excel (.xlsx) ili CSV fajl iz Google Sheets</h2>
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('file').click()">
+      <div style="font-size:36px">📊</div>
+      <div style="font-size:14px;font-weight:600;margin-top:8px">Klikni ili prevuci fajl ovdje</div>
+      <p style="margin-top:6px;font-size:12px">Datoteka → Preuzmi → Microsoft Excel (.xlsx) ili CSV</p>
+      <input type="file" id="file" accept=".xlsx,.xls,.csv">
     </div>
     <div id="preview-wrap" style="display:none">
       <div id="msg-parse"></div>
@@ -64,95 +64,66 @@ tbody tr:nth-child(even) td{background:#f8f9fc;}
 const API='';
 let parsedRows=[];
 
-function parseCSV(text){
-  // Normalizuj line endings
-  const lines=text.split(/\r?\n/);
-  if(!lines.length) return [];
-  function parseLine(line){
-    const cols=[];
-    let cur='', inQ=false;
-    for(let i=0;i<line.length;i++){
-      const c=line[i];
-      if(c==='"'){
-        if(inQ&&line[i+1]==='"'){cur+='"';i++;} // escaped quote
-        else inQ=!inQ;
-      } else if(c===','&&!inQ){
-        cols.push(cur.trim());cur='';
-      } else cur+=c;
-    }
-    cols.push(cur.trim());
-    return cols;
+function parseDate(val){
+  if(!val) return null;
+  // Excel datum (broj dana od 1900-01-01)
+  if(typeof val==='number'){
+    const d=XLSX.SSF.parse_date_code(val);
+    if(d) return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
   }
-  const header=parseLine(lines[0]);
-  const rows=[];
-  for(let i=1;i<lines.length;i++){
-    if(!lines[i].trim()) continue;
-    const cols=parseLine(lines[i]);
-    if(cols.every(c=>!c)) continue;
-    const row={};
-    header.forEach((h,j)=>row[j]=(cols[j]||'').trim());
-    row._raw=cols;
-    rows.push(row);
-  }
-  return rows;
-}
-
-function parseDate(s){
-  if(!s) return null;
-  s=s.trim().replace(/\.$/,''); // ukloni tačku na kraju (10.07.26.)
+  // String formati
+  let s=String(val).trim().replace(/\.$/,'');
   // DD.MM.YY ili DD.MM.YYYY
   let m=s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{2,4})$/);
   if(m){
-    let y=parseInt(m[3]);
-    if(y<100) y+=2000;
+    let y=parseInt(m[3]); if(y<100) y+=2000;
     return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
   }
-  // YYYY-MM-DD
   if(s.match(/^\d{4}-\d{2}-\d{2}$/)) return s;
   return null;
 }
 
-function parseNum(s){
-  if(!s) return 0;
-  // Format: "1.234,56" ili "1234,56" ili "1234.56"
-  s=String(s).replace(/[""]/g,'').trim();
-  if(!s) return 0;
-  // Ako ima i tačku i zarez - tačka je separator hilj., zarez decimalni
-  if(s.includes('.') && s.includes(',')) s=s.replace(/\./g,'').replace(',','.');
-  // Samo zarez - zarez je decimalni
+function parseNum(val){
+  if(val===null||val===undefined||val==='') return 0;
+  if(typeof val==='number') return val;
+  let s=String(val).replace(/["""]/g,'').trim();
+  // Format 1.234,56
+  if(s.includes('.')&&s.includes(',')) s=s.replace(/\./g,'').replace(',','.');
   else if(s.includes(',')) s=s.replace(',','.');
   return parseFloat(s)||0;
 }
 
-function parseBool(s){
-  if(!s) return false;
-  return s.toUpperCase()==='TRUE'||s==='1'||s.toUpperCase()==='DA';
+function parseBool(val){
+  if(val===true||val===1) return true;
+  if(typeof val==='string'){
+    const v=val.toUpperCase().trim();
+    return v==='TRUE'||v==='DA'||v==='1'||v==='YES';
+  }
+  return false;
 }
 
-// Mapiranje po poziciji kolone (0-based index)
-// 0=R.Br, 1=Zadatak, 2=Prioritet, 3=Ugovorio, 4=Narucilac, 5=Materijal
-// 6=Status, 7=Pocetak, 8=Plan.zavrsetak, 9=Broj dana, 10=Gotovo
-// 11=Reklamacija, 12=Napomena, 13=Link skica, 14=Link ponuda
-// 15=Ugovorena Suma, 16=Avans, 17=Za Naplatu
-function mapRow(row){
-  const c=row._raw||[];
-  const get=i=>(c[i]||'').trim();
+function mapRow(cols){
+  // cols[0]=R.Br, [1]=Zadatak, [2]=Prioritet, [3]=Ugovorio, [4]=Narucilac
+  // [5]=Materijal, [6]=Status, [7]=Pocetak, [8]=Plan.zavrsetak
+  // [9]=Broj dana, [10]=Gotovo, [11]=Reklamacija, [12]=Napomena
+  // [13]=Link skica, [14]=Link ponuda, [15]=Ugovorena Suma, [16]=Avans
+  const g=i=>(cols[i]!==undefined&&cols[i]!==null)?cols[i]:'';
   return {
-    zadatak:              get(1)||'',
-    prioritet:            get(2)||'Normal',
-    ugovorio:             get(3)||'',
-    narucilac:            get(4)||'',
-    materijal:            get(5)||'',
-    status:               get(6)||'Nije Započeto',
-    pocetak:              parseDate(get(7)),
-    planirani_zavrsetak:  parseDate(get(8)),
-    gotovo:               parseBool(get(10)),
-    reklamacija_dodatni_rad: get(11)||'',
-    napomena:             get(12)||'',
-    link_skica:           get(13)||'',
-    link_ponuda:          get(14)||'',
-    ugovorena_suma:       parseNum(get(15)),
-    avans:                parseNum(get(16)),
+    zadatak:              String(g(1)||'').trim()||'',
+    prioritet:            String(g(2)||'Normal').trim()||'Normal',
+    ugovorio:             String(g(3)||'').trim(),
+    narucilac:            String(g(4)||'').trim(),
+    materijal:            String(g(5)||'').trim(),
+    status:               String(g(6)||'Nije Započeto').trim()||'Nije Započeto',
+    pocetak:              parseDate(g(7)),
+    planirani_zavrsetak:  parseDate(g(8)),
+    gotovo:               parseBool(g(10)),
+    reklamacija_dodatni_rad: String(g(11)||'').trim(),
+    napomena:             String(g(12)||'').trim(),
+    link_skica:           String(g(13)||'').trim(),
+    link_ponuda:          String(g(14)||'').trim(),
+    ugovorena_suma:       parseNum(g(15)),
+    avans:                parseNum(g(16)),
   };
 }
 
@@ -160,41 +131,47 @@ const dz=document.getElementById('dropZone');
 dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
 dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
 dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');loadFile(e.dataTransfer.files[0]);});
-document.getElementById('csvFile').addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+document.getElementById('file').addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
 
 function loadFile(file){
-  // Pokušaj UTF-8 prvo, pa Windows-1250
   const r=new FileReader();
   r.onload=e=>{
-    let text=e.target.result;
-    // Provjeri da li je OK (ima šumova?)
-    if(text.includes('Ä') || text.includes('Å')){
-      // Čita ponovo kao Windows-1250
-      const r2=new FileReader();
-      r2.onload=e2=>processCSV(e2.target.result);
-      r2.readAsText(file,'windows-1250');
-    } else {
-      processCSV(text);
-    }
+    const data=new Uint8Array(e.target.result);
+    const wb=XLSX.read(data,{type:'array',cellDates:false});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    // Čitaj kao array of arrays
+    const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});
+    processData(aoa);
   };
-  r.readAsText(file,'UTF-8');
+  r.readAsArrayBuffer(file);
 }
 
-function processCSV(text){
-  const raw=parseCSV(text);
-  // Preskoči header red i prazne
-  parsedRows=raw.filter(r=>{
-    const id=parseInt((r._raw||[])[0]);
-    return !isNaN(id)&&id>0;
-  }).map(mapRow);
+function processData(aoa){
+  if(!aoa||aoa.length<2){
+    document.getElementById('msg-parse').innerHTML='<div class="msg err">Fajl je prazan ili nema podataka.</div>';
+    return;
+  }
+  // Preskoči header red (index 0), uzmi sve ostale koji imaju R.Br.
+  const rows=[];
+  for(let i=1;i<aoa.length;i++){
+    const cols=aoa[i];
+    const rbr=parseInt(cols[0]);
+    if(isNaN(rbr)||rbr<=0) continue; // preskoči prazne i header
+    rows.push(mapRow(cols));
+  }
+  parsedRows=rows;
 
   document.getElementById('stat-rows').textContent=`${parsedRows.length} naloga za import`;
 
-  const cols=['zadatak','prioritet','narucilac','materijal','status','pocetak','planirani_zavrsetak','ugovorena_suma','avans'];
+  const previewCols=[
+    {l:'Zadatak',f:'zadatak'},{l:'Prioritet',f:'prioritet'},{l:'Naručilac',f:'narucilac'},
+    {l:'Status',f:'status'},{l:'Ugovoreno',f:'pocetak'},{l:'Plan. završetak',f:'planirani_zavrsetak'},
+    {l:'Gotovo',f:'gotovo'},{l:'Iznos KM',f:'ugovorena_suma'},{l:'Avans',f:'avans'}
+  ];
   document.getElementById('preview').innerHTML=`
     <table>
-      <thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
-      <tbody>${parsedRows.slice(0,15).map(r=>`<tr>${cols.map(c=>`<td>${r[c]??''}</td>`).join('')}</tr>`).join('')}</tbody>
+      <thead><tr>${previewCols.map(c=>`<th>${c.l}</th>`).join('')}</tr></thead>
+      <tbody>${parsedRows.slice(0,15).map(r=>`<tr>${previewCols.map(c=>`<td>${r[c.f]??''}</td>`).join('')}</tr>`).join('')}</tbody>
     </table>
     ${parsedRows.length>15?`<p style="color:#999;font-size:11px;padding:6px;text-align:center">... i još ${parsedRows.length-15} redova</p>`:''}
   `;
@@ -213,8 +190,7 @@ async function startImport(){
     pb.style.width=Math.round(((i+1)/parsedRows.length)*100)+'%';
     try{
       const r=await fetch(`${API}/api/proizvodnja`,{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
+        method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify(parsedRows[i]),
       });
       if(r.ok) ok++; else err++;
