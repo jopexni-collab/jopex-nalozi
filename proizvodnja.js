@@ -57,7 +57,7 @@ router.post('/', async (req, res) => {
   const {
     zadatak, prioritet, ugovorio_id, ugovorio: ugovorioIzReq, narucilac, materijal, status,
     pocetak, planirani_zavrsetak, napomena, link_skica, link_ponuda,
-    ugovorena_suma, avans,
+    ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad,
   } = req.body || {};
 
   if (!zadatak?.trim())
@@ -78,8 +78,8 @@ router.post('/', async (req, res) => {
       `INSERT INTO proizvodnja_jopex
         (zadatak, prioritet, ugovorio_id, ugovorio, narucilac, materijal,
          status, pocetak, planirani_zavrsetak, napomena, link_skica,
-         link_ponuda, ugovorena_suma, avans)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         link_ponuda, ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        RETURNING r_br, zadatak, narucilac, ugovorena_suma, status`,
       [
         zadatak, prioritet || 'Normal',
@@ -89,6 +89,7 @@ router.post('/', async (req, res) => {
         pocetak || new Date().toISOString().split('T')[0], planirani_zavrsetak || null,
         napomena || null, link_skica || null, link_ponuda || null,
         ugovorena_suma ?? 0, avans ?? 0,
+        gotovo || false, reklamacija_dodatni_rad || null,
       ]
     );
     res.status(201).json(r.rows[0]);
