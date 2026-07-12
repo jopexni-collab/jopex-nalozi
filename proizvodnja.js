@@ -114,7 +114,6 @@ router.post('/', async (req, res) => {
       ];
     }
     const r = await pool.query(insertQuery, insertVals);
-    );
     res.status(201).json(r.rows[0]);
   } catch (err) {
     console.error(err);
