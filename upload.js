@@ -100,7 +100,11 @@ router.post('/', async (req, res) => {
     }
     if (radni_nalog_b64) {
       const buf = Buffer.from(radni_nalog_b64, 'base64');
-      rezultat.radni_nalog_link = await uploadToR2(`nalozi/${ts}_${naziv}_nalog.pdf`, buf, 'application/pdf');
+      // Pokušaj detektovati da li je PDF ili HTML
+      const isPdf = buf[0] === 0x25 && buf[1] === 0x50; // %P = PDF header
+      const ext = isPdf ? 'pdf' : 'html';
+      const mime = isPdf ? 'application/pdf' : 'text/html;charset=utf-8';
+      rezultat.radni_nalog_link = await uploadToR2(`nalozi/${ts}_${naziv}_nalog.${ext}`, buf, mime);
     }
     if (ponuda_b64) {
       const buf = Buffer.from(ponuda_b64, 'base64');
