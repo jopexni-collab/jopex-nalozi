@@ -16,7 +16,8 @@ const BASE_COLS = `
   p.narucilac, p.materijal, p.status, p.pocetak, p.planirani_zavrsetak,
   (p.planirani_zavrsetak - CURRENT_DATE) AS broj_dana,
   p.gotovo, p.reklamacija_dodatni_rad, p.napomena,
-  p.link_skica, p.link_ponuda, p.datum_kreiranja, p.nova_procjena
+  p.link_skica, p.link_ponuda, p.datum_kreiranja, p.nova_procjena,
+  p.naplaceno, p.naplaceno_opis
 `;
 
 // GET /api/proizvodnja - lista (admin vidi finansije, ostali ne)
@@ -132,7 +133,7 @@ router.patch('/:r_br', async (req, res) => {
   ];
   const ALLOWED_ADMIN = [
     'ugovorena_suma','avans','naplata_detalji',
-    'naplaceno_fakturisano','dodatni_rad_napomena',
+    'naplaceno_fakturisano','dodatni_rad_napomena','naplaceno','naplaceno_opis',
   ];
 
   const allowed = isAdmin ? [...ALLOWED_BASE, ...ALLOWED_ADMIN] : ALLOWED_BASE;
