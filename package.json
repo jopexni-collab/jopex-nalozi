@@ -12,7 +12,6 @@
     "express": "^4.19.2",
     "express-session": "^1.18.0",
     "googleapis": "^140.0.0",
-    "pg": "^8.11.5",
-    "puppeteer": "^21.0.0"
+    "pg": "^8.11.5"
   }
 }
