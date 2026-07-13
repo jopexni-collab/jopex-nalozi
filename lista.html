@@ -174,7 +174,7 @@ async function undoZadnje(e){
 function mozeEditovati(field){
   if(!trenutniUser) return false;
   if(isAdmin) return true;
-  const finPolja=['ugovorena_suma','avans','za_naplatu','naplata_detalji'];
+  const finPolja=['ugovorena_suma','avans','za_naplatu','naplata_detalji','naplaceno','naplaceno_opis'];
   if(finPolja.includes(field)) return false;
   const statusPolja=['status','gotovo','reklamacija_dodatni_rad','nova_procjena'];
   if(statusPolja.includes(field)) return trenutniUser.izmjena_statusa||false;
@@ -538,6 +538,704 @@ function openPop(td,row,editCfg){
         Odabrano: <b id="naplata-preview">${esc(val||'—')}</b>
       </div>`;
     setTimeout(()=>{document.getElementById('naplata-ime').focus();},30);
+  } else if(editCfg.type==='number'){
+    fEl.innerHTML=`<input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
+    setTimeout(()=>{
+      const el=document.getElementById('pop-inp');
+      if(el){el.focus();el.select();}
+    },30);
+  } else {
+    fEl.innerHTML=`<input type="text" id="pop-inp" value="${esc(val||'')}">`;
+  }
+  const rect=td.getBoundingClientRect();
+  pop.style.display='block';
+  pop.style.left=Math.min(rect.left,window.innerWidth-220)+'px';
+  pop.style.top=(rect.bottom+4)+'px';
+  document.getElementById('pop-inp').focus();
+}
+
+function setNaplata(val){
+  document.getElementById('pop-inp').value=val;
+  document.getElementById('naplata-preview').textContent=val;
+}
+
+function updateNaplata(){
+  const ime=document.getElementById('naplata-ime').value.trim();
+  const datum=document.getElementById('naplata-datum').value.trim();
+  const d=new Date();
+  const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
+  const val=ime+(datum?' '+datum:' '+kratakDatum);
+  document.getElementById('pop-inp').value=val;
+  document.getElementById('naplata-preview').textContent=val;
+}
+
+async function popSave(){
+  if(!popRow||!popField) return;
+  const inp=document.getElementById('pop-inp');
+  let val=inp.value.trim();
+  if(popField==='gotovo') val=val==='true';
+
+  // Datum - čita text input ako je popunjen, inače kalendar
+  if(popField==='pocetak'||popField==='planirani_zavrsetak'){
+    const cal=document.getElementById('pop-cal');
+    const txt=document.getElementById('pop-inp');
+    const txtVal=txt?txt.value.trim():'';
+    if(txtVal){
+      // Parsiraj ručni unos
+      const parts=txtVal.split(/[.\\/]/).map(p=>p.trim());
+      if(parts.length>=2){
+        const d=parseInt(parts[0]),m=parseInt(parts[1]);
+        let y=parts[2]?parseInt(parts[2]):new Date().getFullYear();
+        if(y<100) y=2000+y;
+        if(d&&m&&y) val=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      }
+    } else {
+      val=cal?cal.value:val;
+    }
+    if(!val) val=null;
+  }
+  const body={[popField]:val};
+  // Zapamti staru vrijednost za undo
+  pushUndo(popRow.r_br, popField, popRow[popField]);
+
+  // Kad se stiklira Gotovo = true, automatski promijeni prioritet i status
+  if(popField==='gotovo'&&(val===true||val==='true')){
+    body.prioritet='Normal';
+    body.status='Čeka isporuku';
+  }
+  // Kad se odstiklira Gotovo = false, vrati na U radu
+  if(popField==='gotovo'&&(val===false||val==='false')){
+    body.status='U radu';
+  }
+  // Kad je status = Isporučeno, automatski čekira Gotovo
+  if(popField==='status'&&val==='Isporučeno'){
+    body.gotovo=true;
+  }
+  // Kad je reklamacija = DA, vrati status na U radu
+  if(popField==='reklamacija_dodatni_rad'&&val==='DA'){
+    body.status='U radu';
+  }
+
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/${popRow.r_br}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body),
+    });
+    if(!r.ok) throw new Error();
+    popRow[popField]=val;
+    if(popField==='gotovo'&&(val===true||val==='true')){
+      popRow.prioritet='Normal';
+      popRow.status='Čeka isporuku';
+    }
+    if(popField==='gotovo'&&(val===false||val==='false')){
+      popRow.status='U radu';
+    }
+    if(popField==='status'&&val==='Isporučeno'){
+      popRow.gotovo=true;
+    }
+    if(popField==='reklamacija_dodatni_rad'&&val==='DA'){
+      popRow.status='U radu';
+    }
+    // Preračunaj za_naplatu ako se mijenja avans ili ugovorena_suma
+    if(popField==='avans'||popField==='ugovorena_suma'){
+      popRow.za_naplatu=(parseFloat(popRow.ugovorena_suma)||0)-(parseFloat(popRow.avans)||0);
+    }
+    popClose();
+    render();
+  }catch(e){alert('Greška pri čuvanju.');}
+}
+
+function popClose(){
+  pop.style.display='none';
+  popRow=null;popField=null;popTd=null;
+}
+document.addEventListener('click',e=>{if(!pop.contains(e.target)&&e.target.tagName!=='TD'&&e.target.tagName!=='SPAN')popClose();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')popClose();if(e.key==='Enter'&&pop.style.display!=='none'&&document.getElementById('pop-inp')&&document.getElementById('pop-inp').tagName!=='TEXTAREA')popSave();});
+
+// ─── AUTH & LOAD ──────────────────────────────────────────────────────────
+async function obrisiNalog(rBr, e){
+  e.stopPropagation();
+  if(!confirm(`Obrisati nalog #${rBr}? Ova akcija je nepovratna!`)) return;
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/${rBr}`,{method:'DELETE'});
+    if(!r.ok) throw new Error();
+    all=all.filter(n=>n.r_br!=rBr);
+    render();
+  }catch(err){alert('Greška pri brisanju.');}
+}
+
+async function checkAuth(){
+  try{
+    const r=await fetch(API+'/api/auth/me');
+    if(!r.ok){location.href='login.html';return;}
+    const u=await r.json();
+    isAdmin=u.rola==='admin';
+    trenutniUser=u;
+    document.getElementById('who').textContent='👤 '+u.ime_prezime;
+    buildHeader();
+    loadColWidths();
+    load();
+  }catch{location.href='login.html';}
+}
+
+async function load(){
+  try{
+    const r=await fetch(API+'/api/proizvodnja');
+    if(!r.ok){if(r.status===401){location.href='login.html';return;}throw new Error();}
+    all=await r.json();
+    all.sort((a,b)=>b.r_br-a.r_br);
+    render();
+  }catch{
+    document.getElementById('tbody').innerHTML=`<tr><td colspan="20" class="empty">Greška pri učitavanju.</td></tr>`;
+  }
+}
+
+document.getElementById('logout').onclick=async e=>{e.preventDefault();await fetch(API+'/api/auth/logout',{method:'POST'});location.href='login.html';};
+document.getElementById('search').addEventListener('input',render);
+checkAuth();
+</script>
+</body></html>
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Radni nalozi – JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f0f2f5;--border:#d0d7de;--red:#c0392b;--green:#1f8a4c;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);font-size:11px;}
+header{background:var(--blue);color:#fff;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;}
+header h1{font-size:14px;font-weight:700;}
+header nav{display:flex;gap:8px;align-items:center;}
+header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgba(255,255,255,.4);padding:3px 8px;border-radius:4px;}
+#who{font-size:11px;opacity:.75;}
+.toolbar{display:flex;gap:6px;padding:5px 10px;background:#fff;border-bottom:1px solid var(--border);align-items:center;flex-wrap:wrap;}
+.toolbar input{font:inherit;font-size:11px;padding:3px 7px;border:1px solid var(--border);border-radius:3px;min-width:180px;}
+#stat{font-size:10.5px;color:#6b7a8d;margin-left:auto;}
+.btn-sm{font:inherit;font-size:11px;padding:3px 8px;background:var(--blue);color:#fff;border:none;border-radius:3px;cursor:pointer;}
+
+.wrap{overflow:auto;height:calc(100vh - 78px);}
+table{border-collapse:collapse;table-layout:fixed;width:max-content;min-width:100%;}
+
+/* RESIZE - svaka th ima resize handle */
+thead th{
+  background:#1f3864;color:#fff;font-size:11px;font-weight:600;
+  position:sticky;top:0;z-index:10;border-right:1px solid #2d4a7a;
+  overflow:hidden;
+}
+.th-inner{display:flex;flex-direction:column;}
+.th-label{padding:3px 5px;border-bottom:1px solid #2d4a7a;white-space:normal;word-break:break-word;line-height:1.2;font-size:10.5px;}
+.th-filter{padding:1px 2px;background:#162a52;}
+.th-filter select,.th-filter input{
+  width:100%;font:inherit;font-size:10px;padding:1px 3px;
+  background:#1e3566;color:#fff;border:1px solid #3a5590;border-radius:2px;
+}
+.th-filter select option{background:#1a2a4a;}
+
+/* RESIZE HANDLE */
+.resize-handle{
+  position:absolute;right:0;top:0;bottom:0;width:4px;
+  cursor:col-resize;background:transparent;z-index:1;
+}
+.resize-handle:hover,.resize-handle.dragging{background:rgba(255,255,255,.4);}
+thead th{position:sticky;top:0;}
+
+/* DATA */
+tbody tr:hover td{background:#e8f0fe!important;}
+tbody tr:nth-child(even) td{background:#f5f7fa;}
+td{
+  padding:2px 5px;border-bottom:1px solid #d0d7de;border-right:1px solid #e0e4ea;
+  white-space:normal;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;
+  cursor:pointer;word-break:break-word;font-weight:600;
+}
+td.locked{cursor:default;}
+td.editable{background:#fffde7!important;}
+td.editable:hover{background:#fff9c4!important;}
+td.num{text-align:right;white-space:nowrap;}
+td.center{text-align:center;white-space:nowrap;}
+
+/* CHIPS */
+.chip{display:inline-block;padding:0px 5px;border-radius:8px;font-size:10px;font-weight:700;white-space:nowrap;}
+.p-hitno{background:#fce8e6;color:#c0392b;}.p-normal{background:#e6f4ea;color:#1f8a4c;}.p-zakazano{background:#fef3e2;color:#e67e22;}
+.s-nije{background:#fff9c4;color:#856404;}.s-radu{background:#dce6fc;color:#1a5fa8;}.s-kasni{background:#fce8e6;color:#c0392b;}
+.s-zavrseno{background:#e6f4ea;color:#1f8a4c;}.s-ceka{background:#e0f2f1;color:#00796b;}.s-otkazano{background:#f3e5f5;color:#7b1fa2;}.s-zakazano{background:#fef3e2;color:#e67e22;}
+.r-da{background:#fce8e6;color:#c0392b;}.r-ne{background:#e6f4ea;color:#1f8a4c;}
+.dani-kasni{color:#c0392b;font-weight:700;background:#fce8e6;}
+.dani-vatra{color:#c0392b;font-weight:700;background:#fff0e0;}
+.dani-blizu{color:#856404;font-weight:700;background:#fff9c4;}
+.dani-ok{color:#1f8a4c;font-weight:700;background:#e6f4ea;}
+
+/* INLINE EDITOR POPUP */
+#inline-pop{
+  display:none;position:fixed;z-index:1000;background:#fff;
+  border:1px solid var(--blue);border-radius:6px;padding:8px 10px;
+  box-shadow:0 3px 12px rgba(0,0,0,.2);min-width:180px;
+}
+#inline-pop label{font-size:10.5px;color:#6b7a8d;font-weight:600;display:block;margin-bottom:4px;}
+#inline-pop input,#inline-pop select,#inline-pop textarea{
+  width:100%;font:inherit;font-size:12px;padding:5px 7px;
+  border:1px solid var(--border);border-radius:4px;margin-bottom:6px;
+}
+#inline-pop textarea{resize:vertical;min-height:60px;}
+#inline-pop .pop-btns{display:flex;gap:6px;}
+#inline-pop .pop-btns button{flex:1;font:inherit;font-size:11px;padding:4px;border-radius:4px;border:none;cursor:pointer;}
+.btn-save{background:var(--blue);color:#fff;}
+.btn-cancel{background:#eee;color:#333;}
+.empty{padding:30px;text-align:center;color:#6b7a8d;}
+a.lk{color:var(--blue);text-decoration:none;}
+.nova-proc{cursor:pointer;color:#6b7a8d;}
+.nova-proc.ima-proc{color:#e67e22;font-weight:600;}
+.nova-proc:hover{background:#fef3e2!important;}
+#hist-pop{display:none;position:fixed;z-index:1001;background:#fff;
+  border:1px solid #e67e22;border-radius:6px;padding:10px 12px;
+  box-shadow:0 3px 12px rgba(0,0,0,.2);min-width:260px;}
+#hist-pop h4{font-size:12px;color:var(--dark);margin-bottom:8px;}
+.hist-close{float:right;cursor:pointer;color:#999;font-size:16px;line-height:1;}
+#hist-list{font-size:11px;}
+#hist-list div{padding:4px 0;border-bottom:1px solid #f0f0f0;}
+#hist-list .hist-datum{font-weight:700;color:#e67e22;}
+#hist-list .hist-ko{color:#6b7a8d;}
+#hist-list .hist-kad{color:#aaa;font-size:10px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>📋 Radni nalozi – JoPeX</h1>
+  <nav>
+    <span id="who"></span>
+    <a href="index.html">+ Novi</a>
+    <a href="#" onclick="undoZadnje(event)" id="btn-undo" style="opacity:.5;cursor:not-allowed" title="Poništi zadnju izmjenu">↩ Undo</a>
+    <a href="#" onclick="load()">↺</a>
+    <a href="#" id="logout">Izlaz</a>
+  </nav>
+</header>
+<div class="toolbar">
+  <input type="text" id="search" placeholder="🔍 Pretraži...">
+  <span id="stat"></span>
+</div>
+
+<div class="wrap">
+<table id="tbl">
+  <thead id="thead"></thead>
+  <tbody id="tbody"><tr><td colspan="20" class="empty">Učitavanje...</td></tr></tbody>
+</table>
+</div>
+
+<!-- INLINE EDITOR POPUP -->
+<div id="inline-pop">
+  <label id="pop-label">Vrijednost</label>
+  <div id="pop-field"></div>
+  <div class="pop-btns">
+    <button class="btn-save" onclick="popSave()">✓ Sačuvaj</button>
+    <button class="btn-cancel" onclick="popClose()">✗ Otkaži</button>
+  </div>
+</div>
+
+<script>
+const API='';
+const STATUSI=['Nije Započeto','Zakazano','U radu','Čeka isporuku','Isporučeno','Kasni','Otkazano'];
+const PRIORITETI=['Normal','Hitno','Zakazano'];
+const ZADACI=['Kuhinjska ploča','Klupice, Step','Sto','Na Mjeru','Usluge WJ','Usluge Mašina'];
+const MATERIJALI=['Granit','Mermer','Tašto','Kvarc','Vještački','Keramika','Kombinovano','Obrada na mašini'];
+const REKLAMACIJE=['','NE','DA'];
+let all=[], isAdmin=false, trenutniUser=null;
+let undoStack=[]; // {r_br, field, oldVal}
+
+function pushUndo(rBr, field, oldVal){
+  undoStack.push({rBr, field, oldVal});
+  const btn=document.getElementById('btn-undo');
+  if(btn){btn.style.opacity='1';btn.style.cursor='pointer';}
+}
+
+async function undoZadnje(e){
+  e.preventDefault();
+  if(!undoStack.length) return;
+  const u=undoStack.pop();
+  const body={[u.field]:u.oldVal};
+  try{
+    await fetch(`${API}/api/proizvodnja/${u.rBr}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body),
+    });
+    const row=all.find(r=>r.r_br==u.rBr);
+    if(row) row[u.field]=u.oldVal;
+    render();
+  }catch(e){alert('Greška pri undo.');}
+  if(!undoStack.length){
+    const btn=document.getElementById('btn-undo');
+    if(btn){btn.style.opacity='.5';btn.style.cursor='not-allowed';}
+  }
+}
+
+function mozeEditovati(field){
+  if(!trenutniUser) return false;
+  if(isAdmin) return true;
+  const finPolja=['ugovorena_suma','avans','za_naplatu','naplata_detalji','naplaceno','naplaceno_opis'];
+  if(finPolja.includes(field)) return false;
+  const statusPolja=['status','gotovo','reklamacija_dodatni_rad','nova_procjena'];
+  if(statusPolja.includes(field)) return trenutniUser.izmjena_statusa||false;
+  return trenutniUser.izmjena_naloga||false;
+}
+let popRow=null, popField=null, popTd=null;
+
+// ─── CHIPS ───────────────────────────────────────────────────────────────
+function chipP(p){const m={Hitno:'p-hitno',Normal:'p-normal',Zakazano:'p-zakazano'};return`<span class="chip ${m[p]||'p-normal'}">${esc(p||'Normal')}</span>`;}
+function chipS(s){
+  const m={
+    'Nije Započeto':'s-nije','U radu':'s-radu','Kasni':'s-kasni',
+    'Isporučeno':'s-zavrseno','Čeka isporuku':'s-ceka',
+    'Otkazano':'s-otkazano','Zakazano':'s-zakazano','Završeno':'s-zavrseno'
+  };
+  const icon=s==='Čeka isporuku'?'🚚 ':s==='Isporučeno'?'✓ ':'';
+  return`<span class="chip ${m[s]||'s-nije'}">${icon}${esc(s||'')}</span>`;
+}
+function chipR(r){return r==='DA'?'<span class="chip r-da">DA</span>':r==='NE'?'<span class="chip r-ne">NE</span>':'';}
+function getDani(r){
+  if(r.gotovo) return null;
+  if(r.planirani_zavrsetak){
+    const zav=new Date(r.planirani_zavrsetak.split('T')[0]);
+    const danas=new Date();
+    danas.setHours(0,0,0,0);
+    return Math.round((zav-danas)/(1000*60*60*24));
+  }
+  return null;
+}
+function daniClass(d){
+  if(d==null) return '';
+  if(d<0) return 'dani-kasni';
+  if(d<=2) return 'dani-vatra';
+  if(d<=5) return 'dani-blizu';
+  return 'dani-ok';
+}
+function daniC(r){
+  const d=getDani(r);
+  if(d==null) return '<td></td>';
+  const cls=daniClass(d);
+  const icon=d<0?'🔥 ':'';
+  return`<td class="center ${cls}">${icon}${d}</td>`;
+}
+function zavrsClass(r){
+  if(r.gotovo) return '';
+  const d=getDani(r);
+  return daniClass(d);
+}
+function fd(d){
+  if(!d) return '';
+  // Uzmi samo datumski dio da izbjegnemo timezone pomak
+  const s=typeof d==='string'?d.split('T')[0]:new Date(d).toISOString().split('T')[0];
+  const [y,m,dd]=s.split('-');
+  return `${dd}.${m}.${y.slice(2)}`;
+}
+function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function lk(u){return u?`<a class="lk" href="${esc(u)}" target="_blank">↗</a>`:'';} 
+function gv(id){return(document.getElementById(id)||{}).value||'';}
+
+// ─── KOLONE ───────────────────────────────────────────────────────────────
+function getCols(){
+  const base=[
+    {k:'r_br',l:'R.Br.',w:50,filter:'text',render:r=>`<td class="num">${r.r_br}</td>`,edit:null},
+    {k:'zadatak',l:'Zadatak',w:130,filter:'sel',opts:ZADACI,render:r=>`<td>${esc(r.zadatak)}</td>`,edit:{type:'select',opts:ZADACI,field:'zadatak'}},
+    {k:'materijal',l:'Materijal',w:100,filter:'sel',opts:MATERIJALI,render:r=>`<td>${esc(r.materijal)}</td>`,edit:{type:'select',opts:MATERIJALI,field:'materijal'}},
+    {k:'prioritet',l:'Prioritet',w:90,filter:'sel',opts:PRIORITETI,render:r=>`<td>${chipP(r.prioritet)}</td>`,edit:{type:'select',opts:PRIORITETI,field:'prioritet'}},
+    {k:'ugovorio',l:'Ugovorio',w:110,filter:'text',render:r=>`<td>${esc(r.ugovorio)}</td>`,edit:{type:'text',field:'ugovorio',label:'Ugovorio'}},
+    {k:'narucilac',l:'Naručilac',w:130,filter:'text',render:r=>`<td>${esc(r.narucilac)}</td>`,edit:{type:'text',field:'narucilac',label:'Naručilac'}},
+    {k:'status',l:'Status',w:120,filter:'sel',opts:STATUSI,render:r=>`<td>${chipS(r.status)}</td>`,edit:{type:'select',opts:STATUSI,field:'status'}},
+    {k:'pocetak',l:'Ugovoreno',w:90,filter:null,render:r=>`<td>${fd(r.pocetak)}</td>`,edit:{type:'date',field:'pocetak',label:'Ugovoreno (datum)'}},
+    {k:'planirani_zavrsetak',l:'Plan. završetak',w:110,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>`<td class="${zavrsClass(r)}">${fd(r.planirani_zavrsetak)}</td>`,edit:{type:'date',field:'planirani_zavrsetak',label:'Plan. završetak'}},
+    {k:'broj_dana',l:'Dana',w:70,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>daniC(r),edit:null},
+    {k:'nova_procjena',l:'Razlog kašnjenja',w:180,filter:'text',render:r=>`<td class="note" title="${esc(r.nova_procjena)}">${esc(r.nova_procjena)||''}</td>`,edit:{type:'textarea',field:'nova_procjena',label:'Razlog kašnjenja'}},
+    {k:'gotovo',l:'Gotovo',w:65,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.gotovo?'<span style="color:#1f8a4c;font-size:18px;font-weight:900;line-height:1">✓</span>':''}</td>`,edit:{type:'check',field:'gotovo',label:'Gotovo'}},
+    {k:'reklamacija_dodatni_rad',l:'Rek.',w:60,filter:'sel',opts:['DA','NE'],render:r=>`<td class="center">${chipR(r.reklamacija_dodatni_rad)}</td>`,edit:{type:'select',opts:['','NE','DA'],field:'reklamacija_dodatni_rad',label:'Reklamacija'}},
+    {k:'napomena',l:'Napomena',w:220,filter:'text',render:r=>`<td class="note" title="${esc(r.napomena)}">${esc(r.napomena)}</td>`,edit:{type:'textarea',field:'napomena',label:'Napomena / upute operateru'}},
+    {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center">${lk(r.link_skica)}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
+    {k:'link_ponuda',l:'R.Nalog',w:50,filter:null,render:r=>`<td class="center">${lk(r.link_ponuda)}</td>`,edit:{type:'text',field:'link_ponuda',label:'Link radni nalog'}},
+  ];
+  const fin=isAdmin?[
+    {k:'ugovorena_suma',l:'Ugovoreno',w:90,filter:null,render:r=>`<td class="num">${fm(r.ugovorena_suma)}</td>`,edit:{type:'number',field:'ugovorena_suma',label:'Ugovorena suma (KM)'}},
+    {k:'avans',l:'Avans',w:80,filter:null,render:r=>`<td class="num">${fm(r.avans)}</td>`,edit:{type:'number',field:'avans',label:'Avans (KM)'}},
+    {k:'za_naplatu',l:'Za naplatu',w:90,filter:null,render:r=>`<td class="num">${fm(r.za_naplatu)}</td>`,edit:null},
+    {k:'naplaceno',l:'✓ Napl.',w:55,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.naplaceno?'<span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span>':''}</td>`,edit:{type:'check',field:'naplaceno',label:'Naplaćeno'}},
+    {k:'naplaceno_opis',l:'Opis naplate',w:130,filter:'text',render:r=>`<td class="note" title="${esc(r.naplaceno_opis)}">${esc(r.naplaceno_opis)||''}</td>`,edit:{type:'naplata',field:'naplaceno_opis',label:'Opis naplate'}},
+    {k:'_del',l:'',w:40,filter:null,render:r=>`<td class="center"><button onclick="obrisiNalog(${r.r_br},event)" style="background:none;border:none;cursor:pointer;font-size:14px;color:#c0392b;" title="Obriši nalog">🗑</button></td>`,edit:null},
+  ]:[];
+  return [...base,...fin];
+}
+
+// ─── HEADER ───────────────────────────────────────────────────────────────
+function buildHeader(){
+  const cols=getCols();
+  document.getElementById('thead').innerHTML='<tr>'+cols.map(c=>{
+    let flt='';
+    if(c.k==='pocetak'){
+      // Poseban filter: dropdown + Od/Do polja
+      flt=`<div class="th-filter">
+        <select id="f-pocetak" onchange="onPocetakFilter()" style="width:100%;font:inherit;font-size:10.5px;padding:2px 3px;background:#1e3566;color:#fff;border:1px solid #3a5590;border-radius:2px;">
+          <option value="">Sve</option>
+          <option>Danas</option><option>Ova sedmica</option><option>Ovaj mjesec</option>
+          <option>Ova godina</option><option>Prošli mjesec</option><option>Prošla godina</option>
+          <option>Custom...</option>
+        </select>
+        <div id="custom-od-do" style="display:none;margin-top:2px;">
+          <input type="date" id="filter-od" oninput="render()" placeholder="Od"
+            style="width:100%;font:inherit;font-size:10px;padding:2px 3px;background:#1e3566;color:#fff;border:1px solid #3a5590;border-radius:2px;margin-bottom:2px;">
+          <input type="date" id="filter-do" oninput="render()" placeholder="Do"
+            style="width:100%;font:inherit;font-size:10px;padding:2px 3px;background:#1e3566;color:#fff;border:1px solid #3a5590;border-radius:2px;">
+        </div>
+      </div>`;
+    } else if(c.filter==='text'){
+      flt=`<div class="th-filter"><input type="text" id="f-${c.k}" placeholder="..." oninput="render()"></div>`;
+    } else if(c.filter==='sel'){
+      flt=`<div class="th-filter"><select id="f-${c.k}" onchange="render()"><option value="">Sve</option>${(c.opts||[]).map(o=>`<option>${esc(o)}</option>`).join('')}</select></div>`;
+    }
+    return`<th style="width:${c.w}px" data-key="${c.k}"><div class="th-inner"><div class="th-label">${c.l}</div>${flt}</div><div class="resize-handle"></div></th>`;
+  }).join('')+'</tr>';
+  initResize();
+}
+
+// ─── COLUMN RESIZE ────────────────────────────────────────────────────────
+function saveColWidths(){
+  const ths=document.querySelectorAll('#thead th[data-key]');
+  const widths={};
+  ths.forEach(th=>widths[th.dataset.key]=th.offsetWidth);
+  localStorage.setItem('jopex_col_widths', JSON.stringify(widths));
+}
+
+function loadColWidths(){
+  try{
+    const saved=localStorage.getItem('jopex_col_widths');
+    if(!saved) return;
+    const widths=JSON.parse(saved);
+    document.querySelectorAll('#thead th[data-key]').forEach(th=>{
+      if(widths[th.dataset.key]) th.style.width=widths[th.dataset.key]+'px';
+    });
+  }catch(e){}
+}
+
+function initResize(){
+  document.querySelectorAll('.resize-handle').forEach(handle=>{
+    let startX,startW,th;
+    handle.addEventListener('mousedown',e=>{
+      th=handle.parentElement;
+      startX=e.pageX; startW=th.offsetWidth;
+      handle.classList.add('dragging');
+      document.addEventListener('mousemove',onMove);
+      document.addEventListener('mouseup',onUp);
+      e.preventDefault();
+    });
+    function onMove(e){th.style.width=(Math.max(40,startW+e.pageX-startX))+'px';}
+    function onUp(){
+      handle.classList.remove('dragging');
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onUp);
+      saveColWidths(); // sačuvaj nakon resize-a
+    }
+  });
+}
+
+// ─── FILTER & RENDER ──────────────────────────────────────────────────────
+function filterRows(){
+  const q=gv('search').toLowerCase();
+  const cols=getCols();
+  const fPocetak=gv('f-pocetak');
+  return all.filter(r=>{
+    if(q&&![r.narucilac,r.napomena,r.materijal,r.ugovorio,r.zadatak].some(f=>f&&String(f).toLowerCase().includes(q))) return false;
+
+    // Filter za Ugovoreno (pocetak) - period
+    if(fPocetak){
+      if(!r.pocetak) return false;
+      const d=new Date(r.pocetak.split('T')[0]);
+      const danas=new Date(); danas.setHours(0,0,0,0);
+      if(fPocetak==='Danas'){
+        if(d.toDateString()!==danas.toDateString()) return false;
+      } else if(fPocetak==='Ova sedmica'){
+        const pon=new Date(danas); pon.setDate(danas.getDate()-((danas.getDay()+6)%7));
+        const ned=new Date(pon); ned.setDate(pon.getDate()+6);
+        if(d<pon||d>ned) return false;
+      } else if(fPocetak==='Ovaj mjesec'){
+        if(d.getMonth()!==danas.getMonth()||d.getFullYear()!==danas.getFullYear()) return false;
+      } else if(fPocetak==='Ova godina'){
+        if(d.getFullYear()!==danas.getFullYear()) return false;
+      } else if(fPocetak==='Prošli mjesec'){
+        const pm=new Date(danas.getFullYear(),danas.getMonth()-1,1);
+        if(d.getMonth()!==pm.getMonth()||d.getFullYear()!==pm.getFullYear()) return false;
+      } else if(fPocetak==='Prošla godina'){
+        if(d.getFullYear()!==danas.getFullYear()-1) return false;
+      } else if(fPocetak==='Custom...'){
+        const od=document.getElementById('filter-od')?document.getElementById('filter-od').value:'';
+        const do_=document.getElementById('filter-do')?document.getElementById('filter-do').value:'';
+        if(od&&d<new Date(od)) return false;
+        if(do_&&d>new Date(do_)) return false;
+      }
+    }
+    for(const c of cols){
+      if(!c.filter) continue;
+      const fv=gv('f-'+c.k);
+      if(!fv) continue;
+      // Posebna logika za broj_dana i planirani_zavrsetak
+      if(c.k==='broj_dana'||c.k==='planirani_zavrsetak'){
+        const d=getDani(r);
+        if(fv==='Bez datuma'){if(d!=null) return false;}
+        else if(fv==='Kasni'){if(d==null||d>=0) return false;}
+        else if(fv==='Danas i sutra'){if(d==null||d<0||d>1) return false;}
+        else if(fv==='Ova sedmica'){if(d==null||d<0||d>7) return false;}
+        else if(fv==='Ovaj mjesec'){if(d==null||d<0||d>30) return false;}
+        else if(fv==='Više od mjesec'){if(d==null||d<=30) return false;}
+        continue;
+      }
+      // Posebna logika za Ugovoreno (pocetak) - filter po periodu
+      if(c.k==='pocetak'){
+        if(!r.pocetak) return false;
+        const d=new Date(r.pocetak.split('T')[0]);
+        const danas=new Date(); danas.setHours(0,0,0,0);
+        if(fv==='Danas'){
+          if(d.toDateString()!==danas.toDateString()) return false;
+        } else if(fv==='Ova sedmica'){
+          const pon=new Date(danas); pon.setDate(danas.getDate()-danas.getDay()+1);
+          const ned=new Date(pon); ned.setDate(pon.getDate()+6);
+          if(d<pon||d>ned) return false;
+        } else if(fv==='Ovaj mjesec'){
+          if(d.getMonth()!==danas.getMonth()||d.getFullYear()!==danas.getFullYear()) return false;
+        } else if(fv==='Ova godina'){
+          if(d.getFullYear()!==danas.getFullYear()) return false;
+        } else if(fv==='Prošli mjesec'){
+          const pm=new Date(danas.getFullYear(),danas.getMonth()-1,1);
+          if(d.getMonth()!==pm.getMonth()||d.getFullYear()!==pm.getFullYear()) return false;
+        } else if(fv==='Prošla godina'){
+          if(d.getFullYear()!==danas.getFullYear()-1) return false;
+        } else if(fv==='Custom...'){
+          const od=document.getElementById('filter-od').value;
+          const do_=document.getElementById('filter-do').value;
+          if(od&&d<new Date(od)) return false;
+          if(do_&&d>new Date(do_)) return false;
+        }
+        continue;
+      }
+      const rv=String(r[c.k]||'');
+      if(c.filter==='sel'&&rv!==fv) return false;
+      if(c.filter==='text'&&!rv.toLowerCase().includes(fv.toLowerCase())) return false;
+    }
+    return true;
+  });
+}
+
+function onPocetakFilter(){
+  const fv=gv('f-pocetak');
+  const odDo=document.getElementById('custom-od-do');
+  if(odDo) odDo.style.display=fv==='Custom...'?'block':'none';
+  render();
+}
+
+function clearCustomDate(){
+  const sel=document.getElementById('f-pocetak');
+  if(sel) sel.value='';
+  const odDo=document.getElementById('custom-od-do');
+  if(odDo) odDo.style.display='none';
+  render();
+}
+
+function render(){
+  const rows=filterRows();
+  const cols=getCols();
+  document.getElementById('stat').textContent=`${rows.length} / ${all.length} naloga`;
+  if(!rows.length){document.getElementById('tbody').innerHTML=`<tr><td colspan="${cols.length}" class="empty">Nema naloga.</td></tr>`;return;}
+  document.getElementById('tbody').innerHTML=rows.map(r=>`<tr data-rbr="${r.r_br}">${cols.map(c=>{
+    const cell=c.render(r);
+    if(c.edit&&!mozeEditovati(c.edit.field)){
+      return cell.replace('<td','<td class="locked"');
+    }
+    if(c.edit&&mozeEditovati(c.edit.field)){
+      return cell.replace('<td','<td class="editable"');
+    }
+    return cell;
+  }).join('')}</tr>`).join('');
+}
+
+// ─── INLINE EDIT POPUP ────────────────────────────────────────────────────
+const pop=document.getElementById('inline-pop');
+
+document.getElementById('tbody').addEventListener('click',function(e){
+  const td=e.target.closest('td');
+  const tr=e.target.closest('tr[data-rbr]');
+  if(!td||!tr) return;
+  if(e.target.tagName==='A') return;
+  const rBr=tr.dataset.rbr;
+  const row=all.find(r=>r.r_br==rBr);
+  if(!row) return;
+  const thIdx=Array.from(tr.children).indexOf(td);
+  const cols=getCols();
+  const col=cols[thIdx];
+  if(!col||!col.edit) return;
+  if(!mozeEditovati(col.edit.field)) return; // nema pravo
+  openPop(td,row,col.edit);
+});
+
+function openPop(td,row,editCfg){
+  popRow=row; popField=editCfg.field; popTd=td;
+  document.getElementById('pop-label').textContent=editCfg.label||editCfg.field;
+  const fEl=document.getElementById('pop-field');
+  const val=row[editCfg.field];
+  if(editCfg.type==='select'){
+    fEl.innerHTML=`<select id="pop-inp">${editCfg.opts.map(o=>`<option${o==(val||'')?' selected':''}>${esc(o)}</option>`).join('')}</select>`;
+  } else if(editCfg.type==='textarea'){
+    fEl.innerHTML=`<textarea id="pop-inp">${esc(val||'')}</textarea>`;
+  } else if(editCfg.type==='check'){
+    fEl.innerHTML=`<select id="pop-inp"><option value="true"${val?' selected':''}>✓ Da</option><option value="false"${!val?' selected':''}>✗ Ne</option></select>`;
+  } else if(editCfg.type==='date'){
+    const dv=val?val.split('T')[0]:'';
+    fEl.innerHTML=`
+      <input type="date" id="pop-cal" value="${dv}" style="font:inherit;width:100%;padding:5px 7px;border:1px solid #ccc;border-radius:4px;cursor:pointer;margin-bottom:4px;">
+      <input type="text" id="pop-inp" placeholder="ili ukucaj: 22.7 ili 22/7/28" value=""
+        style="font:inherit;width:100%;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:11px;color:#555;">
+      <div style="font-size:10px;color:#aaa;margin-top:2px;">Bez godine = ${new Date().getFullYear()}, dvocifrena = 20XX</div>`;
+    setTimeout(()=>{
+      const cal=document.getElementById('pop-cal');
+      const txt=document.getElementById('pop-inp');
+      // Text → kalendar (live preview)
+      txt.addEventListener('input',()=>{
+        const parts=txt.value.trim().split(/[.\\/]/).map(p=>p.trim());
+        if(parts.length>=2){
+          const d=parseInt(parts[0]),m=parseInt(parts[1]);
+          let y=parts[2]?parseInt(parts[2]):new Date().getFullYear();
+          if(y<100) y=2000+y;
+          if(d&&m&&y) cal.value=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        }
+      });
+      try{cal.showPicker();}catch(e){}
+      cal.focus();
+    },50);
+  } else if(editCfg.type==='naplata'){
+    const d=new Date();
+    const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
+    const banke=['RFB','UNI','MF','NLB','UNI1'];
+    const got=['got B','got M','got N','got R','got Edo'];
+    fEl.innerHTML=`
+      <div style="margin-bottom:6px;font-size:10.5px;color:#888;font-weight:600">Banka:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
+        ${banke.map(b=>`<button type="button" onclick="setNaplata('${b} ${kratakDatum}')"
+          style="font:inherit;font-size:11px;padding:3px 8px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#f0f4ff;">${b} ${kratakDatum}</button>`).join('')}
+      </div>
+      <div style="margin-bottom:6px;font-size:10.5px;color:#888;font-weight:600">Gotovina:</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
+        ${got.map(g=>`<button type="button" onclick="setNaplata('${g} ${kratakDatum}')"
+          style="font:inherit;font-size:11px;padding:3px 8px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#f0fff4;">${g} ${kratakDatum}</button>`).join('')}
+      </div>
+      <div style="font-size:10.5px;color:#888;font-weight:600;margin-bottom:4px">Slobodan unos (ime + datum):</div>
+      <div style="display:flex;gap:4px;">
+        <input type="text" id="naplata-ime" placeholder="npr. Petar" 
+          style="flex:1;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;"
+          oninput="updateNaplata()">
+        <input type="text" id="naplata-datum" placeholder="${kratakDatum}"
+          style="width:60px;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;"
+          oninput="updateNaplata()">
+      </div>
+      <input type="hidden" id="pop-inp" value="${esc(val||'')}">
+      <div style="margin-top:6px;font-size:11px;color:#555;">
+        Odabrano: <b id="naplata-preview">${esc(val||'—')}</b>
+      </div>`;
+    setTimeout(()=>{document.getElementById('naplata-ime').focus();},30);
+  } else if(editCfg.type==='number'){
     fEl.innerHTML=`<input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
     setTimeout(()=>{
       const el=document.getElementById('pop-inp');
