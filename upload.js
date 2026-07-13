@@ -6,8 +6,8 @@ const http = require('http');
 
 const BUCKET = process.env.R2_BUCKET || 'jopex';
 const ENDPOINT = process.env.R2_ENDPOINT || 'https://7118192006a9c55d294d9b900bee958b.r2.cloudflarestorage.com';
-const ACCESS_KEY = process.env.R2_ACCESS_KEY || '';
-const SECRET_KEY = process.env.R2_SECRET_KEY || '';
+const ACCESS_KEY = process.env.R2_ACCESS_KEY || 'ecc83e5898e97d7f325349ebb5bb38a8';
+const SECRET_KEY = process.env.R2_SECRET_KEY || '20172d765b710548c1914b5d3ec0cfa8dcc886757e70f910409df923c0b691dc';
 const PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-ee5c1c6788b94bd6aa6c888bb8a24fb4.r2.dev';
 
 // Jednostavan HMAC-SHA256
