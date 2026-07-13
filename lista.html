@@ -290,6 +290,24 @@ function buildHeader(){
 }
 
 // ─── COLUMN RESIZE ────────────────────────────────────────────────────────
+function saveColWidths(){
+  const ths=document.querySelectorAll('#thead th[data-key]');
+  const widths={};
+  ths.forEach(th=>widths[th.dataset.key]=th.offsetWidth);
+  localStorage.setItem('jopex_col_widths', JSON.stringify(widths));
+}
+
+function loadColWidths(){
+  try{
+    const saved=localStorage.getItem('jopex_col_widths');
+    if(!saved) return;
+    const widths=JSON.parse(saved);
+    document.querySelectorAll('#thead th[data-key]').forEach(th=>{
+      if(widths[th.dataset.key]) th.style.width=widths[th.dataset.key]+'px';
+    });
+  }catch(e){}
+}
+
 function initResize(){
   document.querySelectorAll('.resize-handle').forEach(handle=>{
     let startX,startW,th;
@@ -302,7 +320,12 @@ function initResize(){
       e.preventDefault();
     });
     function onMove(e){th.style.width=(Math.max(40,startW+e.pageX-startX))+'px';}
-    function onUp(){handle.classList.remove('dragging');document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);}
+    function onUp(){
+      handle.classList.remove('dragging');
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onUp);
+      saveColWidths(); // sačuvaj nakon resize-a
+    }
   });
 }
 
@@ -479,6 +502,10 @@ function openPop(td,row,editCfg){
     },50);
   } else if(editCfg.type==='number'){
     fEl.innerHTML=`<input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
+    setTimeout(()=>{
+      const el=document.getElementById('pop-inp');
+      if(el){el.focus();el.select();}
+    },30);
   } else {
     fEl.innerHTML=`<input type="text" id="pop-inp" value="${esc(val||'')}">`;
   }
@@ -586,6 +613,7 @@ async function checkAuth(){
     trenutniUser=u;
     document.getElementById('who').textContent='👤 '+u.ime_prezime;
     buildHeader();
+    loadColWidths();
     load();
   }catch{location.href='login.html';}
 }
