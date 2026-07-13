@@ -1,38 +1,27 @@
 const express = require('express');
 const router = express.Router();
-const { google } = require('googleapis');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
-const FOLDER_NALOZI = '1OHH2hp43GC1BC2oAPK3QeKMXh57Ft-Dv';
-const FOLDER_PONUDE = '1bT1t18x2a7-Xbl45JwGjElig4a0bGmV9';
+const s3 = new S3Client({
+  region: 'auto',
+  endpoint: process.env.R2_ENDPOINT,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY,
+    secretAccessKey: process.env.R2_SECRET_KEY,
+  },
+});
 
-function getDriveClient() {
-  const creds = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
-  const auth = new google.auth.GoogleAuth({
-    credentials: creds,
-    scopes: ['https://www.googleapis.com/auth/drive.file'],
-  });
-  return google.drive({ version: 'v3', auth });
-}
+const BUCKET = process.env.R2_BUCKET || 'jopex';
+const PUBLIC_URL = process.env.R2_PUBLIC_URL || process.env.R2_ENDPOINT + '/' + BUCKET;
 
-async function uploadToDrive(drive, name, mimeType, base64Data, folderId) {
-  const buffer = Buffer.from(base64Data, 'base64');
-  const { Readable } = require('stream');
-  const stream = Readable.from(buffer);
-  const r = await drive.files.create({
-    requestBody: {
-      name,
-      parents: [folderId],
-      mimeType,
-    },
-    media: { mimeType, body: stream },
-    fields: 'id,webViewLink',
-  });
-  // Postavi fajl kao vidljiv svima sa linkom
-  await drive.permissions.create({
-    fileId: r.data.id,
-    requestBody: { role: 'reader', type: 'anyone' },
-  });
-  return r.data.webViewLink;
+async function uploadToR2(key, buffer, contentType) {
+  await s3.send(new PutObjectCommand({
+    Bucket: BUCKET,
+    Key: key,
+    Body: buffer,
+    ContentType: contentType,
+  }));
+  return `${PUBLIC_URL}/${key}`;
 }
 
 // POST /api/upload
@@ -42,34 +31,43 @@ router.post('/', async (req, res) => {
     const { naziv, dxf_b64, radni_nalog_b64, ponuda_b64 } = req.body;
     if (!naziv) return res.status(400).json({ error: 'naziv je obavezan.' });
 
-    const drive = getDriveClient();
     const rezultat = {};
+    const ts = new Date().toISOString().split('T')[0];
 
-    // DXF → Nalozi folder
     if (dxf_b64) {
-      rezultat.dxf_link = await uploadToDrive(
-        drive, `${naziv}.dxf`, 'application/octet-stream', dxf_b64, FOLDER_NALOZI
-      );
+      const buf = Buffer.from(dxf_b64, 'base64');
+      rezultat.dxf_link = await uploadToR2(`nalozi/${ts}_${naziv}.dxf`, buf, 'application/octet-stream');
     }
 
-    // Radni nalog PDF → Nalozi folder
     if (radni_nalog_b64) {
-      rezultat.radni_nalog_link = await uploadToDrive(
-        drive, `${naziv} - Radni nalog.pdf`, 'application/pdf', radni_nalog_b64, FOLDER_NALOZI
-      );
+      const buf = Buffer.from(radni_nalog_b64, 'base64');
+      rezultat.radni_nalog_link = await uploadToR2(`nalozi/${ts}_${naziv}_nalog.pdf`, buf, 'application/pdf');
     }
 
-    // Ponuda PDF → Ponude folder
     if (ponuda_b64) {
-      rezultat.ponuda_link = await uploadToDrive(
-        drive, `${naziv} - Ponuda.pdf`, 'application/pdf', ponuda_b64, FOLDER_PONUDE
-      );
+      const buf = Buffer.from(ponuda_b64, 'base64');
+      rezultat.ponuda_link = await uploadToR2(`ponude/pdf/${ts}_${naziv}_ponuda.pdf`, buf, 'application/pdf');
     }
 
     res.json({ ok: true, ...rezultat });
   } catch (err) {
-    console.error('Upload greška:', err.message);
+    console.error('R2 upload greška:', err.message);
     res.status(500).json({ error: 'Greška pri uploadu: ' + err.message });
+  }
+});
+
+// POST /api/upload/ponuda-json
+// Čuvanje JSON ponude na R2
+router.post('/ponuda-json', async (req, res) => {
+  try {
+    const { naziv, json_b64 } = req.body;
+    if (!naziv || !json_b64) return res.status(400).json({ error: 'naziv i json_b64 su obavezni.' });
+    const buf = Buffer.from(json_b64, 'base64');
+    const key = `ponude/json/${naziv}.json`;
+    const link = await uploadToR2(key, buf, 'application/json');
+    res.json({ ok: true, link, key });
+  } catch (err) {
+    res.status(500).json({ error: 'Greška: ' + err.message });
   }
 });
 
