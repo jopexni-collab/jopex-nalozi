@@ -187,6 +187,10 @@ router.delete('/:r_br', async (req, res) => {
       [req.params.r_br]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Nije pronađen.' });
+    // Reset sequence na MAX r_br
+    await pool.query(
+      `SELECT setval('proizvodnja_jopex_r_br_seq', COALESCE((SELECT MAX(r_br) FROM proizvodnja_jopex), 0), true)`
+    );
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Greška: ' + err.message });
