@@ -1,39 +1,90 @@
 const express = require('express');
 const router = express.Router();
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
-
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: process.env.R2_ENDPOINT,
-  forcePathStyle: true,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY || '',
-    secretAccessKey: process.env.R2_SECRET_KEY || '',
-  },
-});
+const crypto = require('crypto');
+const https = require('https');
+const http = require('http');
 
 const BUCKET = process.env.R2_BUCKET || 'jopex';
-const PUBLIC_URL = process.env.R2_PUBLIC_URL || process.env.R2_ENDPOINT + '/' + BUCKET;
+const ENDPOINT = process.env.R2_ENDPOINT || '';
+const ACCESS_KEY = process.env.R2_ACCESS_KEY || '';
+const SECRET_KEY = process.env.R2_SECRET_KEY || '';
+const PUBLIC_URL = process.env.R2_PUBLIC_URL || '';
 
-async function uploadToR2(key, buffer, contentType) {
-  await s3.send(new PutObjectCommand({
-    Bucket: BUCKET,
-    Key: key,
-    Body: buffer,
-    ContentType: contentType,
-  }));
-  return `${PUBLIC_URL}/${key}`;
+// Jednostavan HMAC-SHA256
+function hmac(key, data) {
+  return crypto.createHmac('sha256', key).update(data).digest();
+}
+function hmacHex(key, data) {
+  return crypto.createHmac('sha256', key).update(data).digest('hex');
+}
+function sha256(data) {
+  return crypto.createHash('sha256').update(data).digest('hex');
 }
 
-// POST /api/upload
-// Body: { naziv, dxf_b64, radni_nalog_b64, ponuda_b64 }
-router.post('/', async (req, res) => {
-  console.log('R2 debug:', {
-    endpoint: process.env.R2_ENDPOINT,
-    bucket: process.env.R2_BUCKET,
-    accessKey: process.env.R2_ACCESS_KEY ? process.env.R2_ACCESS_KEY.substring(0,8)+'...' : 'MISSING',
-    secretKey: process.env.R2_SECRET_KEY ? 'SET' : 'MISSING',
+async function uploadToR2(key, buffer, contentType) {
+  const url = new URL(`${ENDPOINT}/${BUCKET}/${key}`);
+  const host = url.hostname;
+  const path = url.pathname;
+  
+  const now = new Date();
+  const dateStr = now.toISOString().replace(/[:\-]|\.\d{3}/g, '').substring(0, 8);
+  const datetimeStr = now.toISOString().replace(/[:\-]|\.\d{3}/g, '').substring(0, 15) + 'Z';
+  const region = 'auto';
+  const service = 's3';
+
+  const payloadHash = sha256(buffer);
+
+  const headers = {
+    'host': host,
+    'x-amz-date': datetimeStr,
+    'x-amz-content-sha256': payloadHash,
+    'content-type': contentType,
+    'content-length': buffer.length.toString(),
+  };
+
+  const sortedHeaders = Object.keys(headers).sort();
+  const canonicalHeaders = sortedHeaders.map(k => `${k}:${headers[k]}`).join('\n') + '\n';
+  const signedHeaders = sortedHeaders.join(';');
+
+  const canonicalRequest = [
+    'PUT', path, '',
+    canonicalHeaders, signedHeaders, payloadHash
+  ].join('\n');
+
+  const credScope = `${dateStr}/${region}/${service}/aws4_request`;
+  const stringToSign = ['AWS4-HMAC-SHA256', datetimeStr, credScope, sha256(canonicalRequest)].join('\n');
+
+  const signingKey = hmac(hmac(hmac(hmac(`AWS4${SECRET_KEY}`, dateStr), region), service), 'aws4_request');
+  const signature = hmacHex(signingKey, stringToSign);
+
+  const authorization = `AWS4-HMAC-SHA256 Credential=${ACCESS_KEY}/${credScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: host,
+      path: path,
+      method: 'PUT',
+      headers: { ...headers, 'Authorization': authorization },
+    };
+    const proto = url.protocol === 'https:' ? https : http;
+    const req = proto.request(options, res => {
+      let body = '';
+      res.on('data', d => body += d);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(`${PUBLIC_URL}/${key}`);
+        } else {
+          reject(new Error(`R2 HTTP ${res.statusCode}: ${body}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.write(buffer);
+    req.end();
   });
+}
+
+router.post('/', async (req, res) => {
   try {
     const { naziv, dxf_b64, radni_nalog_b64, ponuda_b64 } = req.body;
     if (!naziv) return res.status(400).json({ error: 'naziv je obavezan.' });
@@ -45,12 +96,10 @@ router.post('/', async (req, res) => {
       const buf = Buffer.from(dxf_b64, 'base64');
       rezultat.dxf_link = await uploadToR2(`nalozi/${ts}_${naziv}.dxf`, buf, 'application/octet-stream');
     }
-
     if (radni_nalog_b64) {
       const buf = Buffer.from(radni_nalog_b64, 'base64');
       rezultat.radni_nalog_link = await uploadToR2(`nalozi/${ts}_${naziv}_nalog.pdf`, buf, 'application/pdf');
     }
-
     if (ponuda_b64) {
       const buf = Buffer.from(ponuda_b64, 'base64');
       rezultat.ponuda_link = await uploadToR2(`ponude/pdf/${ts}_${naziv}_ponuda.pdf`, buf, 'application/pdf');
@@ -63,8 +112,6 @@ router.post('/', async (req, res) => {
   }
 });
 
-// POST /api/upload/ponuda-json
-// Čuvanje JSON ponude na R2
 router.post('/ponuda-json', async (req, res) => {
   try {
     const { naziv, json_b64 } = req.body;
