@@ -22,7 +22,9 @@ function sha256(data) {
 }
 
 async function uploadToR2(key, buffer, contentType) {
-  const url = new URL(`${ENDPOINT}/${BUCKET}/${key}`);
+  const fullUrl = `${ENDPOINT}/${BUCKET}/${key}`;
+  console.log('R2 URL:', fullUrl);
+  const url = new URL(fullUrl);
   const host = url.hostname;
   const path = url.pathname;
   
