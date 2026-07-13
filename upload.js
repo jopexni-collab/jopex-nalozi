@@ -5,10 +5,10 @@ const https = require('https');
 const http = require('http');
 
 const BUCKET = process.env.R2_BUCKET || 'jopex';
-const ENDPOINT = process.env.R2_ENDPOINT || '';
+const ENDPOINT = process.env.R2_ENDPOINT || 'https://7118192006a9c55d294d9b900bee958b.r2.cloudflarestorage.com';
 const ACCESS_KEY = process.env.R2_ACCESS_KEY || '';
 const SECRET_KEY = process.env.R2_SECRET_KEY || '';
-const PUBLIC_URL = process.env.R2_PUBLIC_URL || '';
+const PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-ee5c1c6788b94bd6aa6c888bb8a24fb4.r2.dev';
 
 // Jednostavan HMAC-SHA256
 function hmac(key, data) {
