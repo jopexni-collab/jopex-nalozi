@@ -28,6 +28,12 @@ async function uploadToR2(key, buffer, contentType) {
 // POST /api/upload
 // Body: { naziv, dxf_b64, radni_nalog_b64, ponuda_b64 }
 router.post('/', async (req, res) => {
+  console.log('R2 debug:', {
+    endpoint: process.env.R2_ENDPOINT,
+    bucket: process.env.R2_BUCKET,
+    accessKey: process.env.R2_ACCESS_KEY ? process.env.R2_ACCESS_KEY.substring(0,8)+'...' : 'MISSING',
+    secretKey: process.env.R2_SECRET_KEY ? 'SET' : 'MISSING',
+  });
   try {
     const { naziv, dxf_b64, radni_nalog_b64, ponuda_b64 } = req.body;
     if (!naziv) return res.status(400).json({ error: 'naziv je obavezan.' });
