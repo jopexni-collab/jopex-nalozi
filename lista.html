@@ -65,6 +65,7 @@ td.center{text-align:center;white-space:nowrap;}
 .s-zavrseno{background:#e6f4ea;color:#1f8a4c;}.s-ceka{background:#e0f2f1;color:#00796b;}.s-otkazano{background:#f3e5f5;color:#7b1fa2;}.s-zakazano{background:#fef3e2;color:#e67e22;}
 .r-da{background:#fce8e6;color:#c0392b;}.r-ne{background:#e6f4ea;color:#1f8a4c;}
 .dani-kasni{color:#c0392b;font-weight:700;background:#fce8e6;}
+.dani-vatra{color:#c0392b;font-weight:700;background:#fff0e0;}
 .dani-blizu{color:#856404;font-weight:700;background:#fff9c4;}
 .dani-ok{color:#1f8a4c;font-weight:700;background:#e6f4ea;}
 
@@ -136,7 +137,7 @@ a.lk{color:var(--blue);text-decoration:none;}
 
 <script>
 const API='';
-const STATUSI=['Nije Započeto','Zakazano','U radu','Čeka isporuku','Završeno','Kasni','Otkazano'];
+const STATUSI=['Nije Započeto','Zakazano','U radu','Čeka isporuku','Isporučeno','Kasni','Otkazano'];
 const PRIORITETI=['Normal','Hitno','Zakazano'];
 const ZADACI=['Kuhinjska ploča','Klupice, Step','Sto','Na Mjeru','Usluge WJ','Usluge Mašina'];
 const MATERIJALI=['Granit','Mermer','Tašto','Kvarc','Vještački','Keramika','Kombinovano','Obrada na mašini'];
@@ -183,7 +184,7 @@ let popRow=null, popField=null, popTd=null;
 
 // ─── CHIPS ───────────────────────────────────────────────────────────────
 function chipP(p){const m={Hitno:'p-hitno',Normal:'p-normal',Zakazano:'p-zakazano'};return`<span class="chip ${m[p]||'p-normal'}">${esc(p||'Normal')}</span>`;}
-function chipS(s){const m={'Nije Započeto':'s-nije','U radu':'s-radu',Kasni:'s-kasni',Završeno:'s-zavrseno','Čeka isporuku':'s-ceka',Otkazano:'s-otkazano',Zakazano:'s-zakazano'};return`<span class="chip ${m[s]||'s-nije'}">${esc(s||'')}</span>`;}
+function chipS(s){const m={'Nije Započeto':'s-nije','U radu':'s-radu','Kasni':'s-kasni','Isporučeno':'s-zavrseno','Čeka isporuku':'s-ceka','Otkazano':'s-otkazano','Zakazano':'s-zakazano','Završeno':'s-zavrseno'};return`<span class="chip ${m[s]||'s-nije'}">${esc(s||'')}</span>`;}
 function chipR(r){return r==='DA'?'<span class="chip r-da">DA</span>':r==='NE'?'<span class="chip r-ne">NE</span>':'';}
 function getDani(r){
   if(r.gotovo) return null;
@@ -198,13 +199,16 @@ function getDani(r){
 function daniClass(d){
   if(d==null) return '';
   if(d<0) return 'dani-kasni';
+  if(d<=2) return 'dani-vatra';
   if(d<=5) return 'dani-blizu';
   return 'dani-ok';
 }
 function daniC(r){
   const d=getDani(r);
   if(d==null) return '<td></td>';
-  return`<td class="center ${daniClass(d)}">${d}</td>`;
+  const cls=daniClass(d);
+  const icon=d<0?'🔥 ':'';
+  return`<td class="center ${cls}">${icon}${d}</td>`;
 }
 function zavrsClass(r){
   if(r.gotovo) return '';
@@ -247,6 +251,8 @@ function getCols(){
     {k:'ugovorena_suma',l:'Ugovoreno',w:90,filter:null,render:r=>`<td class="num">${fm(r.ugovorena_suma)}</td>`,edit:{type:'number',field:'ugovorena_suma',label:'Ugovorena suma (KM)'}},
     {k:'avans',l:'Avans',w:80,filter:null,render:r=>`<td class="num">${fm(r.avans)}</td>`,edit:{type:'number',field:'avans',label:'Avans (KM)'}},
     {k:'za_naplatu',l:'Za naplatu',w:90,filter:null,render:r=>`<td class="num">${fm(r.za_naplatu)}</td>`,edit:null},
+    {k:'naplaceno',l:'✓ Napl.',w:55,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.naplaceno?'<span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span>':''}</td>`,edit:{type:'check',field:'naplaceno',label:'Naplaćeno'}},
+    {k:'naplaceno_opis',l:'Opis naplate',w:130,filter:'text',render:r=>`<td class="note" title="${esc(r.naplaceno_opis)}">${esc(r.naplaceno_opis)||''}</td>`,edit:{type:'text',field:'naplaceno_opis',label:'Opis naplate (npr. RFB 25/7, got Nenad 26/7)'}},
     {k:'_del',l:'',w:40,filter:null,render:r=>`<td class="center"><button onclick="obrisiNalog(${r.r_br},event)" style="background:none;border:none;cursor:pointer;font-size:14px;color:#c0392b;" title="Obriši nalog">🗑</button></td>`,edit:null},
   ]:[];
   return [...base,...fin];
@@ -521,6 +527,10 @@ async function popSave(){
   if(popField==='gotovo'&&(val===false||val==='false')){
     body.status='U radu';
   }
+  // Kad je reklamacija = DA, vrati status na U radu
+  if(popField==='reklamacija_dodatni_rad'&&val==='DA'){
+    body.status='U radu';
+  }
 
   try{
     const r=await fetch(`${API}/api/proizvodnja/${popRow.r_br}`,{
@@ -534,6 +544,9 @@ async function popSave(){
       popRow.status='Čeka isporuku';
     }
     if(popField==='gotovo'&&(val===false||val==='false')){
+      popRow.status='U radu';
+    }
+    if(popField==='reklamacija_dodatni_rad'&&val==='DA'){
       popRow.status='U radu';
     }
     popClose();
