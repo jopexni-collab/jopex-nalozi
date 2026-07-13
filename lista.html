@@ -242,7 +242,7 @@ function getCols(){
     {k:'zadatak',l:'Zadatak',w:130,filter:'sel',opts:ZADACI,render:r=>`<td>${esc(r.zadatak)}</td>`,edit:{type:'select',opts:ZADACI,field:'zadatak'}},
     {k:'materijal',l:'Materijal',w:100,filter:'sel',opts:MATERIJALI,render:r=>`<td>${esc(r.materijal)}</td>`,edit:{type:'select',opts:MATERIJALI,field:'materijal'}},
     {k:'prioritet',l:'Prioritet',w:90,filter:'sel',opts:PRIORITETI,render:r=>`<td>${chipP(r.prioritet)}</td>`,edit:{type:'select',opts:PRIORITETI,field:'prioritet'}},
-    {k:'ugovorio',l:'Ugovorio',w:110,filter:'text',render:r=>`<td>${esc(r.ugovorio)}</td>`,edit:{type:'text',field:'ugovorio',label:'Ugovorio'}},
+    {k:'ugovorio',l:'Ugovorio',w:110,filter:'text',render:r=>`<td>${esc(r.ugovorio)}</td>`,edit:{type:'ugovorio',field:'ugovorio_id',label:'Ugovorio'}},
     {k:'narucilac',l:'Naručilac',w:130,filter:'text',render:r=>`<td>${esc(r.narucilac)}</td>`,edit:{type:'text',field:'narucilac',label:'Naručilac'}},
     {k:'status',l:'Status',w:120,filter:'sel',opts:STATUSI,render:r=>`<td>${chipS(r.status)}</td>`,edit:{type:'select',opts:STATUSI,field:'status'}},
     {k:'pocetak',l:'Ugovoreno',w:90,filter:null,render:r=>`<td>${fd(r.pocetak)}</td>`,edit:{type:'date',field:'pocetak',label:'Ugovoreno (datum)'}},
@@ -508,7 +508,15 @@ function openPop(td,row,editCfg){
       try{cal.showPicker();}catch(e){}
       cal.focus();
     },50);
-  } else if(editCfg.type==='naplata'){
+  } else if(editCfg.type==='ugovorio'){
+    // Učitaj ugovarače iz config-a
+    const cfg=JSON.parse(localStorage.getItem('jopex_config')||'{}');
+    const ugovaraci=cfg.ugovaraci||[];
+    fEl.innerHTML=`<select id="pop-inp" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;">
+      <option value="">— izaberi —</option>
+      ${ugovaraci.map(u=>`<option value="${u.id}"${u.id==val?' selected':''}>${esc(u.ime_prezime)}</option>`).join('')}
+    </select>`;
+    setTimeout(()=>{const el=document.getElementById('pop-inp');if(el)el.focus();},30);
     console.log('NAPLATA TIP OTVOREN');
     const d=new Date();
     const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
@@ -622,6 +630,12 @@ async function popSave(){
     });
     if(!r.ok) throw new Error();
     popRow[popField]=val;
+    // Ako se mijenja ugovorio_id, ažuriraj i ugovorio tekst lokalno
+    if(popField==='ugovorio_id'){
+      const cfg=JSON.parse(localStorage.getItem('jopex_config')||'{}');
+      const u=(cfg.ugovaraci||[]).find(u=>u.id==val);
+      if(u) popRow.ugovorio=u.ime_prezime;
+    }
     if(popField==='gotovo'&&(val===true||val==='true')){
       popRow.prioritet='Normal';
       popRow.status='Čeka isporuku';
