@@ -1,19 +1,13 @@
 {
   "name": "jopex-nalozi",
   "version": "2.0.0",
-  "description": "JoPeX API server - radni nalozi, config (materijali/kupci/obrade), prijava",
+  "description": "JoPeX API server",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
+  "scripts": {
+    "start": "node server.js"
+  },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
     "@aws-sdk/client-s3": "^3.0.0",
-    "connect-pg-simple": "^9.0.1",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "express-session": "^1.18.0",
-    "googleapis": "^140.0.0",
-    "pg": "^8.11.5"
-  }
     "bcryptjs": "^2.4.3",
     "connect-pg-simple": "^9.0.1",
     "dotenv": "^16.4.5",
