@@ -549,6 +549,10 @@ async function popSave(){
     if(popField==='reklamacija_dodatni_rad'&&val==='DA'){
       popRow.status='U radu';
     }
+    // Preračunaj za_naplatu ako se mijenja avans ili ugovorena_suma
+    if(popField==='avans'||popField==='ugovorena_suma'){
+      popRow.za_naplatu=(parseFloat(popRow.ugovorena_suma)||0)-(parseFloat(popRow.avans)||0);
+    }
     popClose();
     render();
   }catch(e){alert('Greška pri čuvanju.');}
