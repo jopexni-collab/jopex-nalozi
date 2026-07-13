@@ -512,33 +512,24 @@ function openPop(td,row,editCfg){
     console.log('NAPLATA TIP OTVOREN');
     const d=new Date();
     const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
-    const banke=['RFB','UNI','MF','NLB','UNI1'];
-    const got=['got B','got M','got N','got R','got Edo'];
+    const opcije=[
+      '','rfb '+kratakDatum,'uni '+kratakDatum,'mf '+kratakDatum,'nlb '+kratakDatum,'uni1 '+kratakDatum,
+      'got Boban '+kratakDatum,'got Marija '+kratakDatum,'got Nenad '+kratakDatum,'got Rade '+kratakDatum,'got Edo '+kratakDatum,
+    ];
     fEl.innerHTML=`
-      <div style="margin-bottom:6px;font-size:10.5px;color:#888;font-weight:600">Banka:</div>
-      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
-        ${banke.map(b=>`<button type="button" onclick="setNaplataISacuvaj('${b} ${kratakDatum}')"
-          style="font:inherit;font-size:11px;padding:3px 8px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#f0f4ff;">${b} ${kratakDatum}</button>`).join('')}
-      </div>
-      <div style="margin-bottom:6px;font-size:10.5px;color:#888;font-weight:600">Gotovina:</div>
-      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">
-        ${got.map(g=>`<button type="button" onclick="setNaplataISacuvaj('${g} ${kratakDatum}')"
-          style="font:inherit;font-size:11px;padding:3px 8px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#f0fff4;">${g} ${kratakDatum}</button>`).join('')}
-      </div>
-      <div style="font-size:10.5px;color:#888;font-weight:600;margin-bottom:4px">Slobodan unos (ime + datum):</div>
-      <div style="display:flex;gap:4px;">
-        <input type="text" id="naplata-ime" placeholder="npr. Petar" 
+      <select id="pop-inp" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" onchange="if(this.value)setNaplataISacuvaj(this.value)">
+        ${opcije.map(o=>`<option value="${esc(o)}"${o===(val||'')?' selected':''}>${o||'— izaberi —'}</option>`).join('')}
+      </select>
+      <div style="margin-top:8px;font-size:10.5px;color:#888;font-weight:600">ili slobodan unos (ime + datum):</div>
+      <div style="display:flex;gap:4px;margin-top:4px;">
+        <input type="text" id="naplata-ime" placeholder="npr. Petar"
           style="flex:1;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;"
           oninput="updateNaplata()">
         <input type="text" id="naplata-datum" placeholder="${kratakDatum}"
-          style="width:60px;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;"
+          style="width:55px;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;"
           oninput="updateNaplata()">
-      </div>
-      <input type="hidden" id="pop-inp" value="${esc(val||'')}">
-      <div style="margin-top:6px;font-size:11px;color:#555;">
-        Odabrano: <b id="naplata-preview">${esc(val||'—')}</b>
       </div>`;
-    setTimeout(()=>{const el=document.getElementById('naplata-ime');if(el)el.focus();},100);
+    setTimeout(()=>{const el=document.getElementById('pop-inp');if(el)el.focus();},100);
   } else if(editCfg.type==='number'){
     fEl.innerHTML=`<input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
     setTimeout(()=>{
@@ -571,8 +562,10 @@ function updateNaplata(){
   const d=new Date();
   const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
   const val=ime+(datum?' '+datum:' '+kratakDatum);
-  document.getElementById('pop-inp').value=val;
-  document.getElementById('naplata-preview').textContent=val;
+  const inp=document.getElementById('pop-inp');
+  if(inp) inp.value=val;
+  const prev=document.getElementById('naplata-preview');
+  if(prev) prev.textContent=val;
 }
 
 async function popSave(){
