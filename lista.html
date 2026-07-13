@@ -606,6 +606,10 @@ async function popSave(){
   if(popField==='gotovo'&&(val===false||val==='false')){
     body.status='U radu';
   }
+  // Kad je status = Isporučeno, automatski čekira Gotovo
+  if(popField==='status'&&val==='Isporučeno'){
+    body.gotovo=true;
+  }
   // Kad je reklamacija = DA, vrati status na U radu
   if(popField==='reklamacija_dodatni_rad'&&val==='DA'){
     body.status='U radu';
@@ -624,6 +628,9 @@ async function popSave(){
     }
     if(popField==='gotovo'&&(val===false||val==='false')){
       popRow.status='U radu';
+    }
+    if(popField==='status'&&val==='Isporučeno'){
+      popRow.gotovo=true;
     }
     if(popField==='reklamacija_dodatni_rad'&&val==='DA'){
       popRow.status='U radu';
