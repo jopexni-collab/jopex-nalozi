@@ -184,7 +184,15 @@ let popRow=null, popField=null, popTd=null;
 
 // ─── CHIPS ───────────────────────────────────────────────────────────────
 function chipP(p){const m={Hitno:'p-hitno',Normal:'p-normal',Zakazano:'p-zakazano'};return`<span class="chip ${m[p]||'p-normal'}">${esc(p||'Normal')}</span>`;}
-function chipS(s){const m={'Nije Započeto':'s-nije','U radu':'s-radu','Kasni':'s-kasni','Isporučeno':'s-zavrseno','Čeka isporuku':'s-ceka','Otkazano':'s-otkazano','Zakazano':'s-zakazano','Završeno':'s-zavrseno'};return`<span class="chip ${m[s]||'s-nije'}">${esc(s||'')}</span>`;}
+function chipS(s){
+  const m={
+    'Nije Započeto':'s-nije','U radu':'s-radu','Kasni':'s-kasni',
+    'Isporučeno':'s-zavrseno','Čeka isporuku':'s-ceka',
+    'Otkazano':'s-otkazano','Zakazano':'s-zakazano','Završeno':'s-zavrseno'
+  };
+  const icon=s==='Čeka isporuku'?'🚚 ':s==='Isporučeno'?'✓ ':'';
+  return`<span class="chip ${m[s]||'s-nije'}">${icon}${esc(s||'')}</span>`;
+}
 function chipR(r){return r==='DA'?'<span class="chip r-da">DA</span>':r==='NE'?'<span class="chip r-ne">NE</span>':'';}
 function getDani(r){
   if(r.gotovo) return null;
@@ -252,7 +260,7 @@ function getCols(){
     {k:'avans',l:'Avans',w:80,filter:null,render:r=>`<td class="num">${fm(r.avans)}</td>`,edit:{type:'number',field:'avans',label:'Avans (KM)'}},
     {k:'za_naplatu',l:'Za naplatu',w:90,filter:null,render:r=>`<td class="num">${fm(r.za_naplatu)}</td>`,edit:null},
     {k:'naplaceno',l:'✓ Napl.',w:55,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.naplaceno?'<span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span>':''}</td>`,edit:{type:'check',field:'naplaceno',label:'Naplaćeno'}},
-    {k:'naplaceno_opis',l:'Opis naplate',w:130,filter:'text',render:r=>`<td class="note" title="${esc(r.naplaceno_opis)}">${esc(r.naplaceno_opis)||''}</td>`,edit:{type:'text',field:'naplaceno_opis',label:'Opis naplate (npr. RFB 25/7, got Nenad 26/7)'}},
+    {k:'naplaceno_opis',l:'Opis naplate',w:130,filter:'text',render:r=>`<td class="note" title="${esc(r.naplaceno_opis)}">${esc(r.naplaceno_opis)||''}</td>`,edit:{type:'naplata',field:'naplaceno_opis',label:'Opis naplate'}},
     {k:'_del',l:'',w:40,filter:null,render:r=>`<td class="center"><button onclick="obrisiNalog(${r.r_br},event)" style="background:none;border:none;cursor:pointer;font-size:14px;color:#c0392b;" title="Obriši nalog">🗑</button></td>`,edit:null},
   ]:[];
   return [...base,...fin];
@@ -500,7 +508,23 @@ function openPop(td,row,editCfg){
       try{cal.showPicker();}catch(e){}
       cal.focus();
     },50);
-  } else if(editCfg.type==='number'){
+  } else if(editCfg.type==='naplata'){
+    // Kratki datum format DD/M
+    const d=new Date();
+    const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
+    const prijedlozi=[
+      'RFB '+kratakDatum,'UNI '+kratakDatum,'MF '+kratakDatum,
+      'NLB '+kratakDatum,'UNI1 '+kratakDatum,
+      'got Boban '+kratakDatum,'got Marija '+kratakDatum,
+      'got Nenad '+kratakDatum,'got Rade '+kratakDatum,
+    ];
+    fEl.innerHTML=`
+      <input list="naplata-list" id="pop-inp" value="${esc(val||'')}" placeholder="Izaberi ili upiši..."
+        style="width:100%;font:inherit;font-size:12px;padding:5px 7px;border:1px solid #ccc;border-radius:4px;">
+      <datalist id="naplata-list">
+        ${prijedlozi.map(p=>`<option value="${esc(p)}">`).join('')}
+      </datalist>`;
+    setTimeout(()=>{const el=document.getElementById('pop-inp');if(el)el.focus();},30);
     fEl.innerHTML=`<input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
     setTimeout(()=>{
       const el=document.getElementById('pop-inp');
