@@ -88,7 +88,7 @@ async function uploadToR2(key, buffer, contentType) {
 
 router.post('/', async (req, res) => {
   try {
-    const { naziv, dxf_b64, radni_nalog_b64, ponuda_b64 } = req.body;
+    const { naziv, dxf_b64, radni_nalog_b64, radni_nalog_html_b64, ponuda_b64 } = req.body;
     if (!naziv) return res.status(400).json({ error: 'naziv je obavezan.' });
 
     const rezultat = {};
@@ -98,14 +98,15 @@ router.post('/', async (req, res) => {
       const buf = Buffer.from(dxf_b64, 'base64');
       rezultat.dxf_link = await uploadToR2(`nalozi/${ts}_${naziv}.dxf`, buf, 'application/octet-stream');
     }
-    if (radni_nalog_b64) {
+
+    if (radni_nalog_html_b64) {
+      const buf = Buffer.from(radni_nalog_html_b64, 'base64');
+      rezultat.radni_nalog_link = await uploadToR2(`nalozi/${ts}_${naziv}_nalog.html`, buf, 'text/html;charset=utf-8');
+    } else if (radni_nalog_b64) {
       const buf = Buffer.from(radni_nalog_b64, 'base64');
-      // Pokušaj detektovati da li je PDF ili HTML
-      const isPdf = buf[0] === 0x25 && buf[1] === 0x50; // %P = PDF header
-      const ext = isPdf ? 'pdf' : 'html';
-      const mime = isPdf ? 'application/pdf' : 'text/html;charset=utf-8';
-      rezultat.radni_nalog_link = await uploadToR2(`nalozi/${ts}_${naziv}_nalog.${ext}`, buf, mime);
+      rezultat.radni_nalog_link = await uploadToR2(`nalozi/${ts}_${naziv}_nalog.pdf`, buf, 'application/pdf');
     }
+
     if (ponuda_b64) {
       const buf = Buffer.from(ponuda_b64, 'base64');
       rezultat.ponuda_link = await uploadToR2(`ponude/pdf/${ts}_${naziv}_ponuda.pdf`, buf, 'application/pdf');
