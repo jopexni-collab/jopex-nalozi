@@ -62,6 +62,7 @@ app.use('/api/config', require('./config'));
 app.use('/api/upload',     requireLoginOrApiKey, require('./upload'));
 app.use('/api/zaposleni',   requireLoginOrApiKey, require('./zaposleni'));
 app.use('/api/proizvodnja', requireLoginOrApiKey, require('./proizvodnja'));
+app.use('/api/gotovina',    requireLoginOrApiKey, require('./gotovina'));
 
 // ─── Statički fajlovi (web aplikacija) ───────────────────────────────────
 app.use((req, res, next) => {
