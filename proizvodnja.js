@@ -16,7 +16,8 @@ const BASE_COLS = `
   p.narucilac, p.materijal, p.status, p.pocetak, p.planirani_zavrsetak,
   (p.planirani_zavrsetak - CURRENT_DATE) AS broj_dana,
   p.gotovo, p.reklamacija_dodatni_rad, p.napomena,
-  p.link_skica, p.link_ponuda, p.datum_kreiranja, p.nova_procjena
+  p.link_skica, p.link_ponuda, p.datum_kreiranja, p.nova_procjena,
+  p.naplaceno, p.naplaceno_opis
 `;
 
 // GET /api/proizvodnja - lista (admin vidi finansije, ostali ne)
@@ -57,7 +58,7 @@ router.post('/', async (req, res) => {
   const {
     zadatak, prioritet, ugovorio_id, ugovorio: ugovorioIzReq, narucilac, materijal, status,
     pocetak, planirani_zavrsetak, napomena, link_skica, link_ponuda,
-    ugovorena_suma, avans,
+    ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad, r_br_import,
   } = req.body || {};
 
   if (!zadatak?.trim())
@@ -74,14 +75,35 @@ router.post('/', async (req, res) => {
       if (emp.rows.length) ugovorioIme = emp.rows[0].ime_prezime;
     }
 
-    const r = await pool.query(
-      `INSERT INTO proizvodnja_jopex
+    // Ako je import sa originalnim R.Br., upiši ga direktno
+    let insertQuery, insertVals;
+    if (r_br_import) {
+      insertQuery = `INSERT INTO proizvodnja_jopex
+        (r_br, zadatak, prioritet, ugovorio_id, ugovorio, narucilac, materijal,
+         status, pocetak, planirani_zavrsetak, napomena, link_skica,
+         link_ponuda, ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+       ON CONFLICT (r_br) DO NOTHING
+       RETURNING r_br, zadatak, narucilac, ugovorena_suma, status`;
+      insertVals = [
+        r_br_import,
+        zadatak, prioritet || 'Normal',
+        ugovorio_id || null, ugovorioIme,
+        narucilac || null, materijal || null,
+        status || 'Nije Započeto',
+        pocetak || null, planirani_zavrsetak || null,
+        napomena || null, link_skica || null, link_ponuda || null,
+        ugovorena_suma ?? 0, avans ?? 0,
+        gotovo || false, reklamacija_dodatni_rad || null,
+      ];
+    } else {
+      insertQuery = `INSERT INTO proizvodnja_jopex
         (zadatak, prioritet, ugovorio_id, ugovorio, narucilac, materijal,
          status, pocetak, planirani_zavrsetak, napomena, link_skica,
-         link_ponuda, ugovorena_suma, avans)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-       RETURNING r_br, zadatak, narucilac, ugovorena_suma, status`,
-      [
+         link_ponuda, ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+       RETURNING r_br, zadatak, narucilac, ugovorena_suma, status`;
+      insertVals = [
         zadatak, prioritet || 'Normal',
         ugovorio_id || null, ugovorioIme,
         narucilac || null, materijal || null,
@@ -89,8 +111,10 @@ router.post('/', async (req, res) => {
         pocetak || new Date().toISOString().split('T')[0], planirani_zavrsetak || null,
         napomena || null, link_skica || null, link_ponuda || null,
         ugovorena_suma ?? 0, avans ?? 0,
-      ]
-    );
+        gotovo || false, reklamacija_dodatni_rad || null,
+      ];
+    }
+    const r = await pool.query(insertQuery, insertVals);
     res.status(201).json(r.rows[0]);
   } catch (err) {
     console.error(err);
@@ -109,7 +133,7 @@ router.patch('/:r_br', async (req, res) => {
   ];
   const ALLOWED_ADMIN = [
     'ugovorena_suma','avans','naplata_detalji',
-    'naplaceno_fakturisano','dodatni_rad_napomena',
+    'naplaceno_fakturisano','dodatni_rad_napomena','naplaceno','naplaceno_opis',
   ];
 
   const allowed = isAdmin ? [...ALLOWED_BASE, ...ALLOWED_ADMIN] : ALLOWED_BASE;
@@ -163,6 +187,10 @@ router.delete('/:r_br', async (req, res) => {
       [req.params.r_br]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Nije pronađen.' });
+    // Reset sequence na MAX r_br
+    await pool.query(
+      `SELECT setval('proizvodnja_jopex_r_br_seq', COALESCE((SELECT MAX(r_br) FROM proizvodnja_jopex), 0), true)`
+    );
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Greška: ' + err.message });
