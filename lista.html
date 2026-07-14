@@ -528,6 +528,7 @@ function openPop(td,row,editCfg){
       ${ugovaraci.map(u=>`<option value="${u.id}"${u.id==val?' selected':''}>${esc(u.ime_prezime)}</option>`).join('')}
     </select>`;
     setTimeout(()=>{const el=document.getElementById('pop-inp');if(el)el.focus();},30);
+  } else if(editCfg.type==='naplata'){
     console.log('NAPLATA TIP OTVOREN');
     const d=new Date();
     const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
