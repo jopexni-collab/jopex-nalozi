@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gotovina – JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f0f2f5;--border:#d0d7de;--green:#1f8a4c;--red:#c0392b;--orange:#e67e22;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);font-size:12px;}
+header{background:var(--blue);color:#fff;padding:8px 16px;display:flex;align-items:center;justify-content:space-between;}
+header h1{font-size:15px;font-weight:700;}
+header nav{display:flex;gap:8px;align-items:center;}
+header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgba(255,255,255,.4);padding:3px 8px;border-radius:4px;}
+#who{font-size:11px;opacity:.75;}
+
+/* SUME */
+.sume{display:flex;gap:10px;padding:10px 14px;background:#fff;border-bottom:1px solid var(--border);}
+.suma-box{flex:1;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:10px 14px;text-align:center;}
+.suma-box .val{font-size:20px;font-weight:700;color:var(--dark);}
+.suma-box .lbl{font-size:10.5px;color:#6b7a8d;margin-top:2px;}
+.suma-box.nepredano .val{color:var(--red);}
+
+/* FORMA */
+.forma{background:#fff;border-bottom:1px solid var(--border);padding:10px 14px;}
+.forma h3{font-size:13px;font-weight:700;color:var(--dark);margin-bottom:8px;}
+.forma-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;align-items:end;}
+.fg{display:flex;flex-direction:column;gap:3px;}
+.fg label{font-size:10.5px;font-weight:600;color:#6b7a8d;}
+.fg input,.fg select{font:inherit;font-size:12px;padding:5px 7px;border:1px solid var(--border);border-radius:5px;}
+.btn-add{font:inherit;font-size:12px;font-weight:700;padding:6px 16px;background:var(--green);color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;}
+.btn-add:hover{background:#176e3d;}
+
+/* FILTERI */
+.filteri{display:flex;gap:8px;padding:8px 14px;background:#fff;border-bottom:1px solid var(--border);flex-wrap:wrap;align-items:center;}
+.filteri select,.filteri input{font:inherit;font-size:11.5px;padding:4px 7px;border:1px solid var(--border);border-radius:4px;}
+.filteri label{font-size:11px;color:#6b7a8d;font-weight:600;}
+.btn-sm{font:inherit;font-size:11px;padding:4px 10px;background:#eee;border:none;border-radius:4px;cursor:pointer;}
+
+/* TABELA */
+.wrap{overflow:auto;height:calc(100vh - 230px);}
+table{width:100%;border-collapse:collapse;}
+thead th{background:#1f3864;color:#fff;font-size:11px;padding:6px 8px;text-align:left;position:sticky;top:0;white-space:nowrap;}
+tbody tr:hover td{background:#e8f0fe!important;}
+tbody tr:nth-child(even) td{background:#f5f7fa;}
+td{padding:4px 8px;border-bottom:1px solid #e8eaed;font-size:11.5px;vertical-align:middle;}
+td.num{text-align:right;font-weight:700;}
+.chip-izvor{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;}
+.iz-pro{background:#e8f0fe;color:#1a5fa8;}
+.iz-malo{background:#fef3e2;color:#e67e22;}
+.iz-drugo{background:#f3e5f5;color:#7b1fa2;}
+.predano{color:var(--green);font-weight:700;}
+.nepredano-txt{color:var(--red);font-weight:700;}
+.btn-predaj{font:inherit;font-size:10.5px;padding:2px 8px;background:var(--green);color:#fff;border:none;border-radius:3px;cursor:pointer;}
+.btn-del{font:inherit;font-size:12px;background:none;border:none;cursor:pointer;color:var(--red);}
+.nalog-link{color:var(--blue);text-decoration:none;font-weight:600;}
+</style>
+</head>
+<body>
+<header>
+  <h1>💵 Gotovinska naplata</h1>
+  <nav>
+    <span id="who"></span>
+    <a href="lista.html">← Nalozi</a>
+    <a href="#" id="logout">Izlaz</a>
+  </nav>
+</header>
+
+<!-- SUME -->
+<div class="sume">
+  <div class="suma-box"><div class="val" id="s-danas">—</div><div class="lbl">Danas</div></div>
+  <div class="suma-box"><div class="val" id="s-sedmica">—</div><div class="lbl">Ova sedmica</div></div>
+  <div class="suma-box"><div class="val" id="s-mjesec">—</div><div class="lbl">Ovaj mjesec</div></div>
+  <div class="suma-box nepredano"><div class="val" id="s-nepredano">—</div><div class="lbl">Nije predano blagajniku</div></div>
+</div>
+
+<!-- FORMA ZA UNOS -->
+<div class="forma">
+  <h3>+ Nova naplata</h3>
+  <div class="forma-grid">
+    <div class="fg"><label>Datum</label><input type="date" id="f-datum"></div>
+    <div class="fg"><label>Iznos (KM)</label><input type="number" id="f-iznos" step="0.01" min="0" placeholder="0.00"></div>
+    <div class="fg"><label>Primio</label>
+      <select id="f-primio">
+        <option value="">— izaberi —</option>
+        <option>Boban</option><option>Marija</option><option>Nenad</option>
+        <option>Rade</option><option>Edo</option>
+      </select>
+    </div>
+    <div class="fg"><label>Izvor</label>
+      <select id="f-izvor">
+        <option value="Proizvodnja">Proizvodnja</option>
+        <option value="Maloprodaja">Maloprodaja</option>
+        <option value="Drugo">Drugo</option>
+      </select>
+    </div>
+    <div class="fg"><label>Nalog R.Br. (opciono)</label><input type="number" id="f-nalog" placeholder="npr. 342"></div>
+    <div class="fg"><label>Opis</label><input type="text" id="f-opis" placeholder="napomena..."></div>
+    <div class="fg"><label>&nbsp;</label><button class="btn-add" onclick="dodajNaplatu()">+ Dodaj</button></div>
+  </div>
+  <div id="f-msg" style="margin-top:8px;font-size:12px;"></div>
+</div>
+
+<!-- FILTERI -->
+<div class="filteri">
+  <label>Period:</label>
+  <input type="date" id="fil-od" onchange="load()">
+  <span>—</span>
+  <input type="date" id="fil-do" onchange="load()">
+  <label>Primio:</label>
+  <select id="fil-primio" onchange="load()">
+    <option value="">Svi</option>
+    <option>Boban</option><option>Marija</option><option>Nenad</option><option>Rade</option><option>Edo</option>
+  </select>
+  <label>Izvor:</label>
+  <select id="fil-izvor" onchange="load()">
+    <option value="">Svi</option>
+    <option value="Proizvodnja">Proizvodnja</option>
+    <option value="Maloprodaja">Maloprodaja</option>
+    <option value="Drugo">Drugo</option>
+  </select>
+  <label><input type="checkbox" id="fil-nepredano" onchange="load()"> Samo nepredano</label>
+  <button class="btn-sm" onclick="resetFilteri()">✕ Resetuj</button>
+  <span id="stat" style="margin-left:auto;color:#6b7a8d;font-size:11px;"></span>
+</div>
+
+<!-- TABELA -->
+<div class="wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Datum</th>
+      <th>Iznos</th>
+      <th>Primio</th>
+      <th>Izvor</th>
+      <th>Nalog</th>
+      <th>Opis</th>
+      <th>Predano blagajniku</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody id="tbody">
+    <tr><td colspan="8" style="text-align:center;padding:30px;color:#999">Učitavanje...</td></tr>
+  </tbody>
+</table>
+</div>
+
+<script>
+const API='';
+let all=[], isAdmin=false;
+
+function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fd(d){if(!d)return'';const s=d.split('T')[0];const[y,m,dd]=s.split('-');return`${dd}.${m}.${y.slice(2)}`;}
+function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function gv(id){return(document.getElementById(id)||{}).value||'';}
+
+// Postavi defaultni datum = danas
+document.getElementById('f-datum').value=new Date().toISOString().split('T')[0];
+
+async function loadSume(){
+  try{
+    const r=await fetch(`${API}/api/gotovina/suma`);
+    const d=await r.json();
+    document.getElementById('s-danas').textContent=fm(d.danas||0)+' KM';
+    document.getElementById('s-sedmica').textContent=fm(d.ova_sedmica||0)+' KM';
+    document.getElementById('s-mjesec').textContent=fm(d.ovaj_mjesec||0)+' KM';
+    document.getElementById('s-nepredano').textContent=fm(d.nepredano||0)+' KM';
+  }catch(e){}
+}
+
+async function load(){
+  const params=new URLSearchParams();
+  if(gv('fil-od')) params.set('od',gv('fil-od'));
+  if(gv('fil-do')) params.set('do',gv('fil-do'));
+  if(gv('fil-primio')) params.set('primio',gv('fil-primio'));
+  if(gv('fil-izvor')) params.set('izvor',gv('fil-izvor'));
+  if(document.getElementById('fil-nepredano').checked) params.set('nepredano','true');
+
+  try{
+    const r=await fetch(`${API}/api/gotovina?${params}`);
+    all=await r.json();
+    render();
+  }catch(e){
+    document.getElementById('tbody').innerHTML='<tr><td colspan="8" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>';
+  }
+}
+
+function render(){
+  document.getElementById('stat').textContent=`${all.length} zapisa | Ukupno: ${fm(all.reduce((s,r)=>s+parseFloat(r.iznos||0),0))} KM`;
+  if(!all.length){
+    document.getElementById('tbody').innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:#999">Nema podataka.</td></tr>';
+    return;
+  }
+  document.getElementById('tbody').innerHTML=all.map(r=>`
+    <tr>
+      <td>${fd(r.datum)}</td>
+      <td class="num">${fm(r.iznos)} KM</td>
+      <td><b>${esc(r.primio)}</b></td>
+      <td><span class="chip-izvor ${r.izvor==='Proizvodnja'?'iz-pro':r.izvor==='Maloprodaja'?'iz-malo':'iz-drugo'}">${esc(r.izvor)}</span></td>
+      <td>${r.nalog_r_br?`<a class="nalog-link" href="lista.html">#${r.nalog_r_br}</a>${r.narucilac?' — '+esc(r.narucilac):''}`:''}</td>
+      <td>${esc(r.opis||'')}</td>
+      <td>${r.predao_blagajniku
+        ?`<span class="predano">✓ Predano ${r.datum_predaje?fd(r.datum_predaje):''}</span>`
+        :`<span class="nepredano-txt">Nije predano</span>
+          <button class="btn-predaj" onclick="predajBlagajniku(${r.id})">Predano</button>`
+      }</td>
+      <td>${isAdmin?`<button class="btn-del" onclick="obrisi(${r.id})">🗑</button>`:''}</td>
+    </tr>
+  `).join('');
+}
+
+async function dodajNaplatu(){
+  const iznos=parseFloat(document.getElementById('f-iznos').value);
+  const primio=gv('f-primio');
+  const msg=document.getElementById('f-msg');
+  if(!iznos||iznos<=0){msg.style.color='red';msg.textContent='Unesite iznos.';return;}
+  if(!primio){msg.style.color='red';msg.textContent='Izaberite ko je primio.';return;}
+  try{
+    const r=await fetch(`${API}/api/gotovina`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        datum:gv('f-datum')||new Date().toISOString().split('T')[0],
+        iznos,primio,
+        izvor:gv('f-izvor')||'Proizvodnja',
+        nalog_r_br:parseInt(gv('f-nalog'))||null,
+        opis:gv('f-opis')||null,
+      }),
+    });
+    if(!r.ok) throw new Error();
+    msg.style.color='green';msg.textContent='✓ Upisano!';
+    document.getElementById('f-iznos').value='';
+    document.getElementById('f-nalog').value='';
+    document.getElementById('f-opis').value='';
+    await load();
+    await loadSume();
+    setTimeout(()=>msg.textContent='',2000);
+  }catch(e){msg.style.color='red';msg.textContent='Greška pri upisu.';}
+}
+
+async function predajBlagajniku(id){
+  const danas=new Date().toISOString().split('T')[0];
+  try{
+    await fetch(`${API}/api/gotovina/${id}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({predao_blagajniku:true,datum_predaje:danas}),
+    });
+    await load();
+    await loadSume();
+  }catch(e){alert('Greška.');}
+}
+
+async function obrisi(id){
+  if(!confirm('Obrisati zapis?')) return;
+  try{
+    await fetch(`${API}/api/gotovina/${id}`,{method:'DELETE'});
+    await load();
+    await loadSume();
+  }catch(e){alert('Greška.');}
+}
+
+function resetFilteri(){
+  ['fil-od','fil-do','fil-primio','fil-izvor'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.value='';
+  });
+  document.getElementById('fil-nepredano').checked=false;
+  load();
+}
+
+document.getElementById('logout').onclick=async e=>{
+  e.preventDefault();
+  await fetch(`${API}/api/auth/logout`,{method:'POST'});
+  location.href='login.html';
+};
+
+// Auth
+fetch(`${API}/api/auth/me`).then(r=>{
+  if(!r.ok){location.href='login.html';return;}
+  return r.json();
+}).then(u=>{
+  if(!u) return;
+  isAdmin=u.rola==='admin';
+  document.getElementById('who').textContent='👤 '+u.ime_prezime;
+  load();
+  loadSume();
+}).catch(()=>location.href='login.html');
+</script>
+</body>
+</html>
