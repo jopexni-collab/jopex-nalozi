@@ -7,7 +7,7 @@
 <style>
 :root{--blue:#1a5fa8;--dark:#134a85;--bg:#f0f2f5;--border:#d0d7de;--red:#c0392b;--green:#1f8a4c;}
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);font-size:11px;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);font-size:11.5px;}
 header{background:var(--blue);color:#fff;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;}
 header h1{font-size:14px;font-weight:700;}
 header nav{display:flex;gap:8px;align-items:center;}
@@ -25,13 +25,14 @@ table{border-collapse:collapse;table-layout:fixed;width:max-content;min-width:10
 thead th{
   background:#1f3864;color:#fff;font-size:11px;font-weight:600;
   position:sticky;top:0;z-index:10;border-right:1px solid #2d4a7a;
-  overflow:hidden;
+  overflow:hidden;white-space:nowrap;
+  resize:horizontal; /* browser native resize */
 }
 .th-inner{display:flex;flex-direction:column;}
-.th-label{padding:3px 5px;border-bottom:1px solid #2d4a7a;white-space:normal;word-break:break-word;line-height:1.2;font-size:10.5px;}
-.th-filter{padding:1px 2px;background:#162a52;}
+.th-label{padding:4px 6px;border-bottom:1px solid #2d4a7a;}
+.th-filter{padding:2px 3px;background:#162a52;}
 .th-filter select,.th-filter input{
-  width:100%;font:inherit;font-size:10px;padding:1px 3px;
+  width:100%;font:inherit;font-size:10.5px;padding:2px 3px;
   background:#1e3566;color:#fff;border:1px solid #3a5590;border-radius:2px;
 }
 .th-filter select option{background:#1a2a4a;}
@@ -48,9 +49,9 @@ thead th{position:sticky;top:0;}
 tbody tr:hover td{background:#e8f0fe!important;}
 tbody tr:nth-child(even) td{background:#f5f7fa;}
 td{
-  padding:2px 5px;border-bottom:1px solid #d0d7de;border-right:1px solid #e0e4ea;
+  padding:3px 6px;border-bottom:1px solid #e8eaed;border-right:1px solid #eceef1;
   white-space:normal;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;
-  cursor:pointer;word-break:break-word;font-weight:600;
+  cursor:pointer;word-break:break-word;
 }
 td.locked{cursor:default;}
 td.editable{background:#fffde7!important;}
@@ -59,13 +60,12 @@ td.num{text-align:right;white-space:nowrap;}
 td.center{text-align:center;white-space:nowrap;}
 
 /* CHIPS */
-.chip{display:inline-block;padding:0px 5px;border-radius:8px;font-size:10px;font-weight:700;white-space:nowrap;}
+.chip{display:inline-block;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:600;white-space:nowrap;}
 .p-hitno{background:#fce8e6;color:#c0392b;}.p-normal{background:#e6f4ea;color:#1f8a4c;}.p-zakazano{background:#fef3e2;color:#e67e22;}
 .s-nije{background:#fff9c4;color:#856404;}.s-radu{background:#dce6fc;color:#1a5fa8;}.s-kasni{background:#fce8e6;color:#c0392b;}
 .s-zavrseno{background:#e6f4ea;color:#1f8a4c;}.s-ceka{background:#e0f2f1;color:#00796b;}.s-otkazano{background:#f3e5f5;color:#7b1fa2;}.s-zakazano{background:#fef3e2;color:#e67e22;}
 .r-da{background:#fce8e6;color:#c0392b;}.r-ne{background:#e6f4ea;color:#1f8a4c;}
 .dani-kasni{color:#c0392b;font-weight:700;background:#fce8e6;}
-.dani-vatra{color:#c0392b;font-weight:700;background:#fff0e0;}
 .dani-blizu{color:#856404;font-weight:700;background:#fff9c4;}
 .dani-ok{color:#1f8a4c;font-weight:700;background:#e6f4ea;}
 
@@ -87,16 +87,6 @@ td.center{text-align:center;white-space:nowrap;}
 .btn-cancel{background:#eee;color:#333;}
 .empty{padding:30px;text-align:center;color:#6b7a8d;}
 a.lk{color:var(--blue);text-decoration:none;}
-/* EXCEL NOTE */
-.note-cell{position:relative;}
-.note-cell.has-note::after{content:'';position:absolute;top:0;right:0;
-  border-style:solid;border-width:0 7px 7px 0;
-  border-color:transparent #c0392b transparent transparent;}
-#note-tooltip{display:none;position:fixed;z-index:2000;background:#fffde7;
-  border:1px solid #f9a825;border-radius:4px;padding:6px 10px;
-  font-size:11.5px;color:#333;max-width:280px;
-  box-shadow:2px 2px 6px rgba(0,0,0,.15);white-space:pre-wrap;
-  line-height:1.4;pointer-events:none;}
 .nova-proc{cursor:pointer;color:#6b7a8d;}
 .nova-proc.ima-proc{color:#e67e22;font-weight:600;}
 .nova-proc:hover{background:#fef3e2!important;}
@@ -118,7 +108,6 @@ a.lk{color:var(--blue);text-decoration:none;}
   <nav>
     <span id="who"></span>
     <a href="index.html">+ Novi</a>
-    <a href="#" onclick="undoZadnje(event)" id="btn-undo" style="opacity:.5;cursor:not-allowed" title="Poništi zadnju izmjenu">↩ Undo</a>
     <a href="#" onclick="load()">↺</a>
     <a href="#" id="logout">Izlaz</a>
   </nav>
@@ -137,7 +126,6 @@ a.lk{color:var(--blue);text-decoration:none;}
 
 <!-- INLINE EDITOR POPUP -->
 <div id="inline-pop">
-<div id="note-tooltip"></div>
   <label id="pop-label">Vrijednost</label>
   <div id="pop-field"></div>
   <div class="pop-btns">
@@ -148,44 +136,17 @@ a.lk{color:var(--blue);text-decoration:none;}
 
 <script>
 const API='';
-const STATUSI=['Nije Započeto','Zakazano','U radu','Čeka isporuku','Isporučeno','Kasni','Otkazano'];
+const STATUSI=['Nije Započeto','Zakazano','U radu','Čeka isporuku','Završeno','Kasni','Otkazano'];
 const PRIORITETI=['Normal','Hitno','Zakazano'];
 const ZADACI=['Kuhinjska ploča','Klupice, Step','Sto','Na Mjeru','Usluge WJ','Usluge Mašina'];
 const MATERIJALI=['Granit','Mermer','Tašto','Kvarc','Vještački','Keramika','Kombinovano','Obrada na mašini'];
 const REKLAMACIJE=['','NE','DA'];
 let all=[], isAdmin=false, trenutniUser=null;
-let undoStack=[]; // {r_br, field, oldVal}
-
-function pushUndo(rBr, field, oldVal){
-  undoStack.push({rBr, field, oldVal});
-  const btn=document.getElementById('btn-undo');
-  if(btn){btn.style.opacity='1';btn.style.cursor='pointer';}
-}
-
-async function undoZadnje(e){
-  e.preventDefault();
-  if(!undoStack.length) return;
-  const u=undoStack.pop();
-  const body={[u.field]:u.oldVal};
-  try{
-    await fetch(`${API}/api/proizvodnja/${u.rBr}`,{
-      method:'PATCH',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(body),
-    });
-    const row=all.find(r=>r.r_br==u.rBr);
-    if(row) row[u.field]=u.oldVal;
-    render();
-  }catch(e){alert('Greška pri undo.');}
-  if(!undoStack.length){
-    const btn=document.getElementById('btn-undo');
-    if(btn){btn.style.opacity='.5';btn.style.cursor='not-allowed';}
-  }
-}
 
 function mozeEditovati(field){
   if(!trenutniUser) return false;
   if(isAdmin) return true;
-  const finPolja=['ugovorena_suma','avans','za_naplatu','naplata_detalji','naplaceno','naplaceno_opis'];
+  const finPolja=['ugovorena_suma','avans','za_naplatu','naplata_detalji'];
   if(finPolja.includes(field)) return false;
   const statusPolja=['status','gotovo','reklamacija_dodatni_rad','nova_procjena'];
   if(statusPolja.includes(field)) return trenutniUser.izmjena_statusa||false;
@@ -195,15 +156,7 @@ let popRow=null, popField=null, popTd=null;
 
 // ─── CHIPS ───────────────────────────────────────────────────────────────
 function chipP(p){const m={Hitno:'p-hitno',Normal:'p-normal',Zakazano:'p-zakazano'};return`<span class="chip ${m[p]||'p-normal'}">${esc(p||'Normal')}</span>`;}
-function chipS(s){
-  const m={
-    'Nije Započeto':'s-nije','U radu':'s-radu','Kasni':'s-kasni',
-    'Isporučeno':'s-zavrseno','Čeka isporuku':'s-ceka',
-    'Otkazano':'s-otkazano','Zakazano':'s-zakazano','Završeno':'s-zavrseno'
-  };
-  const icon=s==='Čeka isporuku'?'🚚 ':s==='Isporučeno'?'✓ ':'';
-  return`<span class="chip ${m[s]||'s-nije'}">${icon}${esc(s||'')}</span>`;
-}
+function chipS(s){const m={'Nije Započeto':'s-nije','U radu':'s-radu',Kasni:'s-kasni',Završeno:'s-zavrseno','Čeka isporuku':'s-ceka',Otkazano:'s-otkazano',Zakazano:'s-zakazano'};return`<span class="chip ${m[s]||'s-nije'}">${esc(s||'')}</span>`;}
 function chipR(r){return r==='DA'?'<span class="chip r-da">DA</span>':r==='NE'?'<span class="chip r-ne">NE</span>':'';}
 function getDani(r){
   if(r.gotovo) return null;
@@ -218,16 +171,13 @@ function getDani(r){
 function daniClass(d){
   if(d==null) return '';
   if(d<0) return 'dani-kasni';
-  if(d<=2) return 'dani-vatra';
   if(d<=5) return 'dani-blizu';
   return 'dani-ok';
 }
 function daniC(r){
   const d=getDani(r);
   if(d==null) return '<td></td>';
-  const cls=daniClass(d);
-  const icon=d<0?'🔥 ':'';
-  return`<td class="center ${cls}">${icon}${d}</td>`;
+  return`<td class="center ${daniClass(d)}">${d}</td>`;
 }
 function zavrsClass(r){
   if(r.gotovo) return '';
@@ -253,25 +203,23 @@ function getCols(){
     {k:'zadatak',l:'Zadatak',w:130,filter:'sel',opts:ZADACI,render:r=>`<td>${esc(r.zadatak)}</td>`,edit:{type:'select',opts:ZADACI,field:'zadatak'}},
     {k:'materijal',l:'Materijal',w:100,filter:'sel',opts:MATERIJALI,render:r=>`<td>${esc(r.materijal)}</td>`,edit:{type:'select',opts:MATERIJALI,field:'materijal'}},
     {k:'prioritet',l:'Prioritet',w:90,filter:'sel',opts:PRIORITETI,render:r=>`<td>${chipP(r.prioritet)}</td>`,edit:{type:'select',opts:PRIORITETI,field:'prioritet'}},
-    {k:'ugovorio',l:'Ugovorio',w:110,filter:'text',render:r=>`<td>${esc(r.ugovorio)}</td>`,edit:{type:'ugovorio',field:'ugovorio_id',label:'Ugovorio'}},
+    {k:'ugovorio',l:'Ugovorio',w:110,filter:'text',render:r=>`<td>${esc(r.ugovorio)}</td>`,edit:{type:'text',field:'ugovorio',label:'Ugovorio'}},
     {k:'narucilac',l:'Naručilac',w:130,filter:'text',render:r=>`<td>${esc(r.narucilac)}</td>`,edit:{type:'text',field:'narucilac',label:'Naručilac'}},
     {k:'status',l:'Status',w:120,filter:'sel',opts:STATUSI,render:r=>`<td>${chipS(r.status)}</td>`,edit:{type:'select',opts:STATUSI,field:'status'}},
     {k:'pocetak',l:'Ugovoreno',w:90,filter:null,render:r=>`<td>${fd(r.pocetak)}</td>`,edit:{type:'date',field:'pocetak',label:'Ugovoreno (datum)'}},
     {k:'planirani_zavrsetak',l:'Plan. završetak',w:110,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>`<td class="${zavrsClass(r)}">${fd(r.planirani_zavrsetak)}</td>`,edit:{type:'date',field:'planirani_zavrsetak',label:'Plan. završetak'}},
     {k:'broj_dana',l:'Dana',w:70,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>daniC(r),edit:null},
     {k:'nova_procjena',l:'Razlog kašnjenja',w:180,filter:'text',render:r=>`<td class="note" title="${esc(r.nova_procjena)}">${esc(r.nova_procjena)||''}</td>`,edit:{type:'textarea',field:'nova_procjena',label:'Razlog kašnjenja'}},
-    {k:'gotovo',l:'Gotovo',w:65,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.gotovo?'<span style="color:#1f8a4c;font-size:18px;font-weight:900;line-height:1">✓</span>':''}</td>`,edit:{type:'check',field:'gotovo',label:'Gotovo'}},
+    {k:'gotovo',l:'Gotovo',w:65,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.gotovo?'✓':''}</td>`,edit:{type:'check',field:'gotovo',label:'Gotovo'}},
     {k:'reklamacija_dodatni_rad',l:'Rek.',w:60,filter:'sel',opts:['DA','NE'],render:r=>`<td class="center">${chipR(r.reklamacija_dodatni_rad)}</td>`,edit:{type:'select',opts:['','NE','DA'],field:'reklamacija_dodatni_rad',label:'Reklamacija'}},
-    {k:'napomena',l:'Napomena',w:220,filter:'text',render:r=>`<td class="note-cell${r.napomena?' has-note':''}" data-note="${esc(r.napomena)}">${esc(r.napomena)}</td>`,edit:{type:'textarea',field:'napomena',label:'Napomena / upute operateru'}},
+    {k:'napomena',l:'Napomena (upute operateru)',w:220,filter:'text',render:r=>`<td class="note" title="${esc(r.napomena)}">${esc(r.napomena)}</td>`,edit:{type:'textarea',field:'napomena',label:'Napomena / upute operateru'}},
     {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center">${lk(r.link_skica)}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
-    {k:'link_ponuda',l:'R.Nalog',w:50,filter:null,render:r=>`<td class="center">${lk(r.link_ponuda)}</td>`,edit:{type:'text',field:'link_ponuda',label:'Link radni nalog'}},
+    {k:'link_ponuda',l:'Ponuda',w:50,filter:null,render:r=>`<td class="center">${lk(r.link_ponuda)}</td>`,edit:{type:'text',field:'link_ponuda',label:'Link ponuda'}},
   ];
   const fin=isAdmin?[
     {k:'ugovorena_suma',l:'Ugovoreno',w:90,filter:null,render:r=>`<td class="num">${fm(r.ugovorena_suma)}</td>`,edit:{type:'number',field:'ugovorena_suma',label:'Ugovorena suma (KM)'}},
     {k:'avans',l:'Avans',w:80,filter:null,render:r=>`<td class="num">${fm(r.avans)}</td>`,edit:{type:'number',field:'avans',label:'Avans (KM)'}},
     {k:'za_naplatu',l:'Za naplatu',w:90,filter:null,render:r=>`<td class="num">${fm(r.za_naplatu)}</td>`,edit:null},
-    {k:'naplaceno',l:'✓ Napl.',w:55,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.naplaceno?'<span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span>':''}</td>`,edit:{type:'check',field:'naplaceno',label:'Naplaćeno'}},
-    {k:'naplaceno_opis',l:'Opis naplate',w:130,filter:'text',render:r=>`<td class="note" title="${esc(r.naplaceno_opis)}">${esc(r.naplaceno_opis)||''}</td>`,edit:{type:'naplata',field:'naplaceno_opis',label:'Opis naplate'}},
     {k:'_del',l:'',w:40,filter:null,render:r=>`<td class="center"><button onclick="obrisiNalog(${r.r_br},event)" style="background:none;border:none;cursor:pointer;font-size:14px;color:#c0392b;" title="Obriši nalog">🗑</button></td>`,edit:null},
   ]:[];
   return [...base,...fin];
@@ -309,24 +257,6 @@ function buildHeader(){
 }
 
 // ─── COLUMN RESIZE ────────────────────────────────────────────────────────
-function saveColWidths(){
-  const ths=document.querySelectorAll('#thead th[data-key]');
-  const widths={};
-  ths.forEach(th=>widths[th.dataset.key]=th.offsetWidth);
-  localStorage.setItem('jopex_col_widths', JSON.stringify(widths));
-}
-
-function loadColWidths(){
-  try{
-    const saved=localStorage.getItem('jopex_col_widths');
-    if(!saved) return;
-    const widths=JSON.parse(saved);
-    document.querySelectorAll('#thead th[data-key]').forEach(th=>{
-      if(widths[th.dataset.key]) th.style.width=widths[th.dataset.key]+'px';
-    });
-  }catch(e){}
-}
-
 function initResize(){
   document.querySelectorAll('.resize-handle').forEach(handle=>{
     let startX,startW,th;
@@ -339,12 +269,7 @@ function initResize(){
       e.preventDefault();
     });
     function onMove(e){th.style.width=(Math.max(40,startW+e.pageX-startX))+'px';}
-    function onUp(){
-      handle.classList.remove('dragging');
-      document.removeEventListener('mousemove',onMove);
-      document.removeEventListener('mouseup',onUp);
-      saveColWidths(); // sačuvaj nakon resize-a
-    }
+    function onUp(){handle.classList.remove('dragging');document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);}
   });
 }
 
@@ -519,42 +444,8 @@ function openPop(td,row,editCfg){
       try{cal.showPicker();}catch(e){}
       cal.focus();
     },50);
-  } else if(editCfg.type==='ugovorio'){
-    // Učitaj ugovarače iz config-a
-    const cfg=JSON.parse(localStorage.getItem('jopex_config')||'{}');
-    const ugovaraci=cfg.ugovaraci||[];
-    fEl.innerHTML=`<select id="pop-inp" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;">
-      <option value="">— izaberi —</option>
-      ${ugovaraci.map(u=>`<option value="${u.id}"${u.id==val?' selected':''}>${esc(u.ime_prezime)}</option>`).join('')}
-    </select>`;
-    setTimeout(()=>{const el=document.getElementById('pop-inp');if(el)el.focus();},30);
-    console.log('NAPLATA TIP OTVOREN');
-    const d=new Date();
-    const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
-    const opcije=[
-      '','rfb '+kratakDatum,'uni '+kratakDatum,'mf '+kratakDatum,'nlb '+kratakDatum,'uni1 '+kratakDatum,
-      'got Boban '+kratakDatum,'got Marija '+kratakDatum,'got Nenad '+kratakDatum,'got Rade '+kratakDatum,'got Edo '+kratakDatum,
-    ];
-    fEl.innerHTML=`
-      <select id="pop-inp" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" onchange="if(this.value)setNaplataISacuvaj(this.value)">
-        ${opcije.map(o=>`<option value="${esc(o)}"${o===(val||'')?' selected':''}>${o||'— izaberi —'}</option>`).join('')}
-      </select>
-      <div style="margin-top:8px;font-size:10.5px;color:#888;font-weight:600">ili slobodan unos (ime + datum):</div>
-      <div style="display:flex;gap:4px;margin-top:4px;">
-        <input type="text" id="naplata-ime" placeholder="npr. Petar"
-          style="flex:1;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;"
-          oninput="updateNaplata()">
-        <input type="text" id="naplata-datum" placeholder="${kratakDatum}"
-          style="width:55px;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;"
-          oninput="updateNaplata()">
-      </div>`;
-    setTimeout(()=>{const el=document.getElementById('pop-inp');if(el)el.focus();},100);
   } else if(editCfg.type==='number'){
     fEl.innerHTML=`<input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
-    setTimeout(()=>{
-      const el=document.getElementById('pop-inp');
-      if(el){el.focus();el.select();}
-    },30);
   } else {
     fEl.innerHTML=`<input type="text" id="pop-inp" value="${esc(val||'')}">`;
   }
@@ -563,28 +454,6 @@ function openPop(td,row,editCfg){
   pop.style.left=Math.min(rect.left,window.innerWidth-220)+'px';
   pop.style.top=(rect.bottom+4)+'px';
   document.getElementById('pop-inp').focus();
-}
-
-function setNaplata(val){
-  document.getElementById('pop-inp').value=val;
-  document.getElementById('naplata-preview').textContent=val;
-}
-
-async function setNaplataISacuvaj(val){
-  setNaplata(val);
-  await popSave();
-}
-
-function updateNaplata(){
-  const ime=document.getElementById('naplata-ime').value.trim();
-  const datum=document.getElementById('naplata-datum').value.trim();
-  const d=new Date();
-  const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
-  const val=ime+(datum?' '+datum:' '+kratakDatum);
-  const inp=document.getElementById('pop-inp');
-  if(inp) inp.value=val;
-  const prev=document.getElementById('naplata-preview');
-  if(prev) prev.textContent=val;
 }
 
 async function popSave(){
@@ -613,8 +482,6 @@ async function popSave(){
     if(!val) val=null;
   }
   const body={[popField]:val};
-  // Zapamti staru vrijednost za undo
-  pushUndo(popRow.r_br, popField, popRow[popField]);
 
   // Kad se stiklira Gotovo = true, automatski promijeni prioritet i status
   if(popField==='gotovo'&&(val===true||val==='true')){
@@ -625,14 +492,6 @@ async function popSave(){
   if(popField==='gotovo'&&(val===false||val==='false')){
     body.status='U radu';
   }
-  // Kad je status = Isporučeno, automatski čekira Gotovo
-  if(popField==='status'&&val==='Isporučeno'){
-    body.gotovo=true;
-  }
-  // Kad je reklamacija = DA, vrati status na U radu
-  if(popField==='reklamacija_dodatni_rad'&&val==='DA'){
-    body.status='U radu';
-  }
 
   try{
     const r=await fetch(`${API}/api/proizvodnja/${popRow.r_br}`,{
@@ -641,28 +500,12 @@ async function popSave(){
     });
     if(!r.ok) throw new Error();
     popRow[popField]=val;
-    // Ako se mijenja ugovorio_id, ažuriraj i ugovorio tekst lokalno
-    if(popField==='ugovorio_id'){
-      const cfg=JSON.parse(localStorage.getItem('jopex_config')||'{}');
-      const u=(cfg.ugovaraci||[]).find(u=>u.id==val);
-      if(u) popRow.ugovorio=u.ime_prezime;
-    }
     if(popField==='gotovo'&&(val===true||val==='true')){
       popRow.prioritet='Normal';
       popRow.status='Čeka isporuku';
     }
     if(popField==='gotovo'&&(val===false||val==='false')){
       popRow.status='U radu';
-    }
-    if(popField==='status'&&val==='Isporučeno'){
-      popRow.gotovo=true;
-    }
-    if(popField==='reklamacija_dodatni_rad'&&val==='DA'){
-      popRow.status='U radu';
-    }
-    // Preračunaj za_naplatu ako se mijenja avans ili ugovorena_suma
-    if(popField==='avans'||popField==='ugovorena_suma'){
-      popRow.za_naplatu=(parseFloat(popRow.ugovorena_suma)||0)-(parseFloat(popRow.avans)||0);
     }
     popClose();
     render();
@@ -676,23 +519,7 @@ function popClose(){
 document.addEventListener('click',e=>{if(!pop.contains(e.target)&&e.target.tagName!=='TD'&&e.target.tagName!=='SPAN')popClose();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')popClose();if(e.key==='Enter'&&pop.style.display!=='none'&&document.getElementById('pop-inp')&&document.getElementById('pop-inp').tagName!=='TEXTAREA')popSave();});
 
-// ─── NOTE TOOLTIP ────────────────────────────────────────────────────────
-const noteTooltip=document.getElementById('note-tooltip');
-document.getElementById('tbody').addEventListener('mouseover',function(e){
-  const td=e.target.closest('td.note-cell.has-note');
-  if(td&&td.dataset.note){
-    noteTooltip.textContent=td.dataset.note;
-    noteTooltip.style.display='block';
-  }
-});
-document.getElementById('tbody').addEventListener('mouseout',function(e){
-  const td=e.target.closest('td.note-cell');
-  if(td) noteTooltip.style.display='none';
-});
-document.getElementById('tbody').addEventListener('mousemove',function(e){
-  noteTooltip.style.left=Math.min(e.clientX+12,window.innerWidth-290)+'px';
-  noteTooltip.style.top=(e.clientY+14)+'px';
-});
+// ─── AUTH & LOAD ──────────────────────────────────────────────────────────
 async function obrisiNalog(rBr, e){
   e.stopPropagation();
   if(!confirm(`Obrisati nalog #${rBr}? Ova akcija je nepovratna!`)) return;
@@ -713,7 +540,6 @@ async function checkAuth(){
     trenutniUser=u;
     document.getElementById('who').textContent='👤 '+u.ime_prezime;
     buildHeader();
-    loadColWidths();
     load();
   }catch{location.href='login.html';}
 }

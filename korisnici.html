@@ -82,8 +82,8 @@ input:checked+.slider:before{transform:translateX(16px);}
           <th style="text-align:center">Admin</th>
           <th style="text-align:center">Ugovara</th>
           <th style="text-align:center">Unos naloga</th>
-          <th style="text-align:center">Mijenja nalog</th>
           <th style="text-align:center">Mijenja status</th>
+          <th style="text-align:center">Mijenja nalog</th>
           <th style="text-align:center">Aktivan</th>
           <th>Lozinka</th>
           <th></th>
@@ -143,8 +143,8 @@ function render(){
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.rola==='admin'?'checked':''} onchange="togglePravo(${k.id},'rola',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_ugovarati?'checked':''} onchange="togglePravo(${k.id},'moze_ugovarati',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.unos_naloga?'checked':''} onchange="togglePravo(${k.id},'unos_naloga',this.checked)"><span class="slider"></span></label></td>
-      <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.izmjena_naloga?'checked':''} onchange="togglePravo(${k.id},'izmjena_naloga',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.izmjena_statusa?'checked':''} onchange="togglePravo(${k.id},'izmjena_statusa',this.checked)"><span class="slider"></span></label></td>
+      <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.izmjena_naloga?'checked':''} onchange="togglePravo(${k.id},'izmjena_naloga',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.aktivan?'checked':''} onchange="togglePravo(${k.id},'aktivan',this.checked)"><span class="slider"></span></label></td>
       <td><button class="btn-loz" onclick="openLozinka(${k.id},'${esc(k.ime_prezime)}')">🔑 Postavi</button></td>
       <td><span class="saved" id="saved-${k.id}"></span></td>

@@ -35,13 +35,6 @@ main{max-width:760px;margin:24px auto;padding:0 16px;}
 #msg{margin-top:12px;padding:10px 13px;border-radius:7px;font-size:13px;display:none;}
 .ok{background:#e3f5ea;color:var(--green);border:1px solid #b9e4c9;}
 .err{background:#fbe9e7;color:var(--red);border:1px solid #f3c6c0;}
-/* Prioritet dugmad */
-.prioritet-group{display:flex;gap:6px;}
-.prioritet-group button{flex:1;padding:8px 4px;font:inherit;font-size:12.5px;font-weight:600;
-  border:2px solid var(--border);border-radius:6px;cursor:pointer;background:#f8f9fb;color:#444;}
-.prioritet-group button.active-normal{background:#e6f4ea;color:#1f8a4c;border-color:#1f8a4c;}
-.prioritet-group button.active-hitno{background:#fce8e6;color:#c0392b;border-color:#c0392b;}
-.prioritet-group button.active-zakazano{background:#fef3e2;color:#e67e22;border-color:#e67e22;}
 </style>
 </head>
 <body>
@@ -60,24 +53,18 @@ main{max-width:760px;margin:24px auto;padding:0 16px;}
     <div class="row">
       <div class="fg">
         <label class="req">Zadatak</label>
-        <input list="zadatak-list" id="zadatak" placeholder="Izaberi ili upiši..." required>
-        <datalist id="zadatak-list">
-          <option>Kuhinjska ploča</option>
-          <option>Sto</option>
-          <option>Klupice, Step</option>
-          <option>Na Mjeru</option>
-          <option>Usluge Mašina</option>
-          <option>Usluge WJ</option>
-        </datalist>
+        <select id="zadatak" required>
+          <option value="">— izaberi —</option>
+          <option>Kuhinjska ploča</option><option>Sto</option>
+          <option>Klupice, Step</option><option>Na Mjeru</option>
+          <option>Usluge Mašina</option><option>Usluge WJ</option>
+        </select>
       </div>
       <div class="fg">
         <label>Prioritet</label>
-        <div class="prioritet-group">
-          <button type="button" id="p-normal" class="active-normal" onclick="setPrioritet('Normal')">Normal</button>
-          <button type="button" id="p-hitno" onclick="setPrioritet('Hitno')">Hitno</button>
-          <button type="button" id="p-zakazano" onclick="setPrioritet('Zakazano')">Zakazano</button>
-        </div>
-        <input type="hidden" id="prioritet" value="Normal">
+        <select id="prioritet">
+          <option>Normal</option><option>Zakazano</option>
+        </select>
       </div>
     </div>
     <div class="row">
@@ -90,12 +77,9 @@ main{max-width:760px;margin:24px auto;padding:0 16px;}
       <div class="fg">
         <label>Status</label>
         <select id="status">
-          <option>Nije Započeto</option>
-          <option>Zakazano</option>
-          <option>U radu</option>
-          <option>Čeka isporuku</option>
-          <option>Isporučeno</option>
-          <option>Otkazano</option>
+          <option>Nije Započeto</option><option>Zakazano</option>
+          <option>U radu</option><option>Čeka isporuku</option>
+          <option>Završeno</option><option>Otkazano</option>
         </select>
       </div>
     </div>
@@ -107,19 +91,27 @@ main{max-width:760px;margin:24px auto;padding:0 16px;}
       </div>
       <div class="fg">
         <label>Materijal</label>
-        <input list="mat-list" id="materijal" placeholder="Izaberi ili upiši...">
-        <datalist id="mat-list"></datalist>
+        <select id="materijal">
+          <option value="">— izaberi —</option>
+        </select>
       </div>
     </div>
     <div class="row">
-      <div class="fg">
-        <label>Plan. završetak</label>
-        <input type="date" id="zavrsetak">
+      <div class="fg"><label>Početak</label>
+        <input type="date" id="pocetak"></div>
+      <div class="fg"><label>Planirani završetak</label>
+        <input type="date" id="zavrsetak"></div>
+    </div>
+    <div class="row full">
+      <div class="fg"><label>Napomena</label>
+        <textarea id="napomena" placeholder="Specifikacija, detalji..."></textarea>
       </div>
-      <div class="fg">
-        <label>Napomena</label>
-        <input type="text" id="napomena" placeholder="Specifikacija, detalji...">
-      </div>
+    </div>
+    <div class="row">
+      <div class="fg"><label>Link skica</label>
+        <input type="text" id="link_skica" placeholder="https://..."></div>
+      <div class="fg"><label>Link ponuda</label>
+        <input type="text" id="link_ponuda" placeholder="https://..."></div>
     </div>
     <div class="row" id="fin-row">
       <div class="fg"><label>Ugovorena suma (KM)</label>
@@ -133,35 +125,29 @@ main{max-width:760px;margin:24px auto;padding:0 16px;}
 </div>
 </main>
 <script>
-const API = '';
+const API = ''; // prazno = isti server; ili 'https://nalozi.jpx.ba' kad je na webu
+
+// ─── Auth provjera ────────────────────────────────────────────────────────
 let me = null;
-let prioritet = 'Normal';
-
-function setPrioritet(p){
-  prioritet = p;
-  document.getElementById('prioritet').value = p;
-  document.getElementById('p-normal').className = p==='Normal'?'active-normal':'';
-  document.getElementById('p-hitno').className = p==='Hitno'?'active-hitno':'';
-  document.getElementById('p-zakazano').className = p==='Zakazano'?'active-zakazano':'';
-}
-
 async function checkAuth() {
   try {
     const r = await fetch(API + '/api/auth/me');
     if (!r.ok) { location.href = 'login.html'; return; }
     me = await r.json();
     document.getElementById('who').textContent = '👤 ' + me.ime_prezime;
+    // Finansijska polja - vidljiva samo adminu
     if (me.rola !== 'admin') document.getElementById('fin-row').style.display = 'none';
   } catch { location.href = 'login.html'; }
 }
-
 document.getElementById('logout').onclick = async e => {
   e.preventDefault();
   await fetch(API + '/api/auth/logout', {method:'POST'});
   location.href = 'login.html';
 };
 
+// ─── Config (materijali, kupci, ugovarači) ────────────────────────────────
 async function loadConfig() {
+  // Pokušaj server, ako ne ide - koristi keširan
   let cfg = null;
   try {
     const r = await fetch(API + '/api/config', {signal: AbortSignal.timeout(4000)});
@@ -172,28 +158,25 @@ async function loadConfig() {
   } catch {}
   if (!cfg) {
     const cached = localStorage.getItem('jopex_config');
-    if (cached) { cfg = JSON.parse(cached); }
+    if (cached) { cfg = JSON.parse(cached); console.log('Config iz keša.'); }
   }
   if (!cfg) return;
 
-  // Materijali kao datalist
-  const matDl = document.getElementById('mat-list');
-  matDl.innerHTML = '';
+  // Popuni selekte
+  const matSel = document.getElementById('materijal');
   cfg.materijali.forEach(m => {
-    const o = document.createElement('option'); o.value = m.naziv; matDl.append(o);
+    const o = new Option(m.naziv, m.naziv); matSel.append(o);
   });
 
-  // Ugovarači
   const ugSel = document.getElementById('ugovorio');
   ugSel.innerHTML = '<option value="">— izaberi —</option>';
   cfg.ugovaraci.forEach(u => ugSel.append(new Option(u.ime_prezime, u.id)));
 
-  // Kupci
   const dl = document.getElementById('kupci-list');
-  dl.innerHTML = '';
   cfg.kupci.forEach(k => { const o = document.createElement('option'); o.value = k.naziv; dl.append(o); });
 }
 
+// ─── Submit ───────────────────────────────────────────────────────────────
 document.getElementById('f').addEventListener('submit', async e => {
   e.preventDefault();
   const msg = document.getElementById('msg');
@@ -201,19 +184,18 @@ document.getElementById('f').addEventListener('submit', async e => {
   msg.className=''; msg.style.display='none';
   btn.disabled=true; btn.textContent='Čuvanje...';
 
-  // Datum ugovaranja = danas
-  const danas = new Date().toISOString().split('T')[0];
-
   const body = {
     zadatak:             document.getElementById('zadatak').value,
-    prioritet:           prioritet,
+    prioritet:           document.getElementById('prioritet').value,
     ugovorio_id:         document.getElementById('ugovorio').value || null,
     status:              document.getElementById('status').value,
     narucilac:           document.getElementById('narucilac').value,
     materijal:           document.getElementById('materijal').value,
-    pocetak:             danas, // automatski danas
+    pocetak:             document.getElementById('pocetak').value || null,
     planirani_zavrsetak: document.getElementById('zavrsetak').value || null,
     napomena:            document.getElementById('napomena').value,
+    link_skica:          document.getElementById('link_skica').value,
+    link_ponuda:         document.getElementById('link_ponuda').value,
     ugovorena_suma: me?.rola==='admin' ? parseFloat(document.getElementById('suma').value)||0 : undefined,
     avans:          me?.rola==='admin' ? parseFloat(document.getElementById('avans').value)||0 : undefined,
   };
@@ -227,9 +209,7 @@ document.getElementById('f').addEventListener('submit', async e => {
     if (!r.ok) throw new Error(d.error);
     msg.className='ok'; msg.style.display='block';
     msg.textContent = `✓ Sačuvano kao radni nalog #${d.r_br}.`;
-    document.getElementById('f').reset();
-    setPrioritet('Normal');
-    loadConfig();
+    document.getElementById('f').reset(); loadConfig();
   } catch(err) {
     msg.className='err'; msg.style.display='block';
     msg.textContent = '✗ ' + err.message;
