@@ -5,7 +5,7 @@ const pool = require('./db');
 
 // Finansijske kolone - vide ih samo admini
 const ADMIN_COLS = `
-  p.ugovorena_suma, p.avans,
+  p.ugovorena_suma, p.avans, p.avans_opis,
   (COALESCE(p.ugovorena_suma,0) - COALESCE(p.avans,0)) AS za_naplatu,
   p.naplata_detalji, p.naplaceno_fakturisano, p.dodatni_rad_napomena
 `;
@@ -122,6 +122,15 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Pomoćne funkcije za prepoznavanje gotovinskog opisa ("got Boban 15/7"...)
+function jeGotovina(val) {
+  return /^got\b/i.test(String(val || '').trim());
+}
+function izvuciPrimio(val) {
+  const m = /^got\s+(\S+)/i.exec(String(val || '').trim());
+  return m ? m[1] : 'Nepoznato';
+}
+
 // PATCH /api/proizvodnja/:r_br - djelimično ažuriranje
 router.patch('/:r_br', async (req, res) => {
   const isAdmin = req.session?.user?.rola === 'admin';
@@ -132,7 +141,7 @@ router.patch('/:r_br', async (req, res) => {
     'link_skica','link_ponuda','nova_procjena',
   ];
   const ALLOWED_ADMIN = [
-    'ugovorena_suma','avans','naplata_detalji',
+    'ugovorena_suma','avans','avans_opis','naplata_detalji',
     'naplaceno_fakturisano','dodatni_rad_napomena','naplaceno','naplaceno_opis',
   ];
 
@@ -163,14 +172,64 @@ router.patch('/:r_br', async (req, res) => {
   if (!sets.length)
     return res.status(400).json({ error: 'Nema polja za izmjenu.' });
 
+  // Ako mijenjamo avans_opis ili naplaceno_opis, treba nam stanje PRIJE izmjene
+  // da bismo upis u blagajnu napravili samo jednom (kad se vrijednost stvarno promijeni)
+  const trebaProvjeruGotovine = isAdmin && ('avans_opis' in req.body || 'naplaceno_opis' in req.body);
+  let staro = null;
+  if (trebaProvjeruGotovine) {
+    const s = await pool.query(
+      `SELECT avans_opis, naplaceno_opis FROM proizvodnja_jopex WHERE r_br = $1`,
+      [req.params.r_br]
+    );
+    staro = s.rows[0] || {};
+  }
+
   vals.push(req.params.r_br);
   try {
     const r = await pool.query(
-      `UPDATE proizvodnja_jopex SET ${sets.join(', ')} WHERE r_br = $${i} RETURNING r_br, status`,
+      `UPDATE proizvodnja_jopex SET ${sets.join(', ')} WHERE r_br = $${i}
+       RETURNING r_br, status, avans_opis, naplaceno_opis, avans, ugovorena_suma, narucilac`,
       vals
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Nalog nije pronađen.' });
-    res.json(r.rows[0]);
+    const novo = r.rows[0];
+
+    if (trebaProvjeruGotovine) {
+      // AVANS -> ako je postavljen na gotovinu i promijenjen je, upiši u blagajnu
+      if ('avans_opis' in req.body &&
+          novo.avans_opis !== staro.avans_opis &&
+          jeGotovina(novo.avans_opis)) {
+        await pool.query(
+          `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis)
+           VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4)`,
+          [
+            novo.avans || 0,
+            izvuciPrimio(novo.avans_opis),
+            novo.r_br,
+            `Avans - nalog #${novo.r_br}${novo.narucilac ? ' (' + novo.narucilac + ')' : ''}`,
+          ]
+        );
+      }
+
+      // NAPLATA (preostali iznos) -> isto, ako je gotovina i promijenjena
+      if ('naplaceno_opis' in req.body &&
+          novo.naplaceno_opis !== staro.naplaceno_opis &&
+          jeGotovina(novo.naplaceno_opis)) {
+        const zaNaplatu = Number(novo.ugovorena_suma || 0) - Number(novo.avans || 0);
+        await pool.query(
+          `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis)
+           VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4)`,
+          [
+            zaNaplatu,
+            izvuciPrimio(novo.naplaceno_opis),
+            novo.r_br,
+            `Naplata - nalog #${novo.r_br}${novo.narucilac ? ' (' + novo.narucilac + ')' : ''}`,
+          ]
+        );
+      }
+    }
+
+    res.json(novo);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Greška pri ažuriranju: ' + err.message });
