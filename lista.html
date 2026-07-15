@@ -548,56 +548,55 @@ function openPop(td,row,editCfg){
     </select>`;
     setTimeout(()=>{const el=document.getElementById('pop-inp');if(el)el.focus();},30);
   } else if(editCfg.type==='naplata'){
-    const d=new Date();
-    const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
-    const opcije=[
-      '','rfb '+kratakDatum,'uni '+kratakDatum,'mf '+kratakDatum,'nlb '+kratakDatum,'uni1 '+kratakDatum,
-      'got Boban '+kratakDatum,'got Marija '+kratakDatum,'got Nenad '+kratakDatum,'got Rade '+kratakDatum,'got Edo '+kratakDatum,
+    const todayIso=new Date().toISOString().split('T')[0];
+    const vrste=[
+      ['','— izaberi —'],
+      ['rfb','rfb (banka)'],['uni','uni (banka)'],['mf','mf (banka)'],['nlb','nlb (banka)'],['uni1','uni1 (banka)'],
+      ['got Boban','got Boban (gotovina)'],['got Marija','got Marija (gotovina)'],['got Nenad','got Nenad (gotovina)'],
+      ['got Rade','got Rade (gotovina)'],['got Edo','got Edo (gotovina)'],
     ];
+    // Iz postojeće vrijednosti pokušaj izvući vrstu (bez datuma) da pre-selektuje dropdown
+    const trenVrsta=(val||'').replace(/\s+\d{1,2}\/\d{1,2}(\/\d{2,4})?$/,'').trim();
     fEl.innerHTML=`
-      <select id="naplata-select" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" onchange="if(this.value)setNaplataISacuvaj(this.value)">
-        ${opcije.map(o=>`<option value="${esc(o)}"${o===(val||'')?' selected':''}>${o||'— izaberi —'}</option>`).join('')}
+      <select id="naplata-vrsta" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" onchange="updateOpisCombo('naplata')">
+        ${vrste.map(([v,l])=>`<option value="${esc(v)}"${v===trenVrsta?' selected':''}>${l}</option>`).join('')}
       </select>
-      <div style="margin-top:8px;font-size:10.5px;color:#888;font-weight:600">ili slobodan unos (ime + datum):</div>
-      <div style="display:flex;gap:4px;margin-top:4px;">
-        <input type="text" id="naplata-ime" placeholder="npr. Petar"
-          style="flex:1;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;"
-          oninput="updateNaplata()">
-        <input type="text" id="naplata-datum" placeholder="${kratakDatum}"
-          style="width:55px;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;"
-          oninput="updateNaplata()">
-      </div>
+      <div style="margin-top:8px;font-size:10.5px;color:#888;font-weight:600">Datum uplate:</div>
+      <input type="date" id="naplata-datum-picker" value="${todayIso}" style="width:100%;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;margin-top:4px;" onchange="updateOpisCombo('naplata')">
+      <div style="margin-top:8px;font-size:10.5px;color:#888;font-weight:600">ili slobodan unos imena (gotovina):</div>
+      <input type="text" id="naplata-ime" placeholder="npr. Petar" value=""
+        style="width:100%;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;margin-top:4px;"
+        oninput="updateOpisCombo('naplata')">
       <input type="hidden" id="pop-inp" value="${esc(val||'')}">
       <div style="margin-top:6px;font-size:11px;color:#555;">
         Odabrano: <b id="naplata-preview">${esc(val||'—')}</b>
       </div>`;
-    setTimeout(()=>{const el=document.getElementById('naplata-ime');if(el)el.focus();},100);
+    setTimeout(()=>{const el=document.getElementById('naplata-vrsta');if(el)el.focus();},100);
   } else if(editCfg.type==='avans'){
-    const d=new Date();
-    const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
-    const opcije=[
-      '','rfb '+kratakDatum,'uni '+kratakDatum,'mf '+kratakDatum,'nlb '+kratakDatum,'uni1 '+kratakDatum,
-      'got Boban '+kratakDatum,'got Marija '+kratakDatum,'got Nenad '+kratakDatum,'got Rade '+kratakDatum,'got Edo '+kratakDatum,
-    ];
+    const todayIso=new Date().toISOString().split('T')[0];
     const opisVal=row.avans_opis||'';
+    const trenVrsta=(opisVal||'').replace(/\s+\d{1,2}\/\d{1,2}(\/\d{2,4})?$/,'').trim();
+    const vrste=[
+      ['','— izaberi —'],
+      ['rfb','rfb (banka)'],['uni','uni (banka)'],['mf','mf (banka)'],['nlb','nlb (banka)'],['uni1','uni1 (banka)'],
+      ['got Boban','got Boban (gotovina)'],['got Marija','got Marija (gotovina)'],['got Nenad','got Nenad (gotovina)'],
+      ['got Rade','got Rade (gotovina)'],['got Edo','got Edo (gotovina)'],
+    ];
     fEl.innerHTML=`
       <input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">
-      <div style="margin-top:6px;font-size:10.5px;color:#888;font-weight:600">Način uplate (opciono):</div>
-      <select id="avans-select" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:4px;" onchange="setAvansOpis(this.value)">
-        ${opcije.map(o=>`<option value="${esc(o)}"${o===opisVal?' selected':''}>${o||'— izaberi —'}</option>`).join('')}
+      <div style="margin-top:8px;font-size:10.5px;color:#888;font-weight:600">Način uplate (opciono):</div>
+      <select id="avans-vrsta" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:4px;" onchange="updateOpisCombo('avans')">
+        ${vrste.map(([v,l])=>`<option value="${esc(v)}"${v===trenVrsta?' selected':''}>${l}</option>`).join('')}
       </select>
-      <div style="font-size:10.5px;color:#888;font-weight:600;margin-top:6px">ili slobodan unos (ime + datum):</div>
-      <div style="display:flex;gap:4px;margin-top:4px;">
-        <input type="text" id="avans-ime" placeholder="npr. Petar"
-          style="flex:1;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;"
-          oninput="updateAvansOpis()">
-        <input type="text" id="avans-datum" placeholder="${kratakDatum}"
-          style="width:55px;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;"
-          oninput="updateAvansOpis()">
-      </div>
+      <div style="margin-top:8px;font-size:10.5px;color:#888;font-weight:600">Datum uplate:</div>
+      <input type="date" id="avans-datum-picker" value="${todayIso}" style="width:100%;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;margin-top:4px;" onchange="updateOpisCombo('avans')">
+      <div style="font-size:10.5px;color:#888;font-weight:600;margin-top:8px">ili slobodan unos imena (gotovina):</div>
+      <input type="text" id="avans-ime" placeholder="npr. Petar" value=""
+        style="width:100%;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;margin-top:4px;"
+        oninput="updateOpisCombo('avans')">
       <input type="hidden" id="avans-opis-inp" value="${esc(opisVal)}">
       <div style="margin-top:6px;font-size:11px;color:#555;">
-        Opis: <b id="avans-opis-preview">${esc(opisVal||'—')}</b>
+        Opis: <b id="avans-preview">${esc(opisVal||'—')}</b>
       </div>`;
     setTimeout(()=>{
       const el=document.getElementById('pop-inp');
@@ -620,45 +619,29 @@ function openPop(td,row,editCfg){
   if(focusEl) focusEl.focus();
 }
 
-function setNaplata(val){
-  document.getElementById('pop-inp').value=val;
-  const prev=document.getElementById('naplata-preview');
-  if(prev) prev.textContent=val;
+function formatKratakDatum(iso){
+  if(!iso) return '';
+  const parts=iso.split('-');
+  if(parts.length!==3) return '';
+  return parseInt(parts[2],10)+'/'+parseInt(parts[1],10);
 }
 
-async function setNaplataISacuvaj(val){
-  setNaplata(val);
-  await popSave();
-}
-
-function updateNaplata(){
-  const ime=document.getElementById('naplata-ime').value.trim();
-  const datum=document.getElementById('naplata-datum').value.trim();
-  const d=new Date();
-  const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
-  const val=ime+(datum?' '+datum:' '+kratakDatum);
-  const inp=document.getElementById('pop-inp');
+// Zajednička logika za popup 'naplata' i 'avans' - kombinuje izabranu
+// vrstu (banka/gotovina) ili slobodno uneseno ime, sa slobodno izabranim
+// datumom (ne mora biti današnji - važno za naknadni unos propuštenih uplata)
+function updateOpisCombo(prefix){
+  const vrstaEl=document.getElementById(prefix+'-vrsta');
+  const imeEl=document.getElementById(prefix+'-ime');
+  const datumEl=document.getElementById(prefix+'-datum-picker');
+  const vrsta=vrstaEl?vrstaEl.value:'';
+  const ime=imeEl?imeEl.value.trim():'';
+  const datum=formatKratakDatum(datumEl?datumEl.value:'');
+  const osnov = ime ? ('got '+ime) : vrsta;
+  const val = (osnov && datum) ? (osnov+' '+datum) : (osnov||'');
+  const targetId = prefix==='naplata' ? 'pop-inp' : 'avans-opis-inp';
+  const inp=document.getElementById(targetId);
   if(inp) inp.value=val;
-  const prev=document.getElementById('naplata-preview');
-  if(prev) prev.textContent=val;
-}
-
-function setAvansOpis(val){
-  const el=document.getElementById('avans-opis-inp');
-  if(el) el.value=val;
-  const prev=document.getElementById('avans-opis-preview');
-  if(prev) prev.textContent=val||'—';
-}
-
-function updateAvansOpis(){
-  const ime=document.getElementById('avans-ime').value.trim();
-  const datum=document.getElementById('avans-datum').value.trim();
-  const d=new Date();
-  const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
-  const val=ime?(ime+(datum?' '+datum:' '+kratakDatum)):'';
-  const el=document.getElementById('avans-opis-inp');
-  if(el) el.value=val;
-  const prev=document.getElementById('avans-opis-preview');
+  const prev=document.getElementById(prefix+'-preview');
   if(prev) prev.textContent=val||'—';
 }
 
@@ -816,6 +799,5 @@ async function load(){
 document.getElementById('logout').onclick=async e=>{e.preventDefault();await fetch(API+'/api/auth/logout',{method:'POST'});location.href='login.html';};
 document.getElementById('search').addEventListener('input',render);
 checkAuth();
-// proba
 </script>
 </body></html>
