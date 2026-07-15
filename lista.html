@@ -91,6 +91,7 @@ td.center{text-align:center;white-space:nowrap;}
 a.lk{color:var(--blue);text-decoration:none;}
 /* EXCEL NOTE */
 .note-cell{position:relative;}
+.clamp2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-height:2.6em;}
 .note-cell.has-note::after{content:'';position:absolute;top:0;right:0;
   border-style:solid;border-width:0 7px 7px 0;
   border-color:transparent #c0392b transparent transparent;}
@@ -265,7 +266,7 @@ function getCols(){
     {k:'nova_procjena',l:'Razlog kašnjenja',w:180,filter:'text',render:r=>`<td class="note-cell${r.nova_procjena?' has-note':''}" data-note="${esc(r.nova_procjena)}">${esc(r.nova_procjena)||''}</td>`,edit:{type:'textarea',field:'nova_procjena',label:'Razlog kašnjenja'}},
     {k:'gotovo',l:'Gotovo',w:65,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.gotovo?'<span style="color:#1f8a4c;font-size:18px;font-weight:900;line-height:1">✓</span>':''}</td>`,edit:{type:'check',field:'gotovo',label:'Gotovo'}},
     {k:'reklamacija_dodatni_rad',l:'Rek.',w:60,filter:'sel',opts:['DA','NE'],render:r=>`<td class="center">${chipR(r.reklamacija_dodatni_rad)}</td>`,edit:{type:'select',opts:['','NE','DA'],field:'reklamacija_dodatni_rad',label:'Reklamacija'}},
-    {k:'napomena',l:'Napomena',w:220,filter:'text',render:r=>`<td class="note-cell${r.napomena?' has-note':''}" data-note="${esc(r.napomena)}">${esc(r.napomena)}</td>`,edit:{type:'textarea',field:'napomena',label:'Napomena / upute operateru'}},
+    {k:'napomena',l:'Napomena',w:220,filter:'text',render:r=>`<td class="note-cell clamp2${r.napomena?' has-note':''}" data-note="${esc(r.napomena)}">${esc(r.napomena)}</td>`,edit:{type:'textarea',field:'napomena',label:'Napomena / upute operateru'}},
     {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center">${lk(r.link_skica)}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
     {k:'link_ponuda',l:'R.Nalog',w:50,filter:null,render:r=>`<td class="center">${lk(r.link_ponuda)}</td>`,edit:{type:'text',field:'link_ponuda',label:'Link radni nalog'}},
   ];
