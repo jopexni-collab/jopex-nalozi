@@ -211,15 +211,17 @@ router.patch('/:r_br', async (req, res) => {
     const novo = r.rows[0];
 
     if (trebaProvjeruGotovine) {
-      // AVANS -> ako je postavljen na gotovinu i promijenjen je, upiši u blagajnu
+      // AVANS -> ako je postavljen na gotovinu, promijenjen je, I iznos je > 0
+      const avansIznos = Number(novo.avans || 0);
       if ('avans_opis' in req.body &&
           novo.avans_opis !== staro.avans_opis &&
-          jeGotovina(novo.avans_opis)) {
+          jeGotovina(novo.avans_opis) &&
+          avansIznos > 0) {
         await pool.query(
           `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis)
            VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4)`,
           [
-            novo.avans || 0,
+            avansIznos,
             izvuciPrimio(novo.avans_opis),
             novo.r_br,
             `Avans - nalog #${novo.r_br}${novo.narucilac ? ' (' + novo.narucilac + ')' : ''}`,
@@ -227,11 +229,12 @@ router.patch('/:r_br', async (req, res) => {
         );
       }
 
-      // NAPLATA (preostali iznos) -> isto, ako je gotovina i promijenjena
+      // NAPLATA (preostali iznos) -> isto, ako je gotovina, promijenjena, I iznos je > 0
+      const zaNaplatu = Number(novo.ugovorena_suma || 0) - Number(novo.avans || 0);
       if ('naplaceno_opis' in req.body &&
           novo.naplaceno_opis !== staro.naplaceno_opis &&
-          jeGotovina(novo.naplaceno_opis)) {
-        const zaNaplatu = Number(novo.ugovorena_suma || 0) - Number(novo.avans || 0);
+          jeGotovina(novo.naplaceno_opis) &&
+          zaNaplatu > 0) {
         await pool.query(
           `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis)
            VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4)`,
