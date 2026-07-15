@@ -185,7 +185,7 @@ async function undoZadnje(e){
 function mozeEditovati(field){
   if(!trenutniUser) return false;
   if(isAdmin) return true;
-  const finPolja=['ugovorena_suma','avans','za_naplatu','naplata_detalji','naplaceno','naplaceno_opis'];
+  const finPolja=['ugovorena_suma','avans','avans_opis','za_naplatu','naplata_detalji','naplaceno','naplaceno_opis'];
   if(finPolja.includes(field)) return false;
   const statusPolja=['status','gotovo','reklamacija_dodatni_rad','nova_procjena'];
   if(statusPolja.includes(field)) return trenutniUser.izmjena_statusa||false;
@@ -269,6 +269,7 @@ function getCols(){
   const fin=isAdmin?[
     {k:'ugovorena_suma',l:'Ugovoreno',w:90,filter:null,render:r=>`<td class="num">${fm(r.ugovorena_suma)}</td>`,edit:{type:'number',field:'ugovorena_suma',label:'Ugovorena suma (KM)'}},
     {k:'avans',l:'Avans',w:80,filter:null,render:r=>`<td class="num">${fm(r.avans)}</td>`,edit:{type:'number',field:'avans',label:'Avans (KM)'}},
+    {k:'avans_opis',l:'Opis avansa',w:130,filter:'text',render:r=>`<td class="note" title="${esc(r.avans_opis)}">${esc(r.avans_opis)||''}</td>`,edit:{type:'naplata',field:'avans_opis',label:'Opis avansa'}},
     {k:'za_naplatu',l:'Za naplatu',w:90,filter:null,render:r=>`<td class="num">${fm(r.za_naplatu)}</td>`,edit:null},
     {k:'naplaceno',l:'✓ Napl.',w:55,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.naplaceno?'<span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span>':''}</td>`,edit:{type:'check',field:'naplaceno',label:'Naplaćeno'}},
     {k:'naplaceno_opis',l:'Opis naplate',w:130,filter:'text',render:r=>`<td class="note" title="${esc(r.naplaceno_opis)}">${esc(r.naplaceno_opis)||''}</td>`,edit:{type:'naplata',field:'naplaceno_opis',label:'Opis naplate'}},
@@ -529,7 +530,6 @@ function openPop(td,row,editCfg){
     </select>`;
     setTimeout(()=>{const el=document.getElementById('pop-inp');if(el)el.focus();},30);
   } else if(editCfg.type==='naplata'){
-    console.log('NAPLATA TIP OTVOREN');
     const d=new Date();
     const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
     const opcije=[
@@ -537,7 +537,7 @@ function openPop(td,row,editCfg){
       'got Boban '+kratakDatum,'got Marija '+kratakDatum,'got Nenad '+kratakDatum,'got Rade '+kratakDatum,'got Edo '+kratakDatum,
     ];
     fEl.innerHTML=`
-      <select id="pop-inp" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" onchange="if(this.value)setNaplataISacuvaj(this.value)">
+      <select id="naplata-select" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" onchange="if(this.value)setNaplataISacuvaj(this.value)">
         ${opcije.map(o=>`<option value="${esc(o)}"${o===(val||'')?' selected':''}>${o||'— izaberi —'}</option>`).join('')}
       </select>
       <div style="margin-top:8px;font-size:10.5px;color:#888;font-weight:600">ili slobodan unos (ime + datum):</div>
@@ -548,8 +548,12 @@ function openPop(td,row,editCfg){
         <input type="text" id="naplata-datum" placeholder="${kratakDatum}"
           style="width:55px;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;"
           oninput="updateNaplata()">
+      </div>
+      <input type="hidden" id="pop-inp" value="${esc(val||'')}">
+      <div style="margin-top:6px;font-size:11px;color:#555;">
+        Odabrano: <b id="naplata-preview">${esc(val||'—')}</b>
       </div>`;
-    setTimeout(()=>{const el=document.getElementById('pop-inp');if(el)el.focus();},100);
+    setTimeout(()=>{const el=document.getElementById('naplata-ime');if(el)el.focus();},100);
   } else if(editCfg.type==='number'){
     fEl.innerHTML=`<input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
     setTimeout(()=>{
@@ -563,12 +567,14 @@ function openPop(td,row,editCfg){
   pop.style.display='block';
   pop.style.left=Math.min(rect.left,window.innerWidth-220)+'px';
   pop.style.top=(rect.bottom+4)+'px';
-  document.getElementById('pop-inp').focus();
+  const focusEl=document.getElementById('pop-inp');
+  if(focusEl) focusEl.focus();
 }
 
 function setNaplata(val){
   document.getElementById('pop-inp').value=val;
-  document.getElementById('naplata-preview').textContent=val;
+  const prev=document.getElementById('naplata-preview');
+  if(prev) prev.textContent=val;
 }
 
 async function setNaplataISacuvaj(val){
