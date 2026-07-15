@@ -7,7 +7,21 @@ const pool = require('./db');
 const ADMIN_COLS = `
   p.ugovorena_suma, p.avans, p.avans_opis,
   (COALESCE(p.ugovorena_suma,0) - COALESCE(p.avans,0)) AS za_naplatu,
-  p.naplata_detalji, p.naplaceno_fakturisano, p.dodatni_rad_napomena
+  p.naplata_detalji, p.naplaceno_fakturisano, p.dodatni_rad_napomena,
+  ga.predano AS avans_predano, gn.predano AS naplata_predano
+`;
+
+// JOIN koji provjerava da li je gotovina za avans/naplatu ovog naloga
+// već predata blagajniku (sve odgovarajuće stavke moraju biti predane)
+const GOTOVINA_JOINS = `
+  LEFT JOIN LATERAL (
+    SELECT bool_and(predao_blagajniku) AS predano
+    FROM gotovina g WHERE g.nalog_r_br = p.r_br AND g.opis LIKE 'Avans%'
+  ) ga ON true
+  LEFT JOIN LATERAL (
+    SELECT bool_and(predao_blagajniku) AS predano
+    FROM gotovina g WHERE g.nalog_r_br = p.r_br AND g.opis LIKE 'Naplata%'
+  ) gn ON true
 `;
 
 // Tehničke kolone - vide ih svi
@@ -24,9 +38,10 @@ const BASE_COLS = `
 router.get('/', async (req, res) => {
   const isAdmin = req.session?.user?.rola === 'admin';
   const cols = isAdmin ? BASE_COLS + ',' + ADMIN_COLS : BASE_COLS;
+  const joins = isAdmin ? GOTOVINA_JOINS : '';
   try {
     const r = await pool.query(
-      `SELECT ${cols} FROM proizvodnja_jopex p ORDER BY p.r_br DESC`
+      `SELECT ${cols} FROM proizvodnja_jopex p ${joins} ORDER BY p.r_br DESC`
     );
     res.json(r.rows);
   } catch (err) {
@@ -39,9 +54,10 @@ router.get('/', async (req, res) => {
 router.get('/:r_br', async (req, res) => {
   const isAdmin = req.session?.user?.rola === 'admin';
   const cols = isAdmin ? BASE_COLS + ',' + ADMIN_COLS : BASE_COLS;
+  const joins = isAdmin ? GOTOVINA_JOINS : '';
   try {
     const r = await pool.query(
-      `SELECT ${cols} FROM proizvodnja_jopex p WHERE p.r_br = $1`,
+      `SELECT ${cols} FROM proizvodnja_jopex p ${joins} WHERE p.r_br = $1`,
       [req.params.r_br]
     );
     if (!r.rows.length)
