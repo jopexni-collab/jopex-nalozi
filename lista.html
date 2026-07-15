@@ -191,7 +191,7 @@ function mozeEditovati(field){
   if(statusPolja.includes(field)) return trenutniUser.izmjena_statusa||false;
   return trenutniUser.izmjena_naloga||false;
 }
-let popRow=null, popField=null, popTd=null;
+let popRow=null, popField=null, popTd=null, popEditType=null;
 
 // ─── CHIPS ───────────────────────────────────────────────────────────────
 function chipP(p){const m={Hitno:'p-hitno',Normal:'p-normal',Zakazano:'p-zakazano'};return`<span class="chip ${m[p]||'p-normal'}">${esc(p||'Normal')}</span>`;}
@@ -259,7 +259,7 @@ function getCols(){
     {k:'pocetak',l:'Ugovoreno',w:90,filter:null,render:r=>`<td>${fd(r.pocetak)}</td>`,edit:{type:'date',field:'pocetak',label:'Ugovoreno (datum)'}},
     {k:'planirani_zavrsetak',l:'Plan. završetak',w:110,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>`<td class="${zavrsClass(r)}">${fd(r.planirani_zavrsetak)}</td>`,edit:{type:'date',field:'planirani_zavrsetak',label:'Plan. završetak'}},
     {k:'broj_dana',l:'Dana',w:70,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>daniC(r),edit:null},
-    {k:'nova_procjena',l:'Razlog kašnjenja',w:180,filter:'text',render:r=>`<td class="note" title="${esc(r.nova_procjena)}">${esc(r.nova_procjena)||''}</td>`,edit:{type:'textarea',field:'nova_procjena',label:'Razlog kašnjenja'}},
+    {k:'nova_procjena',l:'Razlog kašnjenja',w:180,filter:'text',render:r=>`<td class="note-cell${r.nova_procjena?' has-note':''}" data-note="${esc(r.nova_procjena)}">${esc(r.nova_procjena)||''}</td>`,edit:{type:'textarea',field:'nova_procjena',label:'Razlog kašnjenja'}},
     {k:'gotovo',l:'Gotovo',w:65,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.gotovo?'<span style="color:#1f8a4c;font-size:18px;font-weight:900;line-height:1">✓</span>':''}</td>`,edit:{type:'check',field:'gotovo',label:'Gotovo'}},
     {k:'reklamacija_dodatni_rad',l:'Rek.',w:60,filter:'sel',opts:['DA','NE'],render:r=>`<td class="center">${chipR(r.reklamacija_dodatni_rad)}</td>`,edit:{type:'select',opts:['','NE','DA'],field:'reklamacija_dodatni_rad',label:'Reklamacija'}},
     {k:'napomena',l:'Napomena',w:220,filter:'text',render:r=>`<td class="note-cell${r.napomena?' has-note':''}" data-note="${esc(r.napomena)}">${esc(r.napomena)}</td>`,edit:{type:'textarea',field:'napomena',label:'Napomena / upute operateru'}},
@@ -268,11 +268,10 @@ function getCols(){
   ];
   const fin=isAdmin?[
     {k:'ugovorena_suma',l:'Ugovoreno',w:90,filter:null,render:r=>`<td class="num">${fm(r.ugovorena_suma)}</td>`,edit:{type:'number',field:'ugovorena_suma',label:'Ugovorena suma (KM)'}},
-    {k:'avans',l:'Avans',w:80,filter:null,render:r=>`<td class="num">${fm(r.avans)}</td>`,edit:{type:'number',field:'avans',label:'Avans (KM)'}},
-    {k:'avans_opis',l:'Opis avansa',w:130,filter:'text',render:r=>`<td class="note" title="${esc(r.avans_opis)}">${esc(r.avans_opis)||''}</td>`,edit:{type:'naplata',field:'avans_opis',label:'Opis avansa'}},
+    {k:'avans',l:'Avans',w:80,filter:null,render:r=>`<td class="num note-cell${r.avans_opis?' has-note':''}" data-note="${esc(r.avans_opis)}">${fm(r.avans)}</td>`,edit:{type:'avans',field:'avans',label:'Avans (KM)'}},
     {k:'za_naplatu',l:'Za naplatu',w:90,filter:null,render:r=>`<td class="num">${fm(r.za_naplatu)}</td>`,edit:null},
     {k:'naplaceno',l:'✓ Napl.',w:55,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.naplaceno?'<span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span>':''}</td>`,edit:{type:'check',field:'naplaceno',label:'Naplaćeno'}},
-    {k:'naplaceno_opis',l:'Opis naplate',w:130,filter:'text',render:r=>`<td class="note" title="${esc(r.naplaceno_opis)}">${esc(r.naplaceno_opis)||''}</td>`,edit:{type:'naplata',field:'naplaceno_opis',label:'Opis naplate'}},
+    {k:'naplaceno_opis',l:'Opis naplate',w:130,filter:'text',render:r=>`<td class="note-cell${r.naplaceno_opis?' has-note':''}" data-note="${esc(r.naplaceno_opis)}">${esc(r.naplaceno_opis)||''}</td>`,edit:{type:'naplata',field:'naplaceno_opis',label:'Opis naplate'}},
     {k:'_del',l:'',w:40,filter:null,render:r=>`<td class="center"><button onclick="obrisiNalog(${r.r_br},event)" style="background:none;border:none;cursor:pointer;font-size:14px;color:#c0392b;" title="Obriši nalog">🗑</button></td>`,edit:null},
   ]:[];
   return [...base,...fin];
@@ -450,6 +449,13 @@ function clearCustomDate(){
   render();
 }
 
+function addTdClass(html, cls){
+  // Ako <td> već ima class="...", spoji klase; inače dodaj novi atribut.
+  const m = html.match(/^<td\s+class="([^"]*)"/);
+  if(m) return html.replace(/^<td\s+class="([^"]*)"/, `<td class="$1 ${cls}"`);
+  return html.replace('<td', `<td class="${cls}"`);
+}
+
 function render(){
   const rows=filterRows();
   const cols=getCols();
@@ -458,10 +464,10 @@ function render(){
   document.getElementById('tbody').innerHTML=rows.map(r=>`<tr data-rbr="${r.r_br}">${cols.map(c=>{
     const cell=c.render(r);
     if(c.edit&&!mozeEditovati(c.edit.field)){
-      return cell.replace('<td','<td class="locked"');
+      return addTdClass(cell,'locked');
     }
     if(c.edit&&mozeEditovati(c.edit.field)){
-      return cell.replace('<td','<td class="editable"');
+      return addTdClass(cell,'editable');
     }
     return cell;
   }).join('')}</tr>`).join('');
@@ -487,7 +493,7 @@ document.getElementById('tbody').addEventListener('click',function(e){
 });
 
 function openPop(td,row,editCfg){
-  popRow=row; popField=editCfg.field; popTd=td;
+  popRow=row; popField=editCfg.field; popTd=td; popEditType=editCfg.type;
   document.getElementById('pop-label').textContent=editCfg.label||editCfg.field;
   const fEl=document.getElementById('pop-field');
   const val=row[editCfg.field];
@@ -554,6 +560,37 @@ function openPop(td,row,editCfg){
         Odabrano: <b id="naplata-preview">${esc(val||'—')}</b>
       </div>`;
     setTimeout(()=>{const el=document.getElementById('naplata-ime');if(el)el.focus();},100);
+  } else if(editCfg.type==='avans'){
+    const d=new Date();
+    const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
+    const opcije=[
+      '','rfb '+kratakDatum,'uni '+kratakDatum,'mf '+kratakDatum,'nlb '+kratakDatum,'uni1 '+kratakDatum,
+      'got Boban '+kratakDatum,'got Marija '+kratakDatum,'got Nenad '+kratakDatum,'got Rade '+kratakDatum,'got Edo '+kratakDatum,
+    ];
+    const opisVal=row.avans_opis||'';
+    fEl.innerHTML=`
+      <input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">
+      <div style="margin-top:6px;font-size:10.5px;color:#888;font-weight:600">Način uplate (opciono):</div>
+      <select id="avans-select" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:4px;" onchange="setAvansOpis(this.value)">
+        ${opcije.map(o=>`<option value="${esc(o)}"${o===opisVal?' selected':''}>${o||'— izaberi —'}</option>`).join('')}
+      </select>
+      <div style="font-size:10.5px;color:#888;font-weight:600;margin-top:6px">ili slobodan unos (ime + datum):</div>
+      <div style="display:flex;gap:4px;margin-top:4px;">
+        <input type="text" id="avans-ime" placeholder="npr. Petar"
+          style="flex:1;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;"
+          oninput="updateAvansOpis()">
+        <input type="text" id="avans-datum" placeholder="${kratakDatum}"
+          style="width:55px;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;"
+          oninput="updateAvansOpis()">
+      </div>
+      <input type="hidden" id="avans-opis-inp" value="${esc(opisVal)}">
+      <div style="margin-top:6px;font-size:11px;color:#555;">
+        Opis: <b id="avans-opis-preview">${esc(opisVal||'—')}</b>
+      </div>`;
+    setTimeout(()=>{
+      const el=document.getElementById('pop-inp');
+      if(el){el.focus();el.select();}
+    },30);
   } else if(editCfg.type==='number'){
     fEl.innerHTML=`<input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
     setTimeout(()=>{
@@ -594,6 +631,25 @@ function updateNaplata(){
   if(prev) prev.textContent=val;
 }
 
+function setAvansOpis(val){
+  const el=document.getElementById('avans-opis-inp');
+  if(el) el.value=val;
+  const prev=document.getElementById('avans-opis-preview');
+  if(prev) prev.textContent=val||'—';
+}
+
+function updateAvansOpis(){
+  const ime=document.getElementById('avans-ime').value.trim();
+  const datum=document.getElementById('avans-datum').value.trim();
+  const d=new Date();
+  const kratakDatum=d.getDate()+'/'+(d.getMonth()+1);
+  const val=ime?(ime+(datum?' '+datum:' '+kratakDatum)):'';
+  const el=document.getElementById('avans-opis-inp');
+  if(el) el.value=val;
+  const prev=document.getElementById('avans-opis-preview');
+  if(prev) prev.textContent=val||'—';
+}
+
 async function popSave(){
   if(!popRow||!popField) return;
   const inp=document.getElementById('pop-inp');
@@ -620,6 +676,11 @@ async function popSave(){
     if(!val) val=null;
   }
   const body={[popField]:val};
+  // Avans tip: šalje i opis (način uplate) zajedno sa iznosom
+  if(popEditType==='avans'){
+    const opisEl=document.getElementById('avans-opis-inp');
+    if(opisEl) body.avans_opis=opisEl.value.trim();
+  }
   // Zapamti staru vrijednost za undo
   pushUndo(popRow.r_br, popField, popRow[popField]);
 
@@ -648,6 +709,9 @@ async function popSave(){
     });
     if(!r.ok) throw new Error();
     popRow[popField]=val;
+    if(popEditType==='avans'&&'avans_opis' in body){
+      popRow.avans_opis=body.avans_opis;
+    }
     // Ako se mijenja ugovorio_id, ažuriraj i ugovorio tekst lokalno
     if(popField==='ugovorio_id'){
       const cfg=JSON.parse(localStorage.getItem('jopex_config')||'{}');
@@ -678,7 +742,7 @@ async function popSave(){
 
 function popClose(){
   pop.style.display='none';
-  popRow=null;popField=null;popTd=null;
+  popRow=null;popField=null;popTd=null;popEditType=null;
 }
 document.addEventListener('click',e=>{if(!pop.contains(e.target)&&e.target.tagName!=='TD'&&e.target.tagName!=='SPAN')popClose();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')popClose();if(e.key==='Enter'&&pop.style.display!=='none'&&document.getElementById('pop-inp')&&document.getElementById('pop-inp').tagName!=='TEXTAREA')popSave();});
