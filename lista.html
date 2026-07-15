@@ -68,7 +68,8 @@ td.center{text-align:center;white-space:nowrap;}
 .dani-vatra{color:#c0392b;font-weight:700;background:#fff0e0;}
 .dani-blizu{color:#856404;font-weight:700;background:#fff9c4;}
 .dani-ok{color:#1f8a4c;font-weight:700;background:#e6f4ea;}
-.predano-siva{color:#9aa5b1!important;}
+.ceka-blagajnu{color:#c0392b!important;font-weight:700;}
+.predano-zeleno{color:#1f8a4c!important;font-weight:700;}
 
 /* INLINE EDITOR POPUP */
 #inline-pop{
@@ -244,6 +245,7 @@ function fd(d){
 }
 function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function jeGotovinaOpis(v){return /^got\b/i.test(String(v||'').trim());}
 function lk(u){return u?`<a class="lk" href="${esc(u)}" target="_blank">↗</a>`:'';} 
 function gv(id){return(document.getElementById(id)||{}).value||'';}
 
@@ -269,8 +271,16 @@ function getCols(){
   ];
   const fin=isAdmin?[
     {k:'ugovorena_suma',l:'Ugovoreno',w:90,filter:null,render:r=>`<td class="num">${fm(r.ugovorena_suma)}</td>`,edit:{type:'number',field:'ugovorena_suma',label:'Ugovorena suma (KM)'}},
-    {k:'avans',l:'Avans',w:80,filter:null,render:r=>`<td class="num note-cell${r.avans_opis?' has-note':''}${r.avans_predano?' predano-siva':''}" data-note="${esc(r.avans_opis)}${r.avans_predano?' (predano blagajniku)':''}">${fm(r.avans)}</td>`,edit:{type:'avans',field:'avans',label:'Avans (KM)'}},
-    {k:'za_naplatu',l:'Za naplatu',w:90,filter:null,render:r=>`<td class="num${r.naplata_predano?' predano-siva':''}" title="${r.naplata_predano?'Predano blagajniku':''}">${fm(r.za_naplatu)}</td>`,edit:null},
+    {k:'avans',l:'Avans',w:80,filter:null,render:r=>{
+      const cash=jeGotovinaOpis(r.avans_opis);
+      const cls=cash?(r.avans_predano?' predano-zeleno':' ceka-blagajnu'):'';
+      return `<td class="num note-cell${r.avans_opis?' has-note':''}${cls}" data-note="${esc(r.avans_opis)}${r.avans_predano?' (predano blagajniku)':''}">${fm(r.avans)}</td>`;
+    },edit:{type:'avans',field:'avans',label:'Avans (KM)'}},
+    {k:'za_naplatu',l:'Za naplatu',w:90,filter:null,render:r=>{
+      const cash=jeGotovinaOpis(r.naplaceno_opis);
+      const cls=cash?(r.naplata_predano?' predano-zeleno':' ceka-blagajnu'):'';
+      return `<td class="num${cls}" title="${r.naplata_predano?'Predano blagajniku':''}">${fm(r.za_naplatu)}</td>`;
+    },edit:null},
     {k:'naplaceno',l:'✓ Napl.',w:55,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.naplaceno?'<span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span>':''}</td>`,edit:{type:'check',field:'naplaceno',label:'Naplaćeno'}},
     {k:'naplaceno_opis',l:'Opis naplate',w:130,filter:'text',render:r=>`<td class="note-cell${r.naplaceno_opis?' has-note':''}" data-note="${esc(r.naplaceno_opis)}">${esc(r.naplaceno_opis)||''}</td>`,edit:{type:'naplata',field:'naplaceno_opis',label:'Opis naplate'}},
     {k:'_del',l:'',w:40,filter:null,render:r=>`<td class="center"><button onclick="obrisiNalog(${r.r_br},event)" style="background:none;border:none;cursor:pointer;font-size:14px;color:#c0392b;" title="Obriši nalog">🗑</button></td>`,edit:null},
