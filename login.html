@@ -27,7 +27,7 @@ p{margin:0 0 22px;font-size:13px;color:#6b7a8d;}
 </head>
 <body>
 <div class="card">
-  <h1>📋 JoPeX Nalozi</h1>
+  <h1>🪨 JoPeX d.o.o.</h1>
   <p>Prijavite se sa radnim email-om.</p>
   <form id="f">
     <div class="fg"><label>Email</label>
@@ -53,7 +53,7 @@ document.getElementById('f').addEventListener('submit', async e => {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error);
-    location.href = 'index.html';
+    location.href = 'home.html';
   } catch(err) {
     msg.textContent = '✗ ' + err.message; msg.style.display='block';
     btn.disabled=false; btn.textContent='Prijavi se';
