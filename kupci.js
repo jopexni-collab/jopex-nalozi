@@ -9,19 +9,21 @@ router.use((req, res, next) => {
   return res.status(403).json({ error: 'Nemate dozvolu za maloprodaju.' });
 });
 
-// GET /api/kupci?q=pretraga&limit=20 - pretraga po nazivu ili telefonu
+// GET /api/kupci?q=pretraga&limit=20 - pretraga po nazivu ili telefonu (samo aktivni)
 router.get('/', async (req, res) => {
   try {
     const { q, limit } = req.query;
     const lim = Math.min(parseInt(limit) || 20, 50);
     if (!q || !q.trim()) {
-      const r = await pool.query('SELECT * FROM kupci ORDER BY kreiran DESC LIMIT $1', [lim]);
+      const r = await pool.query(
+        `SELECT * FROM kupci WHERE aktivan IS NOT FALSE ORDER BY kreiran DESC LIMIT $1`, [lim]
+      );
       return res.json(r.rows);
     }
     const term = q.trim();
     const r = await pool.query(
       `SELECT * FROM kupci
-       WHERE naziv ILIKE $1 OR telefon ILIKE $1
+       WHERE aktivan IS NOT FALSE AND (naziv ILIKE $1 OR telefon ILIKE $1)
        ORDER BY (naziv ILIKE $2) DESC, naziv
        LIMIT $3`,
       [`%${term}%`, `${term}%`, lim]
