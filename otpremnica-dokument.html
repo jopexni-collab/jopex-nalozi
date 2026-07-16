@@ -121,6 +121,7 @@ async function ucitaj(){
         <div class="lbl">Kupac</div>
         <div class="naziv">${esc(otp.kupac_naziv||'—')}</div>
         ${otp.kupac_adresa?`<div class="adresa">${esc(otp.kupac_adresa)}</div>`:''}
+        ${otp.kupac_grad?`<div class="adresa">${esc(otp.kupac_grad)}</div>`:''}
       </div>
 
       <table>
@@ -133,14 +134,18 @@ async function ucitaj(){
           </tr>
         </thead>
         <tbody>
-          ${otp.stavke.map(s=>`
+          ${otp.stavke.map(s=>{
+            const dim = s.duzina_cm && s.visina_cm
+              ? ` <span style="color:#9aa5b1;font-size:11px;">(${s.duzina_cm}${s.debljina_cm?`×${s.visina_cm}×${s.debljina_cm}`:`×${s.visina_cm}`} cm)</span>`
+              : '';
+            return `
             <tr>
               <td class="c">${s.rb}</td>
               <td>${esc(s.sifra)}</td>
-              <td>${esc(s.naziv)}</td>
+              <td>${esc(s.naziv)}${dim}</td>
               <td class="c">${s.kolicina} ${esc(s.jed_mjera||'')}</td>
             </tr>
-          `).join('')}
+          `;}).join('')}
         </tbody>
       </table>
 
