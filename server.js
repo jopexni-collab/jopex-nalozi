@@ -58,12 +58,16 @@ function requireLoginOrApiKey(req, res, next) {
 // ─── Javne rute (bez prijave) ─────────────────────────────────────────────
 app.use('/api/auth',   require('./auth'));
 app.use('/api/config', require('./config'));
+// Javni dokument otpremnice (za kupca) — NEMA cijena, pristup preko tokena, ne preko ID-ja.
+app.use('/api/otpremnice-javno', require('./otpremnice-javno'));
 
 // ─── Zaštićene rute (trebaju prijavu ili API ključ) ───────────────────────
 app.use('/api/upload',     requireLoginOrApiKey, require('./upload'));
 app.use('/api/zaposleni',   requireLoginOrApiKey, require('./zaposleni'));
 app.use('/api/proizvodnja', requireLoginOrApiKey, require('./proizvodnja'));
 app.use('/api/gotovina',    requireLoginOrApiKey, require('./gotovina'));
+app.use('/api/roba',        requireLoginOrApiKey, require('./roba'));
+app.use('/api/otpremnice',  requireLoginOrApiKey, require('./otpremnice'));
 
 // ─── Statički fajlovi (web aplikacija) ───────────────────────────────────
 app.use((req, res, next) => {

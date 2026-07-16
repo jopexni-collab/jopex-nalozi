@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Maloprodaja – JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f0f2f5;--border:#d0d7de;--red:#c0392b;--green:#1f8a4c;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);font-size:14px;color:#222;
+  -webkit-text-size-adjust:100%;overscroll-behavior-y:contain;}
+
+/* ── HEADER ───────────────────────────────────────────────── */
+header{background:var(--blue);color:#fff;padding:10px 14px;display:flex;align-items:center;
+  justify-content:space-between;position:sticky;top:0;z-index:50;box-shadow:0 1px 4px rgba(0,0,0,.15);}
+header h1{font-size:16px;font-weight:700;}
+header nav{display:flex;gap:6px;align-items:center;}
+header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgba(255,255,255,.4);
+  padding:5px 9px;border-radius:5px;min-height:30px;display:flex;align-items:center;}
+#who{font-size:10.5px;opacity:.8;display:block;margin-top:1px;}
+.hdr-left{display:flex;flex-direction:column;}
+
+/* ── TABS ─────────────────────────────────────────────────── */
+.tabs{display:flex;background:#fff;border-bottom:1px solid var(--border);position:sticky;top:53px;z-index:40;}
+.tab-btn{flex:1;padding:12px 6px;text-align:center;font-size:13px;font-weight:700;color:#6b7a8d;
+  background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;min-height:44px;}
+.tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
+
+.view{display:none;padding:12px;padding-bottom:100px;}
+.view.active{display:block;}
+
+/* ── PRETRAGA ─────────────────────────────────────────────── */
+.search-box{position:relative;margin-bottom:10px;}
+.search-box input{width:100%;font:inherit;font-size:16px;padding:12px 14px;border:1.5px solid var(--border);
+  border-radius:10px;background:#fff;min-height:48px;}
+.search-box input:focus{outline:none;border-color:var(--blue);}
+.search-hint{font-size:11px;color:#8b96a5;margin:4px 2px 10px;}
+
+.rez-list{display:flex;flex-direction:column;gap:8px;}
+.rez-item{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;min-height:56px;}
+.rez-item:active{background:#eef4fc;}
+.rez-info{flex:1;min-width:0;}
+.rez-naziv{font-weight:700;font-size:13.5px;color:#1a2733;}
+.rez-sifra{font-size:11px;color:#8b96a5;margin-top:1px;}
+.rez-right{text-align:right;flex-shrink:0;}
+.rez-cijena{font-weight:700;color:var(--dark);font-size:14px;}
+.rez-stanje{font-size:10.5px;margin-top:2px;}
+.chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;}
+.chip-ok{background:#e6f4ea;color:var(--green);}
+.chip-nisko{background:#fff3e0;color:#e67e22;}
+.chip-nema{background:#fce8e6;color:var(--red);}
+.empty-msg{text-align:center;color:#9aa5b1;font-size:12.5px;padding:24px 10px;}
+
+/* ── KOŠARICA (donji sticky panel) ───────────────────────────── */
+.kosarica-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--border);
+  box-shadow:0 -2px 10px rgba(0,0,0,.08);z-index:60;transition:max-height .25s ease;overflow:hidden;}
+.kb-summary{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;
+  min-height:56px;}
+.kb-summary-left{display:flex;align-items:center;gap:8px;}
+.kb-badge{background:var(--blue);color:#fff;font-weight:700;font-size:13px;border-radius:50%;
+  width:26px;height:26px;display:flex;align-items:center;justify-content:center;}
+.kb-total{font-weight:700;font-size:16px;color:var(--dark);}
+.kb-chevron{font-size:12px;color:#8b96a5;}
+.kb-body{max-height:0;overflow:auto;transition:max-height .25s ease;padding:0 14px;}
+.kosarica-bar.open .kb-body{max-height:50vh;padding:6px 14px 14px;}
+
+.kos-item{padding:9px 0;border-bottom:1px solid #eef0f3;}
+.kos-item-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.kos-info{flex:1;min-width:0;}
+.kos-naziv{font-size:12.5px;font-weight:600;color:#1a2733;}
+.kos-cijena{font-size:11px;color:#8b96a5;}
+.kos-cijena.izmijenjena{color:var(--red);font-weight:700;}
+.kos-qty{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.qty-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:#f7f8fa;
+  font-size:16px;font-weight:700;color:var(--blue);cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.qty-btn:active{background:#e8eef7;}
+.qty-val{min-width:34px;text-align:center;font-weight:700;font-size:13px;}
+.kos-iznos{font-weight:700;font-size:13px;color:var(--dark);min-width:60px;text-align:right;}
+.kos-del{background:none;border:none;color:var(--red);font-size:16px;cursor:pointer;padding:4px 6px;}
+
+.kos-item-bottom{display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap;}
+.btn-cijena{font:inherit;font-size:10.5px;font-weight:600;color:var(--blue);background:#eef4fc;
+  border:none;border-radius:6px;padding:4px 9px;cursor:pointer;min-height:26px;}
+.chip-odstupanje{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;
+  color:var(--red);background:#fce8e6;border-radius:8px;padding:2px 8px;}
+.chip-odstupanje button{background:none;border:none;color:var(--red);font-size:11px;cursor:pointer;
+  padding:0 0 0 4px;font-weight:700;}
+
+.cijena-edit{background:#f7f8fa;border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:6px;}
+.ce-row{display:flex;gap:6px;margin-bottom:7px;}
+.ce-tip-btn{flex:1;font:inherit;font-size:11px;font-weight:600;padding:7px;border-radius:6px;
+  border:1px solid var(--border);background:#fff;color:#6b7a8d;cursor:pointer;}
+.ce-tip-btn.active{background:var(--blue);color:#fff;border-color:var(--blue);}
+.cijena-edit input[type=number]{width:100%;font:inherit;font-size:15px;padding:9px 10px;
+  border:1px solid var(--border);border-radius:6px;margin-bottom:7px;text-align:center;}
+.cijena-edit select{width:100%;font:inherit;font-size:12.5px;padding:8px;border:1px solid var(--border);
+  border-radius:6px;margin-bottom:7px;}
+.cijena-edit input[type=text]{width:100%;font:inherit;font-size:12px;padding:8px;
+  border:1px solid var(--border);border-radius:6px;margin-bottom:7px;}
+.ce-btns{display:flex;gap:6px;}
+.ce-btns button{flex:1;font:inherit;font-size:12px;font-weight:700;padding:9px;border-radius:6px;
+  border:none;cursor:pointer;min-height:38px;}
+.ce-primijeni{background:var(--green);color:#fff;}
+.ce-otkazi{background:#eee;color:#444;}
+.ce-preview{font-size:11px;color:#6b7a8d;text-align:center;margin-bottom:7px;}
+
+.kupac-fld{margin:10px 0;}
+.kupac-fld label{font-size:11px;font-weight:600;color:#6b7a8d;display:block;margin-bottom:4px;}
+.kupac-fld input{width:100%;font:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--border);
+  border-radius:8px;min-height:44px;}
+
+.btn-generisi{width:100%;background:var(--green);color:#fff;border:none;border-radius:10px;
+  font:inherit;font-size:15px;font-weight:700;padding:14px;min-height:52px;cursor:pointer;margin-top:6px;}
+.btn-generisi:disabled{background:#a9b4bf;}
+.btn-generisi:active{background:#176e3d;}
+
+/* ── OVERLAY: POTVRDA KUPCA ──────────────────────────────────── */
+.overlay{position:fixed;inset:0;background:#fff;z-index:100;display:none;flex-direction:column;}
+.overlay.on{display:flex;}
+.ov-header{background:var(--blue);color:#fff;padding:14px;text-align:center;font-weight:700;font-size:15px;}
+.ov-body{flex:1;overflow:auto;padding:20px;display:flex;flex-direction:column;align-items:center;}
+.ov-broj{font-size:13px;color:#8b96a5;margin-bottom:6px;}
+.ov-iznos-lbl{font-size:13px;color:#6b7a8d;margin-top:10px;}
+.ov-iznos{font-size:42px;font-weight:800;color:var(--dark);margin:4px 0 18px;}
+.ov-stavke{width:100%;max-width:420px;background:#f7f8fa;border-radius:10px;padding:10px 14px;margin-bottom:20px;}
+.ov-stavka{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0;border-bottom:1px solid #e8eaed;}
+.ov-stavka:last-child{border-bottom:none;}
+.ov-kupac-fld{width:100%;max-width:420px;margin-top:auto;}
+.ov-kupac-fld label{font-size:13px;font-weight:600;color:#1a2733;display:block;margin-bottom:6px;}
+.ov-kupac-fld input{width:100%;font:inherit;font-size:18px;padding:14px;border:2px solid var(--border);
+  border-radius:10px;min-height:52px;text-align:center;}
+.ov-kupac-fld input:focus{outline:none;border-color:var(--blue);}
+.ov-footer{padding:16px;border-top:1px solid var(--border);display:flex;gap:10px;}
+.btn-otkazi{flex:1;background:#eee;color:#444;border:none;border-radius:10px;font:inherit;font-size:14px;
+  font-weight:700;padding:14px;min-height:52px;cursor:pointer;}
+.btn-potvrdi{flex:2;background:var(--green);color:#fff;border:none;border-radius:10px;font:inherit;
+  font-size:17px;font-weight:800;padding:14px;min-height:56px;cursor:pointer;}
+.btn-potvrdi:disabled{background:#a9b4bf;}
+.btn-potvrdi:active{background:#176e3d;}
+
+/* ── USPJEH ───────────────────────────────────────────────── */
+.ov-success{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;}
+.ov-success .ico{font-size:64px;margin-bottom:14px;}
+.ov-success h2{color:var(--green);font-size:20px;margin-bottom:8px;}
+.ov-success p{color:#6b7a8d;font-size:13px;text-align:center;margin-bottom:16px;}
+.btn-nova{background:var(--blue);color:#fff;border:none;border-radius:10px;font:inherit;font-size:15px;
+  font-weight:700;padding:14px 28px;min-height:52px;cursor:pointer;}
+
+.posalji-box{width:100%;max-width:340px;margin-bottom:20px;}
+.posalji-lbl{font-size:11.5px;font-weight:700;color:#6b7a8d;text-align:center;margin-bottom:8px;
+  text-transform:uppercase;letter-spacing:.4px;}
+.posalji-btns{display:flex;gap:8px;}
+.btn-posalji{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font:inherit;
+  font-size:11px;font-weight:700;padding:10px 4px;border-radius:10px;border:1px solid var(--border);
+  background:#fff;color:#1a2733;cursor:pointer;min-height:56px;text-decoration:none;}
+.btn-posalji .ic{font-size:20px;}
+.btn-posalji.viber{color:#7360f2;}
+.btn-posalji.whatsapp{color:#25d366;}
+.btn-posalji.email{color:var(--blue);}
+.posalji-link{font-size:10.5px;color:#8b96a5;text-align:center;margin-top:8px;word-break:break-all;}
+
+/* ── ADMIN: SVE OTPREMNICE ───────────────────────────────────── */
+.filt-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;}
+.filt-row select,.filt-row input[type=date]{font:inherit;font-size:12.5px;padding:8px 10px;border:1px solid var(--border);
+  border-radius:8px;min-height:40px;flex:1;min-width:110px;}
+.filt-row label.chk{font-size:11.5px;color:#6b7a8d;display:flex;align-items:center;gap:5px;white-space:nowrap;}
+.otp-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;}
+.otp-card.ima-odstupanje{border-color:#f3c7c2;}
+.otp-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:6px;}
+.otp-broj{font-weight:700;font-size:13px;color:var(--dark);}
+.otp-badges{display:flex;gap:5px;flex-shrink:0;}
+.otp-status{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;white-space:nowrap;}
+.st-kreirana{background:#fff3e0;color:#e67e22;}
+.st-potvrdjena{background:#e6f4ea;color:var(--green);}
+.st-stornirana{background:#fce8e6;color:var(--red);}
+.badge-odstupanje{background:#fce8e6;color:var(--red);font-size:10px;font-weight:700;
+  padding:2px 8px;border-radius:8px;white-space:nowrap;}
+.otp-meta{font-size:11.5px;color:#6b7a8d;line-height:1.5;}
+.otp-iznos{font-weight:700;color:var(--dark);font-size:14px;margin-top:4px;}
+.otp-actions{display:flex;gap:6px;margin-top:8px;}
+.btn-otp-posalji{flex:1;font:inherit;font-size:11px;font-weight:700;padding:8px;border-radius:6px;
+  border:1px solid var(--border);background:#f7f8fa;color:var(--blue);cursor:pointer;min-height:36px;}
+.mini-posalji{display:none;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);}
+.mini-posalji.on{display:flex;}
+.mini-posalji a,.mini-posalji button{flex:1;text-align:center;font:inherit;font-size:10.5px;font-weight:700;
+  padding:7px 2px;border-radius:6px;border:1px solid var(--border);background:#fff;text-decoration:none;
+  cursor:pointer;min-height:32px;}
+.otp-detalji{display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);}
+.otp-detalji.on{display:block;}
+.otp-stavka-red{font-size:11.5px;padding:5px 0;border-bottom:1px solid #f0f2f5;}
+.otp-stavka-red .osr-top{display:flex;justify-content:space-between;}
+.otp-stavka-red .osr-odst{font-size:10.5px;color:var(--red);margin-top:2px;}
+
+.import-box{background:#fff;border:1px dashed var(--border);border-radius:10px;padding:14px;margin-bottom:14px;}
+.import-box h3{font-size:13px;color:var(--dark);margin-bottom:8px;}
+.import-box select,.import-box input[type=file],.import-box input[type=text]{font:inherit;font-size:12.5px;padding:8px;
+  border:1px solid var(--border);border-radius:6px;margin-bottom:8px;width:100%;}
+.btn-import{width:100%;background:var(--blue);color:#fff;border:none;border-radius:8px;font:inherit;
+  font-size:13px;font-weight:700;padding:10px;min-height:44px;cursor:pointer;}
+.btn-import.sec{background:#eee;color:#444;}
+#import-msg{font-size:12px;margin-top:8px;}
+
+.map-row{display:grid;grid-template-columns:120px 1fr;gap:8px;align-items:center;margin-bottom:7px;}
+.map-row label{font-size:12px;font-weight:600;color:#1a2733;}
+.map-row label .req{color:var(--red);}
+.map-row select{margin-bottom:0;}
+.uzorak-box{background:#f7f8fa;border-radius:8px;padding:8px 10px;margin:10px 0;overflow-x:auto;}
+.uzorak-box table{border-collapse:collapse;font-size:10.5px;white-space:nowrap;}
+.uzorak-box th,.uzorak-box td{padding:3px 8px;border-bottom:1px solid #e8eaed;text-align:left;}
+.uzorak-box th{color:#6b7a8d;font-weight:700;}
+.uzorak-hint{font-size:10.5px;color:#8b96a5;margin-bottom:6px;}
+
+.spinner{text-align:center;padding:20px;color:#9aa5b1;font-size:12.5px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr-left">
+    <h1>🛒 Maloprodaja</h1>
+    <span id="who"></span>
+  </div>
+  <nav>
+    <a href="lista.html">← Nalozi</a>
+    <a href="#" id="logout">Izlaz</a>
+  </nav>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="prodaja">🛒 Prodaja</button>
+  <button class="tab-btn" data-tab="admin" id="tab-admin-btn">🧾 Otpremnice</button>
+</div>
+
+<!-- ═══ TAB: PRODAJA ═══ -->
+<div class="view active" id="view-prodaja">
+  <div class="search-box">
+    <input type="text" id="search" placeholder="🔍 Pretraga po šifri ili nazivu..." autocomplete="off">
+  </div>
+  <div class="search-hint">Ukucaj šifru ili naziv artikla — dodirni rezultat da dodaš u košaricu.</div>
+  <div class="rez-list" id="rez-list"></div>
+</div>
+
+<!-- ═══ TAB: ADMIN OTPREMNICE ═══ -->
+<div class="view" id="view-admin">
+  <div class="import-box" id="import-box">
+    <h3>📥 Uvoz robe iz XLSX</h3>
+
+    <!-- Korak 1: izbor fajla -->
+    <div id="imp-korak1">
+      <select id="imp-izvor">
+        <option value="interni" selected>Interni cjenovnik</option>
+        <option value="bluesoft">Bluesoft izvoz</option>
+      </select>
+      <input type="file" id="imp-file" accept=".xlsx,.xls">
+      <button class="btn-import" onclick="ucitajPregledUvoza()">Učitaj fajl i prikaži kolone</button>
+    </div>
+
+    <!-- Korak 2: potvrda mapiranja kolona (prikazuje se nakon učitavanja) -->
+    <div id="imp-korak2" style="display:none">
+      <div class="uzorak-hint">Zaglavlja pronađena u fajlu i prvih par redova — provjeri mapiranje:</div>
+      <div class="uzorak-box"><table id="uzorak-tabela"></table></div>
+
+      <div class="map-row"><label>Šifra <span class="req">*</span></label><select id="map-sifra"></select></div>
+      <div class="map-row"><label>Naziv <span class="req">*</span></label><select id="map-naziv"></select></div>
+      <div class="map-row"><label>Cijena</label><select id="map-cijena"></select></div>
+      <div class="map-row"><label>Stanje</label><select id="map-stanje"></select></div>
+      <div class="map-row"><label>Jed. mjere</label><select id="map-jed_mjera"></select></div>
+      <div class="map-row"><label>Ako nema JM kolone</label><input type="text" id="map-jm-default" value="m2" placeholder="npr. m2, kom"></div>
+
+      <button class="btn-import" onclick="potvrdiUvoz()">✓ Uvezi sa ovim mapiranjem</button>
+      <button class="btn-import sec" onclick="otkaziUvoz()">← Nazad / drugi fajl</button>
+    </div>
+
+    <div id="import-msg"></div>
+  </div>
+
+  <div class="filt-row">
+    <input type="date" id="fil-od" onchange="loadOtpremnice()">
+    <input type="date" id="fil-do" onchange="loadOtpremnice()">
+    <label class="chk"><input type="checkbox" id="fil-odstupanje" onchange="loadOtpremnice()"> ⚠ Samo sa odstupanjem</label>
+  </div>
+  <div id="otp-list"></div>
+</div>
+
+<!-- ═══ KOŠARICA (sticky bottom) ═══ -->
+<div class="kosarica-bar" id="kosarica-bar">
+  <div class="kb-summary" id="kb-summary">
+    <div class="kb-summary-left">
+      <div class="kb-badge" id="kb-count">0</div>
+      <div>Košarica</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="kb-total" id="kb-total">0.00 KM</div>
+      <div class="kb-chevron" id="kb-chevron">▲</div>
+    </div>
+  </div>
+  <div class="kb-body" id="kb-body">
+    <div id="kos-items"></div>
+    <div class="kupac-fld">
+      <label>Naziv kupca (opciono)</label>
+      <input type="text" id="kupac-naziv" placeholder="Naziv kupca / firme...">
+    </div>
+    <div class="kupac-fld">
+      <label>Adresa kupca (za otpremnicu)</label>
+      <input type="text" id="kupac-adresa" placeholder="Ulica, broj, mjesto...">
+    </div>
+    <div class="kupac-fld">
+      <label>Telefon (za Viber/WhatsApp)</label>
+      <input type="tel" id="kupac-telefon" placeholder="+387 6X XXX XXX">
+    </div>
+    <div class="kupac-fld">
+      <label>Email (opciono)</label>
+      <input type="email" id="kupac-email" placeholder="kupac@email.com">
+    </div>
+    <div style="font-size:10.5px;color:#8b96a5;margin-bottom:6px;">
+      Cijene (≈) su okvirne — konačna cijena i stanje se provjeravaju uživo na sljedećem ekranu.
+      Otpremnica koju kupac dobija NE prikazuje cijene.
+    </div>
+    <button class="btn-generisi" id="btn-generisi" onclick="generisiOtpremnicu()" disabled>Generiši otpremnicu</button>
+  </div>
+</div>
+
+<!-- ═══ OVERLAY: POTVRDA KUPCA ═══ -->
+<div class="overlay" id="ov-potvrda">
+  <div class="ov-header">Potvrda otpremnice</div>
+  <div class="ov-body">
+    <div class="ov-broj" id="ov-broj">OTP-...</div>
+    <div class="ov-stavke" id="ov-stavke"></div>
+    <div class="ov-iznos-lbl">IZNOS ZA NAPLATU</div>
+    <div class="ov-iznos" id="ov-iznos">0.00 KM</div>
+    <div class="ov-kupac-fld">
+      <label>Ime i prezime kupca</label>
+      <input type="text" id="ov-kupac-ime" placeholder="Unesite ime kupca...">
+    </div>
+  </div>
+  <div class="ov-footer">
+    <button class="btn-otkazi" onclick="otkaziOtpremnicu()">Otkaži</button>
+    <button class="btn-potvrdi" id="btn-potvrdi" onclick="potvrdiOtpremnicu()">✓ KUPAC POTVRĐUJE</button>
+  </div>
+</div>
+
+<!-- ═══ OVERLAY: USPJEH ═══ -->
+<div class="overlay" id="ov-uspjeh">
+  <div class="ov-success">
+    <div class="ico">✅</div>
+    <h2>Otpremnica potvrđena!</h2>
+    <p id="uspjeh-detalji"></p>
+    <div class="posalji-box" id="posalji-box"></div>
+    <button class="btn-nova" onclick="novaProdaja()">+ Nova prodaja</button>
+  </div>
+</div>
+
+<script>
+const API='';
+let isAdmin=false, currentUser=null;
+let kosarica=[];       // { roba_id, sifra, naziv, jed_mjera, cijena, kolicina, stanje_max }
+                        // cijena/stanje_max su OKVIRNI (iz trenutka dodavanja) — konačna,
+                        // obavezujuća cijena i količina se određuju tek u /pregled i /potvrdi pozivima.
+let searchTimer=null;
+
+function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fd(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('sr-Latn-BA')+' '+dt.toLocaleTimeString('sr-Latn-BA',{hour:'2-digit',minute:'2-digit'});}
+
+/* ── TABOVI ─────────────────────────────────────────────── */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-'+btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab==='admin') loadOtpremnice();
+  };
+});
+
+/* ── PRETRAGA ROBE ──────────────────────────────────────── */
+document.getElementById('search').addEventListener('input', e=>{
+  clearTimeout(searchTimer);
+  const q=e.target.value;
+  searchTimer=setTimeout(()=>trazi(q), 250);
+});
+
+async function trazi(q){
+  const list=document.getElementById('rez-list');
+  list.innerHTML='<div class="spinner">Pretraga...</div>';
+  try{
+    const r=await fetch(`${API}/api/roba?q=${encodeURIComponent(q)}&limit=30`);
+    const rows=await r.json();
+    if(!rows.length){
+      list.innerHTML='<div class="empty-msg">Nema rezultata za "'+esc(q)+'".</div>';
+      return;
+    }
+    list.innerHTML=rows.map(a=>{
+      const stanje=parseFloat(a.stanje);
+      let chip='chip-ok', txt=stanje+' '+esc(a.jed_mjera);
+      if(stanje<=0){chip='chip-nema';txt='Nema na stanju';}
+      else if(stanje<10){chip='chip-nisko';}
+      return `
+      <div class="rez-item" onclick='dodajUKosaricu(${JSON.stringify(a).replace(/'/g,"&apos;")})'>
+        <div class="rez-info">
+          <div class="rez-naziv">${esc(a.naziv)}</div>
+          <div class="rez-sifra">Šifra: ${esc(a.sifra)}</div>
+        </div>
+        <div class="rez-right">
+          <div class="rez-cijena">${fm(a.cijena)} KM</div>
+          <div class="rez-stanje"><span class="chip ${chip}">${txt}</span></div>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    list.innerHTML='<div class="empty-msg">Greška pri pretrazi.</div>';
+  }
+}
+// Prikaži početnu listu (top artikli) odmah po prijavi
+function trazi_init(){ trazi(''); }
+
+/* ── KOŠARICA ───────────────────────────────────────────── */
+const RAZLOG_LABEL={kvalitet:'Slabiji kvalitet',kolicina:'Popust na količinu',lom:'Lom',drugo:'Drugo'};
+let uredjivanjeIdx=null; // koja stavka trenutno ima otvoren editor cijene
+
+function dodajUKosaricu(artikal){
+  if(parseFloat(artikal.stanje)<=0){alert('Artikal "'+artikal.naziv+'" nema stanja.');return;}
+  const postoji=kosarica.find(k=>k.roba_id===artikal.id);
+  if(postoji){
+    if(postoji.kolicina+1>parseFloat(artikal.stanje)){alert('Nema dovoljno na stanju.');return;}
+    postoji.kolicina++;
+  }else{
+    kosarica.push({
+      roba_id:artikal.id, sifra:artikal.sifra, naziv:artikal.naziv,
+      jed_mjera:artikal.jed_mjera, cijena:parseFloat(artikal.cijena),
+      kolicina:1, stanje_max:parseFloat(artikal.stanje),
+      override:null, // { tip:'posto'|'iznos', vrijednost, razlog, napomena } kad trgovac odstupi od zadane cijene
+    });
+  }
+  renderKosarica();
+  document.getElementById('kosarica-bar').classList.add('open');
+  document.getElementById('kb-chevron').textContent='▼';
+}
+
+function promijeniKolicinu(idx, delta){
+  const it=kosarica[idx];
+  const nova=it.kolicina+delta;
+  if(nova<=0){kosarica.splice(idx,1);}
+  else if(nova>it.stanje_max){alert('Nema dovoljno na stanju (max '+it.stanje_max+').');return;}
+  else{it.kolicina=nova;}
+  renderKosarica();
+}
+
+function ukloniStavku(idx){ kosarica.splice(idx,1); renderKosarica(); }
+
+// Okvirna efektivna cijena za prikaz u košarici (samo procjena — konačna se računa na serveru uživo)
+function efektivnaCijenaProcjena(k){
+  if(!k.override||k.override.vrijednost===''||k.override.vrijednost==null) return k.cijena;
+  const v=parseFloat(k.override.vrijednost);
+  if(isNaN(v)) return k.cijena;
+  return k.override.tip==='posto' ? Math.max(0,k.cijena*(1-v/100)) : Math.max(0,v);
+}
+
+function otvoriUredjivanjeCijene(idx){
+  uredjivanjeIdx=(uredjivanjeIdx===idx)?null:idx;
+  renderKosarica();
+}
+
+function primijeniOdstupanje(idx){
+  const tip=document.querySelector(`.ce-tip-btn[data-idx="${idx}"].active`)?.dataset.tip||'posto';
+  const vrijednost=document.getElementById('ce-vrijednost-'+idx).value;
+  const razlog=document.getElementById('ce-razlog-'+idx).value;
+  const napomena=document.getElementById('ce-napomena-'+idx).value;
+  if(vrijednost===''||isNaN(parseFloat(vrijednost))){alert('Unesite vrijednost.');return;}
+  if(!razlog){alert('Izaberite razlog odstupanja.');return;}
+  kosarica[idx].override={tip, vrijednost:parseFloat(vrijednost), razlog, napomena};
+  uredjivanjeIdx=null;
+  renderKosarica();
+}
+
+function ukloniOdstupanje(idx){
+  kosarica[idx].override=null;
+  uredjivanjeIdx=null;
+  renderKosarica();
+}
+
+function postaviTipOdstupanja(idx, tip){
+  document.querySelectorAll(`.ce-tip-btn[data-idx="${idx}"]`).forEach(b=>b.classList.toggle('active', b.dataset.tip===tip));
+  document.getElementById('ce-editor-'+idx).dataset.tip=tip;
+  azurirajPreview(idx);
+}
+
+function azurirajPreview(idx){
+  const k=kosarica[idx];
+  const tip=document.getElementById('ce-editor-'+idx)?.dataset.tip||'posto';
+  const vrijednost=parseFloat(document.getElementById('ce-vrijednost-'+idx)?.value);
+  const prev=document.getElementById('ce-preview-'+idx);
+  if(!prev) return;
+  if(isNaN(vrijednost)){prev.textContent='';return;}
+  const nova= tip==='posto' ? Math.max(0,k.cijena*(1-vrijednost/100)) : Math.max(0,vrijednost);
+  prev.textContent=`Nova cijena: ≈ ${fm(nova)} KM / ${esc(k.jed_mjera)} (umjesto ${fm(k.cijena)} KM)`;
+}
+
+function renderKosarica(){
+  const cont=document.getElementById('kos-items');
+  const total=kosarica.reduce((s,k)=>s+k.kolicina*efektivnaCijenaProcjena(k),0);
+  document.getElementById('kb-count').textContent=kosarica.length;
+  document.getElementById('kb-total').textContent=fm(total)+' KM';
+  document.getElementById('btn-generisi').disabled=kosarica.length===0;
+
+  if(!kosarica.length){
+    cont.innerHTML='<div class="empty-msg">Košarica je prazna.</div>';
+    return;
+  }
+  cont.innerHTML=kosarica.map((k,idx)=>{
+    const efCij=efektivnaCijenaProcjena(k);
+    const odstupa=!!k.override;
+    const editorOtvoren=uredjivanjeIdx===idx;
+    return `
+    <div class="kos-item">
+      <div class="kos-item-top">
+        <div class="kos-info">
+          <div class="kos-naziv">${esc(k.naziv)}</div>
+          <div class="kos-cijena ${odstupa?'izmijenjena':''}">≈ ${fm(efCij)} KM / ${esc(k.jed_mjera)}${odstupa?' <s style="opacity:.6">'+fm(k.cijena)+'</s>':''}</div>
+        </div>
+        <div class="kos-qty">
+          <button class="qty-btn" onclick="promijeniKolicinu(${idx},-1)">−</button>
+          <div class="qty-val">${k.kolicina}</div>
+          <button class="qty-btn" onclick="promijeniKolicinu(${idx},1)">+</button>
+        </div>
+        <div class="kos-iznos">≈ ${fm(k.kolicina*efCij)} KM</div>
+        <button class="kos-del" onclick="ukloniStavku(${idx})">🗑</button>
+      </div>
+      <div class="kos-item-bottom">
+        ${odstupa
+          ? `<span class="chip-odstupanje">⚠ ${esc(RAZLOG_LABEL[k.override.razlog]||k.override.razlog)}<button onclick="ukloniOdstupanje(${idx})">✕</button></span>
+             <button class="btn-cijena" onclick="otvoriUredjivanjeCijene(${idx})">✎ Izmijeni</button>`
+          : `<button class="btn-cijena" onclick="otvoriUredjivanjeCijene(${idx})">✎ Odstupi od cijene</button>`
+        }
+      </div>
+      ${editorOtvoren?`
+      <div class="cijena-edit" id="ce-editor-${idx}" data-tip="${k.override?.tip||'posto'}">
+        <div class="ce-row">
+          <button type="button" class="ce-tip-btn ${((k.override?.tip||'posto')==='posto')?'active':''}" data-idx="${idx}" data-tip="posto" onclick="postaviTipOdstupanja(${idx},'posto')">% popusta</button>
+          <button type="button" class="ce-tip-btn ${(k.override?.tip==='iznos')?'active':''}" data-idx="${idx}" data-tip="iznos" onclick="postaviTipOdstupanja(${idx},'iznos')">Nova cijena</button>
+        </div>
+        <input type="number" id="ce-vrijednost-${idx}" step="0.01" min="0" placeholder="npr. 10" value="${k.override?.vrijednost??''}" oninput="azurirajPreview(${idx})">
+        <div class="ce-preview" id="ce-preview-${idx}"></div>
+        <select id="ce-razlog-${idx}">
+          <option value="">— izaberi razlog —</option>
+          ${Object.entries(RAZLOG_LABEL).map(([v,l])=>`<option value="${v}" ${k.override?.razlog===v?'selected':''}>${l}</option>`).join('')}
+        </select>
+        <input type="text" id="ce-napomena-${idx}" placeholder="Napomena (opciono)..." value="${esc(k.override?.napomena||'')}">
+        <div class="ce-btns">
+          <button class="ce-primijeni" onclick="primijeniOdstupanje(${idx})">✓ Primijeni</button>
+          <button class="ce-otkazi" onclick="otvoriUredjivanjeCijene(${idx})">Zatvori</button>
+        </div>
+      </div>`:''}
+    </div>
+  `;}).join('');
+  // inicijalni preview za otvoreni editor
+  if(uredjivanjeIdx!=null) azurirajPreview(uredjivanjeIdx);
+}
+
+document.getElementById('kb-summary').onclick=()=>{
+  const bar=document.getElementById('kosarica-bar');
+  bar.classList.toggle('open');
+  document.getElementById('kb-chevron').textContent=bar.classList.contains('open')?'▼':'▲';
+};
+
+/* ── GENERISANJE OTPREMNICE ──────────────────────────────────
+   Ovo NE piše ništa u bazu. Samo traži od servera ŽIVU cijenu i
+   stanje za stavke iz košarice (cijena i količina se ne zaključavaju
+   ovdje — mogu se i dalje mijenjati sve dok kupac ne pritisne potvrdu). */
+function stavkeZaSlanje(){
+  return kosarica.map(k=>({
+    roba_id:k.roba_id, kolicina:k.kolicina,
+    override: k.override ? {
+      tip:k.override.tip, vrijednost:k.override.vrijednost,
+      razlog:k.override.razlog, napomena:k.override.napomena,
+    } : null,
+  }));
+}
+
+async function generisiOtpremnicu(){
+  if(!kosarica.length) return;
+  const btn=document.getElementById('btn-generisi');
+  btn.disabled=true; btn.textContent='Provjera cijena...';
+  try{
+    const r=await fetch(`${API}/api/otpremnice/pregled`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ stavke: stavkeZaSlanje() }),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri provjeri.');
+    prikaziPotvrduEkran(data);
+  }catch(e){
+    alert(e.message);
+  }finally{
+    btn.disabled=false; btn.textContent='Generiši otpremnicu';
+  }
+}
+
+function prikaziPotvrduEkran(pregled){
+  document.getElementById('ov-broj').textContent='Broj se dodjeljuje nakon potvrde';
+  document.getElementById('ov-iznos').textContent=fm(pregled.ukupan_iznos)+' KM';
+  document.getElementById('ov-stavke').innerHTML=pregled.stavke.map(s=>`
+    <div class="ov-stavka">
+      <span>${esc(s.naziv)} × ${s.kolicina}${s.odstupa?' ⚠':''}</span>
+      <span>${s.odstupa?`<s style="opacity:.5">${fm(s.kolicina*s.cijena_zadana)}</s> `:''}${fm(s.iznos)} KM</span>
+    </div>
+    ${s.odstupa?`<div style="font-size:10.5px;color:var(--red);margin:-4px 0 6px;">
+      Razlog: ${esc(RAZLOG_LABEL[s.razlog_odstupanja]||s.razlog_odstupanja)}${s.napomena_odstupanja?' — '+esc(s.napomena_odstupanja):''}
+    </div>`:''}
+  `).join('');
+  if(pregled.ima_odstupanje){
+    document.getElementById('ov-stavke').innerHTML += `
+      <div style="font-size:11.5px;color:var(--red);font-weight:700;text-align:center;padding-top:6px;border-top:1px solid #e8eaed;margin-top:4px;">
+        ⚠ Otpremnica ima odstupanje od zadanih cijena — razlika: ${fm(pregled.razlika)} KM (zadano: ${fm(pregled.ukupno_zadano)} KM)
+      </div>`;
+  }
+  document.getElementById('ov-kupac-ime').value='';
+  document.getElementById('ov-potvrda').classList.add('on');
+}
+
+function otkaziOtpremnicu(){
+  // Ništa nije upisano u bazu do sada — otkazivanje je samo zatvaranje ekrana,
+  // košarica ostaje netaknuta pa komercijalista može nastaviti izmjene.
+  document.getElementById('ov-potvrda').classList.remove('on');
+}
+
+/* ── POTVRDA KUPCA ────────────────────────────────────────────
+   JEDINI trenutak upisa u bazu. Server ponovo (uživo, u transakciji)
+   čita cijenu i stanje iz roba tabele — ovdje se sve konačno zaključava,
+   uključujući i eventualna odstupanja od zadane cijene. */
+async function potvrdiOtpremnicu(){
+  const ime=document.getElementById('ov-kupac-ime').value.trim();
+  if(!ime){alert('Unesite ime kupca.');return;}
+  const btn=document.getElementById('btn-potvrdi');
+  btn.disabled=true; btn.textContent='Obrada...';
+  try{
+    const r=await fetch(`${API}/api/otpremnice/potvrdi`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        kupac_naziv: document.getElementById('kupac-naziv').value.trim()||null,
+        kupac_adresa: document.getElementById('kupac-adresa').value.trim()||null,
+        kupac_telefon: document.getElementById('kupac-telefon').value.trim()||null,
+        kupac_email: document.getElementById('kupac-email').value.trim()||null,
+        stavke: stavkeZaSlanje(),
+        potvrdio_kupac_ime: ime,
+      }),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri potvrdi.');
+    document.getElementById('ov-potvrda').classList.remove('on');
+    document.getElementById('uspjeh-detalji').textContent=
+      `${data.broj} — ${fm(data.ukupan_iznos)} KM — potvrdio: ${data.potvrdio_kupac_ime}`
+      +(data.ima_odstupanje?' ⚠ (ima odstupanje od zadane cijene)':'');
+    document.getElementById('posalji-box').innerHTML=
+      renderPosaljiDugmad(data.javni_token, data.broj, data.kupac_telefon, data.kupac_email);
+    document.getElementById('ov-uspjeh').classList.add('on');
+  }catch(e){
+    alert(e.message);
+  }finally{
+    btn.disabled=false; btn.textContent='✓ KUPAC POTVRĐUJE';
+  }
+}
+
+// Gradi link ka javnom dokumentu (bez cijena) i dugmad za Viber/WhatsApp/Email.
+// Radi i kad kupac nema unesen telefon/email — link se onda samo kopira/dijeli generički.
+function linkDokumenta(token){
+  return `${location.origin}/otpremnica-dokument.html?token=${encodeURIComponent(token)}`;
+}
+
+function renderPosaljiDugmad(token, broj, telefon, email){
+  const link=linkDokumenta(token);
+  const poruka=encodeURIComponent(`Otpremnica ${broj} — JoPeX\n${link}`);
+  const tel=(telefon||'').replace(/[^0-9+]/g,'');
+  const waHref = tel ? `https://wa.me/${tel.replace(/^\+/,'')}?text=${poruka}` : `https://wa.me/?text=${poruka}`;
+  const viberHref = `viber://forward?text=${poruka}`;
+  const mailHref = `mailto:${email||''}?subject=${encodeURIComponent('Otpremnica '+broj+' — JoPeX')}&body=${poruka}`;
+  return `
+    <div class="posalji-lbl">Pošalji otpremnicu kupcu</div>
+    <div class="posalji-btns">
+      <a class="btn-posalji viber" href="${viberHref}"><span class="ic">📱</span>Viber</a>
+      <a class="btn-posalji whatsapp" href="${waHref}" target="_blank" rel="noopener"><span class="ic">💬</span>WhatsApp</a>
+      <a class="btn-posalji email" href="${mailHref}"><span class="ic">✉️</span>Email</a>
+    </div>
+    <div class="posalji-link">${esc(link)}</div>
+  `;
+}
+
+function novaProdaja(){
+  kosarica=[];
+  renderKosarica();
+  document.getElementById('kupac-naziv').value='';
+  document.getElementById('kupac-adresa').value='';
+  document.getElementById('kupac-telefon').value='';
+  document.getElementById('kupac-email').value='';
+  document.getElementById('kosarica-bar').classList.remove('open');
+  document.getElementById('kb-chevron').textContent='▲';
+  document.getElementById('ov-uspjeh').classList.remove('on');
+  document.getElementById('posalji-box').innerHTML='';
+  document.getElementById('search').value='';
+  trazi_init();
+}
+
+/* ── ADMIN: SVE OTPREMNICE ─────────────────────────────────── */
+async function loadOtpremnice(){
+  const cont=document.getElementById('otp-list');
+  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
+  const params=new URLSearchParams();
+  const od=document.getElementById('fil-od').value;
+  const do_=document.getElementById('fil-do').value;
+  if(od) params.set('od',od);
+  if(do_) params.set('do',do_);
+  if(document.getElementById('fil-odstupanje').checked) params.set('odstupanje','true');
+  try{
+    const r=await fetch(`${API}/api/otpremnice?${params}`);
+    const rows=await r.json();
+    if(!rows.length){cont.innerHTML='<div class="empty-msg">Nema otpremnica.</div>';return;}
+    const stLabel={kreirana:'Kreirana',potvrdjena:'Potvrđena',stornirana:'Stornirana'};
+    cont.innerHTML=rows.map(o=>`
+      <div class="otp-card ${o.ima_odstupanje?'ima-odstupanje':''}" onclick="prikaziDetaljeOtpremnice(${o.id})">
+        <div class="otp-top">
+          <span class="otp-broj">${esc(o.broj)}</span>
+          <div class="otp-badges">
+            ${o.ima_odstupanje?'<span class="badge-odstupanje">⚠ Odstupanje</span>':''}
+            <span class="otp-status st-${o.status}">${stLabel[o.status]||o.status}</span>
+          </div>
+        </div>
+        <div class="otp-meta">
+          ${fd(o.datum)} &middot; Komercijalista: ${esc(o.komercijalista_ime||'—')}<br>
+          Kupac: ${esc(o.kupac_naziv||'—')}${o.potvrdio_kupac_ime?' &middot; Potvrdio: '+esc(o.potvrdio_kupac_ime):''}
+        </div>
+        <div class="otp-iznos">${fm(o.ukupan_iznos)} KM</div>
+        <div class="otp-actions">
+          <button class="btn-otp-posalji" onclick="event.stopPropagation();togglePosaljiKartica(${o.id})">📤 Pošalji kupcu</button>
+        </div>
+        <div class="mini-posalji" id="mini-posalji-${o.id}" onclick="event.stopPropagation()"></div>
+        <div class="otp-detalji" id="otp-detalji-${o.id}"></div>
+      </div>
+    `).join('');
+    window.__otpDataById=Object.fromEntries(rows.map(o=>[o.id,o]));
+  }catch(e){
+    cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>';
+  }
+}
+
+function togglePosaljiKartica(id){
+  const el=document.getElementById('mini-posalji-'+id);
+  const bio=el.classList.contains('on');
+  document.querySelectorAll('.mini-posalji.on').forEach(d=>{d.classList.remove('on');d.innerHTML='';});
+  if(bio) return;
+  const o=window.__otpDataById?.[id];
+  if(!o||!o.javni_token){el.innerHTML='<div class="empty-msg">Nema dostupnog linka.</div>';el.classList.add('on');return;}
+  const link=linkDokumenta(o.javni_token);
+  const poruka=encodeURIComponent(`Otpremnica ${o.broj} — JoPeX\n${link}`);
+  const tel=(o.kupac_telefon||'').replace(/[^0-9+]/g,'');
+  const waHref = tel ? `https://wa.me/${tel.replace(/^\+/,'')}?text=${poruka}` : `https://wa.me/?text=${poruka}`;
+  el.innerHTML=`
+    <a href="viber://forward?text=${poruka}">📱 Viber</a>
+    <a href="${waHref}" target="_blank" rel="noopener">💬 WhatsApp</a>
+    <a href="mailto:${o.kupac_email||''}?subject=${encodeURIComponent('Otpremnica '+o.broj+' — JoPeX')}&body=${poruka}">✉️ Email</a>
+  `;
+  el.classList.add('on');
+}
+
+async function prikaziDetaljeOtpremnice(id){
+  const el=document.getElementById('otp-detalji-'+id);
+  if(!el) return;
+  const otvoren=el.classList.contains('on');
+  document.querySelectorAll('.otp-detalji.on').forEach(d=>d.classList.remove('on'));
+  if(otvoren) return; // bio otvoren, sad se samo zatvara
+  el.classList.add('on');
+  el.innerHTML='<div class="spinner">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/otpremnice/${id}`);
+    const otp=await r.json();
+    if(!r.ok) throw new Error(otp.error||'Greška.');
+    el.innerHTML=otp.stavke.map(s=>{
+      const odstupa=parseFloat(s.cijena)!==parseFloat(s.cijena_zadana);
+      return `
+      <div class="otp-stavka-red">
+        <div class="osr-top"><span>${esc(s.naziv)} × ${s.kolicina}</span><span>${fm(s.iznos)} KM</span></div>
+        ${odstupa?`<div class="osr-odst">⚠ Zadana cijena: ${fm(s.cijena_zadana)} KM → Prodano: ${fm(s.cijena)} KM
+          &middot; ${esc(RAZLOG_LABEL[s.razlog_odstupanja]||s.razlog_odstupanja||'')}${s.napomena_odstupanja?' — '+esc(s.napomena_odstupanja):''}</div>`:''}
+      </div>`;
+    }).join('');
+  }catch(e){
+    el.innerHTML='<div class="empty-msg">Greška pri učitavanju detalja.</div>';
+  }
+}
+
+/* ── XLSX IMPORT (pregled kolona → ručno mapiranje → uvoz) ──────────── */
+let uvozHeader=[], uvozUzorak=[];
+
+async function ucitajPregledUvoza(){
+  const fileInput=document.getElementById('imp-file');
+  const msg=document.getElementById('import-msg');
+  if(!fileInput.files.length){msg.style.color='red';msg.textContent='Izaberite fajl.';return;}
+  msg.style.color='#6b7a8d'; msg.textContent='Čitanje fajla...';
+  const fd_=new FormData();
+  fd_.append('file', fileInput.files[0]);
+  try{
+    const r=await fetch(`${API}/api/roba/import/pregled`,{method:'POST',body:fd_});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri čitanju fajla.');
+    uvozHeader=data.header; uvozUzorak=data.uzorak;
+    prikaziMapiranje(data.predlog, data.ukupno_redova);
+    msg.textContent='';
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+function prikaziMapiranje(predlog, ukupnoRedova){
+  // Tabela sa uzorkom
+  const tbl=document.getElementById('uzorak-tabela');
+  tbl.innerHTML='<tr>'+uvozHeader.map(h=>`<th>${esc(h)}</th>`).join('')+'</tr>'+
+    uvozUzorak.map(row=>'<tr>'+uvozHeader.map(h=>`<td>${esc(row[h])}</td>`).join('')+'</tr>').join('');
+
+  // Dropdown-ovi za mapiranje
+  const polja=['sifra','naziv','cijena','stanje','jed_mjera'];
+  polja.forEach(p=>{
+    const sel=document.getElementById('map-'+p);
+    const prazna=(p==='cijena'||p==='stanje'||p==='jed_mjera')?'<option value="">— ne uvozi —</option>':'<option value="">— izaberi kolonu —</option>';
+    sel.innerHTML=prazna+uvozHeader.map(h=>`<option value="${esc(h)}" ${predlog[p]===h?'selected':''}>${esc(h)}</option>`).join('');
+  });
+
+  document.getElementById('imp-korak1').style.display='none';
+  document.getElementById('imp-korak2').style.display='block';
+  document.getElementById('import-msg').textContent=`Pronađeno ${ukupnoRedova} redova u fajlu.`;
+  document.getElementById('import-msg').style.color='#6b7a8d';
+}
+
+function otkaziUvoz(){
+  document.getElementById('imp-korak1').style.display='block';
+  document.getElementById('imp-korak2').style.display='none';
+  document.getElementById('import-msg').textContent='';
+  document.getElementById('imp-file').value='';
+}
+
+async function potvrdiUvoz(){
+  const msg=document.getElementById('import-msg');
+  const mapping={
+    sifra:document.getElementById('map-sifra').value,
+    naziv:document.getElementById('map-naziv').value,
+    cijena:document.getElementById('map-cijena').value,
+    stanje:document.getElementById('map-stanje').value,
+    jed_mjera:document.getElementById('map-jed_mjera').value,
+  };
+  if(!mapping.sifra||!mapping.naziv){
+    msg.style.color='red'; msg.textContent='Morate izabrati kolonu za Šifru i Naziv.'; return;
+  }
+  const fileInput=document.getElementById('imp-file');
+  const fd_=new FormData();
+  fd_.append('file', fileInput.files[0]);
+  fd_.append('izvor', document.getElementById('imp-izvor').value);
+  fd_.append('mapping', JSON.stringify(mapping));
+  fd_.append('jed_mjera_default', document.getElementById('map-jm-default').value.trim()||'kom');
+
+  msg.style.color='#6b7a8d'; msg.textContent='Uvoz u toku...';
+  try{
+    const r=await fetch(`${API}/api/roba/import`,{method:'POST',body:fd_});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri uvozu.');
+    msg.style.color='var(--green)';
+    msg.textContent=`✓ Uneseno: ${data.uneseno}, ažurirano: ${data.azurirano}, preskočeno (bez šifre/naziva): ${data.preskoceno}.`;
+    otkaziUvoz();
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+/* ── AUTH / LOGOUT ──────────────────────────────────────────── */
+document.getElementById('logout').onclick=async e=>{
+  e.preventDefault();
+  await fetch(`${API}/api/auth/logout`,{method:'POST'});
+  location.href='login.html';
+};
+
+fetch(`${API}/api/auth/me`).then(r=>{
+  if(!r.ok){location.href='login.html';return;}
+  return r.json();
+}).then(u=>{
+  if(!u) return;
+  currentUser=u;
+  isAdmin=u.rola==='admin';
+  document.getElementById('who').textContent='👤 '+u.ime_prezime;
+  document.getElementById('tab-admin-btn').textContent = isAdmin ? '📋 Sve otpremnice' : '🧾 Moje otpremnice';
+  if(!isAdmin) document.getElementById('import-box').style.display='none';
+  renderKosarica();
+  trazi_init();
+}).catch(()=>location.href='login.html');
+</script>
+</body>
+</html>
