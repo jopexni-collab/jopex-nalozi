@@ -11,7 +11,8 @@ router.post('/login', async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT id, ime_prezime, email, lozinka, rola, aktivan,
-              moze_ugovarati, unos_naloga, izmjena_statusa, izmjena_naloga
+              moze_ugovarati, unos_naloga, izmjena_statusa, izmjena_naloga,
+              moze_prodavati
        FROM zaposleni WHERE LOWER(email) = LOWER($1)`,
       [String(email).trim()]
     );
@@ -32,6 +33,7 @@ router.post('/login', async (req, res) => {
       unos_naloga: user.unos_naloga,
       izmjena_statusa: user.izmjena_statusa,
       izmjena_naloga: user.izmjena_naloga,
+      moze_prodavati: user.moze_prodavati,
     };
     res.json({ ok: true, user: req.session.user });
   } catch (err) {

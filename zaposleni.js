@@ -3,7 +3,7 @@ const router = express.Router();
 const pool = require('./db');
 const bcrypt = require('bcryptjs');
 
-// GET /api/zaposleni/ugovaraci - lista onih koji mogu ugovarati (javna ruta za JoPeX)
+// GET /api/zaposleni/ugovaraci
 router.get('/ugovaraci', async (req, res) => {
   try {
     const r = await pool.query(
@@ -16,14 +16,15 @@ router.get('/ugovaraci', async (req, res) => {
   }
 });
 
-// GET /api/zaposleni - lista svih zaposlenih (samo admin)
+// GET /api/zaposleni - lista svih (samo admin)
 router.get('/', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Nema pristupa.' });
   try {
     const r = await pool.query(
       `SELECT id, ime_prezime, pozicija, rola, aktivan,
-              moze_ugovarati, unos_naloga, izmjena_statusa, izmjena_naloga, email
+              moze_ugovarati, unos_naloga, izmjena_statusa, izmjena_naloga,
+              moze_prodavati, email
        FROM zaposleni ORDER BY ime_prezime`
     );
     res.json(r.rows);
@@ -32,11 +33,11 @@ router.get('/', async (req, res) => {
   }
 });
 
-// PATCH /api/zaposleni/:id - izmjena prava (samo admin)
+// PATCH /api/zaposleni/:id
 router.patch('/:id', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Nema pristupa.' });
-  const ALLOWED = ['rola','aktivan','moze_ugovarati','unos_naloga','izmjena_statusa','izmjena_naloga','email'];
+  const ALLOWED = ['rola','aktivan','moze_ugovarati','unos_naloga','izmjena_statusa','izmjena_naloga','moze_prodavati','email'];
   const sets=[], vals=[];
   let i=1;
   for(const key of ALLOWED){
@@ -46,8 +47,7 @@ router.patch('/:id', async (req, res) => {
   vals.push(req.params.id);
   try {
     const r = await pool.query(
-      `UPDATE zaposleni SET ${sets.join(',')} WHERE id=$${i} RETURNING id`,
-      vals
+      `UPDATE zaposleni SET ${sets.join(',')} WHERE id=$${i} RETURNING id`, vals
     );
     if(!r.rows.length) return res.status(404).json({ error: 'Nije pronađen.' });
     res.json({ ok: true });
@@ -56,7 +56,7 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
-// POST /api/zaposleni/:id/lozinka - postavljanje lozinke (samo admin)
+// POST /api/zaposleni/:id/lozinka
 router.post('/:id/lozinka', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Nema pristupa.' });
