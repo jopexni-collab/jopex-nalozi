@@ -883,7 +883,15 @@ fetch(`${API}/api/auth/me`).then(r=>{
 }).then(u=>{
   if(!u) return;
   currentUser=u;
+  }).then(u=>{
+  if(!u) return;
+  currentUser=u;
   isAdmin=u.rola==='admin';
+  if(!isAdmin && !u.moze_prodavati){
+    alert('Nemate dozvolu za pristup maloprodaji. Obratite se administratoru.');
+    location.href='home.html';
+    return;
+  }
   document.getElementById('who').textContent='👤 '+u.ime_prezime;
   document.getElementById('tab-admin-btn').textContent = isAdmin ? '📋 Sve otpremnice' : '🧾 Moje otpremnice';
   if(!isAdmin) document.getElementById('import-box').style.display='none';
