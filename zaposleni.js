@@ -71,5 +71,5 @@ router.post('/:id/lozinka', async (req, res) => {
     res.status(500).json({ error: 'Greška.' });
   }
 });
-
+// novi fajl
 module.exports = router;
