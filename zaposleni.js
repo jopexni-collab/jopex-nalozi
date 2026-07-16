@@ -37,7 +37,7 @@ router.get('/', async (req, res) => {
 router.patch('/:id', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Nema pristupa.' });
-  const ALLOWED = ['rola','aktivan','moze_ugovarati','unos_naloga','izmjena_statusa','izmjena_naloga','moze_prodavati','email'];
+ const ALLOWED = ['rola','aktivan','moze_ugovarati','unos_naloga','izmjena_statusa','izmjena_naloga','moze_prodavati','email'];
   const sets=[], vals=[];
   let i=1;
   for(const key of ALLOWED){
