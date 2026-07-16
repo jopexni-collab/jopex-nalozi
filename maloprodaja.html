@@ -1,115 +1,1338 @@
--- ═══════════════════════════════════════════════════════════════
--- JoPeX — Maloprodaja: migracija baze
--- Pokreni jednom na Railway PostgreSQL bazi (psql ili preko servera).
--- ═══════════════════════════════════════════════════════════════
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Maloprodaja – JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f0f2f5;--border:#d0d7de;--red:#c0392b;--green:#1f8a4c;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);font-size:14px;color:#222;
+  -webkit-text-size-adjust:100%;overscroll-behavior-y:contain;}
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto; -- za generisanje javni_token (gen_random_bytes)
+/* ── HEADER ───────────────────────────────────────────────── */
+header{background:var(--blue);color:#fff;padding:10px 14px;display:flex;align-items:center;
+  justify-content:space-between;position:sticky;top:0;z-index:50;box-shadow:0 1px 4px rgba(0,0,0,.15);}
+header h1{font-size:16px;font-weight:700;}
+header nav{display:flex;gap:6px;align-items:center;}
+header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgba(255,255,255,.4);
+  padding:5px 9px;border-radius:5px;min-height:30px;display:flex;align-items:center;}
+#who{font-size:10.5px;opacity:.8;display:block;margin-top:1px;}
+.hdr-left{display:flex;flex-direction:column;}
 
+/* ── TABS ─────────────────────────────────────────────────── */
+.tabs{display:flex;background:#fff;border-bottom:1px solid var(--border);position:sticky;top:53px;z-index:40;}
+.tab-btn{flex:1;padding:12px 6px;text-align:center;font-size:13px;font-weight:700;color:#6b7a8d;
+  background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;min-height:44px;}
+.tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
 
--- ── ROBA (šifrarnik / stanje) ─────────────────────────────────
-CREATE TABLE IF NOT EXISTS roba (
-  id          SERIAL PRIMARY KEY,
-  sifra       VARCHAR(50) NOT NULL UNIQUE,
-  naziv       TEXT NOT NULL,
-  jed_mjera   VARCHAR(10) DEFAULT 'kom',
-  cijena      NUMERIC(12,2) NOT NULL DEFAULT 0,
-  stanje      NUMERIC(14,3) NOT NULL DEFAULT 0,
-  aktivan     BOOLEAN NOT NULL DEFAULT true,
-  izvor_uvoza VARCHAR(20),               -- 'bluesoft' | 'interni' | ručno
-  azurirano   TIMESTAMP NOT NULL DEFAULT now(),
-  kreirano    TIMESTAMP NOT NULL DEFAULT now()
-);
+.view{display:none;padding:12px;padding-bottom:100px;}
+.view.active{display:block;}
 
-CREATE INDEX IF NOT EXISTS idx_roba_naziv ON roba USING gin (to_tsvector('simple', naziv));
-CREATE INDEX IF NOT EXISTS idx_roba_sifra ON roba (sifra);
+/* ── PRETRAGA ─────────────────────────────────────────────── */
+.search-box{position:relative;margin-bottom:10px;}
+.search-box input{width:100%;font:inherit;font-size:16px;padding:12px 14px;border:1.5px solid var(--border);
+  border-radius:10px;background:#fff;min-height:48px;}
+.search-box input:focus{outline:none;border-color:var(--blue);}
+.search-hint{font-size:11px;color:#8b96a5;margin:4px 2px 10px;}
 
--- ── OTPREMNICE (zaglavlje) ────────────────────────────────────
-CREATE TABLE IF NOT EXISTS otpremnice (
-  id                    SERIAL PRIMARY KEY,
-  broj                  VARCHAR(30) NOT NULL UNIQUE,   -- npr. OTP-2026-000123
-  datum                 TIMESTAMP NOT NULL DEFAULT now(),
-  komercijalista_id     INTEGER REFERENCES zaposleni(id),
-  komercijalista_ime    VARCHAR(120),                  -- snapshot imena
-  kupac_naziv           TEXT,
-  kupac_adresa          TEXT,
-  kupac_telefon         VARCHAR(30),
-  kupac_email           VARCHAR(120),
-  javni_token           VARCHAR(40) UNIQUE,           -- za javni link ka dokumentu (bez cijena) za kupca
-  ukupan_iznos          NUMERIC(12,2) NOT NULL DEFAULT 0,
-  status                VARCHAR(20) NOT NULL DEFAULT 'kreirana', -- kreirana | potvrdjena | stornirana
-  ima_odstupanje        BOOLEAN NOT NULL DEFAULT false, -- true ako bar jedna stavka odstupa od zadane cijene
-  potvrdio_kupac_ime    TEXT,
-  potvrdjeno_vrijeme    TIMESTAMP,
-  gotovina_id           INTEGER REFERENCES gotovina(id),
-  kreirano              TIMESTAMP NOT NULL DEFAULT now()
-);
+.rez-list{display:flex;flex-direction:column;gap:8px;}
+.rez-item{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;min-height:56px;}
+.rez-item:active{background:#eef4fc;}
+.rez-info{flex:1;min-width:0;}
+.rez-naziv{font-weight:700;font-size:13.5px;color:#1a2733;}
+.rez-sifra{font-size:11px;color:#8b96a5;margin-top:1px;}
+.rez-right{text-align:right;flex-shrink:0;}
+.rez-cijena{font-weight:700;color:var(--dark);font-size:14px;}
+.rez-stanje{font-size:10.5px;margin-top:2px;}
+.chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;}
+.chip-ok{background:#e6f4ea;color:var(--green);}
+.chip-nisko{background:#fff3e0;color:#e67e22;}
+.chip-nema{background:#fce8e6;color:var(--red);}
+.empty-msg{text-align:center;color:#9aa5b1;font-size:12.5px;padding:24px 10px;}
 
-CREATE INDEX IF NOT EXISTS idx_otpremnice_status ON otpremnice (status);
-CREATE INDEX IF NOT EXISTS idx_otpremnice_komercijalista ON otpremnice (komercijalista_id);
-CREATE INDEX IF NOT EXISTS idx_otpremnice_datum ON otpremnice (datum);
-CREATE INDEX IF NOT EXISTS idx_otpremnice_odstupanje ON otpremnice (ima_odstupanje);
+/* ── KOŠARICA (donji sticky panel) ───────────────────────────── */
+.kosarica-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--border);
+  box-shadow:0 -2px 10px rgba(0,0,0,.08);z-index:60;transition:max-height .25s ease;overflow:hidden;}
+.kb-summary{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;
+  min-height:56px;}
+.kb-summary-left{display:flex;align-items:center;gap:8px;}
+.kb-badge{background:var(--blue);color:#fff;font-weight:700;font-size:13px;border-radius:50%;
+  width:26px;height:26px;display:flex;align-items:center;justify-content:center;}
+.kb-total{font-weight:700;font-size:16px;color:var(--dark);}
+.kb-chevron{font-size:12px;color:#8b96a5;}
+.kb-body{max-height:0;overflow:auto;transition:max-height .25s ease;padding:0 14px;}
+.kosarica-bar.open .kb-body{max-height:50vh;padding:6px 14px 14px;}
 
--- ── OTPREMNICA_STAVKE (redovi, cijena zaključana tek u trenutku potvrde) ──
-CREATE TABLE IF NOT EXISTS otpremnica_stavke (
-  id                    SERIAL PRIMARY KEY,
-  otpremnica_id         INTEGER NOT NULL REFERENCES otpremnice(id) ON DELETE CASCADE,
-  roba_id               INTEGER REFERENCES roba(id),
-  sifra                 VARCHAR(50) NOT NULL,     -- snapshot
-  naziv                 TEXT NOT NULL,            -- snapshot
-  jed_mjera             VARCHAR(10),
-  kolicina              NUMERIC(14,3) NOT NULL,
-  cijena_zadana         NUMERIC(12,2) NOT NULL,   -- cijena iz šifrarnika u trenutku potvrde (zvanična)
-  cijena                NUMERIC(12,2) NOT NULL,   -- stvarna prodajna cijena (može odstupati od cijena_zadana)
-  iznos                 NUMERIC(12,2) NOT NULL,   -- kolicina * cijena
-  razlog_odstupanja     VARCHAR(30),              -- 'kvalitet' | 'kolicina' | 'lom' | 'drugo' | NULL
-  napomena_odstupanja   TEXT
-);
+.kos-item{padding:9px 0;border-bottom:1px solid #eef0f3;}
+.kos-item-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.kos-info{flex:1;min-width:0;}
+.kos-naziv{font-size:12.5px;font-weight:600;color:#1a2733;}
+.kos-cijena{font-size:11px;color:#8b96a5;}
+.kos-cijena.izmijenjena{color:var(--red);font-weight:700;}
+.kos-qty{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.qty-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:#f7f8fa;
+  font-size:16px;font-weight:700;color:var(--blue);cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.qty-btn:active{background:#e8eef7;}
+.qty-val{min-width:34px;text-align:center;font-weight:700;font-size:13px;}
+.kos-iznos{font-weight:700;font-size:13px;color:var(--dark);min-width:60px;text-align:right;}
+.kos-del{background:none;border:none;color:var(--red);font-size:16px;cursor:pointer;padding:4px 6px;}
 
-CREATE INDEX IF NOT EXISTS idx_stavke_otpremnica ON otpremnica_stavke (otpremnica_id);
+.kos-item-bottom{display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap;}
+.btn-cijena{font:inherit;font-size:10.5px;font-weight:600;color:var(--blue);background:#eef4fc;
+  border:none;border-radius:6px;padding:4px 9px;cursor:pointer;min-height:26px;}
+.chip-odstupanje{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;
+  color:var(--red);background:#fce8e6;border-radius:8px;padding:2px 8px;}
+.chip-odstupanje button{background:none;border:none;color:var(--red);font-size:11px;cursor:pointer;
+  padding:0 0 0 4px;font-weight:700;}
 
--- Automatski generisan broj otpremnice: OTP-YYYY-000001
-CREATE SEQUENCE IF NOT EXISTS otpremnica_broj_seq;
+.cijena-edit{background:#f7f8fa;border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:6px;}
+.ce-row{display:flex;gap:6px;margin-bottom:7px;}
+.ce-tip-btn{flex:1;font:inherit;font-size:11px;font-weight:600;padding:7px;border-radius:6px;
+  border:1px solid var(--border);background:#fff;color:#6b7a8d;cursor:pointer;}
+.ce-tip-btn.active{background:var(--blue);color:#fff;border-color:var(--blue);}
+.cijena-edit input[type=number]{width:100%;font:inherit;font-size:15px;padding:9px 10px;
+  border:1px solid var(--border);border-radius:6px;margin-bottom:7px;text-align:center;}
+.cijena-edit select{width:100%;font:inherit;font-size:12.5px;padding:8px;border:1px solid var(--border);
+  border-radius:6px;margin-bottom:7px;}
+.cijena-edit input[type=text]{width:100%;font:inherit;font-size:12px;padding:8px;
+  border:1px solid var(--border);border-radius:6px;margin-bottom:7px;}
+.ce-btns{display:flex;gap:6px;}
+.ce-btns button{flex:1;font:inherit;font-size:12px;font-weight:700;padding:9px;border-radius:6px;
+  border:none;cursor:pointer;min-height:38px;}
+.ce-primijeni{background:var(--green);color:#fff;}
+.ce-otkazi{background:#eee;color:#444;}
+.ce-preview{font-size:11px;color:#6b7a8d;text-align:center;margin-bottom:7px;}
 
--- ── NADOGRADNJA za baze gdje je STARA verzija migracije već pokrenuta ──
--- (bezbjedno se pokreće više puta; ako kolone već postoje, ništa se ne dešava)
-ALTER TABLE otpremnice        ADD COLUMN IF NOT EXISTS ima_odstupanje BOOLEAN NOT NULL DEFAULT false;
-ALTER TABLE otpremnica_stavke ADD COLUMN IF NOT EXISTS cijena_zadana NUMERIC(12,2);
-ALTER TABLE otpremnica_stavke ADD COLUMN IF NOT EXISTS razlog_odstupanja VARCHAR(30);
-ALTER TABLE otpremnica_stavke ADD COLUMN IF NOT EXISTS napomena_odstupanja TEXT;
--- Ako su stare stavke već postojale bez cijena_zadana, popuni ih trenutnom cijenom (nema odstupanja unazad)
-UPDATE otpremnica_stavke SET cijena_zadana = cijena WHERE cijena_zadana IS NULL;
-ALTER TABLE otpremnica_stavke ALTER COLUMN cijena_zadana SET NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_otpremnice_odstupanje ON otpremnice (ima_odstupanje);
+.kupac-fld{margin:10px 0;}
+.kupac-fld label{font-size:11px;font-weight:600;color:#6b7a8d;display:block;margin-bottom:4px;}
+.kupac-fld input{width:100%;font:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--border);
+  border-radius:8px;min-height:44px;}
 
-ALTER TABLE otpremnice ADD COLUMN IF NOT EXISTS kupac_adresa TEXT;
-ALTER TABLE otpremnice ADD COLUMN IF NOT EXISTS kupac_telefon VARCHAR(30);
-ALTER TABLE otpremnice ADD COLUMN IF NOT EXISTS kupac_email VARCHAR(120);
-ALTER TABLE otpremnice ADD COLUMN IF NOT EXISTS javni_token VARCHAR(40);
--- Popuni token za postojeće (već potvrđene) otpremnice koje ga nemaju, da i njih bude moguće podijeliti
-UPDATE otpremnice SET javni_token = encode(gen_random_bytes(20), 'hex') WHERE javni_token IS NULL;
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname='otpremnice_javni_token_key') THEN
-    ALTER TABLE otpremnice ADD CONSTRAINT otpremnice_javni_token_key UNIQUE (javni_token);
-  END IF;
-END $$;
+.btn-generisi{width:100%;background:var(--green);color:#fff;border:none;border-radius:10px;
+  font:inherit;font-size:15px;font-weight:700;padding:14px;min-height:52px;cursor:pointer;margin-top:6px;}
+.btn-generisi:disabled{background:#a9b4bf;}
+.btn-generisi:active{background:#176e3d;}
 
--- ── KUPCI (baza kupaca za pretragu/ponovnu upotrebu) ────────────────
-CREATE TABLE IF NOT EXISTS kupci (
-  id        SERIAL PRIMARY KEY,
-  naziv     TEXT NOT NULL,
-  telefon   VARCHAR(30),
-  grad      VARCHAR(100),
-  adresa    TEXT,
-  email     VARCHAR(120),
-  kreiran   TIMESTAMP NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_kupci_naziv ON kupci USING gin (to_tsvector('simple', naziv));
-CREATE INDEX IF NOT EXISTS idx_kupci_telefon ON kupci (telefon);
+/* ── OVERLAY: POTVRDA KUPCA ──────────────────────────────────── */
+.overlay{position:fixed;inset:0;background:#fff;z-index:100;display:none;flex-direction:column;}
+.overlay.on{display:flex;}
+.ov-header{background:var(--blue);color:#fff;padding:14px;text-align:center;font-weight:700;font-size:15px;}
+.ov-body{flex:1;overflow:auto;padding:20px;display:flex;flex-direction:column;align-items:center;}
+.ov-broj{font-size:13px;color:#8b96a5;margin-bottom:6px;}
+.ov-iznos-lbl{font-size:13px;color:#6b7a8d;margin-top:10px;}
+.ov-iznos{font-size:42px;font-weight:800;color:var(--dark);margin:4px 0 18px;}
+.ov-stavke{width:100%;max-width:420px;background:#f7f8fa;border-radius:10px;padding:10px 14px;margin-bottom:20px;}
+.ov-stavka{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0;border-bottom:1px solid #e8eaed;}
+.ov-stavka:last-child{border-bottom:none;}
+.ov-kupac-fld{width:100%;max-width:420px;margin-top:auto;}
+.ov-kupac-fld label{font-size:13px;font-weight:600;color:#1a2733;display:block;margin-bottom:6px;}
+.ov-kupac-fld input{width:100%;font:inherit;font-size:18px;padding:14px;border:2px solid var(--border);
+  border-radius:10px;min-height:52px;text-align:center;}
+.ov-kupac-fld input:focus{outline:none;border-color:var(--blue);}
+.ov-footer{padding:16px;border-top:1px solid var(--border);display:flex;gap:10px;}
+.btn-otkazi{flex:1;background:#eee;color:#444;border:none;border-radius:10px;font:inherit;font-size:14px;
+  font-weight:700;padding:14px;min-height:52px;cursor:pointer;}
+.btn-potvrdi{flex:2;background:var(--green);color:#fff;border:none;border-radius:10px;font:inherit;
+  font-size:17px;font-weight:800;padding:14px;min-height:56px;cursor:pointer;}
+.btn-potvrdi:disabled{background:#a9b4bf;}
+.btn-potvrdi:active{background:#176e3d;}
 
-ALTER TABLE otpremnice ADD COLUMN IF NOT EXISTS kupac_id INTEGER REFERENCES kupci(id);
-ALTER TABLE otpremnice ADD COLUMN IF NOT EXISTS kupac_grad VARCHAR(100);
+/* ── USPJEH ───────────────────────────────────────────────── */
+.ov-success{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;}
+.ov-success .ico{font-size:64px;margin-bottom:14px;}
+.ov-success h2{color:var(--green);font-size:20px;margin-bottom:8px;}
+.ov-success p{color:#6b7a8d;font-size:13px;text-align:center;margin-bottom:16px;}
+.btn-nova{background:var(--blue);color:#fff;border:none;border-radius:10px;font:inherit;font-size:15px;
+  font-weight:700;padding:14px 28px;min-height:52px;cursor:pointer;}
 
--- ── Dimenzije stavke (kad se količina računa preko dužina×visina[×debljina]) ──
-ALTER TABLE otpremnica_stavke ADD COLUMN IF NOT EXISTS duzina_cm NUMERIC(10,2);
-ALTER TABLE otpremnica_stavke ADD COLUMN IF NOT EXISTS visina_cm NUMERIC(10,2);
-ALTER TABLE otpremnica_stavke ADD COLUMN IF NOT EXISTS debljina_cm NUMERIC(10,2);
+.posalji-box{width:100%;max-width:340px;margin-bottom:20px;}
+.posalji-lbl{font-size:11.5px;font-weight:700;color:#6b7a8d;text-align:center;margin-bottom:8px;
+  text-transform:uppercase;letter-spacing:.4px;}
+.posalji-btns{display:flex;gap:8px;}
+.btn-posalji{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font:inherit;
+  font-size:11px;font-weight:700;padding:10px 4px;border-radius:10px;border:1px solid var(--border);
+  background:#fff;color:#1a2733;cursor:pointer;min-height:56px;text-decoration:none;}
+.btn-posalji .ic{font-size:20px;}
+.btn-posalji.viber{color:#7360f2;}
+.btn-posalji.whatsapp{color:#25d366;}
+.btn-posalji.email{color:var(--blue);}
+.posalji-link{font-size:10.5px;color:#8b96a5;text-align:center;margin-top:8px;word-break:break-all;}
+
+/* ── ADMIN: SVE OTPREMNICE ───────────────────────────────────── */
+.filt-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;}
+.filt-row select,.filt-row input[type=date]{font:inherit;font-size:12.5px;padding:8px 10px;border:1px solid var(--border);
+  border-radius:8px;min-height:40px;flex:1;min-width:110px;}
+.filt-row label.chk{font-size:11.5px;color:#6b7a8d;display:flex;align-items:center;gap:5px;white-space:nowrap;}
+.otp-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;}
+.otp-card.ima-odstupanje{border-color:#f3c7c2;}
+.otp-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:6px;}
+.otp-broj{font-weight:700;font-size:13px;color:var(--dark);}
+.otp-badges{display:flex;gap:5px;flex-shrink:0;}
+.otp-status{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;white-space:nowrap;}
+.st-kreirana{background:#fff3e0;color:#e67e22;}
+.st-potvrdjena{background:#e6f4ea;color:var(--green);}
+.st-stornirana{background:#fce8e6;color:var(--red);}
+.badge-odstupanje{background:#fce8e6;color:var(--red);font-size:10px;font-weight:700;
+  padding:2px 8px;border-radius:8px;white-space:nowrap;}
+.otp-meta{font-size:11.5px;color:#6b7a8d;line-height:1.5;}
+.otp-iznos{font-weight:700;color:var(--dark);font-size:14px;margin-top:4px;}
+.otp-actions{display:flex;gap:6px;margin-top:8px;}
+.dnevni-total{background:var(--dark);color:#fff;border-radius:10px;padding:14px;text-align:center;
+  font-size:16px;font-weight:700;margin-bottom:12px;}
+.dnevni-total .cnt{font-size:11.5px;font-weight:400;opacity:.8;display:block;margin-top:2px;}
+.btn-otp-posalji{flex:1;font:inherit;font-size:11px;font-weight:700;padding:8px;border-radius:6px;
+  border:1px solid var(--border);background:#f7f8fa;color:var(--blue);cursor:pointer;min-height:36px;}
+.mini-posalji{display:none;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);}
+.mini-posalji.on{display:flex;}
+.mini-posalji a,.mini-posalji button{flex:1;text-align:center;font:inherit;font-size:10.5px;font-weight:700;
+  padding:7px 2px;border-radius:6px;border:1px solid var(--border);background:#fff;text-decoration:none;
+  cursor:pointer;min-height:32px;}
+.otp-detalji{display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);}
+.otp-detalji.on{display:block;}
+.otp-stavka-red{font-size:11.5px;padding:5px 0;border-bottom:1px solid #f0f2f5;}
+.otp-stavka-red .osr-top{display:flex;justify-content:space-between;}
+.otp-stavka-red .osr-odst{font-size:10.5px;color:var(--red);margin-top:2px;}
+
+.import-box{background:#fff;border:1px dashed var(--border);border-radius:10px;padding:14px;margin-bottom:14px;}
+.import-box h3{font-size:13px;color:var(--dark);margin-bottom:8px;}
+.import-box select,.import-box input[type=file],.import-box input[type=text]{font:inherit;font-size:12.5px;padding:8px;
+  border:1px solid var(--border);border-radius:6px;margin-bottom:8px;width:100%;}
+.btn-import{width:100%;background:var(--blue);color:#fff;border:none;border-radius:8px;font:inherit;
+  font-size:13px;font-weight:700;padding:10px;min-height:44px;cursor:pointer;}
+.btn-import.sec{background:#eee;color:#444;}
+#import-msg{font-size:12px;margin-top:8px;}
+
+.map-row{display:grid;grid-template-columns:120px 1fr;gap:8px;align-items:center;margin-bottom:7px;}
+.map-row label{font-size:12px;font-weight:600;color:#1a2733;}
+.map-row label .req{color:var(--red);}
+.map-row select{margin-bottom:0;}
+.uzorak-box{background:#f7f8fa;border-radius:8px;padding:8px 10px;margin:10px 0;overflow-x:auto;}
+.uzorak-box table{border-collapse:collapse;font-size:10.5px;white-space:nowrap;}
+.uzorak-box th,.uzorak-box td{padding:3px 8px;border-bottom:1px solid #e8eaed;text-align:left;}
+.uzorak-box th{color:#6b7a8d;font-weight:700;}
+.uzorak-hint{font-size:10.5px;color:#8b96a5;margin-bottom:6px;}
+
+.spinner{text-align:center;padding:20px;color:#9aa5b1;font-size:12.5px;}
+
+/* ── KUPAC (picker/banner) ───────────────────────────────────── */
+.kupac-rez-item{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+  margin-bottom:8px;cursor:pointer;min-height:48px;}
+.kupac-rez-item:active{background:#eef4fc;}
+.kupac-rez-naziv{font-weight:700;font-size:13.5px;color:#1a2733;}
+.kupac-rez-meta{font-size:11px;color:#8b96a5;margin-top:1px;}
+.btn-novi-kupac{width:100%;background:#eef4fc;color:var(--blue);border:1px dashed var(--blue);
+  border-radius:10px;font:inherit;font-size:13px;font-weight:700;padding:12px;cursor:pointer;
+  min-height:44px;margin-top:4px;}
+.novi-kupac-forma{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:10px;}
+.novi-kupac-forma .kupac-fld{margin:0 0 10px;}
+.nk-btns{display:flex;gap:8px;}
+.nk-btns button{flex:1;font:inherit;font-size:13px;font-weight:700;padding:11px;border-radius:8px;
+  border:none;cursor:pointer;min-height:44px;}
+.nk-sacuvaj{background:var(--green);color:#fff;}
+.nk-otkazi{background:#eee;color:#444;}
+
+.kupac-banner{background:#fff;border:1px solid var(--border);border-left:4px solid var(--blue);
+  border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;
+  justify-content:space-between;gap:10px;}
+.kb-naziv{font-weight:700;font-size:14px;color:#1a2733;}
+.kb-meta{font-size:11.5px;color:#8b96a5;margin-top:2px;}
+.btn-promijeni-kupca{flex-shrink:0;font:inherit;font-size:11px;font-weight:700;color:var(--blue);
+  background:#eef4fc;border:none;border-radius:6px;padding:8px 12px;cursor:pointer;min-height:36px;}
+
+/* ── OVERLAY: DODAJ STAVKU (jedinica mjere + kalkulator dimenzija) ──── */
+.das-artikal-naziv{font-weight:700;font-size:15px;color:#1a2733;margin-bottom:2px;}
+.das-artikal-sifra{font-size:11px;color:#8b96a5;margin-bottom:16px;}
+.das-jedinica-info{background:#eef4fc;color:var(--dark);font-weight:700;font-size:13px;
+  text-align:center;border-radius:8px;padding:9px;margin-bottom:14px;width:100%;max-width:420px;}
+.das-blok{width:100%;max-width:420px;}
+.das-blok label{font-size:12px;font-weight:600;color:#1a2733;display:block;margin:10px 0 5px;}
+.das-blok input[type=number]{width:100%;font:inherit;font-size:16px;padding:11px 12px;
+  border:1.5px solid var(--border);border-radius:8px;text-align:center;}
+.das-blok input[type=number]:focus{outline:none;border-color:var(--blue);}
+.das-preview{font-size:13px;font-weight:700;color:var(--dark);text-align:center;margin-top:8px;
+  background:#eef4fc;border-radius:8px;padding:8px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr-left">
+    <h1>🛒 Maloprodaja</h1>
+    <span id="who"></span>
+  </div>
+  <nav>
+    <a href="home.html">← Početna</a>
+    <a href="#" id="btn-zakljuci-dan">🔒 Zaključi dan</a>
+    <a href="#" id="logout">Izlaz</a>
+  </nav>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="prodaja">🛒 Prodaja</button>
+  <button class="tab-btn" data-tab="admin" id="tab-admin-btn">🧾 Otpremnice</button>
+</div>
+
+<!-- ═══ TAB: PRODAJA ═══ -->
+<div class="view active" id="view-prodaja">
+
+  <!-- KORAK 1: KUPAC (mora se izabrati/kreirati prije pretrage robe) -->
+  <div id="kupac-picker">
+    <div class="search-box">
+      <input type="text" id="kupac-search" placeholder="🔍 Pretraga kupca (ime ili telefon)..." autocomplete="off">
+    </div>
+    <div id="kupac-rez-list"></div>
+    <button class="btn-novi-kupac" onclick="prikaziNovogKupca()">+ Kupac nije pronađen — unesi novog</button>
+    <div class="novi-kupac-forma" id="novi-kupac-forma" style="display:none">
+      <div class="kupac-fld"><label>Ime / naziv kupca *</label><input type="text" id="nk-naziv" placeholder="Ime i prezime ili firma..."></div>
+      <div class="kupac-fld"><label>Telefon</label><input type="tel" id="nk-telefon" placeholder="+387 6X XXX XXX"></div>
+      <div class="kupac-fld"><label>Grad</label><input type="text" id="nk-grad" placeholder="npr. Banja Luka"></div>
+      <div class="kupac-fld"><label>Adresa</label><input type="text" id="nk-adresa" placeholder="Ulica, broj..."></div>
+      <div class="nk-btns">
+        <button class="nk-otkazi" onclick="otkaziNovogKupca()">Otkaži</button>
+        <button class="nk-sacuvaj" onclick="sacuvajNovogKupca()">✓ Sačuvaj i nastavi</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- IZABRANI KUPAC -->
+  <div class="kupac-banner" id="kupac-banner" style="display:none">
+    <div>
+      <div class="kb-naziv" id="kb-naziv"></div>
+      <div class="kb-meta" id="kb-meta"></div>
+    </div>
+    <button class="btn-promijeni-kupca" onclick="promijeniKupca()">✕ Promijeni</button>
+  </div>
+
+  <!-- KORAK 2: PRETRAGA ROBE (vidljivo tek nakon izbora kupca) -->
+  <div id="prodaja-roba" style="display:none">
+    <div class="search-box">
+      <input type="text" id="search" placeholder="🔍 Pretraga po šifri ili nazivu..." autocomplete="off">
+    </div>
+    <div class="search-hint">Ukucaj šifru ili naziv artikla — dodirni rezultat da dodaš stavku.</div>
+    <div class="rez-list" id="rez-list"></div>
+  </div>
+</div>
+
+<!-- ═══ TAB: ADMIN OTPREMNICE ═══ -->
+<div class="view" id="view-admin">
+  <div class="import-box" id="import-box">
+    <h3>📥 Uvoz robe iz XLSX</h3>
+
+    <!-- Korak 1: izbor fajla -->
+    <div id="imp-korak1">
+      <select id="imp-izvor">
+        <option value="interni" selected>Interni cjenovnik</option>
+        <option value="bluesoft">Bluesoft izvoz</option>
+      </select>
+      <input type="file" id="imp-file" accept=".xlsx,.xls">
+      <button class="btn-import" onclick="ucitajPregledUvoza()">Učitaj fajl i prikaži kolone</button>
+    </div>
+
+    <!-- Korak 2: potvrda mapiranja kolona (prikazuje se nakon učitavanja) -->
+    <div id="imp-korak2" style="display:none">
+      <div class="uzorak-hint">Zaglavlja pronađena u fajlu i prvih par redova — provjeri mapiranje:</div>
+      <div class="uzorak-box"><table id="uzorak-tabela"></table></div>
+
+      <div class="map-row"><label>Šifra <span class="req">*</span></label><select id="map-sifra"></select></div>
+      <div class="map-row"><label>Naziv <span class="req">*</span></label><select id="map-naziv"></select></div>
+      <div class="map-row"><label>Cijena</label><select id="map-cijena"></select></div>
+      <div class="map-row"><label>Stanje</label><select id="map-stanje"></select></div>
+      <div class="map-row"><label>Jed. mjere</label><select id="map-jed_mjera"></select></div>
+      <div class="map-row"><label>Ako nema JM kolone</label><input type="text" id="map-jm-default" value="m2" placeholder="npr. m2, kom"></div>
+
+      <button class="btn-import" onclick="potvrdiUvoz()">✓ Uvezi sa ovim mapiranjem</button>
+      <button class="btn-import sec" onclick="otkaziUvoz()">← Nazad / drugi fajl</button>
+    </div>
+
+    <div id="import-msg"></div>
+  </div>
+
+  <div class="import-box" id="blic-izbor-box">
+    <h3>📏 Blic izbor jedinice mjere</h3>
+    <div class="uzorak-hint">Brzo grupno podešavanje — pretraži artikle, označi ih, pa jednim dodirom postavi jedinicu za sve izabrane. Bitno je da jedinica ovdje odgovara jedinici za koju važi cijena artikla.</div>
+    <input type="text" id="blic-search" placeholder="Pretraga po šifri ili nazivu...">
+    <button class="btn-import sec" onclick="blicTrazi()">Pretraži</button>
+    <div id="blic-lista"></div>
+    <div id="blic-akcije" style="display:none;margin-top:10px;">
+      <div style="font-size:11.5px;color:#6b7a8d;margin-bottom:6px;">Izabrano: <b id="blic-broj">0</b></div>
+      <div class="ce-row">
+        <button type="button" class="ce-tip-btn" onclick="blicPostavi('kom')">Postavi: Kom</button>
+        <button type="button" class="ce-tip-btn" onclick="blicPostavi('m2')">Postavi: m²</button>
+        <button type="button" class="ce-tip-btn" onclick="blicPostavi('m3')">Postavi: m³</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="filt-row">
+    <input type="date" id="fil-od" onchange="loadOtpremnice()">
+    <input type="date" id="fil-do" onchange="loadOtpremnice()">
+    <label class="chk"><input type="checkbox" id="fil-odstupanje" onchange="loadOtpremnice()"> ⚠ Samo sa odstupanjem</label>
+  </div>
+  <div class="dnevni-total" id="dnevni-total" style="display:none"></div>
+  <div id="otp-list"></div>
+</div>
+
+<!-- ═══ KOŠARICA (sticky bottom) ═══ -->
+<div class="kosarica-bar" id="kosarica-bar">
+  <div class="kb-summary" id="kb-summary">
+    <div class="kb-summary-left">
+      <div class="kb-badge" id="kb-count">0</div>
+      <div>Košarica</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="kb-total" id="kb-total">0.00 KM</div>
+      <div class="kb-chevron" id="kb-chevron">▲</div>
+    </div>
+  </div>
+  <div class="kb-body" id="kb-body">
+    <div id="kos-items"></div>
+    <button class="btn-novi-kupac" style="margin-top:4px;" onclick="document.getElementById('search').focus()">+ Nova stavka</button>
+    <div style="font-size:10.5px;color:#8b96a5;margin:8px 0 6px;">
+      Cijene (≈) su okvirne — konačna cijena i stanje se provjeravaju uživo na sljedećem ekranu.
+      Otpremnica koju kupac dobija NE prikazuje cijene.
+    </div>
+    <button class="btn-generisi" id="btn-generisi" onclick="generisiOtpremnicu()" disabled>Generiši otpremnicu</button>
+  </div>
+</div>
+
+<!-- ═══ OVERLAY: DODAJ STAVKU (jedinica + kalkulator dimenzija) ═══ -->
+<div class="overlay" id="ov-dodaj-stavka">
+  <div class="ov-header">Dodaj stavku</div>
+  <div class="ov-body">
+    <div class="das-artikal-naziv" id="das-naziv"></div>
+    <div class="das-artikal-sifra" id="das-sifra"></div>
+
+    <div class="das-blok">
+      <div class="das-jedinica-info" id="das-jedinica-info"></div>
+      <div class="ce-row">
+        <button type="button" class="ce-tip-btn" data-u="kom" onclick="dasIzaberiJedinicu('kom')">Komad</button>
+        <button type="button" class="ce-tip-btn" data-u="m2" onclick="dasIzaberiJedinicu('m2')">m²</button>
+        <button type="button" class="ce-tip-btn" data-u="m3" onclick="dasIzaberiJedinicu('m3')">m³</button>
+      </div>
+
+      <div id="das-kom-blok" style="display:none">
+        <label>Količina (kom)</label>
+        <input type="number" id="das-kom" step="0.001" min="0.001" placeholder="npr. 2 ili 2.5">
+      </div>
+
+      <div id="das-m2-blok" style="display:none">
+        <div class="ce-row">
+          <button type="button" class="ce-tip-btn" data-m2="direktno" onclick="dasM2Mode('direktno')">Direktan unos</button>
+          <button type="button" class="ce-tip-btn" data-m2="racunaj" onclick="dasM2Mode('racunaj')">Dužina × Visina</button>
+        </div>
+        <div id="das-m2-direktno-blok">
+          <label>Površina (m²)</label>
+          <input type="number" id="das-m2-vr" step="0.01" min="0.01" placeholder="npr. 1.68">
+        </div>
+        <div id="das-m2-racunaj-blok" style="display:none">
+          <label>Dužina (cm)</label>
+          <input type="number" id="das-m2-duzina" step="0.5" min="0" oninput="dasPreview()">
+          <label>Visina (cm)</label>
+          <input type="number" id="das-m2-visina" step="0.5" min="0" oninput="dasPreview()">
+          <div class="das-preview" id="das-m2-preview"></div>
+        </div>
+      </div>
+
+      <div id="das-m3-blok" style="display:none">
+        <div class="ce-row">
+          <button type="button" class="ce-tip-btn" data-m3="direktno" onclick="dasM3Mode('direktno')">Direktan unos</button>
+          <button type="button" class="ce-tip-btn" data-m3="racunaj" onclick="dasM3Mode('racunaj')">Dužina × Visina × Debljina</button>
+        </div>
+        <div id="das-m3-direktno-blok">
+          <label>Zapremina (m³)</label>
+          <input type="number" id="das-m3-vr" step="0.001" min="0.001" placeholder="npr. 0.084">
+        </div>
+        <div id="das-m3-racunaj-blok" style="display:none">
+          <label>Dužina (cm)</label>
+          <input type="number" id="das-m3-duzina" step="0.5" min="0" oninput="dasPreview()">
+          <label>Visina (cm)</label>
+          <input type="number" id="das-m3-visina" step="0.5" min="0" oninput="dasPreview()">
+          <label>Debljina (cm)</label>
+          <input type="number" id="das-m3-debljina" step="0.5" min="0" oninput="dasPreview()">
+          <div class="das-preview" id="das-m3-preview"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="ov-footer">
+    <button class="btn-otkazi" onclick="zatvoriDodajStavku()">Otkaži</button>
+    <button class="btn-potvrdi" onclick="potvrdiDodajStavku()">+ Dodaj u košaricu</button>
+  </div>
+</div>
+
+<!-- ═══ OVERLAY: POTVRDA KUPCA ═══ -->
+<div class="overlay" id="ov-potvrda">
+  <div class="ov-header">Potvrda otpremnice</div>
+  <div class="ov-body">
+    <div class="ov-broj" id="ov-broj">OTP-...</div>
+    <div class="ov-stavke" id="ov-stavke"></div>
+    <div class="ov-iznos-lbl">IZNOS ZA NAPLATU</div>
+    <div class="ov-iznos" id="ov-iznos">0.00 KM</div>
+    <div class="ov-kupac-fld">
+      <label>Ime i prezime kupca</label>
+      <input type="text" id="ov-kupac-ime" placeholder="Unesite ime kupca...">
+    </div>
+  </div>
+  <div class="ov-footer">
+    <button class="btn-otkazi" onclick="otkaziOtpremnicu()">Otkaži</button>
+    <button class="btn-potvrdi" id="btn-potvrdi" onclick="potvrdiOtpremnicu()">✓ KUPAC POTVRĐUJE</button>
+  </div>
+</div>
+
+<!-- ═══ OVERLAY: USPJEH ═══ -->
+<div class="overlay" id="ov-uspjeh">
+  <div class="ov-success">
+    <div class="ico">✅</div>
+    <h2>Otpremnica potvrđena!</h2>
+    <p id="uspjeh-detalji"></p>
+    <div class="posalji-box" id="posalji-box"></div>
+    <button class="btn-nova" onclick="novaProdaja()">+ Nova prodaja</button>
+  </div>
+</div>
+
+<script>
+const API='';
+let isAdmin=false, currentUser=null;
+let kosarica=[];       // { roba_id, sifra, naziv, jed_mjera, cijena, kolicina, stanje_max }
+                        // cijena/stanje_max su OKVIRNI (iz trenutka dodavanja) — konačna,
+                        // obavezujuća cijena i količina se određuju tek u /pregled i /potvrdi pozivima.
+let searchTimer=null;
+
+function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fd(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('sr-Latn-BA')+' '+dt.toLocaleTimeString('sr-Latn-BA',{hour:'2-digit',minute:'2-digit'});}
+
+/* ── TABOVI ─────────────────────────────────────────────── */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('view-'+btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab==='admin') loadOtpremnice();
+  };
+});
+
+/* ── PRETRAGA ROBE ──────────────────────────────────────── */
+document.getElementById('search').addEventListener('input', e=>{
+  clearTimeout(searchTimer);
+  const q=e.target.value;
+  searchTimer=setTimeout(()=>trazi(q), 250);
+});
+
+async function trazi(q){
+  const list=document.getElementById('rez-list');
+  list.innerHTML='<div class="spinner">Pretraga...</div>';
+  try{
+    const r=await fetch(`${API}/api/roba?q=${encodeURIComponent(q)}&limit=30`);
+    const rows=await r.json();
+    if(!rows.length){
+      list.innerHTML='<div class="empty-msg">Nema rezultata za "'+esc(q)+'".</div>';
+      return;
+    }
+    list.innerHTML=rows.map(a=>{
+      const stanje=parseFloat(a.stanje);
+      let chip='chip-ok', txt=stanje+' '+esc(a.jed_mjera);
+      if(stanje<=0){chip='chip-nema';txt='Nema na stanju';}
+      else if(stanje<10){chip='chip-nisko';}
+      return `
+      <div class="rez-item" onclick='dodajUKosaricu(${JSON.stringify(a).replace(/'/g,"&apos;")})'>
+        <div class="rez-info">
+          <div class="rez-naziv">${esc(a.naziv)}</div>
+          <div class="rez-sifra">Šifra: ${esc(a.sifra)}</div>
+        </div>
+        <div class="rez-right">
+          <div class="rez-cijena">${fm(a.cijena)} KM</div>
+          <div class="rez-stanje"><span class="chip ${chip}">${txt}</span></div>
+        </div>
+      </div>`;
+    }).join('');
+  }catch(e){
+    list.innerHTML='<div class="empty-msg">Greška pri pretrazi.</div>';
+  }
+}
+// Prikaži početnu listu (top artikli) odmah po prijavi
+function trazi_init(){ trazi(''); }
+
+/* ── KUPAC (bira se/kreira PRIJE pretrage robe) ──────────────────── */
+let trenutniKupac=null; // {id, naziv, telefon, grad, adresa}
+let kupacSearchTimer=null;
+
+document.getElementById('kupac-search').addEventListener('input', e=>{
+  clearTimeout(kupacSearchTimer);
+  const q=e.target.value;
+  kupacSearchTimer=setTimeout(()=>traziKupca(q), 250);
+});
+traziKupca(''); // prikaži nedavne kupce odmah
+
+async function traziKupca(q){
+  const list=document.getElementById('kupac-rez-list');
+  list.innerHTML='<div class="spinner">Pretraga...</div>';
+  try{
+    const r=await fetch(`${API}/api/kupci?q=${encodeURIComponent(q)}&limit=20`);
+    const rows=await r.json();
+    if(!rows.length){
+      list.innerHTML=q?'<div class="empty-msg">Nema rezultata za "'+esc(q)+'".</div>':'<div class="empty-msg">Nema još kupaca — unesi prvog.</div>';
+      return;
+    }
+    list.innerHTML=rows.map(k=>`
+      <div class="kupac-rez-item" onclick='izaberiKupca(${JSON.stringify(k).replace(/'/g,"&apos;")})'>
+        <div class="kupac-rez-naziv">${esc(k.naziv)}</div>
+        <div class="kupac-rez-meta">${[k.telefon,k.grad].filter(Boolean).map(esc).join(' · ')||'—'}</div>
+      </div>
+    `).join('');
+  }catch(e){
+    list.innerHTML='<div class="empty-msg">Greška pri pretrazi.</div>';
+  }
+}
+
+function izaberiKupca(kupac){
+  trenutniKupac=kupac;
+  document.getElementById('kupac-picker').style.display='none';
+  document.getElementById('novi-kupac-forma').style.display='none';
+  document.getElementById('kupac-banner').style.display='flex';
+  document.getElementById('kb-naziv').textContent=kupac.naziv;
+  document.getElementById('kb-meta').textContent=[kupac.telefon,kupac.grad].filter(Boolean).join(' · ')||'Bez dodatnih podataka';
+  document.getElementById('prodaja-roba').style.display='block';
+  trazi_init();
+}
+
+function promijeniKupca(){
+  trenutniKupac=null;
+  document.getElementById('kupac-banner').style.display='none';
+  document.getElementById('prodaja-roba').style.display='none';
+  document.getElementById('kupac-picker').style.display='block';
+  document.getElementById('kupac-search').value='';
+  traziKupca('');
+}
+
+function prikaziNovogKupca(){
+  document.getElementById('novi-kupac-forma').style.display='block';
+  document.getElementById('nk-naziv').focus();
+}
+
+function otkaziNovogKupca(){
+  document.getElementById('novi-kupac-forma').style.display='none';
+  ['nk-naziv','nk-telefon','nk-grad','nk-adresa'].forEach(id=>document.getElementById(id).value='');
+}
+
+async function sacuvajNovogKupca(){
+  const naziv=document.getElementById('nk-naziv').value.trim();
+  if(!naziv){alert('Unesite ime/naziv kupca.');return;}
+  try{
+    const r=await fetch(`${API}/api/kupci`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        naziv,
+        telefon:document.getElementById('nk-telefon').value.trim()||null,
+        grad:document.getElementById('nk-grad').value.trim()||null,
+        adresa:document.getElementById('nk-adresa').value.trim()||null,
+      }),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri čuvanju kupca.');
+    otkaziNovogKupca();
+    izaberiKupca(data);
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+/* ── KOŠARICA ───────────────────────────────────────────── */
+const RAZLOG_LABEL={kvalitet:'Slabiji kvalitet',kolicina:'Popust na količinu',lom:'Lom',jedinica:'⚙ Jedinica mjere (automatski)',drugo:'Drugo'};
+let uredjivanjeIdx=null; // koja stavka trenutno ima otvoren editor cijene
+
+/* ── DODAJ STAVKU: jedinica mjere (kom/m2/m3) + kalkulator dimenzija ── */
+let dasArtikal=null, dasJedinica='kom', dasM2mode='direktno', dasM3mode='direktno';
+
+function dodajUKosaricu(artikal){
+  if(parseFloat(artikal.stanje)<=0){alert('Artikal "'+artikal.naziv+'" nema stanja.');return;}
+  dasArtikal=artikal;
+  document.getElementById('das-naziv').textContent=artikal.naziv;
+  document.getElementById('das-sifra').textContent='Šifra: '+artikal.sifra+' · Zadana cijena: '+fm(artikal.cijena)+' KM po '+esc(artikal.jed_mjera);
+  document.getElementById('das-kom').value='';
+  document.getElementById('das-m2-vr').value='';
+  document.getElementById('das-m2-duzina').value='';
+  document.getElementById('das-m2-visina').value='';
+  document.getElementById('das-m3-vr').value='';
+  document.getElementById('das-m3-duzina').value='';
+  document.getElementById('das-m3-visina').value='';
+  document.getElementById('das-m3-debljina').value='';
+  dasM2mode='direktno'; dasM3mode='direktno';
+  // Podrazumijevano biramo jedinicu iz šifrarnika, ali trgovac je može promijeniti —
+  // ako promijeni, ide automatsko signaliziranje odstupanja (vidi otpremnice.js), pa se
+  // ne mora ništa provjeravati unaprijed pri svakom uvozu.
+  const jedinica=['kom','m2','m3'].includes(artikal.jed_mjera)?artikal.jed_mjera:'kom';
+  dasIzaberiJedinicu(jedinica);
+  document.getElementById('ov-dodaj-stavka').classList.add('on');
+}
+
+function dasIzaberiJedinicu(u){
+  dasJedinica=u;
+  document.querySelectorAll('.ce-tip-btn[data-u]').forEach(b=>b.classList.toggle('active', b.dataset.u===u));
+  const zadana=['kom','m2','m3'].includes(dasArtikal?.jed_mjera)?dasArtikal.jed_mjera:'kom';
+  const info=document.getElementById('das-jedinica-info');
+  if(u!==zadana){
+    info.textContent=`⚠ Prodaješ po "${u}", a zadana jedinica u šifrarniku je "${zadana}" — sistem će ovo automatski prijaviti kao odstupanje radi provjere.`;
+    info.style.background='#fce8e6'; info.style.color='var(--red)';
+  }else{
+    info.textContent=`Jedinica: ${u==='kom'?'komad':u==='m2'?'m² (kvadratni metar)':'m³ (kubni metar)'} (zadana u šifrarniku)`;
+    info.style.background='#eef4fc'; info.style.color='var(--dark)';
+  }
+  document.getElementById('das-kom-blok').style.display = u==='kom' ? 'block':'none';
+  document.getElementById('das-m2-blok').style.display = u==='m2' ? 'block':'none';
+  document.getElementById('das-m3-blok').style.display = u==='m3' ? 'block':'none';
+  if(u==='m2') dasM2Mode(dasM2mode);
+  if(u==='m3') dasM3Mode(dasM3mode);
+}
+
+function dasM2Mode(mode){
+  dasM2mode=mode;
+  document.querySelectorAll('.ce-tip-btn[data-m2]').forEach(b=>b.classList.toggle('active', b.dataset.m2===mode));
+  document.getElementById('das-m2-direktno-blok').style.display = mode==='direktno' ? 'block':'none';
+  document.getElementById('das-m2-racunaj-blok').style.display = mode==='racunaj' ? 'block':'none';
+  dasPreview();
+}
+
+function dasM3Mode(mode){
+  dasM3mode=mode;
+  document.querySelectorAll('.ce-tip-btn[data-m3]').forEach(b=>b.classList.toggle('active', b.dataset.m3===mode));
+  document.getElementById('das-m3-direktno-blok').style.display = mode==='direktno' ? 'block':'none';
+  document.getElementById('das-m3-racunaj-blok').style.display = mode==='racunaj' ? 'block':'none';
+  dasPreview();
+}
+
+function dasPreview(){
+  if(dasJedinica==='m2' && dasM2mode==='racunaj'){
+    const d=parseFloat(document.getElementById('das-m2-duzina').value);
+    const v=parseFloat(document.getElementById('das-m2-visina').value);
+    const prev=document.getElementById('das-m2-preview');
+    if(!isNaN(d)&&!isNaN(v)&&d>0&&v>0){
+      const m2=(d*v)/10000;
+      prev.textContent=`= ${m2.toFixed(3)} m² (${d} × ${v} cm)`;
+    }else prev.textContent='';
+  }
+  if(dasJedinica==='m3' && dasM3mode==='racunaj'){
+    const d=parseFloat(document.getElementById('das-m3-duzina').value);
+    const v=parseFloat(document.getElementById('das-m3-visina').value);
+    const deb=parseFloat(document.getElementById('das-m3-debljina').value);
+    const prev=document.getElementById('das-m3-preview');
+    if(!isNaN(d)&&!isNaN(v)&&!isNaN(deb)&&d>0&&v>0&&deb>0){
+      const m3=(d*v*deb)/1000000;
+      prev.textContent=`= ${m3.toFixed(4)} m³ (${d} × ${v} × ${deb} cm)`;
+    }else prev.textContent='';
+  }
+}
+
+function zatvoriDodajStavku(){
+  document.getElementById('ov-dodaj-stavka').classList.remove('on');
+  dasArtikal=null;
+}
+
+function potvrdiDodajStavku(){
+  if(!dasArtikal) return;
+  let kolicina=null, duzina_cm=null, visina_cm=null, debljina_cm=null;
+
+  if(dasJedinica==='kom'){
+    kolicina=parseFloat(document.getElementById('das-kom').value);
+  }else if(dasJedinica==='m2'){
+    if(dasM2mode==='direktno'){
+      kolicina=parseFloat(document.getElementById('das-m2-vr').value);
+    }else{
+      const d=parseFloat(document.getElementById('das-m2-duzina').value);
+      const v=parseFloat(document.getElementById('das-m2-visina').value);
+      if(!d||!v||d<=0||v<=0){alert('Unesite dužinu i visinu (cm).');return;}
+      kolicina=+((d*v)/10000).toFixed(3);
+      duzina_cm=d; visina_cm=v;
+    }
+  }else if(dasJedinica==='m3'){
+    if(dasM3mode==='direktno'){
+      kolicina=parseFloat(document.getElementById('das-m3-vr').value);
+    }else{
+      const d=parseFloat(document.getElementById('das-m3-duzina').value);
+      const v=parseFloat(document.getElementById('das-m3-visina').value);
+      const deb=parseFloat(document.getElementById('das-m3-debljina').value);
+      if(!d||!v||!deb||d<=0||v<=0||deb<=0){alert('Unesite dužinu, visinu i debljinu (cm).');return;}
+      kolicina=+((d*v*deb)/1000000).toFixed(4);
+      duzina_cm=d; visina_cm=v; debljina_cm=deb;
+    }
+  }
+
+  if(!kolicina||isNaN(kolicina)||kolicina<=0){alert('Unesite ispravnu količinu.');return;}
+  if(kolicina>parseFloat(dasArtikal.stanje)){
+    alert(`Nema dovoljno na stanju (raspoloživo: ${dasArtikal.stanje} ${dasArtikal.jed_mjera}). Napomena: stanje je vođeno u jedinici iz šifrarnika — provjerite da li se poklapa sa izabranom jedinicom.`);
+    return;
+  }
+
+  const postojeciIdx=kosarica.findIndex(k=>k.roba_id===dasArtikal.id && k.jed_mjera===dasJedinica && !duzina_cm && !k.duzina_cm);
+  if(postojeciIdx>=0){
+    kosarica[postojeciIdx].kolicina=+(kosarica[postojeciIdx].kolicina+kolicina).toFixed(4);
+  }else{
+    kosarica.push({
+      roba_id:dasArtikal.id, sifra:dasArtikal.sifra, naziv:dasArtikal.naziv,
+      jed_mjera:dasJedinica, jed_mjera_zadana:dasArtikal.jed_mjera, cijena:parseFloat(dasArtikal.cijena),
+      kolicina, stanje_max:parseFloat(dasArtikal.stanje),
+      duzina_cm, visina_cm, debljina_cm,
+      override:null, // { tip:'posto'|'iznos', vrijednost, razlog, napomena } kad trgovac odstupi od zadane cijene
+    });
+  }
+
+  renderKosarica();
+  document.getElementById('kosarica-bar').classList.add('open');
+  document.getElementById('kb-chevron').textContent='▼';
+  zatvoriDodajStavku();
+  document.getElementById('search').value='';
+  document.getElementById('search').focus();
+  trazi('');
+}
+
+function promijeniKolicinu(idx, delta){
+  const it=kosarica[idx];
+  const nova=it.kolicina+delta;
+  if(nova<=0){kosarica.splice(idx,1);}
+  else if(nova>it.stanje_max){alert('Nema dovoljno na stanju (max '+it.stanje_max+').');return;}
+  else{it.kolicina=nova;}
+  renderKosarica();
+}
+
+function ukloniStavku(idx){ kosarica.splice(idx,1); renderKosarica(); }
+
+// Okvirna efektivna cijena za prikaz u košarici (samo procjena — konačna se računa na serveru uživo)
+function efektivnaCijenaProcjena(k){
+  if(!k.override||k.override.vrijednost===''||k.override.vrijednost==null) return k.cijena;
+  const v=parseFloat(k.override.vrijednost);
+  if(isNaN(v)) return k.cijena;
+  return k.override.tip==='posto' ? Math.max(0,k.cijena*(1-v/100)) : Math.max(0,v);
+}
+
+function otvoriUredjivanjeCijene(idx){
+  uredjivanjeIdx=(uredjivanjeIdx===idx)?null:idx;
+  renderKosarica();
+}
+
+function primijeniOdstupanje(idx){
+  const tip=document.querySelector(`.ce-tip-btn[data-idx="${idx}"].active`)?.dataset.tip||'posto';
+  const vrijednost=document.getElementById('ce-vrijednost-'+idx).value;
+  const razlog=document.getElementById('ce-razlog-'+idx).value;
+  const napomena=document.getElementById('ce-napomena-'+idx).value;
+  if(vrijednost===''||isNaN(parseFloat(vrijednost))){alert('Unesite vrijednost.');return;}
+  if(!razlog){alert('Izaberite razlog odstupanja.');return;}
+  kosarica[idx].override={tip, vrijednost:parseFloat(vrijednost), razlog, napomena};
+  uredjivanjeIdx=null;
+  renderKosarica();
+}
+
+function ukloniOdstupanje(idx){
+  kosarica[idx].override=null;
+  uredjivanjeIdx=null;
+  renderKosarica();
+}
+
+function postaviTipOdstupanja(idx, tip){
+  document.querySelectorAll(`.ce-tip-btn[data-idx="${idx}"]`).forEach(b=>b.classList.toggle('active', b.dataset.tip===tip));
+  document.getElementById('ce-editor-'+idx).dataset.tip=tip;
+  azurirajPreview(idx);
+}
+
+function azurirajPreview(idx){
+  const k=kosarica[idx];
+  const tip=document.getElementById('ce-editor-'+idx)?.dataset.tip||'posto';
+  const vrijednost=parseFloat(document.getElementById('ce-vrijednost-'+idx)?.value);
+  const prev=document.getElementById('ce-preview-'+idx);
+  if(!prev) return;
+  if(isNaN(vrijednost)){prev.textContent='';return;}
+  const nova= tip==='posto' ? Math.max(0,k.cijena*(1-vrijednost/100)) : Math.max(0,vrijednost);
+  prev.textContent=`Nova cijena: ≈ ${fm(nova)} KM / ${esc(k.jed_mjera)} (umjesto ${fm(k.cijena)} KM)`;
+}
+
+function renderKosarica(){
+  const cont=document.getElementById('kos-items');
+  const total=kosarica.reduce((s,k)=>s+k.kolicina*efektivnaCijenaProcjena(k),0);
+  document.getElementById('kb-count').textContent=kosarica.length;
+  document.getElementById('kb-total').textContent=fm(total)+' KM';
+  document.getElementById('btn-generisi').disabled=kosarica.length===0;
+
+  if(!kosarica.length){
+    cont.innerHTML='<div class="empty-msg">Košarica je prazna.</div>';
+    return;
+  }
+  cont.innerHTML=kosarica.map((k,idx)=>{
+    const efCij=efektivnaCijenaProcjena(k);
+    const odstupa=!!k.override;
+    const jedinicaOdstupa=k.jed_mjera_zadana && k.jed_mjera!==k.jed_mjera_zadana;
+    const editorOtvoren=uredjivanjeIdx===idx;
+    return `
+    <div class="kos-item">
+      <div class="kos-item-top">
+        <div class="kos-info">
+          <div class="kos-naziv">${esc(k.naziv)}</div>
+          <div class="kos-cijena ${odstupa?'izmijenjena':''}">≈ ${fm(efCij)} KM / ${esc(k.jed_mjera)}${odstupa?' <s style="opacity:.6">'+fm(k.cijena)+'</s>':''}</div>
+        </div>
+        <div class="kos-qty">
+          <button class="qty-btn" onclick="promijeniKolicinu(${idx},-1)">−</button>
+          <div class="qty-val">${k.kolicina}</div>
+          <button class="qty-btn" onclick="promijeniKolicinu(${idx},1)">+</button>
+        </div>
+        <div class="kos-iznos">≈ ${fm(k.kolicina*efCij)} KM</div>
+        <button class="kos-del" onclick="ukloniStavku(${idx})">🗑</button>
+      </div>
+      ${jedinicaOdstupa?`<div style="font-size:10.5px;color:var(--red);margin-top:2px;">⚙ Prodaje se po "${esc(k.jed_mjera)}" umjesto zadane "${esc(k.jed_mjera_zadana)}" — biće automatski prijavljeno kao odstupanje.</div>`:''}
+      <div class="kos-item-bottom">
+        ${odstupa
+          ? `<span class="chip-odstupanje">⚠ ${esc(RAZLOG_LABEL[k.override.razlog]||k.override.razlog)}<button onclick="ukloniOdstupanje(${idx})">✕</button></span>
+             <button class="btn-cijena" onclick="otvoriUredjivanjeCijene(${idx})">✎ Izmijeni</button>`
+          : `<button class="btn-cijena" onclick="otvoriUredjivanjeCijene(${idx})">✎ Odstupi od cijene</button>`
+        }
+      </div>
+      ${editorOtvoren?`
+      <div class="cijena-edit" id="ce-editor-${idx}" data-tip="${k.override?.tip||'posto'}">
+        <div class="ce-row">
+          <button type="button" class="ce-tip-btn ${((k.override?.tip||'posto')==='posto')?'active':''}" data-idx="${idx}" data-tip="posto" onclick="postaviTipOdstupanja(${idx},'posto')">% popusta</button>
+          <button type="button" class="ce-tip-btn ${(k.override?.tip==='iznos')?'active':''}" data-idx="${idx}" data-tip="iznos" onclick="postaviTipOdstupanja(${idx},'iznos')">Nova cijena</button>
+        </div>
+        <input type="number" id="ce-vrijednost-${idx}" step="0.01" min="0" placeholder="npr. 10" value="${k.override?.vrijednost??''}" oninput="azurirajPreview(${idx})">
+        <div class="ce-preview" id="ce-preview-${idx}"></div>
+        <select id="ce-razlog-${idx}">
+          <option value="">— izaberi razlog —</option>
+          ${Object.entries(RAZLOG_LABEL).map(([v,l])=>`<option value="${v}" ${k.override?.razlog===v?'selected':''}>${l}</option>`).join('')}
+        </select>
+        <input type="text" id="ce-napomena-${idx}" placeholder="Napomena (opciono)..." value="${esc(k.override?.napomena||'')}">
+        <div class="ce-btns">
+          <button class="ce-primijeni" onclick="primijeniOdstupanje(${idx})">✓ Primijeni</button>
+          <button class="ce-otkazi" onclick="otvoriUredjivanjeCijene(${idx})">Zatvori</button>
+        </div>
+      </div>`:''}
+    </div>
+  `;}).join('');
+  // inicijalni preview za otvoreni editor
+  if(uredjivanjeIdx!=null) azurirajPreview(uredjivanjeIdx);
+}
+
+document.getElementById('kb-summary').onclick=()=>{
+  const bar=document.getElementById('kosarica-bar');
+  bar.classList.toggle('open');
+  document.getElementById('kb-chevron').textContent=bar.classList.contains('open')?'▼':'▲';
+};
+
+/* ── GENERISANJE OTPREMNICE ──────────────────────────────────
+   Ovo NE piše ništa u bazu. Samo traži od servera ŽIVU cijenu i
+   stanje za stavke iz košarice (cijena i količina se ne zaključavaju
+   ovdje — mogu se i dalje mijenjati sve dok kupac ne pritisne potvrdu). */
+function stavkeZaSlanje(){
+  return kosarica.map(k=>({
+    roba_id:k.roba_id, kolicina:k.kolicina, jed_mjera_prodaja:k.jed_mjera,
+    duzina_cm:k.duzina_cm||null, visina_cm:k.visina_cm||null, debljina_cm:k.debljina_cm||null,
+    override: k.override ? {
+      tip:k.override.tip, vrijednost:k.override.vrijednost,
+      razlog:k.override.razlog, napomena:k.override.napomena,
+    } : null,
+  }));
+}
+
+async function generisiOtpremnicu(){
+  if(!kosarica.length) return;
+  if(!trenutniKupac){alert('Prvo izaberite ili unesite kupca.');return;}
+  const btn=document.getElementById('btn-generisi');
+  btn.disabled=true; btn.textContent='Provjera cijena...';
+  try{
+    const r=await fetch(`${API}/api/otpremnice/pregled`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ stavke: stavkeZaSlanje() }),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri provjeri.');
+    prikaziPotvrduEkran(data);
+  }catch(e){
+    alert(e.message);
+  }finally{
+    btn.disabled=false; btn.textContent='Generiši otpremnicu';
+  }
+}
+
+function prikaziPotvrduEkran(pregled){
+  document.getElementById('ov-broj').textContent='Broj se dodjeljuje nakon potvrde';
+  document.getElementById('ov-iznos').textContent=fm(pregled.ukupan_iznos)+' KM';
+  document.getElementById('ov-stavke').innerHTML=pregled.stavke.map(s=>`
+    <div class="ov-stavka">
+      <span>${esc(s.naziv)} × ${s.kolicina}${s.odstupa?' ⚠':''}</span>
+      <span>${s.odstupa?`<s style="opacity:.5">${fm(s.kolicina*s.cijena_zadana)}</s> `:''}${fm(s.iznos)} KM</span>
+    </div>
+    ${s.odstupa?`<div style="font-size:10.5px;color:var(--red);margin:-4px 0 6px;">
+      Razlog: ${esc(RAZLOG_LABEL[s.razlog_odstupanja]||s.razlog_odstupanja)}${s.napomena_odstupanja?' — '+esc(s.napomena_odstupanja):''}
+    </div>`:''}
+  `).join('');
+  if(pregled.ima_odstupanje){
+    document.getElementById('ov-stavke').innerHTML += `
+      <div style="font-size:11.5px;color:var(--red);font-weight:700;text-align:center;padding-top:6px;border-top:1px solid #e8eaed;margin-top:4px;">
+        ⚠ Otpremnica ima odstupanje od zadanih cijena — razlika: ${fm(pregled.razlika)} KM (zadano: ${fm(pregled.ukupno_zadano)} KM)
+      </div>`;
+  }
+  document.getElementById('ov-kupac-ime').value='';
+  document.getElementById('ov-potvrda').classList.add('on');
+}
+
+function otkaziOtpremnicu(){
+  // Ništa nije upisano u bazu do sada — otkazivanje je samo zatvaranje ekrana,
+  // košarica ostaje netaknuta pa komercijalista može nastaviti izmjene.
+  document.getElementById('ov-potvrda').classList.remove('on');
+}
+
+/* ── POTVRDA KUPCA ────────────────────────────────────────────
+   JEDINI trenutak upisa u bazu. Server ponovo (uživo, u transakciji)
+   čita cijenu i stanje iz roba tabele — ovdje se sve konačno zaključava,
+   uključujući i eventualna odstupanja od zadane cijene. */
+async function potvrdiOtpremnicu(){
+  const ime=document.getElementById('ov-kupac-ime').value.trim();
+  if(!ime){alert('Unesite ime kupca.');return;}
+  if(!trenutniKupac){alert('Nedostaje izabrani kupac.');return;}
+  const btn=document.getElementById('btn-potvrdi');
+  btn.disabled=true; btn.textContent='Obrada...';
+  try{
+    const r=await fetch(`${API}/api/otpremnice/potvrdi`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        kupac_id: trenutniKupac.id||null,
+        kupac_naziv: trenutniKupac.naziv||null,
+        kupac_adresa: trenutniKupac.adresa||null,
+        kupac_telefon: trenutniKupac.telefon||null,
+        kupac_grad: trenutniKupac.grad||null,
+        stavke: stavkeZaSlanje(),
+        potvrdio_kupac_ime: ime,
+      }),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri potvrdi.');
+    document.getElementById('ov-potvrda').classList.remove('on');
+    document.getElementById('uspjeh-detalji').textContent=
+      `${data.broj} — ${fm(data.ukupan_iznos)} KM — potvrdio: ${data.potvrdio_kupac_ime}`
+      +(data.ima_odstupanje?' ⚠ (ima odstupanje od zadane cijene)':'');
+    document.getElementById('posalji-box').innerHTML=
+      renderPosaljiDugmad(data.javni_token, data.broj, data.kupac_telefon, data.kupac_email);
+    document.getElementById('ov-uspjeh').classList.add('on');
+  }catch(e){
+    alert(e.message);
+  }finally{
+    btn.disabled=false; btn.textContent='✓ KUPAC POTVRĐUJE';
+  }
+}
+
+// Gradi link ka javnom dokumentu (bez cijena) i dugmad za Viber/WhatsApp/Email.
+// Radi i kad kupac nema unesen telefon/email — link se onda samo kopira/dijeli generički.
+function linkDokumenta(token){
+  return `${location.origin}/otpremnica-dokument.html?token=${encodeURIComponent(token)}`;
+}
+
+function renderPosaljiDugmad(token, broj, telefon, email){
+  const link=linkDokumenta(token);
+  const poruka=encodeURIComponent(`Otpremnica ${broj} — JoPeX\n${link}`);
+  const tel=(telefon||'').replace(/[^0-9+]/g,'');
+  const waHref = tel ? `https://wa.me/${tel.replace(/^\+/,'')}?text=${poruka}` : `https://wa.me/?text=${poruka}`;
+  const viberHref = `viber://forward?text=${poruka}`;
+  const mailHref = `mailto:${email||''}?subject=${encodeURIComponent('Otpremnica '+broj+' — JoPeX')}&body=${poruka}`;
+  return `
+    <div class="posalji-lbl">Pošalji otpremnicu kupcu</div>
+    <div class="posalji-btns">
+      <a class="btn-posalji viber" href="${viberHref}"><span class="ic">📱</span>Viber</a>
+      <a class="btn-posalji whatsapp" href="${waHref}" target="_blank" rel="noopener"><span class="ic">💬</span>WhatsApp</a>
+      <a class="btn-posalji email" href="${mailHref}"><span class="ic">✉️</span>Email</a>
+    </div>
+    <div class="posalji-link">${esc(link)}</div>
+  `;
+}
+
+function novaProdaja(){
+  kosarica=[];
+  renderKosarica();
+  document.getElementById('kosarica-bar').classList.remove('open');
+  document.getElementById('kb-chevron').textContent='▲';
+  document.getElementById('ov-uspjeh').classList.remove('on');
+  document.getElementById('posalji-box').innerHTML='';
+  document.getElementById('search').value='';
+  promijeniKupca();
+}
+
+/* ── ADMIN: SVE OTPREMNICE ─────────────────────────────────── */
+async function loadOtpremnice(){
+  const cont=document.getElementById('otp-list');
+  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
+  const params=new URLSearchParams();
+  const od=document.getElementById('fil-od').value;
+  const do_=document.getElementById('fil-do').value;
+  if(od) params.set('od',od);
+  if(do_) params.set('do',do_);
+  if(document.getElementById('fil-odstupanje').checked) params.set('odstupanje','true');
+  try{
+    const r=await fetch(`${API}/api/otpremnice?${params}`);
+    const rows=await r.json();
+    const totalDiv=document.getElementById('dnevni-total');
+    if(!rows.length){
+      cont.innerHTML='<div class="empty-msg">Nema otpremnica.</div>';
+      totalDiv.style.display='none';
+      return;
+    }
+    const ukupno=rows.reduce((s,o)=>s+parseFloat(o.ukupan_iznos||0),0);
+    totalDiv.style.display='block';
+    totalDiv.innerHTML=`${fm(ukupno)} KM<span class="cnt">${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'}</span>`;
+    const stLabel={kreirana:'Kreirana',potvrdjena:'Potvrđena',stornirana:'Stornirana'};
+    cont.innerHTML=rows.map(o=>`
+      <div class="otp-card ${o.ima_odstupanje?'ima-odstupanje':''}" onclick="prikaziDetaljeOtpremnice(${o.id})">
+        <div class="otp-top">
+          <span class="otp-broj">${esc(o.broj)}</span>
+          <div class="otp-badges">
+            ${o.ima_odstupanje?'<span class="badge-odstupanje">⚠ Odstupanje</span>':''}
+            <span class="otp-status st-${o.status}">${stLabel[o.status]||o.status}</span>
+          </div>
+        </div>
+        <div class="otp-meta">
+          ${fd(o.datum)} &middot; Komercijalista: ${esc(o.komercijalista_ime||'—')}<br>
+          Kupac: ${esc(o.kupac_naziv||'—')}${o.potvrdio_kupac_ime?' &middot; Potvrdio: '+esc(o.potvrdio_kupac_ime):''}
+        </div>
+        <div class="otp-iznos">${fm(o.ukupan_iznos)} KM</div>
+        <div class="otp-actions">
+          <button class="btn-otp-posalji" onclick="event.stopPropagation();togglePosaljiKartica(${o.id})">📤 Pošalji kupcu</button>
+        </div>
+        <div class="mini-posalji" id="mini-posalji-${o.id}" onclick="event.stopPropagation()"></div>
+        <div class="otp-detalji" id="otp-detalji-${o.id}"></div>
+      </div>
+    `).join('');
+    window.__otpDataById=Object.fromEntries(rows.map(o=>[o.id,o]));
+  }catch(e){
+    cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>';
+  }
+}
+
+function togglePosaljiKartica(id){
+  const el=document.getElementById('mini-posalji-'+id);
+  const bio=el.classList.contains('on');
+  document.querySelectorAll('.mini-posalji.on').forEach(d=>{d.classList.remove('on');d.innerHTML='';});
+  if(bio) return;
+  const o=window.__otpDataById?.[id];
+  if(!o||!o.javni_token){el.innerHTML='<div class="empty-msg">Nema dostupnog linka.</div>';el.classList.add('on');return;}
+  const link=linkDokumenta(o.javni_token);
+  const poruka=encodeURIComponent(`Otpremnica ${o.broj} — JoPeX\n${link}`);
+  const tel=(o.kupac_telefon||'').replace(/[^0-9+]/g,'');
+  const waHref = tel ? `https://wa.me/${tel.replace(/^\+/,'')}?text=${poruka}` : `https://wa.me/?text=${poruka}`;
+  el.innerHTML=`
+    <a href="viber://forward?text=${poruka}">📱 Viber</a>
+    <a href="${waHref}" target="_blank" rel="noopener">💬 WhatsApp</a>
+    <a href="mailto:${o.kupac_email||''}?subject=${encodeURIComponent('Otpremnica '+o.broj+' — JoPeX')}&body=${poruka}">✉️ Email</a>
+  `;
+  el.classList.add('on');
+}
+
+async function prikaziDetaljeOtpremnice(id){
+  const el=document.getElementById('otp-detalji-'+id);
+  if(!el) return;
+  const otvoren=el.classList.contains('on');
+  document.querySelectorAll('.otp-detalji.on').forEach(d=>d.classList.remove('on'));
+  if(otvoren) return; // bio otvoren, sad se samo zatvara
+  el.classList.add('on');
+  el.innerHTML='<div class="spinner">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/otpremnice/${id}`);
+    const otp=await r.json();
+    if(!r.ok) throw new Error(otp.error||'Greška.');
+    el.innerHTML=otp.stavke.map(s=>{
+      const odstupa=parseFloat(s.cijena)!==parseFloat(s.cijena_zadana);
+      return `
+      <div class="otp-stavka-red">
+        <div class="osr-top"><span>${esc(s.naziv)} × ${s.kolicina}</span><span>${fm(s.iznos)} KM</span></div>
+        ${odstupa?`<div class="osr-odst">⚠ Zadana cijena: ${fm(s.cijena_zadana)} KM → Prodano: ${fm(s.cijena)} KM
+          &middot; ${esc(RAZLOG_LABEL[s.razlog_odstupanja]||s.razlog_odstupanja||'')}${s.napomena_odstupanja?' — '+esc(s.napomena_odstupanja):''}</div>`:''}
+      </div>`;
+    }).join('');
+  }catch(e){
+    el.innerHTML='<div class="empty-msg">Greška pri učitavanju detalja.</div>';
+  }
+}
+
+/* ── XLSX IMPORT (pregled kolona → ručno mapiranje → uvoz) ──────────── */
+let uvozHeader=[], uvozUzorak=[];
+
+async function ucitajPregledUvoza(){
+  const fileInput=document.getElementById('imp-file');
+  const msg=document.getElementById('import-msg');
+  if(!fileInput.files.length){msg.style.color='red';msg.textContent='Izaberite fajl.';return;}
+  msg.style.color='#6b7a8d'; msg.textContent='Čitanje fajla...';
+  const fd_=new FormData();
+  fd_.append('file', fileInput.files[0]);
+  try{
+    const r=await fetch(`${API}/api/roba/import/pregled`,{method:'POST',body:fd_});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri čitanju fajla.');
+    uvozHeader=data.header; uvozUzorak=data.uzorak;
+    prikaziMapiranje(data.predlog, data.ukupno_redova);
+    msg.textContent='';
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+function prikaziMapiranje(predlog, ukupnoRedova){
+  // Tabela sa uzorkom
+  const tbl=document.getElementById('uzorak-tabela');
+  tbl.innerHTML='<tr>'+uvozHeader.map(h=>`<th>${esc(h)}</th>`).join('')+'</tr>'+
+    uvozUzorak.map(row=>'<tr>'+uvozHeader.map(h=>`<td>${esc(row[h])}</td>`).join('')+'</tr>').join('');
+
+  // Dropdown-ovi za mapiranje
+  const polja=['sifra','naziv','cijena','stanje','jed_mjera'];
+  polja.forEach(p=>{
+    const sel=document.getElementById('map-'+p);
+    const prazna=(p==='cijena'||p==='stanje'||p==='jed_mjera')?'<option value="">— ne uvozi —</option>':'<option value="">— izaberi kolonu —</option>';
+    sel.innerHTML=prazna+uvozHeader.map(h=>`<option value="${esc(h)}" ${predlog[p]===h?'selected':''}>${esc(h)}</option>`).join('');
+  });
+
+  document.getElementById('imp-korak1').style.display='none';
+  document.getElementById('imp-korak2').style.display='block';
+  document.getElementById('import-msg').textContent=`Pronađeno ${ukupnoRedova} redova u fajlu.`;
+  document.getElementById('import-msg').style.color='#6b7a8d';
+}
+
+function otkaziUvoz(){
+  document.getElementById('imp-korak1').style.display='block';
+  document.getElementById('imp-korak2').style.display='none';
+  document.getElementById('import-msg').textContent='';
+  document.getElementById('imp-file').value='';
+}
+
+async function potvrdiUvoz(){
+  const msg=document.getElementById('import-msg');
+  const mapping={
+    sifra:document.getElementById('map-sifra').value,
+    naziv:document.getElementById('map-naziv').value,
+    cijena:document.getElementById('map-cijena').value,
+    stanje:document.getElementById('map-stanje').value,
+    jed_mjera:document.getElementById('map-jed_mjera').value,
+  };
+  if(!mapping.sifra||!mapping.naziv){
+    msg.style.color='red'; msg.textContent='Morate izabrati kolonu za Šifru i Naziv.'; return;
+  }
+  const fileInput=document.getElementById('imp-file');
+  const fd_=new FormData();
+  fd_.append('file', fileInput.files[0]);
+  fd_.append('izvor', document.getElementById('imp-izvor').value);
+  fd_.append('mapping', JSON.stringify(mapping));
+  fd_.append('jed_mjera_default', document.getElementById('map-jm-default').value.trim()||'kom');
+
+  msg.style.color='#6b7a8d'; msg.textContent='Uvoz u toku...';
+  try{
+    const r=await fetch(`${API}/api/roba/import`,{method:'POST',body:fd_});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri uvozu.');
+    msg.style.color='var(--green)';
+    msg.textContent=`✓ Uneseno: ${data.uneseno}, ažurirano: ${data.azurirano}, preskočeno (bez šifre/naziva): ${data.preskoceno}.`;
+    otkaziUvoz();
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+/* ── BLIC IZBOR JEDINICE MJERE (grupno podešavanje, brže od artikal-po-artikal) ── */
+let blicSelected=new Set();
+
+async function blicTrazi(){
+  const q=document.getElementById('blic-search').value;
+  const cont=document.getElementById('blic-lista');
+  cont.innerHTML='<div class="spinner">Pretraga...</div>';
+  try{
+    const r=await fetch(`${API}/api/roba?q=${encodeURIComponent(q)}&limit=100`);
+    const rows=await r.json();
+    blicSelected.clear();
+    renderBlicLista(rows);
+  }catch(e){
+    cont.innerHTML='<div class="empty-msg">Greška pri pretrazi.</div>';
+  }
+}
+
+function renderBlicLista(rows){
+  const cont=document.getElementById('blic-lista');
+  if(!rows.length){
+    cont.innerHTML='<div class="empty-msg">Nema rezultata.</div>';
+    document.getElementById('blic-akcije').style.display='none';
+    return;
+  }
+  cont.innerHTML=rows.map(a=>`
+    <label class="kupac-rez-item" style="display:flex;align-items:center;gap:10px;">
+      <input type="checkbox" onchange="blicToggle(${a.id},this.checked)" style="width:20px;height:20px;flex-shrink:0;">
+      <div style="flex:1;min-width:0;">
+        <div class="kupac-rez-naziv">${esc(a.naziv)}</div>
+        <div class="kupac-rez-meta">Šifra: ${esc(a.sifra)} · Trenutno: <b>${esc(a.jed_mjera)}</b></div>
+      </div>
+    </label>
+  `).join('');
+  document.getElementById('blic-akcije').style.display='block';
+  blicAzurirajBroj();
+}
+
+function blicToggle(id, checked){
+  if(checked) blicSelected.add(id); else blicSelected.delete(id);
+  blicAzurirajBroj();
+}
+
+function blicAzurirajBroj(){
+  document.getElementById('blic-broj').textContent=blicSelected.size;
+}
+
+async function blicPostavi(jm){
+  if(!blicSelected.size){alert('Izaberite bar jedan artikal.');return;}
+  if(!confirm(`Postaviti jedinicu "${jm}" za ${blicSelected.size} artikal(a)? Ovo mijenja jedinicu za koju važi njihova cijena.`)) return;
+  try{
+    const r=await fetch(`${API}/api/roba/bulk-jedinica`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ids:[...blicSelected], jed_mjera:jm}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška.');
+    alert(`✓ Ažurirano ${data.izmijenjeno} artikal(a).`);
+    blicTrazi();
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+/* ── AUTH / LOGOUT ──────────────────────────────────────────── */
+document.getElementById('logout').onclick=async e=>{
+  e.preventDefault();
+  await fetch(`${API}/api/auth/logout`,{method:'POST'});
+  location.href='login.html';
+};
+
+fetch(`${API}/api/auth/me`).then(r=>{
+  if(!r.ok){location.href='login.html';return;}
+  return r.json();
+}).then(u=>{
+  if(!u) return;
+  currentUser=u;
+  isAdmin=u.rola==='admin';
+  if(!isAdmin && !u.moze_prodavati){
+    alert('Nemate dozvolu za pristup maloprodaji. Obratite se administratoru.');
+    location.href='home.html';
+    return;
+  }
+  document.getElementById('who').textContent='👤 '+u.ime_prezime;
+  document.getElementById('tab-admin-btn').textContent = isAdmin ? '📋 Sve otpremnice' : '🧾 Moje otpremnice';
+  if(!isAdmin){
+    document.getElementById('import-box').style.display='none';
+    document.getElementById('blic-izbor-box').style.display='none';
+  }
+  renderKosarica();
+}).catch(()=>location.href='login.html');
+
+/* ── ZAKLJUČI DAN ─────────────────────────────────────────── */
+document.getElementById('btn-zakljuci-dan').onclick=e=>{
+  e.preventDefault();
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelector('.tab-btn[data-tab="admin"]').classList.add('active');
+  document.getElementById('view-admin').classList.add('active');
+  const danas=new Date().toISOString().split('T')[0];
+  document.getElementById('fil-od').value=danas;
+  document.getElementById('fil-do').value=danas;
+  loadOtpremnice();
+};
+</script>
+</body>
+</html>
