@@ -3,7 +3,16 @@ const router = express.Router();
 const pool = require('./db');
 const crypto = require('crypto');
 
-const RAZLOZI = ['kvalitet', 'kolicina', 'lom', 'drugo'];
+const RAZLOZI = ['kvalitet', 'kolicina', 'lom', 'jedinica', 'drugo'];
+
+// Admin uvijek prolazi; ostali moraju imati moze_prodavati=true (dozvola iz korisnici.html).
+// Primjenjuje se na SVE rute u ovom routeru — nijedna ovdje nije striktnije ograničena,
+// admin samo vidi širi opseg (sve otpremnice) unutar istih ruta, ne posebnu rutu.
+router.use((req, res, next) => {
+  const u = req.session?.user;
+  if (u?.rola === 'admin' || u?.moze_prodavati) return next();
+  return res.status(403).json({ error: 'Nemate dozvolu za maloprodaju.' });
+});
 
 // Generiše broj otpremnice: OTP-YYYY-000123
 async function noviBroj(client) {
@@ -25,11 +34,19 @@ async function ucitajZivuRobu(client, roba_idjevi) {
   return map;
 }
 
-// Sastavlja stavke na osnovu ŽIVIH podataka iz baze (cijena_zadana/naziv/stanje uvijek iz roba).
-// Klijent šalje: roba_id, kolicina, i OPCIONO override { tip: 'posto'|'iznos', vrijednost, razlog, napomena }
-// da bi trgovac mogao odstupiti od zadane cijene (slabiji kvalitet, popust na količinu, lom...).
-// Zadana cijena (cijena_zadana) se NIKAD ne uzima od klijenta — uvijek iz roba.cijena u ovom trenutku.
+// Sastavlja stavke na osnovu ŽIVIH podataka iz baze (cijena_zadana/naziv/stanje UVIJEK iz roba).
+// Klijent šalje: roba_id, kolicina, jed_mjera_prodaja (kom/m2/m3 — trgovac SLOBODNO bira, jer
+// se šifrarnik pri uvozu samo NAGAĐA — cijeli broj stanja => "kom", decimalan => "m2", a to
+// nagađanje ne mora biti tačno za svaki artikal), opciono duzina_cm/visina_cm/debljina_cm (ako
+// je količina izračunata preko kalkulatora), i OPCIONO override { tip, vrijednost, razlog,
+// napomena } za ručno odstupanje od cijene.
+//
+// AUTOMATSKO SIGNALIZIRANJE: ako izabrana jedinica NE odgovara jedinici iz šifrarnika, stavka
+// se automatski označava kao odstupanje (razlog 'jedinica'), bez obzira da li je trgovac ručno
+// mijenjao cijenu — jer cijena artikla važi za zadanu jedinicu, pa prodaja u drugoj jedinici
+// zaslužuje pregled kasnije (umjesto provjere unaprijed pri svakom uvozu).
 function sastaviStavke(inputStavke, zivaRoba) {
+  const DOZVOLJENE_JEDINICE = ['kom', 'm2', 'm3'];
   const stavke = [];
   for (const s of inputStavke) {
     const kolicina = parseFloat(s.kolicina);
@@ -43,6 +60,13 @@ function sastaviStavke(inputStavke, zivaRoba) {
         new Error(`Nedovoljno stanje za "${roba.naziv}" (raspoloživo: ${roba.stanje} ${roba.jed_mjera}).`),
         { status: 400 }
       );
+
+    const jedMjeraProdaja = DOZVOLJENE_JEDINICE.includes(s.jed_mjera_prodaja) ? s.jed_mjera_prodaja : roba.jed_mjera;
+    const jedinicaOdstupa = jedMjeraProdaja !== roba.jed_mjera;
+
+    const duzina_cm = s.duzina_cm != null && s.duzina_cm !== '' ? +parseFloat(s.duzina_cm).toFixed(2) : null;
+    const visina_cm = s.visina_cm != null && s.visina_cm !== '' ? +parseFloat(s.visina_cm).toFixed(2) : null;
+    const debljina_cm = s.debljina_cm != null && s.debljina_cm !== '' ? +parseFloat(s.debljina_cm).toFixed(2) : null;
 
     const cijenaZadana = parseFloat(roba.cijena);
     let cijena = cijenaZadana;
@@ -64,12 +88,27 @@ function sastaviStavke(inputStavke, zivaRoba) {
       napomena = (ov.napomena || '').trim().slice(0, 500) || null;
     }
 
-    const odstupa = Math.abs(cijena - cijenaZadana) > 0.001;
+    const cijenaOdstupa = Math.abs(cijena - cijenaZadana) > 0.001;
+    const odstupa = cijenaOdstupa || jedinicaOdstupa;
+
+    let finalRazlog = null, finalNapomena = null;
+    if (odstupa) {
+      if (jedinicaOdstupa) {
+        finalRazlog = razlog || 'jedinica';
+        const autoNota = `⚙ Automatski signal: prodano po "${jedMjeraProdaja}" umjesto zadane jedinice "${roba.jed_mjera}" iz šifrarnika — provjeriti cijenu.`;
+        finalNapomena = napomena ? `${autoNota} ${napomena}` : autoNota;
+      } else {
+        finalRazlog = razlog;
+        finalNapomena = napomena;
+      }
+    }
+
     const iznos = +(kolicina * cijena).toFixed(2);
     stavke.push({
-      roba_id: roba.id, sifra: roba.sifra, naziv: roba.naziv, jed_mjera: roba.jed_mjera,
+      roba_id: roba.id, sifra: roba.sifra, naziv: roba.naziv, jed_mjera: jedMjeraProdaja,
       kolicina, cijena_zadana: cijenaZadana, cijena, iznos,
-      odstupa, razlog_odstupanja: odstupa ? razlog : null, napomena_odstupanja: odstupa ? napomena : null,
+      duzina_cm, visina_cm, debljina_cm,
+      odstupa, razlog_odstupanja: finalRazlog, napomena_odstupanja: finalNapomena,
     });
   }
   return stavke;
@@ -153,11 +192,11 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/otpremnice/potvrdi - JEDINI trenutak kad se nešto upisuje.
 // body: { stavke: [{ roba_id, kolicina, override? }], kupac_naziv, kupac_adresa,
-//         kupac_telefon, kupac_email, potvrdio_kupac_ime }
+//         kupac_telefon, kupac_email, kupac_grad, kupac_id, potvrdio_kupac_ime }
 router.post('/potvrdi', async (req, res) => {
   const user = req.session?.user;
   if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
-  const { stavke, kupac_naziv, kupac_adresa, kupac_telefon, kupac_email, potvrdio_kupac_ime } = req.body;
+  const { stavke, kupac_naziv, kupac_adresa, kupac_telefon, kupac_email, kupac_grad, kupac_id, potvrdio_kupac_ime } = req.body;
   if (!Array.isArray(stavke) || !stavke.length)
     return res.status(400).json({ error: 'Košarica je prazna.' });
   if (!potvrdio_kupac_ime || !potvrdio_kupac_ime.trim())
@@ -180,12 +219,12 @@ router.post('/potvrdi', async (req, res) => {
     const broj = await noviBroj(client);
     const h = await client.query(
       `INSERT INTO otpremnice
-         (broj, komercijalista_id, komercijalista_ime, kupac_naziv, kupac_adresa,
-          kupac_telefon, kupac_email, javni_token, ukupan_iznos,
+         (broj, komercijalista_id, komercijalista_ime, kupac_id, kupac_naziv, kupac_adresa,
+          kupac_telefon, kupac_email, kupac_grad, javni_token, ukupan_iznos,
           status, ima_odstupanje, potvrdio_kupac_ime, potvrdjeno_vrijeme)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'potvrdjena',$10,$11, now()) RETURNING *`,
-      [broj, user.id, user.ime_prezime, kupac_naziv || null, kupac_adresa || null,
-       kupac_telefon || null, kupac_email || null, javniToken, ukupanIznos,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'potvrdjena',$12,$13, now()) RETURNING *`,
+      [broj, user.id, user.ime_prezime, kupac_id || null, kupac_naziv || null, kupac_adresa || null,
+       kupac_telefon || null, kupac_email || null, kupac_grad || null, javniToken, ukupanIznos,
        imaOdstupanje, potvrdio_kupac_ime.trim()]
     );
     const otpId = h.rows[0].id;
@@ -194,10 +233,12 @@ router.post('/potvrdi', async (req, res) => {
       await client.query(
         `INSERT INTO otpremnica_stavke
            (otpremnica_id, roba_id, sifra, naziv, jed_mjera, kolicina,
-            cijena_zadana, cijena, iznos, razlog_odstupanja, napomena_odstupanja)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            cijena_zadana, cijena, iznos, razlog_odstupanja, napomena_odstupanja,
+            duzina_cm, visina_cm, debljina_cm)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
         [otpId, s.roba_id, s.sifra, s.naziv, s.jed_mjera, s.kolicina,
-         s.cijena_zadana, s.cijena, s.iznos, s.razlog_odstupanja, s.napomena_odstupanja]
+         s.cijena_zadana, s.cijena, s.iznos, s.razlog_odstupanja, s.napomena_odstupanja,
+         s.duzina_cm, s.visina_cm, s.debljina_cm]
       );
       await client.query(
         'UPDATE roba SET stanje = stanje - $1, azurirano = now() WHERE id=$2',

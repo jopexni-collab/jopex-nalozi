@@ -6,8 +6,17 @@ const XLSX = require('xlsx');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
+// Admin uvijek prolazi; ostali moraju imati moze_prodavati=true (dozvola iz korisnici.html).
+// Primjenjuje se samo na GET rute za pretragu/pregled robe (POST/PATCH/DELETE/import su već
+// ograničeni striktnije na rola==='admin', pa im ovo ne treba dodatno).
+function zahtijevaProdaju(req, res, next) {
+  const u = req.session?.user;
+  if (u?.rola === 'admin' || u?.moze_prodavati) return next();
+  return res.status(403).json({ error: 'Nemate dozvolu za maloprodaju.' });
+}
+
 // GET /api/roba?q=pretraga&limit=30 - pretraga po šifri ili nazivu
-router.get('/', async (req, res) => {
+router.get('/', zahtijevaProdaju, async (req, res) => {
   try {
     const { q, limit } = req.query;
     const lim = Math.min(parseInt(limit) || 30, 100);
@@ -32,7 +41,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/roba/:id
-router.get('/:id', async (req, res) => {
+router.get('/:id', zahtijevaProdaju, async (req, res) => {
   try {
     const r = await pool.query('SELECT * FROM roba WHERE id=$1', [req.params.id]);
     if (!r.rows.length) return res.status(404).json({ error: 'Nije pronađeno.' });
@@ -44,6 +53,8 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/roba - ručno dodavanje artikla
 router.post('/', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin može dodavati/mijenjati šifrarnik.' });
   try {
     const { sifra, naziv, jed_mjera, cijena, stanje } = req.body;
     if (!sifra || !naziv) return res.status(400).json({ error: 'Šifra i naziv su obavezni.' });
@@ -60,8 +71,30 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PATCH /api/roba/:id - izmjena (cijena, stanje, naziv, aktivan)
+// PATCH /api/roba/bulk-jedinica - "blic izbor": grupno postavljanje jed_mjere za više artikala
+// odjednom (jednim dodirom), da se ne mora ići artikal po artikal nakon uvoza. Samo admin.
+// body: { ids: [1,2,3], jed_mjera: 'kom'|'m2'|'m3' }
+router.patch('/bulk-jedinica', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin može mijenjati šifrarnik.' });
+  try {
+    const { ids, jed_mjera } = req.body;
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'Nema izabranih artikala.' });
+    if (!['kom', 'm2', 'm3'].includes(jed_mjera)) return res.status(400).json({ error: 'Neispravna jedinica mjere.' });
+    const r = await pool.query(
+      `UPDATE roba SET jed_mjera=$1, azurirano=now() WHERE id = ANY($2::int[]) RETURNING id`,
+      [jed_mjera, ids]
+    );
+    res.json({ ok: true, izmijenjeno: r.rows.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/roba/:id - izmjena (cijena, stanje, naziv, aktivan) — samo admin
 router.patch('/:id', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin može mijenjati šifrarnik.' });
   try {
     const ALLOWED = ['naziv', 'jed_mjera', 'cijena', 'stanje', 'aktivan'];
     const sets = [], vals = [];
@@ -190,11 +223,21 @@ router.post('/import', upload.single('file'), async (req, res) => {
         const naziv = String(row[mapping.naziv] ?? '').trim();
         if (!sifra || !naziv) { preskoceno++; continue; }
 
-        const jed_mjera = mapping.jed_mjera ? (String(row[mapping.jed_mjera] ?? '').trim() || jmDefault) : jmDefault;
         const cijenaRaw = mapping.cijena ? row[mapping.cijena] : 0;
         const stanjeRaw = mapping.stanje ? row[mapping.stanje] : 0;
         const cijena = parseFloat(String(cijenaRaw).replace(',', '.')) || 0;
         const stanje = parseFloat(String(stanjeRaw).replace(',', '.')) || 0;
+
+        // Ako fajl nema posebnu kolonu za jedinicu mjere, pogađamo po obliku broja u
+        // koloni stanja: cijeli broj (npr. 45) -> najvjerovatnije "kom", decimalan
+        // (npr. 6,20) -> najvjerovatnije "m2". Ovo je samo POLAZNA pretpostavka —
+        // ne mora biti tačna za svaki artikal. Ako trgovac pri prodaji izabere
+        // drugačiju jedinicu, sistem to automatski prijavljuje kao odstupanje
+        // (vidi otpremnice.js) pa se greške brzo uočavaju naknadno, bez potrebe
+        // da se pri svakom uvozu ide artikal po artikal.
+        const jed_mjera = mapping.jed_mjera
+          ? (String(row[mapping.jed_mjera] ?? '').trim() || jmDefault)
+          : (Number.isInteger(stanje) && stanje !== 0 ? 'kom' : 'm2');
 
         const r = await pool.query(
           `INSERT INTO roba (sifra, naziv, jed_mjera, cijena, stanje, izvor_uvoza)
@@ -212,7 +255,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
       throw err;
     }
 
-    res.json({ ok: true, uneseno, azurirano, preskoceno, ukupno_redova: rows.length, kolone: colMap });
+    res.json({ ok: true, uneseno, azurirano, preskoceno, ukupno_redova: rows.length, kolone: mapping });
   } catch (err) {
     res.status(500).json({ error: 'Greška pri uvozu: ' + err.message });
   }

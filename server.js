@@ -68,6 +68,7 @@ app.use('/api/proizvodnja', requireLoginOrApiKey, require('./proizvodnja'));
 app.use('/api/gotovina',    requireLoginOrApiKey, require('./gotovina'));
 app.use('/api/roba',        requireLoginOrApiKey, require('./roba'));
 app.use('/api/otpremnice',  requireLoginOrApiKey, require('./otpremnice'));
+app.use('/api/kupci',       requireLoginOrApiKey, require('./kupci'));
 
 // ─── Statički fajlovi (web aplikacija) ───────────────────────────────────
 app.use((req, res, next) => {
