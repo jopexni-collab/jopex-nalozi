@@ -6443,31 +6443,16 @@ function _generisiNazivPonude(){
 async function cloudSave(){
   if(!_currentUser){ alert('Niste prijavljeni.'); return; }
   const naziv = _generisiNazivPonude();
-  // Sakupi projekat kao JSON
-  const projekat = typeof saveProject==='function' ? _getProjectData() : {};
-  // Generiši HTML ponude
-  let ponudaHtml = '';
-  try{ ponudaHtml = typeof genPon==='function' ? await genPon(true) : ''; }catch(e){}
-
+  const projekat = _getProjectData();
   try{
-    // Encode
     const jsonB64 = btoa(unescape(encodeURIComponent(JSON.stringify(projekat))));
-    const htmlB64 = ponudaHtml ? btoa(unescape(encodeURIComponent(ponudaHtml))) : '';
-
-    const r = await fetch(API_URL+'/api/upload',{
+    const r = await fetch(API_URL+'/api/upload/ponuda-json',{
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        ponuda_naziv: naziv,
-        ponuda_json_b64: jsonB64,
-        ponuda_html_b64: htmlB64,
-        kupac: (document.getElementById('kl-ime')||{}).value.trim()||null,
-        kreator_id: _currentUser.id,
-        kreator_inicijali: _currentUser.ime_prezime.split(' ').map(d=>d[0]).join('').toUpperCase(),
-      })
+      body: JSON.stringify({ naziv, json_b64: jsonB64 })
     });
     const data = await r.json();
     if(!r.ok) throw new Error(data.error||'Greška');
-    alert('✓ Ponuda sačuvana na serveru:\n'+naziv);
+    alert('✓ Ponuda sačuvana:\n'+naziv);
   }catch(e){ alert('Greška pri cloud čuvanju: '+e.message); }
 }
 
@@ -6507,7 +6492,6 @@ async function usvojiPonudu(){
     msg.style.border=ok?'1px solid #b9e4c9':'1px solid #f3c6c0';
     msg.textContent=t;
   }
-  if(!url){showMsg('⚠ Upiši Server URL.',false);return;}
   if(!items||!items.length){showMsg('⚠ Nema stavki.',false);return;}
 
   var opis=[],ukupno=0,matNazivi=[];
@@ -6639,7 +6623,7 @@ async function usvojiPonudu(){
   }
 }
 
-// povuci
+
 
 </script>
 </body>
