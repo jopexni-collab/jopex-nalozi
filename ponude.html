@@ -205,16 +205,23 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
 
   <div class="sec">
     <div class="sec-hd">Klijent</div>
-    <div class="fg"><label>Ime / Firma</label>
-      <input type="text" id="kl-ime" placeholder="Počni kucati za pretragu..." oninput="refresh();kupciFilter(this.value)" autocomplete="off" style="position:relative">
-      <div id="kupci-dropdown" style="display:none;position:absolute;z-index:999;background:#fff;border:1px solid #1a5fa8;border-radius:4px;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.15);min-width:240px;"></div>
+    <div class="fg" style="position:relative;">
+      <label>Ime / Firma</label>
+      <div style="display:flex;gap:4px;">
+        <input type="text" id="kl-ime" placeholder="Pretraži ili unesi novog..." 
+          oninput="refresh();kupciFilter(this.value)" autocomplete="off" style="flex:1;">
+        <button onclick="kupciToggleDropdown()" title="Prikaži sve kupce"
+          style="font:inherit;font-size:13px;padding:4px 8px;border:1px solid #dde2ea;border-radius:4px;background:#fafbfc;cursor:pointer;">▼</button>
+      </div>
+      <div id="kupci-dropdown" style="display:none;position:absolute;left:0;right:0;z-index:999;background:#fff;border:1px solid #1a5fa8;border-radius:4px;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.15);"></div>
     </div>
     <div class="r2">
       <div class="fg"><label>Telefon</label><input type="text" id="kl-tel"></div>
       <div class="fg"><label>Adresa</label><input type="text" id="kl-adr"></div>
     </div>
-    <div class="fg" style="margin-top:2px;">
-      <button onclick="noviKupacSacuvaj()" style="font:inherit;font-size:11px;padding:4px 10px;background:#eef4fb;border:1px solid #1a5fa8;border-radius:4px;color:#1a5fa8;cursor:pointer;">+ Sačuvaj kao novi kupac u bazi</button>
+    <div class="fg" style="margin-top:2px;display:flex;gap:6px;">
+      <button onclick="noviKupacSacuvaj()" style="font:inherit;font-size:11px;padding:4px 10px;background:#eef4fb;border:1px solid #1a5fa8;border-radius:4px;color:#1a5fa8;cursor:pointer;">+ Sačuvaj u bazu</button>
+      <button onclick="ocistiKupca()" style="font:inherit;font-size:11px;padding:4px 10px;background:#fce8e6;border:1px solid #f3c6c0;border-radius:4px;color:#c0392b;cursor:pointer;">✕ Očisti</button>
     </div>
   </div>
 
@@ -6364,19 +6371,50 @@ async function _loadConfig(){
 }
 
 // KUPCI AUTOCOMPLETE
-function kupciFilter(q){
+function _renderKupciDropdown(lista){
   const dd = document.getElementById('kupci-dropdown');
   if(!dd) return;
-  if(!q || q.length < 2){ dd.style.display='none'; return; }
-  const matches = _sviKupci.filter(k=>k.naziv.toLowerCase().includes(q.toLowerCase())).slice(0,8);
-  if(!matches.length){ dd.style.display='none'; return; }
-  dd.innerHTML = matches.map(k=>`
+  if(!lista.length){
+    dd.innerHTML='<div style="padding:10px;color:#999;font-size:12px;text-align:center;">Nema rezultata</div>';
+    dd.style.display='block';
+    return;
+  }
+  dd.innerHTML = lista.map(k=>`
     <div onclick="izaberiKupca(${JSON.stringify(k).replace(/"/g,'&quot;')})"
-      style="padding:7px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid #eee;"
+      style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #f0f0f0;"
       onmouseover="this.style.background='#eef4fb'" onmouseout="this.style.background=''">
-      <b>${k.naziv}</b>${k.telefon?' · '+k.telefon:''}
+      <b style="color:#1a2332;">${k.naziv}</b>
+      ${k.telefon?'<span style="color:#8a93a3;margin-left:6px;">'+k.telefon+'</span>':''}
+      ${k.adresa?'<div style="font-size:10.5px;color:#aaa;">'+k.adresa+'</div>':''}
     </div>`).join('');
   dd.style.display='block';
+}
+
+function kupciFilter(q){
+  if(!q || q.length < 1){
+    document.getElementById('kupci-dropdown').style.display='none';
+    return;
+  }
+  const matches = _sviKupci.filter(k=>k.naziv.toLowerCase().includes(q.toLowerCase())).slice(0,10);
+  _renderKupciDropdown(matches);
+}
+
+function kupciToggleDropdown(){
+  const dd = document.getElementById('kupci-dropdown');
+  if(dd.style.display==='block'){ dd.style.display='none'; return; }
+  _renderKupciDropdown(_sviKupci.slice(0,20));
+  document.getElementById('kl-ime').focus();
+}
+
+function ocistiKupca(){
+  const ime=document.getElementById('kl-ime');
+  const tel=document.getElementById('kl-tel');
+  const adr=document.getElementById('kl-adr');
+  if(ime) ime.value='';
+  if(tel) tel.value='';
+  if(adr) adr.value='';
+  document.getElementById('kupci-dropdown').style.display='none';
+  refresh();
 }
 
 function izaberiKupca(k){
