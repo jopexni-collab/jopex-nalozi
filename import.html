@@ -11,210 +11,317 @@
 body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);font-size:13px;}
 header{background:var(--blue);color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;}
 header h1{font-size:15px;font-weight:700;}
-header a{color:#fff;text-decoration:none;font-size:12px;border:1px solid rgba(255,255,255,.4);padding:4px 10px;border-radius:4px;}
-main{max-width:960px;margin:24px auto;padding:0 16px;}
+header nav a{color:#fff;text-decoration:none;font-size:12px;border:1px solid rgba(255,255,255,.4);padding:4px 10px;border-radius:4px;margin-left:8px;}
+/* TABS */
+.tabs{display:flex;background:#fff;border-bottom:2px solid var(--border);}
+.tab-btn{padding:12px 24px;font:inherit;font-size:13px;font-weight:700;color:#6b7a8d;background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;margin-bottom:-2px;}
+.tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
+.tab-btn:hover{color:var(--dark);}
+.view{display:none;max-width:960px;margin:24px auto;padding:0 16px;}
+.view.active{display:block;}
+/* CARD */
 .card{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);padding:24px;margin-bottom:20px;}
 .card h2{font-size:14px;color:var(--dark);margin-bottom:16px;border-bottom:1px solid #eee;padding-bottom:10px;}
+/* DROP ZONE */
 .drop-zone{border:2px dashed var(--border);border-radius:8px;padding:40px;text-align:center;cursor:pointer;transition:all .2s;color:#6b7a8d;}
 .drop-zone:hover,.drop-zone.over{border-color:var(--blue);background:#f0f4ff;color:var(--blue);}
 .drop-zone input{display:none;}
-.btn{font:inherit;font-size:13px;padding:8px 20px;border:none;border-radius:6px;cursor:pointer;}
+/* BTN */
+.btn{font:inherit;font-size:13px;padding:8px 20px;border:none;border-radius:6px;cursor:pointer;font-weight:600;}
 .btn-primary{background:var(--blue);color:#fff;}
 .btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+.btn-sec{background:#eee;color:#333;}
+/* PREVIEW */
 .preview{margin-top:16px;overflow:auto;max-height:320px;}
 table{width:100%;border-collapse:collapse;font-size:11.5px;}
 thead th{background:#1f3864;color:#fff;padding:6px 8px;text-align:left;position:sticky;top:0;white-space:nowrap;}
 tbody td{padding:5px 8px;border-bottom:1px solid #eee;white-space:nowrap;}
 tbody tr:nth-child(even) td{background:#f8f9fc;}
+/* MSG */
 .msg{padding:10px 14px;border-radius:6px;margin-top:12px;font-size:13px;}
 .msg.ok{background:#e6f4ea;color:var(--green);}
 .msg.err{background:#fce8e6;color:var(--red);}
 .msg.info{background:#e8f0fe;color:var(--blue);}
+/* PROGRESS */
 .progress{height:8px;background:#eee;border-radius:4px;margin-top:10px;}
 .progress-bar{height:100%;background:var(--blue);border-radius:4px;transition:width .3s;width:0%;}
+/* MAPIRANJE */
+.map-row{display:grid;grid-template-columns:140px 1fr;gap:8px;align-items:center;margin-bottom:7px;}
+.map-row label{font-size:12px;font-weight:600;color:#1a2333;}
+.map-row label .req{color:var(--red);}
+.map-row select{font:inherit;font-size:12px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;}
+.uzorak-box{background:#f7f8fa;border-radius:8px;padding:8px 10px;margin:10px 0;overflow-x:auto;}
+.uzorak-box table{font-size:10.5px;}
+/* TIPOVI KUPACA */
+.tipovi-grid{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0;}
+.tip-chk{display:flex;align-items:center;gap:5px;background:#f0f4ff;border:1px solid #c8d8f0;border-radius:20px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:600;color:#1a5fa8;}
+.tip-chk input{cursor:pointer;}
 </style>
 </head>
 <body>
 <header>
-  <h1>📥 Import naloga iz Excel/CSV</h1>
-  <a href="lista.html">← Radni nalozi</a>
+  <h1>📥 Import podataka – JoPeX</h1>
+  <nav>
+    <a href="home.html">← Početna</a>
+    <a href="#" id="logout">Izlaz</a>
+  </nav>
 </header>
-<main>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('nalozi',this)">📋 Radni nalozi</button>
+  <button class="tab-btn" onclick="switchTab('kupci',this)">🤝 Kupci</button>
+  <button class="tab-btn" onclick="switchTab('roba',this)">📦 Roba / Lager</button>
+</div>
+
+<!-- ═══ TAB: RADNI NALOZI ═══ -->
+<div class="view active" id="view-nalozi">
   <div class="card">
-    <h2>Izaberi Excel (.xlsx) ili CSV fajl iz Google Sheets</h2>
-    <div class="drop-zone" id="dropZone" onclick="document.getElementById('file').click()">
+    <h2>Import radnih naloga iz Excel/CSV</h2>
+    <div class="drop-zone" id="dz-nalozi" onclick="document.getElementById('file-nalozi').click()">
       <div style="font-size:36px">📊</div>
       <div style="font-size:14px;font-weight:600;margin-top:8px">Klikni ili prevuci fajl ovdje</div>
       <p style="margin-top:6px;font-size:12px">Datoteka → Preuzmi → Microsoft Excel (.xlsx) ili CSV</p>
-      <input type="file" id="file" accept=".xlsx,.xls,.csv">
+      <input type="file" id="file-nalozi" accept=".xlsx,.xls,.csv">
     </div>
-    <div id="preview-wrap" style="display:none">
-      <div id="msg-parse"></div>
-      <div class="preview" id="preview"></div>
+    <div id="preview-wrap-nalozi" style="display:none">
+      <div id="msg-parse-nalozi"></div>
+      <div class="preview" id="preview-nalozi"></div>
       <div style="margin-top:14px;display:flex;gap:12px;align-items:center">
-        <button class="btn btn-primary" id="btn-import" onclick="startImport()">✅ Importuj sve naloge</button>
-        <span id="stat-rows" style="font-size:12px;color:#6b7a8d;"></span>
+        <button class="btn btn-primary" id="btn-import-nalozi" onclick="startImportNalozi()">✅ Importuj sve naloge</button>
+        <span id="stat-nalozi" style="font-size:12px;color:#6b7a8d;"></span>
       </div>
-      <div class="progress" id="pw" style="display:none"><div class="progress-bar" id="pb"></div></div>
-      <div id="msg-import"></div>
+      <div class="progress" id="pw-nalozi" style="display:none"><div class="progress-bar" id="pb-nalozi"></div></div>
+      <div id="msg-import-nalozi"></div>
     </div>
   </div>
-</main>
+</div>
+
+<!-- ═══ TAB: KUPCI ═══ -->
+<div class="view" id="view-kupci">
+  <div class="card">
+    <h2>Import kupaca iz Excel/CSV</h2>
+    <p style="font-size:12px;color:#6b7a8d;margin-bottom:16px;">
+      Importovani kupci se dodaju u zajedničku bazu — vidljivi su i u Generatoru ponuda i u Maloprodaji.
+      Duplikati po nazivu se preskače.
+    </p>
+
+    <!-- Korak 1: fajl -->
+    <div id="kupci-k1">
+      <div class="drop-zone" id="dz-kupci" onclick="document.getElementById('file-kupci').click()">
+        <div style="font-size:36px">📊</div>
+        <div style="font-size:14px;font-weight:600;margin-top:8px">Klikni ili prevuci fajl ovdje</div>
+        <p style="margin-top:6px;font-size:12px">.xlsx, .xls ili .csv</p>
+        <input type="file" id="file-kupci" accept=".xlsx,.xls,.csv">
+      </div>
+      <div id="msg-kupci-parse"></div>
+    </div>
+
+    <!-- Korak 2: mapiranje kolona -->
+    <div id="kupci-k2" style="display:none">
+      <div class="uzorak-box"><table id="uzorak-kupci"></table></div>
+      <div style="font-size:12px;color:#6b7a8d;margin-bottom:10px;">Mapiranje kolona — poveži kolone iz fajla sa poljima:</div>
+      <div class="map-row"><label>Naziv <span class="req">*</span></label><select id="map-k-naziv"></select></div>
+      <div class="map-row"><label>Telefon</label><select id="map-k-tel"></select></div>
+      <div class="map-row"><label>Grad</label><select id="map-k-grad"></select></div>
+      <div class="map-row"><label>Adresa</label><select id="map-k-adr"></select></div>
+      <div class="map-row"><label>Email</label><select id="map-k-email"></select></div>
+
+      <div style="margin:14px 0 6px;font-size:12px;font-weight:700;color:#1a2333;">Tip kupca (može se označiti više):</div>
+      <div class="tipovi-grid">
+        <label class="tip-chk"><input type="checkbox" value="kamenorezac"> 🪨 Kamenorezac</label>
+        <label class="tip-chk"><input type="checkbox" value="kuhinja"> 🍳 Kuhinja</label>
+        <label class="tip-chk"><input type="checkbox" value="gradjevina"> 🏗 Građevina</label>
+        <label class="tip-chk"><input type="checkbox" value="malo"> 🛒 Malo (krajnji)</label>
+        <label class="tip-chk"><input type="checkbox" value="veleprodaja"> 📦 Veleprodaja</label>
+      </div>
+      <p style="font-size:11px;color:#8a93a3;margin-bottom:14px;">Tip se primjenjuje na sve uvezene kupce. Možeš ga promijeniti pojedinačno u sekciji Kupci.</p>
+
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn btn-primary" onclick="startImportKupci()">✅ Uvezi kupce</button>
+        <button class="btn btn-sec" onclick="resetKupci()">← Drugi fajl</button>
+        <span id="stat-kupci" style="font-size:12px;color:#6b7a8d;align-self:center;"></span>
+      </div>
+      <div class="progress" id="pw-kupci" style="display:none"><div class="progress-bar" id="pb-kupci"></div></div>
+      <div id="msg-import-kupci"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TAB: ROBA ═══ -->
+<div class="view" id="view-roba">
+  <div class="card">
+    <h2>Import robe / lager liste</h2>
+    <div style="background:#fff3e0;border:1px solid #ffe0b2;border-radius:8px;padding:16px;color:#e65100;font-size:13px;">
+      🚧 Ovaj import je vezan za modul Maloprodaja koji se razvija u zasebnom tasku.<br>
+      <span style="font-size:12px;opacity:.8;margin-top:4px;display:block;">Import robe sa izborom skladišta biće dostupan kada se poveže sa modulom Maloprodaja.</span>
+    </div>
+  </div>
+</div>
+
 <script>
 const API='';
-let parsedRows=[];
+let parsedNalozi=[], kupciHeader=[], kupciUzorak=[], kupciSviRedovi=[];
 
+function switchTab(tab, btn){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('view-'+tab).classList.add('active');
+}
+
+// ═══ NALOZI ═══
 function parseDate(val){
   if(!val) return null;
-  // Excel datum (broj dana od 1900-01-01)
-  if(typeof val==='number'){
-    const d=XLSX.SSF.parse_date_code(val);
-    if(d) return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
-  }
-  // String formati
+  if(typeof val==='number'){const d=XLSX.SSF.parse_date_code(val);if(d)return`${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;}
   let s=String(val).trim().replace(/\.$/,'');
-  // DD.MM.YY ili DD.MM.YYYY
   let m=s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{2,4})$/);
-  if(m){
-    let y=parseInt(m[3]); if(y<100) y+=2000;
-    return `${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
-  }
-  if(s.match(/^\d{4}-\d{2}-\d{2}$/)) return s;
+  if(m){let y=parseInt(m[3]);if(y<100)y+=2000;return`${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;}
+  if(s.match(/^\d{4}-\d{2}-\d{2}$/))return s;
   return null;
 }
-
 function parseNum(val){
-  if(val===null||val===undefined||val==='') return 0;
-  if(typeof val==='number') return val;
+  if(val===null||val===undefined||val==='')return 0;
+  if(typeof val==='number')return val;
   let s=String(val).replace(/["""]/g,'').trim();
-  if(!s||s==='-') return 0;
-  // Detektuj format: ako ima i tačku i zarez
-  // Format 1.234,56 — tačka je separator hilj, zarez decimalni
-  if(s.includes(',') && s.includes('.')){
-    // Provjeri koja je zadnja: ako je zarez zadnji — decimalni separator
-    if(s.lastIndexOf(',')>s.lastIndexOf('.'))
-      s=s.replace(/\./g,'').replace(',','.');
-    else
-      s=s.replace(/,/g,'');
-  } else if(s.includes(',')&&!s.includes('.')){
-    // Samo zarez — decimalni separator
-    s=s.replace(',','.');
-  }
-  // Tačka jedino kao decimalni separator — ostavi
+  if(!s||s==='-')return 0;
+  if(s.includes(',')&&s.includes('.')){if(s.lastIndexOf(',')>s.lastIndexOf('.'))s=s.replace(/\./g,'').replace(',','.');else s=s.replace(/,/g,'');}
+  else if(s.includes(',')&&!s.includes('.'))s=s.replace(',','.');
   return parseFloat(s)||0;
 }
-
 function parseBool(val){
-  if(val===null||val===undefined||val==='') return false;
-  if(typeof val==='boolean') return val;
-  if(typeof val==='number') return val===1;
+  if(val===null||val===undefined||val==='')return false;
+  if(typeof val==='boolean')return val;
+  if(typeof val==='number')return val===1;
   const v=String(val).toUpperCase().trim();
-  if(v==='FALSE'||v==='NE'||v==='0'||v==='NO') return false;
+  if(v==='FALSE'||v==='NE'||v==='0'||v==='NO')return false;
   return v==='TRUE'||v==='DA'||v==='1'||v==='YES';
 }
-
 function mapRow(cols){
-  // cols[0]=R.Br, [1]=Zadatak, [2]=Prioritet, [3]=Ugovorio, [4]=Narucilac
-  // [5]=Materijal, [6]=Status, [7]=Pocetak, [8]=Plan.zavrsetak
-  // [9]=Broj dana, [10]=Gotovo, [11]=Reklamacija, [12]=Napomena
-  // [13]=Link skica, [14]=Link ponuda, [15]=Ugovorena Suma, [16]=Avans
   const g=i=>(cols[i]!==undefined&&cols[i]!==null)?cols[i]:'';
-  const rBr=parseInt(g(0))||null;
-  return {
-    _r_br:                rBr,
-    zadatak:              String(g(1)||'').trim()||'',
-    prioritet:            String(g(2)||'Normal').trim()||'Normal',
-    ugovorio:             String(g(3)||'').trim(),
-    narucilac:            String(g(4)||'').trim(),
-    materijal:            String(g(5)||'').trim(),
-    status:               String(g(6)||'Nije Započeto').trim()||'Nije Započeto',
-    pocetak:              parseDate(g(7)),
-    planirani_zavrsetak:  parseDate(g(8)),
-    gotovo:               parseBool(g(10)),
-    reklamacija_dodatni_rad: String(g(11)||'').trim(),
-    napomena:             String(g(12)||'').trim(),
-    link_skica:           String(g(13)||'').trim(),
-    link_ponuda:          String(g(14)||'').trim(),
-    ugovorena_suma:       parseNum(g(15)),
-    avans:                parseNum(g(16)),
-  };
+  return{_r_br:parseInt(g(0))||null,zadatak:String(g(1)||'').trim(),prioritet:String(g(2)||'Normal').trim()||'Normal',ugovorio:String(g(3)||'').trim(),narucilac:String(g(4)||'').trim(),materijal:String(g(5)||'').trim(),status:String(g(6)||'Nije Započeto').trim()||'Nije Započeto',pocetak:parseDate(g(7)),planirani_zavrsetak:parseDate(g(8)),gotovo:parseBool(g(10)),reklamacija_dodatni_rad:String(g(11)||'').trim(),napomena:String(g(12)||'').trim(),link_skica:String(g(13)||'').trim(),link_ponuda:String(g(14)||'').trim(),ugovorena_suma:parseNum(g(15)),avans:parseNum(g(16))};
 }
 
-const dz=document.getElementById('dropZone');
-dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
-dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
-dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');loadFile(e.dataTransfer.files[0]);});
-document.getElementById('file').addEventListener('change',e=>{if(e.target.files[0])loadFile(e.target.files[0]);});
+function setupDropzone(dzId, fileId, onFile){
+  const dz=document.getElementById(dzId);
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over');});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');onFile(e.dataTransfer.files[0]);});
+  document.getElementById(fileId).addEventListener('change',e=>{if(e.target.files[0])onFile(e.target.files[0]);});
+}
 
-function loadFile(file){
+function readXlsx(file, cb){
   const r=new FileReader();
   r.onload=e=>{
     const data=new Uint8Array(e.target.result);
     const wb=XLSX.read(data,{type:'array',cellDates:false});
     const ws=wb.Sheets[wb.SheetNames[0]];
-    // Čitaj kao array of arrays
-    const aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
-    processData(aoa);
+    cb(XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false}));
   };
   r.readAsArrayBuffer(file);
 }
 
-function processData(aoa){
-  if(!aoa||aoa.length<2){
-    document.getElementById('msg-parse').innerHTML='<div class="msg err">Fajl je prazan ili nema podataka.</div>';
-    return;
-  }
-  // Preskoči header red (index 0), uzmi sve ostale koji imaju R.Br.
+setupDropzone('dz-nalozi','file-nalozi', file=>readXlsx(file, processNalozi));
+
+function processNalozi(aoa){
+  if(!aoa||aoa.length<2){document.getElementById('msg-parse-nalozi').innerHTML='<div class="msg err">Fajl je prazan.</div>';return;}
   const rows=[];
-  for(let i=1;i<aoa.length;i++){
-    const cols=aoa[i];
-    const rbr=parseInt(cols[0]);
-    if(isNaN(rbr)||rbr<=0) continue; // preskoči prazne i header
-    rows.push(mapRow(cols));
-  }
-  parsedRows=rows.reverse(); // okreni - importuj od najstarijeg prema najnovijem
-
-  document.getElementById('stat-rows').textContent=`${parsedRows.length} naloga za import`;
-
-  const previewCols=[
-    {l:'Zadatak',f:'zadatak'},{l:'Prioritet',f:'prioritet'},{l:'Naručilac',f:'narucilac'},
-    {l:'Status',f:'status'},{l:'Ugovoreno',f:'pocetak'},{l:'Plan. završetak',f:'planirani_zavrsetak'},
-    {l:'Gotovo ✓',f:'gotovo'},{l:'Iznos KM',f:'ugovorena_suma'},{l:'Avans',f:'avans'}
-  ];
-  document.getElementById('preview').innerHTML=`
-    <table>
-      <thead><tr>${previewCols.map(c=>`<th>${c.l}</th>`).join('')}</tr></thead>
-      <tbody>${parsedRows.slice(0,15).map(r=>`<tr>${previewCols.map(c=>`<td>${r[c.f]??''}</td>`).join('')}</tr>`).join('')}</tbody>
-    </table>
-    ${parsedRows.length>15?`<p style="color:#999;font-size:11px;padding:6px;text-align:center">... i još ${parsedRows.length-15} redova</p>`:''}
-  `;
-  document.getElementById('preview-wrap').style.display='block';
-  document.getElementById('msg-parse').innerHTML=`<div class="msg info">✓ Učitano ${parsedRows.length} naloga. Provjeri preview pa klikni Import.</div>`;
+  for(let i=1;i<aoa.length;i++){const cols=aoa[i];const rbr=parseInt(cols[0]);if(isNaN(rbr)||rbr<=0)continue;rows.push(mapRow(cols));}
+  parsedNalozi=rows.reverse();
+  document.getElementById('stat-nalozi').textContent=`${parsedNalozi.length} naloga za import`;
+  const previewCols=[{l:'Zadatak',f:'zadatak'},{l:'Prioritet',f:'prioritet'},{l:'Naručilac',f:'narucilac'},{l:'Status',f:'status'},{l:'Ugovoreno',f:'pocetak'},{l:'Gotovo',f:'gotovo'},{l:'Iznos KM',f:'ugovorena_suma'}];
+  document.getElementById('preview-nalozi').innerHTML=`<table><thead><tr>${previewCols.map(c=>`<th>${c.l}</th>`).join('')}</tr></thead><tbody>${parsedNalozi.slice(0,15).map(r=>`<tr>${previewCols.map(c=>`<td>${r[c.f]??''}</td>`).join('')}</tr>`).join('')}</tbody></table>${parsedNalozi.length>15?`<p style="color:#999;font-size:11px;padding:6px;text-align:center">... i još ${parsedNalozi.length-15} redova</p>`:''}`;
+  document.getElementById('preview-wrap-nalozi').style.display='block';
+  document.getElementById('msg-parse-nalozi').innerHTML=`<div class="msg info">✓ Učitano ${parsedNalozi.length} naloga.</div>`;
 }
 
-async function startImport(){
-  const btn=document.getElementById('btn-import');
+async function startImportNalozi(){
+  const btn=document.getElementById('btn-import-nalozi');
   btn.disabled=true;
-  document.getElementById('pw').style.display='block';
-  const pb=document.getElementById('pb');
-  const mi=document.getElementById('msg-import');
+  document.getElementById('pw-nalozi').style.display='block';
+  const pb=document.getElementById('pb-nalozi');
+  const mi=document.getElementById('msg-import-nalozi');
   let ok=0,err=0;
-  for(let i=0;i<parsedRows.length;i++){
-    pb.style.width=Math.round(((i+1)/parsedRows.length)*100)+'%';
-    try{
-      const r=await fetch(`${API}/api/proizvodnja`,{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({...parsedRows[i], r_br_import: parsedRows[i]._r_br}),
-      });
-      if(r.ok) ok++; else err++;
-    }catch(e){err++;}
+  for(let i=0;i<parsedNalozi.length;i++){
+    pb.style.width=Math.round(((i+1)/parsedNalozi.length)*100)+'%';
+    try{const r=await fetch(`${API}/api/proizvodnja`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...parsedNalozi[i],r_br_import:parsedNalozi[i]._r_br})});if(r.ok)ok++;else err++;}catch(e){err++;}
   }
-  mi.innerHTML=`<div class="msg ${err?'err':'ok'}">
-    ${err?'⚠':'✓'} Importovano: <b>${ok}</b> naloga${err?` | Greška: <b>${err}</b>`:''}
-  </div>`;
+  mi.innerHTML=`<div class="msg ${err?'err':'ok'}">${err?'⚠':'✓'} Importovano: <b>${ok}</b>${err?` | Greška: <b>${err}</b>`:''}</div>`;
   btn.disabled=false;
   if(!err) setTimeout(()=>location.href='lista.html',2000);
 }
+
+// ═══ KUPCI ═══
+setupDropzone('dz-kupci','file-kupci', file=>readXlsx(file, processKupci));
+
+function processKupci(aoa){
+  if(!aoa||aoa.length<2){document.getElementById('msg-kupci-parse').innerHTML='<div class="msg err">Fajl je prazan.</div>';return;}
+  kupciHeader=aoa[0].map(h=>String(h||'').trim()).filter(Boolean);
+  kupciUzorak=aoa.slice(1,4);
+  kupciSviRedovi=aoa.slice(1).filter(r=>r.some(c=>c!==''&&c!==null&&c!==undefined));
+
+  // Uzorak tabela
+  document.getElementById('uzorak-kupci').innerHTML=
+    '<tr>'+kupciHeader.map(h=>`<th>${h}</th>`).join('')+'</tr>'+
+    kupciUzorak.map(r=>'<tr>'+kupciHeader.map((h,i)=>`<td>${r[i]||''}</td>`).join('')+'</tr>').join('');
+
+  // Predlog mapiranja
+  const predlog={naziv:kupciHeader.find(h=>/naziv|ime|firma|name/i.test(h))||'',tel:kupciHeader.find(h=>/tel|mob|gsm|phone/i.test(h))||'',grad:kupciHeader.find(h=>/grad|city|mjesto|mjesto/i.test(h))||'',adr:kupciHeader.find(h=>/adres/i.test(h))||'',email:kupciHeader.find(h=>/email|mail/i.test(h))||''};
+
+  // Puni dropdownove
+  ['naziv','tel','grad','adr','email'].forEach(k=>{
+    const sel=document.getElementById('map-k-'+k);
+    const prazno=k==='naziv'?'<option value="">— izaberi —</option>':'<option value="">— preskoči —</option>';
+    sel.innerHTML=prazno+kupciHeader.map(h=>`<option value="${h}" ${predlog[k]===h?'selected':''}>${h}</option>`).join('');
+  });
+
+  document.getElementById('stat-kupci').textContent=`${kupciSviRedovi.length} redova u fajlu`;
+  document.getElementById('kupci-k1').style.display='none';
+  document.getElementById('kupci-k2').style.display='block';
+}
+
+function resetKupci(){
+  document.getElementById('kupci-k1').style.display='block';
+  document.getElementById('kupci-k2').style.display='none';
+  document.getElementById('file-kupci').value='';
+  document.getElementById('msg-kupci-parse').innerHTML='';
+  document.getElementById('msg-import-kupci').innerHTML='';
+}
+
+async function startImportKupci(){
+  const nazCol=document.getElementById('map-k-naziv').value;
+  if(!nazCol){document.getElementById('msg-import-kupci').innerHTML='<div class="msg err">Izaberi kolonu za Naziv.</div>';return;}
+  const telCol=document.getElementById('map-k-tel').value;
+  const gradCol=document.getElementById('map-k-grad').value;
+  const adrCol=document.getElementById('map-k-adr').value;
+  const emailCol=document.getElementById('map-k-email').value;
+  const tipovi=Array.from(document.querySelectorAll('.tip-chk input:checked')).map(c=>c.value);
+
+  const getCol=(row,colName)=>{const i=kupciHeader.indexOf(colName);return i>=0?(row[i]||'').toString().trim():'';}
+
+  document.getElementById('pw-kupci').style.display='block';
+  const pb=document.getElementById('pb-kupci');
+  const mi=document.getElementById('msg-import-kupci');
+  let ok=0,skip=0,err=0;
+
+  for(let i=0;i<kupciSviRedovi.length;i++){
+    pb.style.width=Math.round(((i+1)/kupciSviRedovi.length)*100)+'%';
+    const row=kupciSviRedovi[i];
+    const naziv=getCol(row,nazCol);
+    if(!naziv){skip++;continue;}
+    try{
+      const r=await fetch(`${API}/api/config/kupci`,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({naziv,telefon:getCol(row,telCol)||null,grad:getCol(row,gradCol)||null,adresa:getCol(row,adrCol)||null,email:getCol(row,emailCol)||null,tipovi:tipovi.length?tipovi:null})
+      });
+      if(r.ok)ok++;else{const d=await r.json();if(d.error&&d.error.includes('duplikat'))skip++;else err++;}
+    }catch(e){err++;}
+  }
+  mi.innerHTML=`<div class="msg ${err?'err':'ok'}">✓ Uvezeno: <b>${ok}</b> | Preskočeno: <b>${skip}</b>${err?` | Greška: <b>${err}</b>`:''}</div>`;
+}
+
+document.getElementById('logout').onclick=async e=>{e.preventDefault();await fetch(API+'/api/auth/logout',{method:'POST'});location.href='login.html';};
+
+fetch(API+'/api/auth/me').then(r=>{if(!r.ok){location.href='login.html';return;}return r.json();}).then(u=>{if(!u||u.rola!=='admin'){location.href='home.html';return;}}).catch(()=>location.href='login.html');
 </script>
 </body>
 </html>
