@@ -91,6 +91,14 @@ main{max-width:700px;margin:32px auto;padding:0 16px;}
       <div class="card-arrow">→</div>
     </a>
 
+
+    <a href="kupci.html" class="card hidden" id="card-kupci" style="border-left:4px solid #00796b;">
+      <div class="card-icon">🤝</div>
+      <div class="card-title">Kupci</div>
+      <div class="card-desc">Pregled i upravljanje kupcima. Koriste Ponude i Maloprodaja.</div>
+      <div class="card-arrow">→</div>
+    </a>
+
   </div>
 </main>
 <div class="footer">JoPeX d.o.o. · Auto-Put, Aleksandrovačka petlja bb · 78255 Aleksandrovac</div>
@@ -121,6 +129,7 @@ async function checkAuth(){
     if(admin || u.moze_ugovarati) show('card-ponude');
 
     // Admin only
+    if(admin || u.moze_ugovarati || u.moze_prodavati) show('card-kupci');
     if(admin){ show('card-korisnici'); show('card-import'); }
 
   }catch{location.href='login.html';}
@@ -136,3 +145,4 @@ checkAuth();
 </script>
 </body>
 </html>
+
