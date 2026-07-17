@@ -282,6 +282,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 <div class="tabs">
   <button class="tab-btn active" data-tab="prodaja">🛒 Prodaja</button>
   <button class="tab-btn" data-tab="admin" id="tab-admin-btn">🧾 Otpremnice</button>
+  <button class="tab-btn" data-tab="magacin" id="tab-magacin-btn" style="display:none">📦 Roba i magacin</button>
 </div>
 
 <!-- ═══ TAB: PRODAJA ═══ -->
@@ -325,14 +326,48 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   </div>
 </div>
 
-<!-- ═══ TAB: ADMIN OTPREMNICE ═══ -->
+<!-- ═══ TAB: ADMIN OTPREMNICE (čisto kontrola komercijalista) ═══ -->
 <div class="view" id="view-admin">
+  <div class="filt-row">
+    <select id="fil-objekat" onchange="loadOtpremnice()"><option value="">Svi objekti</option></select>
+    <input type="date" id="fil-od" onchange="loadOtpremnice()">
+    <input type="date" id="fil-do" onchange="loadOtpremnice()">
+    <label class="chk"><input type="checkbox" id="fil-odstupanje" onchange="loadOtpremnice()"> ⚠ Samo sa odstupanjem</label>
+  </div>
+  <div class="dnevni-total" id="dnevni-total" style="display:none"></div>
+  <div id="otp-list"></div>
+</div>
+
+<!-- ═══ TAB: ROBA I MAGACIN (admin) ═══ -->
+<div class="view" id="view-magacin">
+  <div class="import-box" id="lager-lista-box">
+    <h3>📋 Kompletna lager lista</h3>
+    <select id="lager-objekat"><option value="">— izaberi prodajni objekat —</option></select>
+    <button class="btn-import sec" onclick="ucitajLagerListu()">Prikaži</button>
+    <div id="lager-lista-tabela-wrap" style="overflow-x:auto;margin-top:10px;"></div>
+    <div id="lager-total" style="display:none" class="dnevni-total"></div>
+  </div>
+
   <div class="import-box" id="import-box">
     <h3>📥 Uvoz robe iz XLSX</h3>
 
     <!-- Korak 1: izbor fajla -->
     <div id="imp-korak1">
       <select id="imp-objekat"><option value="">— izaberi prodajni objekat —</option></select>
+
+      <div class="ce-row">
+        <button type="button" class="ce-tip-btn active" data-nacin="nabavka" onclick="postaviNacinUvoza('nabavka')">📦 Nova nabavka</button>
+        <button type="button" class="ce-tip-btn" data-nacin="zamjena" onclick="postaviNacinUvoza('zamjena')">🔁 Zamjena kompletnog lagera</button>
+      </div>
+      <div id="nacin-opis" style="font-size:11px;color:#6b7a8d;margin:-4px 0 8px;">
+        Dodaje količinu iz fajla na postojeće stanje. Zadržava stare cijene osim ako ih izričito ažuriraš ispod.
+      </div>
+      <div id="nabavka-cijena-opcija">
+        <label class="chk" style="margin-bottom:8px;">
+          <input type="checkbox" id="imp-azuriraj-cijenu"> Ažuriraj cijenu ako se razlikuje od fajla
+        </label>
+      </div>
+
       <select id="imp-izvor">
         <option value="interni" selected>Interni cjenovnik</option>
         <option value="bluesoft">Bluesoft izvoz</option>
@@ -427,15 +462,6 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
     <div id="prenos-msg" style="font-size:12px;margin-top:8px;"></div>
   </div>
-
-  <div class="filt-row">
-    <select id="fil-objekat" onchange="loadOtpremnice()"><option value="">Svi objekti</option></select>
-    <input type="date" id="fil-od" onchange="loadOtpremnice()">
-    <input type="date" id="fil-do" onchange="loadOtpremnice()">
-    <label class="chk"><input type="checkbox" id="fil-odstupanje" onchange="loadOtpremnice()"> ⚠ Samo sa odstupanjem</label>
-  </div>
-  <div class="dnevni-total" id="dnevni-total" style="display:none"></div>
-  <div id="otp-list"></div>
 </div>
 
 <!-- ═══ KOŠARICA (sticky bottom) ═══ -->
@@ -646,6 +672,7 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     btn.classList.add('active');
     document.getElementById('view-'+btn.dataset.tab).classList.add('active');
     if(btn.dataset.tab==='admin') loadOtpremnice();
+    if(btn.dataset.tab==='magacin') popuniLagerObjekat();
   };
 });
 
@@ -1324,6 +1351,78 @@ async function popuniImportObjekat(){
   }catch(e){}
 }
 
+let uvozNacin='nabavka';
+function postaviNacinUvoza(nacin){
+  uvozNacin=nacin;
+  document.querySelectorAll('.ce-tip-btn[data-nacin]').forEach(b=>b.classList.toggle('active', b.dataset.nacin===nacin));
+  const opis=document.getElementById('nacin-opis');
+  const cijenaOpcija=document.getElementById('nabavka-cijena-opcija');
+  if(nacin==='nabavka'){
+    opis.textContent='Dodaje količinu iz fajla na postojeće stanje. Zadržava stare cijene osim ako ih izričito ažuriraš ispod.';
+    cijenaOpcija.style.display='block';
+  }else{
+    opis.innerHTML='⚠ <b>Nulira stanje svih artikala</b> za izabrani objekat, pa upisuje potpuno novo stanje i cijenu iz fajla. Koristi kad fajl predstavlja CIJELI trenutni lager (ne dodatak).';
+    cijenaOpcija.style.display='none';
+  }
+}
+
+/* ── ADMIN: KOMPLETNA LAGER LISTA ─────────────────────────────────── */
+async function popuniLagerObjekat(){
+  const sel=document.getElementById('lager-objekat');
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`);
+    const rows=await r.json();
+    sel.innerHTML='<option value="">— izaberi prodajni objekat —</option>'+rows.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');
+    if(trenutniObjekat) sel.value=trenutniObjekat.id;
+  }catch(e){}
+}
+
+async function ucitajLagerListu(){
+  const objektId=document.getElementById('lager-objekat').value;
+  const wrap=document.getElementById('lager-lista-tabela-wrap');
+  const totalDiv=document.getElementById('lager-total');
+  if(!objektId){wrap.innerHTML='<div class="empty-msg">Izaberite prodajni objekat.</div>';totalDiv.style.display='none';return;}
+  wrap.innerHTML='<div class="spinner">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/roba/lager?objekt_id=${objektId}`);
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška.');
+    if(!data.stavke.length){
+      wrap.innerHTML='<div class="empty-msg">Nema robe u ovom objektu.</div>';
+      totalDiv.style.display='none';
+      return;
+    }
+    wrap.innerHTML=`
+      <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+        <thead><tr style="background:#1f3864;color:#fff;">
+          <th style="padding:6px 8px;text-align:left;">Šifra</th>
+          <th style="padding:6px 8px;text-align:left;">Naziv</th>
+          <th style="padding:6px 8px;text-align:center;">JM</th>
+          <th style="padding:6px 8px;text-align:right;">Cijena/JM</th>
+          <th style="padding:6px 8px;text-align:right;">Stanje</th>
+          <th style="padding:6px 8px;text-align:right;">Ukupno</th>
+        </tr></thead>
+        <tbody>
+          ${data.stavke.map((s,i)=>`
+            <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
+              <td style="padding:5px 8px;">${esc(s.sifra)}</td>
+              <td style="padding:5px 8px;">${esc(s.naziv)}</td>
+              <td style="padding:5px 8px;text-align:center;">${esc(s.jed_mjera)}</td>
+              <td style="padding:5px 8px;text-align:right;">${fm(s.cijena)} KM</td>
+              <td style="padding:5px 8px;text-align:right;">${s.stanje}</td>
+              <td style="padding:5px 8px;text-align:right;font-weight:700;">${fm(s.ukupno)} KM</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`;
+    totalDiv.style.display='block';
+    totalDiv.innerHTML=`${fm(data.total_vrijednost)} KM<span class="cnt">${data.broj_artikala} artikala u lageru</span>`;
+  }catch(e){
+    wrap.innerHTML=`<div class="empty-msg">${esc(e.message)}</div>`;
+    totalDiv.style.display='none';
+  }
+}
+
 /* ── ADMIN: UPRAVLJANJE PRODAJNIM OBJEKTIMA (PJ) ──────────────────── */
 async function ucitajObjektiListu(){
   const cont=document.getElementById('objekti-postojeci-lista');
@@ -1578,7 +1677,6 @@ function prikaziMapiranje(predlog, ukupnoRedova){
 function otkaziUvoz(){
   document.getElementById('imp-korak1').style.display='block';
   document.getElementById('imp-korak2').style.display='none';
-  document.getElementById('import-msg').textContent='';
   document.getElementById('imp-file').value='';
 }
 
@@ -1601,6 +1699,8 @@ async function potvrdiUvoz(){
   fd_.append('izvor', document.getElementById('imp-izvor').value);
   fd_.append('mapping', JSON.stringify(mapping));
   fd_.append('jed_mjera_default', document.getElementById('map-jm-default').value.trim()||'kom');
+  fd_.append('nacin', uvozNacin);
+  fd_.append('azuriraj_cijenu', document.getElementById('imp-azuriraj-cijenu').checked ? 'true' : 'false');
 
   msg.style.color='#6b7a8d'; msg.textContent='Uvoz u toku...';
   try{
@@ -1608,7 +1708,12 @@ async function potvrdiUvoz(){
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška pri uvozu.');
     msg.style.color='var(--green)';
-    msg.textContent=`✓ Uneseno: ${data.uneseno}, ažurirano: ${data.azurirano}, preskočeno (bez šifre/naziva): ${data.preskoceno}.`;
+    let poruka=`✓ Uneseno: ${data.uneseno}, ažurirano: ${data.azurirano}, preskočeno (bez šifre/naziva): ${data.preskoceno}.`;
+    if(data.nacin==='nabavka' && data.broj_cijena_razlike>0){
+      poruka+=` ⚠ ${data.broj_cijena_razlike} artikal(a) imalo je drugačiju cijenu u fajlu — `+
+        (data.cijena_azurirana?'cijene su ažurirane na nove.':'STARE cijene su zadržane (nisi tražio ažuriranje).');
+    }
+    msg.textContent=poruka;
     otkaziUvoz();
   }catch(e){
     msg.style.color='red'; msg.textContent=e.message;
@@ -1699,15 +1804,12 @@ fetch(`${API}/api/auth/me`).then(r=>{
   }
   document.getElementById('who').textContent='👤 '+u.ime_prezime;
   document.getElementById('tab-admin-btn').textContent = isAdmin ? '📋 Sve otpremnice' : '🧾 Moje otpremnice';
-  if(!isAdmin){
-    document.getElementById('import-box').style.display='none';
-    document.getElementById('blic-izbor-box').style.display='none';
-    document.getElementById('objekti-box').style.display='none';
-    document.getElementById('prenos-box').style.display='none';
-  }else{
+  if(isAdmin){
+    document.getElementById('tab-magacin-btn').style.display='';
     popuniImportObjekat();
     ucitajObjektiListu();
     popuniPrenosObjekte();
+    popuniLagerObjekat();
   }
   popuniFilterObjekata();
   renderKosarica();
