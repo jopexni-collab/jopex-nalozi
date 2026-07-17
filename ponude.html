@@ -6445,19 +6445,110 @@ async function cloudSave(){
   const naziv = _generisiNazivPonude();
   const projekat = _getProjectData();
   try{
+    // 1. Upload JSON na R2
     const jsonB64 = btoa(unescape(encodeURIComponent(JSON.stringify(projekat))));
-    const r = await fetch(API_URL+'/api/upload/ponuda-json',{
+    const r1 = await fetch(API_URL+'/api/upload/ponuda-json',{
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ naziv, json_b64: jsonB64 })
     });
-    const data = await r.json();
-    if(!r.ok) throw new Error(data.error||'Greška');
+    const d1 = await r1.json();
+    if(!r1.ok) throw new Error(d1.error||'Greška pri uploadu');
+
+    // 2. Upis metapodataka u bazu
+    const kupac = (document.getElementById('kl-ime')||{}).value.trim()||null;
+    const r2 = await fetch(API_URL+'/api/ponude',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ naziv, kupac, link_json: d1.link })
+    });
+    const d2 = await r2.json();
+    if(!r2.ok) throw new Error(d2.error||'Greška pri upisu');
+
     alert('✓ Ponuda sačuvana:\n'+naziv);
   }catch(e){ alert('Greška pri cloud čuvanju: '+e.message); }
 }
 
 async function cloudLoad(){
-  alert('Lista ponuda sa servera — dolazi u sljedećoj verziji.');
+  try{
+    const r = await fetch(API_URL+'/api/ponude');
+    if(!r.ok) throw new Error('Greška pri učitavanju.');
+    const lista = await r.json();
+    if(!lista.length){ alert('Nema sačuvanih ponuda.'); return; }
+    _prikaziListuPonuda(lista);
+  }catch(e){ alert('Greška: '+e.message); }
+}
+
+function _prikaziListuPonuda(lista){
+  // Ukloni stari modal ako postoji
+  const stari = document.getElementById('cloud-modal');
+  if(stari) stari.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'cloud-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:10px;padding:20px;min-width:420px;max-width:90vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <b style="font-size:15px;color:#134a85;">☁ Ponude na serveru</b>
+        <button onclick="document.getElementById('cloud-modal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+      </div>
+      <div style="overflow-y:auto;flex:1;">
+        ${lista.map(p=>`
+          <div style="padding:10px 12px;border:1px solid #dde2ea;border-radius:7px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
+            <div>
+              <div style="font-weight:700;font-size:13px;color:#1a2332;">${p.naziv}</div>
+              <div style="font-size:11px;color:#8a93a3;margin-top:2px;">
+                ${p.kupac||'—'} · ${p.kreator_inicijali||''} · ${p.datum?p.datum.split('T')[0]:''}
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;">
+              <button onclick="_ucitajPonudu('${p.link_json}','${p.naziv}')"
+                style="font:inherit;font-size:11px;padding:5px 10px;background:#1a5fa8;color:#fff;border:none;border-radius:5px;cursor:pointer;">
+                📂 Učitaj
+              </button>
+              <button onclick="_obrisiPonudu(${p.id},this)"
+                style="font:inherit;font-size:11px;padding:5px 8px;background:#fce8e6;color:#c0392b;border:1px solid #f3c6c0;border-radius:5px;cursor:pointer;">
+                🗑
+              </button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function _ucitajPonudu(linkJson, naziv){
+  if(!linkJson){ alert('Nema linka za učitavanje.'); return; }
+  try{
+    const r = await fetch(linkJson);
+    if(!r.ok) throw new Error('Greška pri preuzimanju.');
+    const projekat = await r.json();
+    // Popuni klijenta
+    if(projekat.klijent){
+      const ime=document.getElementById('kl-ime');
+      const tel=document.getElementById('kl-tel');
+      const adr=document.getElementById('kl-adr');
+      if(ime) ime.value=projekat.klijent.ime||'';
+      if(tel) tel.value=projekat.klijent.tel||'';
+      if(adr) adr.value=projekat.klijent.adr||'';
+    }
+    // Učitaj stavke ako postoje
+    if(projekat.items && typeof loadItems==='function'){
+      loadItems(projekat.items);
+    }
+    document.getElementById('cloud-modal').remove();
+    refresh();
+    alert('✓ Ponuda "'+naziv+'" učitana.');
+  }catch(e){ alert('Greška pri učitavanju: '+e.message); }
+}
+
+async function _obrisiPonudu(id, btn){
+  if(!confirm('Obrisati ovu ponudu?')) return;
+  try{
+    const r = await fetch(API_URL+'/api/ponude/'+id,{method:'DELETE'});
+    if(!r.ok) throw new Error();
+    btn.closest('div[style]').remove();
+  }catch(e){ alert('Greška pri brisanju.'); }
 }
 
 // Pomoćna — izvuci podatke projekta za cloud čuvanje
