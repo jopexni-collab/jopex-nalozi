@@ -6553,23 +6553,45 @@ async function _ucitajPonudu(linkJson, naziv){
   try{
     const r = await fetch(API_URL+'/api/ponude/ucitaj?link='+encodeURIComponent(linkJson));
     if(!r.ok) throw new Error('Greška pri preuzimanju.');
-    const projekat = await r.json();
-    // Popuni klijenta
-    if(projekat.klijent){
-      const ime=document.getElementById('kl-ime');
-      const tel=document.getElementById('kl-tel');
-      const adr=document.getElementById('kl-adr');
-      if(ime) ime.value=projekat.klijent.ime||'';
-      if(tel) tel.value=projekat.klijent.tel||'';
-      if(adr) adr.value=projekat.klijent.adr||'';
+    const p = await r.json();
+    if(!p.items) throw new Error('Nevažeći format ponude.');
+    // Postavi klijenta
+    if(p.klijent){
+      if(ge('kl-ime')) ge('kl-ime').value=p.klijent.ime||'';
+      if(ge('kl-tel')) ge('kl-tel').value=p.klijent.tel||'';
+      if(ge('kl-adr')) ge('kl-adr').value=p.klijent.adr||'';
     }
-    // Učitaj stavke ako postoje
-    if(projekat.items && typeof loadItems==='function'){
-      loadItems(projekat.items);
+    // Postavi stavke — ista logika kao loadProject
+    items = p.items;
+    items.forEach(function(it){
+      it.wallSides={};
+      if(!it.slavine && it.inputs && it.inputs['cb-slav']){
+        it.slavine=[{id:'sl'+Date.now()+Math.floor(Math.random()*1000),fi:parseFloat(it.inputs['slav-fi'])||35,cost:parseFloat(it.inputs['slav-c'])||0,x:parseFloat(it.inputs['slav-x'])||400,yz:parseFloat(it.inputs['slav-yz'])||50}];
+      } else if(!it.slavine){ it.slavine=[]; }
+    });
+    activeIdx = Math.min(p.activeIdx||0, items.length-1);
+    syncFromActive();
+    loadItemInputs();
+    if(!dims||!Object.keys(dims).length){
+      var sh=SHAPES.find(function(x){return x.id===shape;});
+      if(sh){dims=Object.assign({},sh.def||{});getAct().dims=dims;}
     }
-    document.getElementById('cloud-modal').remove();
+    ['k','kl','st','sto'].forEach(function(x){
+      var el=ge('tab-'+x); if(el) el.className='tip-tab'+(x===tip?' on':'');
+      var bl=ge('blok-'+x); if(bl) bl.className='blok'+(x===tip?' on':'');
+    });
+    buildShapeGrid();
+    buildDimTable();
+    buildWallGrid();
+    buildExtSection();
+    buildIvice();
+    buildCornerR();
+    buildCustomOtvoriUI();
+    buildSlavinaUI();
+    buildItemList();
     refresh();
-    alert('✓ Ponuda "'+naziv+'" učitana.');
+    document.getElementById('cloud-modal').remove();
+    alert('✓ Ponuda "'+naziv+'" učitana: '+p.items.length+' stavki');
   }catch(e){ alert('Greška pri učitavanju: '+e.message); }
 }
 
@@ -6586,15 +6608,17 @@ async function _obrisiPonudu(id, btn){
 function _getProjectData(){
   try{
     return {
+      version: 1,
       klijent:{
         ime: (document.getElementById('kl-ime')||{}).value||'',
         tel: (document.getElementById('kl-tel')||{}).value||'',
         adr: (document.getElementById('kl-adr')||{}).value||'',
       },
       items: typeof items!=='undefined'?items:[],
+      activeIdx: typeof activeIdx!=='undefined'?activeIdx:0,
       timestamp: new Date().toISOString(),
     };
-  }catch(e){ return {}; }
+  }catch(e){ return {version:1,items:[]}; }
 }
 
 // Zamjena _apiUrl funkcije — uvijek vraća relativni URL
