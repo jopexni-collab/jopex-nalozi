@@ -9,13 +9,14 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('./db');
+const { listaKupaca, kreirajKupca, azurirajKupca } = require('./kupci-lib');
 
 router.get('/', async (req, res) => {
   try {
     const [mat, kupci, obrade, ugovaraci] = await Promise.all([
       pool.query(`SELECT id, naziv, cijena_m2 FROM materijali
                   WHERE aktivan = true ORDER BY naziv`),
-      pool.query(`SELECT id, naziv, telefon, adresa, email FROM kupci
+      pool.query(`SELECT id, naziv, telefon, grad, adresa, email FROM kupci
                   WHERE aktivan = true ORDER BY naziv`),
       pool.query(`SELECT id, naziv, kod, cijena_m FROM vrste_obrade
                   WHERE aktivan = true ORDER BY id`),
@@ -65,36 +66,32 @@ router.patch('/materijali/:id', async (req, res) => {
   res.json(r.rows[0]);
 });
 
-// CRUD za kupce (admin)
+// CRUD za kupce (admin) — logika je u kupci-lib.js, dijeli se sa maloprodajom (kupci.js),
+// tako da su "grad"/"napomena" i sva ostala polja uvijek dostupna na oba mjesta.
 router.get('/kupci', async (req, res) => {
-  const r = await pool.query(`SELECT * FROM kupci ORDER BY naziv`);
-  res.json(r.rows);
+  try {
+    const rows = await listaKupaca({ samoAktivni: false }); // admin vidi i neaktivne (za reaktivaciju)
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 router.post('/kupci', async (req, res) => {
-  const { naziv, telefon, adresa, email, napomena } = req.body;
-  if (!naziv) return res.status(400).json({ error: 'Naziv je obavezan.' });
-  const r = await pool.query(
-    `INSERT INTO kupci (naziv, telefon, adresa, email, napomena)
-     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [naziv, telefon||null, adresa||null, email||null, napomena||null]
-  );
-  res.status(201).json(r.rows[0]);
+  try {
+    const kupac = await kreirajKupca(req.body);
+    res.status(201).json(kupac);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
 });
 router.patch('/kupci/:id', async (req, res) => {
-  const { naziv, telefon, adresa, email, napomena, aktivan } = req.body;
-  const r = await pool.query(
-    `UPDATE kupci SET
-       naziv   = COALESCE($1, naziv),
-       telefon = COALESCE($2, telefon),
-       adresa  = COALESCE($3, adresa),
-       email   = COALESCE($4, email),
-       napomena= COALESCE($5, napomena),
-       aktivan = COALESCE($6, aktivan)
-     WHERE id = $7 RETURNING *`,
-    [naziv, telefon, adresa, email, napomena, aktivan, req.params.id]
-  );
-  if (!r.rows.length) return res.status(404).json({ error: 'Nije pronađeno.' });
-  res.json(r.rows[0]);
+  try {
+    const kupac = await azurirajKupca(req.params.id, req.body);
+    if (!kupac) return res.status(404).json({ error: 'Nije pronađeno.' });
+    res.json(kupac);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
 });
 
 // Cijene obrade (admin)
