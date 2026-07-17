@@ -376,6 +376,58 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
   </div>
 
+  <div class="import-box" id="objekti-box">
+    <h3>🏢 Prodajni objekti (PJ)</h3>
+    <div id="objekti-postojeci-lista" style="margin-bottom:10px;"></div>
+    <input type="text" id="novi-objekat-naziv" placeholder="Naziv novog PJ (npr. PJ Prijedor)">
+    <input type="text" id="novi-objekat-adresa" placeholder="Adresa (opciono, za memorandum ako se razlikuje)">
+    <button class="btn-import" onclick="dodajProdajniObjekat()">+ Dodaj prodajni objekat</button>
+    <div id="objekti-msg" style="font-size:12px;margin-top:8px;"></div>
+  </div>
+
+  <div class="import-box" id="prenos-box">
+    <h3>🔄 Prebacivanje robe između objekata</h3>
+    <div class="uzorak-hint">Interni transfer stanja — ne prodaja. Cijena u odredišnom PJ se preuzima iz izvornog PJ ako artikal tamo još nema svoju cijenu (možeš je odmah izmijeniti nakon prenosa).</div>
+
+    <div class="ce-row">
+      <button type="button" class="ce-tip-btn active" data-pmode="rucno" onclick="postaviPrenosMode('rucno')">Ručno (1 artikal)</button>
+      <button type="button" class="ce-tip-btn" data-pmode="xlsx" onclick="postaviPrenosMode('xlsx')">Uvezi iz XLSX</button>
+    </div>
+
+    <!-- RUČNI UNOS -->
+    <div id="prenos-rucno-blok">
+      <select id="prenos-iz" onchange="document.getElementById('prenos-search').value='';document.getElementById('prenos-rezultati').innerHTML='';"><option value="">— iz objekta —</option></select>
+      <select id="prenos-u"><option value="">— u objekat —</option></select>
+      <input type="text" id="prenos-search" placeholder="Pretraga artikla po šifri/nazivu...">
+      <div id="prenos-rezultati"></div>
+      <div id="prenos-izabrano" style="display:none;background:#f7f8fa;border-radius:8px;padding:10px;margin:8px 0;">
+        <div id="prenos-izabrano-naziv" style="font-weight:700;font-size:13px;margin-bottom:6px;"></div>
+        <input type="number" id="prenos-kolicina" step="0.001" min="0.001" placeholder="Količina za prebaciti">
+        <button class="btn-import" onclick="potvrdiPrenos()">✓ Prebaci</button>
+      </div>
+    </div>
+
+    <!-- XLSX UVOZ (bulk, cijela prenosnica odjednom) -->
+    <div id="prenos-xlsx-blok" style="display:none">
+      <select id="prenos-xlsx-iz"><option value="">— iz objekta —</option></select>
+      <select id="prenos-xlsx-u"><option value="">— u objekat —</option></select>
+      <div id="prenos-xlsx-k1">
+        <input type="file" id="prenos-xlsx-file" accept=".xlsx,.xls">
+        <button class="btn-import sec" onclick="ucitajPregledPrenosa()">Učitaj fajl i prikaži kolone</button>
+      </div>
+      <div id="prenos-xlsx-k2" style="display:none">
+        <div class="uzorak-hint">Zaglavlja pronađena u fajlu i prvih par redova — provjeri mapiranje:</div>
+        <div class="uzorak-box"><table id="prenos-uzorak-tabela"></table></div>
+        <div class="map-row"><label>Šifra <span class="req">*</span></label><select id="prenos-map-sifra"></select></div>
+        <div class="map-row"><label>Količina <span class="req">*</span></label><select id="prenos-map-kolicina"></select></div>
+        <button class="btn-import" onclick="potvrdiUvozPrenosa()">✓ Uvezi prenosnicu</button>
+        <button class="btn-import sec" onclick="otkaziUvozPrenosa()">← Nazad / drugi fajl</button>
+      </div>
+    </div>
+
+    <div id="prenos-msg" style="font-size:12px;margin-top:8px;"></div>
+  </div>
+
   <div class="filt-row">
     <select id="fil-objekat" onchange="loadOtpremnice()"><option value="">Svi objekti</option></select>
     <input type="date" id="fil-od" onchange="loadOtpremnice()">
@@ -1272,6 +1324,217 @@ async function popuniImportObjekat(){
   }catch(e){}
 }
 
+/* ── ADMIN: UPRAVLJANJE PRODAJNIM OBJEKTIMA (PJ) ──────────────────── */
+async function ucitajObjektiListu(){
+  const cont=document.getElementById('objekti-postojeci-lista');
+  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`);
+    const rows=await r.json();
+    if(!rows.length){cont.innerHTML='<div class="empty-msg">Još nema definisanih prodajnih objekata.</div>';return;}
+    cont.innerHTML=rows.map(o=>`
+      <div class="kupac-rez-item" style="cursor:default;">
+        <div class="kupac-rez-naziv">🏢 ${esc(o.naziv)}</div>
+        ${o.adresa?`<div class="kupac-rez-meta">${esc(o.adresa)}</div>`:''}
+      </div>
+    `).join('');
+  }catch(e){
+    cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>';
+  }
+}
+
+async function dodajProdajniObjekat(){
+  const naziv=document.getElementById('novi-objekat-naziv').value.trim();
+  const adresa=document.getElementById('novi-objekat-adresa').value.trim();
+  const msg=document.getElementById('objekti-msg');
+  if(!naziv){msg.style.color='red';msg.textContent='Unesite naziv prodajnog objekta.';return;}
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({naziv, adresa: adresa||null}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri dodavanju.');
+    msg.style.color='var(--green)';
+    msg.textContent=`✓ Dodano: ${data.naziv}`;
+    document.getElementById('novi-objekat-naziv').value='';
+    document.getElementById('novi-objekat-adresa').value='';
+    ucitajObjektiListu();
+    popuniFilterObjekata();
+    popuniImportObjekat();
+    popuniPrenosObjekte();
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+/* ── ADMIN: PREBACIVANJE ROBE IZMEĐU PRODAJNIH OBJEKATA ─────────────── */
+let prenosIzabraniArtikal=null;
+let prenosSearchTimer=null;
+
+async function popuniPrenosObjekte(){
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`);
+    const rows=await r.json();
+    const opcije='<option value="">— izaberi —</option>'+rows.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');
+    document.getElementById('prenos-iz').innerHTML=opcije;
+    document.getElementById('prenos-u').innerHTML=opcije;
+    document.getElementById('prenos-xlsx-iz').innerHTML=opcije;
+    document.getElementById('prenos-xlsx-u').innerHTML=opcije;
+  }catch(e){}
+}
+
+function postaviPrenosMode(mode){
+  document.querySelectorAll('.ce-tip-btn[data-pmode]').forEach(b=>b.classList.toggle('active', b.dataset.pmode===mode));
+  document.getElementById('prenos-rucno-blok').style.display = mode==='rucno' ? 'block':'none';
+  document.getElementById('prenos-xlsx-blok').style.display = mode==='xlsx' ? 'block':'none';
+  document.getElementById('prenos-msg').textContent='';
+}
+
+document.getElementById('prenos-search').addEventListener('input', e=>{
+  clearTimeout(prenosSearchTimer);
+  const q=e.target.value;
+  prenosSearchTimer=setTimeout(()=>traziPrenosArtikal(q), 250);
+});
+
+async function traziPrenosArtikal(q){
+  const izObjekta=document.getElementById('prenos-iz').value;
+  const cont=document.getElementById('prenos-rezultati');
+  if(!izObjekta){cont.innerHTML='<div class="empty-msg">Prvo izaberi IZ kojeg objekta prebacuješ.</div>';return;}
+  if(!q||!q.trim()){cont.innerHTML='';return;}
+  cont.innerHTML='<div class="spinner">Pretraga...</div>';
+  try{
+    const r=await fetch(`${API}/api/roba?q=${encodeURIComponent(q)}&limit=15&objekt_id=${izObjekta}`);
+    const rows=await r.json();
+    if(!rows.length){cont.innerHTML='<div class="empty-msg">Nema rezultata (ili artikal nema stanje u ovom objektu).</div>';return;}
+    cont.innerHTML=rows.map(a=>`
+      <div class="rez-item" onclick='izaberiPrenosArtikal(${JSON.stringify(a).replace(/'/g,"&apos;")})'>
+        <div class="rez-info">
+          <div class="rez-naziv">${esc(a.naziv)}</div>
+          <div class="rez-sifra">Šifra: ${esc(a.sifra)}</div>
+        </div>
+        <div class="rez-right"><div class="rez-stanje">${a.stanje} ${esc(a.jed_mjera)}</div></div>
+      </div>
+    `).join('');
+  }catch(e){
+    cont.innerHTML='<div class="empty-msg">Greška pri pretrazi.</div>';
+  }
+}
+
+function izaberiPrenosArtikal(artikal){
+  prenosIzabraniArtikal=artikal;
+  document.getElementById('prenos-izabrano-naziv').textContent=
+    `${artikal.naziv} — raspoloživo: ${artikal.stanje} ${artikal.jed_mjera}`;
+  document.getElementById('prenos-izabrano').style.display='block';
+  document.getElementById('prenos-rezultati').innerHTML='';
+  document.getElementById('prenos-search').value='';
+}
+
+async function potvrdiPrenos(){
+  const msg=document.getElementById('prenos-msg');
+  const izObjekta=document.getElementById('prenos-iz').value;
+  const uObjekat=document.getElementById('prenos-u').value;
+  const kolicina=parseFloat(document.getElementById('prenos-kolicina').value);
+  if(!prenosIzabraniArtikal){msg.style.color='red';msg.textContent='Izaberite artikal.';return;}
+  if(!izObjekta||!uObjekat){msg.style.color='red';msg.textContent='Izaberite oba objekta.';return;}
+  if(izObjekta===uObjekat){msg.style.color='red';msg.textContent='Izvorni i odredišni objekat moraju biti različiti.';return;}
+  if(!kolicina||kolicina<=0){msg.style.color='red';msg.textContent='Unesite ispravnu količinu.';return;}
+  try{
+    const r=await fetch(`${API}/api/prenosi`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        roba_id: prenosIzabraniArtikal.id, iz_objekta_id: izObjekta, u_objekat_id: uObjekat, kolicina,
+      }),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri prenosu.');
+    msg.style.color='var(--green)';
+    msg.textContent=`✓ Prebačeno ${data.kolicina} ${esc(data.jed_mjera||'')} iz "${esc(data.iz_objekta_naziv)}" u "${esc(data.u_objekat_naziv)}".`;
+    prenosIzabraniArtikal=null;
+    document.getElementById('prenos-izabrano').style.display='none';
+    document.getElementById('prenos-kolicina').value='';
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+/* ── XLSX UVOZ PRENOSNICE (bulk) ──────────────────────────────────── */
+let prenosUvozHeader=[], prenosUvozUzorak=[];
+
+async function ucitajPregledPrenosa(){
+  const msg=document.getElementById('prenos-msg');
+  const fileInput=document.getElementById('prenos-xlsx-file');
+  const izObjekta=document.getElementById('prenos-xlsx-iz').value;
+  const uObjekat=document.getElementById('prenos-xlsx-u').value;
+  if(!izObjekta||!uObjekat){msg.style.color='red';msg.textContent='Izaberite oba objekta.';return;}
+  if(izObjekta===uObjekat){msg.style.color='red';msg.textContent='Izvorni i odredišni objekat moraju biti različiti.';return;}
+  if(!fileInput.files.length){msg.style.color='red';msg.textContent='Izaberite fajl.';return;}
+  msg.style.color='#6b7a8d'; msg.textContent='Čitanje fajla...';
+  const fd_=new FormData();
+  fd_.append('file', fileInput.files[0]);
+  try{
+    const r=await fetch(`${API}/api/prenosi/import/pregled`,{method:'POST',body:fd_});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri čitanju fajla.');
+    prenosUvozHeader=data.header; prenosUvozUzorak=data.uzorak;
+
+    const tbl=document.getElementById('prenos-uzorak-tabela');
+    tbl.innerHTML='<tr>'+prenosUvozHeader.map(h=>`<th>${esc(h)}</th>`).join('')+'</tr>'+
+      prenosUvozUzorak.map(row=>'<tr>'+prenosUvozHeader.map(h=>`<td>${esc(row[h])}</td>`).join('')+'</tr>').join('');
+
+    ['sifra','kolicina'].forEach(p=>{
+      const sel=document.getElementById('prenos-map-'+p);
+      sel.innerHTML='<option value="">— izaberi kolonu —</option>'+
+        prenosUvozHeader.map(h=>`<option value="${esc(h)}" ${data.predlog[p]===h?'selected':''}>${esc(h)}</option>`).join('');
+    });
+
+    document.getElementById('prenos-xlsx-k1').style.display='none';
+    document.getElementById('prenos-xlsx-k2').style.display='block';
+    msg.style.color='#6b7a8d';
+    msg.textContent=`Pronađeno ${data.ukupno_redova} redova u fajlu.`;
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+function otkaziUvozPrenosa(){
+  document.getElementById('prenos-xlsx-k1').style.display='block';
+  document.getElementById('prenos-xlsx-k2').style.display='none';
+  document.getElementById('prenos-xlsx-file').value='';
+  document.getElementById('prenos-msg').textContent='';
+}
+
+async function potvrdiUvozPrenosa(){
+  const msg=document.getElementById('prenos-msg');
+  const mapping={
+    sifra: document.getElementById('prenos-map-sifra').value,
+    kolicina: document.getElementById('prenos-map-kolicina').value,
+  };
+  if(!mapping.sifra||!mapping.kolicina){msg.style.color='red';msg.textContent='Morate mapirati Šifru i Količinu.';return;}
+
+  const fileInput=document.getElementById('prenos-xlsx-file');
+  const fd_=new FormData();
+  fd_.append('file', fileInput.files[0]);
+  fd_.append('iz_objekta_id', document.getElementById('prenos-xlsx-iz').value);
+  fd_.append('u_objekat_id', document.getElementById('prenos-xlsx-u').value);
+  fd_.append('mapping', JSON.stringify(mapping));
+
+  msg.style.color='#6b7a8d'; msg.textContent='Uvoz u toku...';
+  try{
+    const r=await fetch(`${API}/api/prenosi/import`,{method:'POST',body:fd_});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri uvozu.');
+    msg.style.color='var(--green)';
+    let poruka=`✓ Prebačeno: ${data.uspjesno}, preskočeno: ${data.preskoceno} (od ${data.ukupno_redova} redova).`;
+    if(data.greske&&data.greske.length) poruka+=' Greške: '+data.greske.slice(0,5).join('; ');
+    msg.textContent=poruka;
+    otkaziUvozPrenosa();
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+
 async function ucitajPregledUvoza(){
   const fileInput=document.getElementById('imp-file');
   const msg=document.getElementById('import-msg');
@@ -1439,8 +1702,12 @@ fetch(`${API}/api/auth/me`).then(r=>{
   if(!isAdmin){
     document.getElementById('import-box').style.display='none';
     document.getElementById('blic-izbor-box').style.display='none';
+    document.getElementById('objekti-box').style.display='none';
+    document.getElementById('prenos-box').style.display='none';
   }else{
     popuniImportObjekat();
+    ucitajObjektiListu();
+    popuniPrenosObjekte();
   }
   popuniFilterObjekata();
   renderKosarica();

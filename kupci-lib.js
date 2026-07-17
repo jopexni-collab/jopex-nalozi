@@ -9,7 +9,7 @@
 const pool = require('./db');
 
 // Sva polja kupca koja se mogu upisati/mijenjati preko ove biblioteke.
-const POLJA = ['naziv', 'telefon', 'grad', 'adresa', 'email', 'napomena'];
+const POLJA = ['naziv', 'telefon', 'grad', 'adresa', 'email', 'napomena', 'tipovi'];
 
 // Lista kupaca — bez pretrage, cijela tabela (ili samo aktivni). Koristi admin
 // pregled u config.js (samoAktivni:false, da se vide i neaktivni za reaktivaciju)
@@ -43,16 +43,18 @@ async function pretraziKupce(q, limit) {
 async function kreirajKupca(podaci) {
   const naziv = (podaci.naziv || '').trim();
   if (!naziv) throw Object.assign(new Error('Naziv/ime kupca je obavezno.'), { status: 400 });
+  const tipovi = Array.isArray(podaci.tipovi) && podaci.tipovi.length ? podaci.tipovi : null;
   const r = await pool.query(
-    `INSERT INTO kupci (naziv, telefon, grad, adresa, email, napomena)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    `INSERT INTO kupci (naziv, telefon, grad, adresa, email, napomena, tipovi)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
     [naziv, podaci.telefon || null, podaci.grad || null, podaci.adresa || null,
-     podaci.email || null, podaci.napomena || null]
+     podaci.email || null, podaci.napomena || null, tipovi]
   );
   return r.rows[0];
 }
 
 async function azurirajKupca(id, podaci) {
+  const tipovi = Array.isArray(podaci.tipovi) ? podaci.tipovi : undefined;
   const r = await pool.query(
     `UPDATE kupci SET
        naziv    = COALESCE($1, naziv),
@@ -61,10 +63,11 @@ async function azurirajKupca(id, podaci) {
        adresa   = COALESCE($4, adresa),
        email    = COALESCE($5, email),
        napomena = COALESCE($6, napomena),
-       aktivan  = COALESCE($7, aktivan)
-     WHERE id = $8 RETURNING *`,
+       aktivan  = COALESCE($7, aktivan),
+       tipovi   = COALESCE($8, tipovi)
+     WHERE id = $9 RETURNING *`,
     [podaci.naziv, podaci.telefon, podaci.grad, podaci.adresa,
-     podaci.email, podaci.napomena, podaci.aktivan, id]
+     podaci.email, podaci.napomena, podaci.aktivan, tipovi, id]
   );
   return r.rows[0] || null;
 }
