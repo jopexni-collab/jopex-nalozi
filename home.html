@@ -24,12 +24,13 @@ main{max-width:700px;margin:32px auto;padding:0 16px;}
 .card-title{font-size:15px;font-weight:700;color:var(--dark);}
 .card-desc{font-size:11.5px;color:#6b7a8d;line-height:1.5;}
 .card-arrow{margin-top:auto;font-size:18px;color:var(--blue);align-self:flex-end;}
-.card.admin-only{display:none;}
+.card.hidden{display:none;}
 .card.blue{border-left:4px solid var(--blue);}
 .card.green{border-left:4px solid var(--green);}
 .card.red{border-left:4px solid var(--red);}
 .card.orange{border-left:4px solid #e67e22;}
 .card.purple{border-left:4px solid #7b1fa2;}
+.card.violet{border-left:4px solid #7b3fa0;}
 .footer{text-align:center;margin-top:40px;font-size:11px;color:#aaa;padding-bottom:20px;}
 </style>
 </head>
@@ -44,40 +45,46 @@ main{max-width:700px;margin:32px auto;padding:0 16px;}
     <a href="#" class="logout-btn" id="logout">Izlaz</a>
   </div>
 </header>
-
 <main>
   <div class="welcome">Dobrodošli, <b id="ime">...</b>. Izaberite modul:</div>
   <div class="grid">
 
-    <a href="lista.html" class="card blue">
+    <a href="lista.html" class="card blue hidden" id="card-nalozi">
       <div class="card-icon">📋</div>
       <div class="card-title">Radni nalozi</div>
       <div class="card-desc">Pregled i upravljanje nalozima proizvodnje. Status, rokovi, isporuka.</div>
       <div class="card-arrow">→</div>
     </a>
 
-    <a href="gotovina.html" class="card green">
+    <a href="gotovina.html" class="card green hidden" id="card-blagajna">
       <div class="card-icon">💵</div>
       <div class="card-title">Blagajna</div>
       <div class="card-desc">Gotovinska naplata. Pregled dnevnih uplata i predaja blagajniku.</div>
       <div class="card-arrow">→</div>
     </a>
 
-    <a href="maloprodaja.html" class="card orange">
+    <a href="maloprodaja.html" class="card orange hidden" id="card-maloprodaja">
       <div class="card-icon">🛒</div>
       <div class="card-title">Maloprodaja</div>
       <div class="card-desc">Mobilna prodaja kamena. Otpremnice, potvrda kupca, lager lista.</div>
       <div class="card-arrow">→</div>
     </a>
 
-    <a href="korisnici.html" class="card purple admin-only">
+    <a href="ponude.html" class="card violet hidden" id="card-ponude">
+      <div class="card-icon">📝</div>
+      <div class="card-title">Generator ponuda</div>
+      <div class="card-desc">Kreiranje ponuda, kalkulacija cijene, DXF, radni nalog. Cloud čuvanje.</div>
+      <div class="card-arrow">→</div>
+    </a>
+
+    <a href="korisnici.html" class="card purple hidden" id="card-korisnici">
       <div class="card-icon">👥</div>
       <div class="card-title">Korisnici</div>
       <div class="card-desc">Upravljanje zaposlenima, rolama i pravima pristupa.</div>
       <div class="card-arrow">→</div>
     </a>
 
-    <a href="import.html" class="card red admin-only">
+    <a href="import.html" class="card red hidden" id="card-import">
       <div class="card-icon">📥</div>
       <div class="card-title">Import</div>
       <div class="card-desc">Uvoz podataka iz Excel fajlova. Nalozi, roba, lager lista.</div>
@@ -86,10 +93,10 @@ main{max-width:700px;margin:32px auto;padding:0 16px;}
 
   </div>
 </main>
-
 <div class="footer">JoPeX d.o.o. · Auto-Put, Aleksandrovačka petlja bb · 78255 Aleksandrovac</div>
-
 <script>
+function show(id){ const c=document.getElementById(id); if(c) c.style.display='flex'; }
+
 async function checkAuth(){
   try{
     const r=await fetch('/api/auth/me');
@@ -97,9 +104,25 @@ async function checkAuth(){
     const u=await r.json();
     document.getElementById('who').textContent='👤 '+u.ime_prezime;
     document.getElementById('ime').textContent=u.ime_prezime;
-    if(u.rola==='admin'){
-      document.querySelectorAll('.card.admin-only').forEach(c=>c.style.display='flex');
-    }
+
+    const admin = u.rola==='admin';
+
+    // Nalozi — svi osim čistih prodavaca
+    if(admin || u.unos_naloga || u.izmjena_statusa || u.izmjena_naloga || u.moze_ugovarati)
+      show('card-nalozi');
+
+    // Blagajna — admin
+    if(admin) show('card-blagajna');
+
+    // Maloprodaja — moze_prodavati ili admin
+    if(admin || u.moze_prodavati) show('card-maloprodaja');
+
+    // Ponude — moze_ugovarati ili admin
+    if(admin || u.moze_ugovarati) show('card-ponude');
+
+    // Admin only
+    if(admin){ show('card-korisnici'); show('card-import'); }
+
   }catch{location.href='login.html';}
 }
 
