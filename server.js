@@ -55,6 +55,7 @@ app.use('/api/roba',        requireLoginOrApiKey, require('./roba'));
 app.use('/api/otpremnice',  requireLoginOrApiKey, require('./otpremnice'));
 app.use('/api/kupci',       requireLoginOrApiKey, require('./kupci'));
 app.use('/api/ponude',      requireLoginOrApiKey, require('./ponude'));
+app.use('/api/prodajni-objekti', requireLoginOrApiKey, require('./prodajni-objekti'));
 // ─── Statički fajlovi ─────────────────────────────────────────────────────
 app.use((req, res, next) => {
   if (req.path.endsWith('.html')) {
