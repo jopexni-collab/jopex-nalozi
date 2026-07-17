@@ -151,10 +151,17 @@ tbody tr:nth-child(even) td{background:#f8f9fc;}
 <div class="view" id="view-roba">
   <div class="card">
     <h2>Import robe / lager liste</h2>
-    <div style="background:#fff3e0;border:1px solid #ffe0b2;border-radius:8px;padding:16px;color:#e65100;font-size:13px;">
-      🚧 Ovaj import je vezan za modul Maloprodaja koji se razvija u zasebnom tasku.<br>
-      <span style="font-size:12px;opacity:.8;margin-top:4px;display:block;">Import robe sa izborom skladišta biće dostupan kada se poveže sa modulom Maloprodaja.</span>
-    </div>
+    <p style="font-size:13px;color:#6b7a8d;line-height:1.6;margin-bottom:20px;">
+      Uvoz robe (šifrarnik, cijene, stanje po prodajnom objektu) radi se direktno
+      u modulu Maloprodaja — tamo se bira za koji prodajni objekat (PJ) se uvozi,
+      i mapiraju kolone iz fajla (jer stvarni exporti, npr. Bluesoft, imaju
+      nestandardna zaglavlja koja se ne smiju nagađati naslijepo).
+    </p>
+    <a href="maloprodaja.html"
+       style="display:inline-block;background:var(--blue);color:#fff;text-decoration:none;
+              font-weight:700;font-size:14px;padding:12px 24px;border-radius:8px;">
+      🛒 Otvori Maloprodaja → Otpremnice → Uvoz robe
+    </a>
   </div>
 </div>
 
