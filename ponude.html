@@ -221,15 +221,11 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
   <div class="sec">
     <div class="sec-hd">Sastavio ponudu</div>
     <div class="fg"><label>Ime referenta</label>
-        <div style="display:flex;gap:4px;align-items:center">
-          <select id="ref-ime-sel" onchange="(function(){var v=this.value;if(v==='custom'){ge('ref-ime-inp').style.display='';ge('ref-ime-inp').focus();ge('ref-ime-inp').value='';}else{ge('ref-ime-inp').style.display='none';ge('ref-ime-inp').value=v;}refresh();}).call(this)" style="flex:1">
-            <option value="">— učitavanje... —</option>
-            <option value="JoPeX Proizvodnja">JoPeX Proizvodnja</option>
-            <option value="custom">Drugo...</option>
-          </select>
-          <input type="text" id="ref-ime-inp" placeholder="Unesite ime" style="display:none;width:110px" oninput="refresh()">
-        </div>
+      <div style="display:flex;gap:4px;align-items:center">
+        <input type="text" id="ref-ime-inp" style="flex:1" oninput="refresh()" readonly>
+        <select id="ref-ime-sel" style="display:none"></select>
       </div>
+    </div>
     <div class="r2">
       <div class="fg"><label>Telefon</label><input type="text" id="ref-tel" value="+387 65 512 868"></div>
       <div class="fg"><label>E-mail</label><input type="text" id="ref-email" value="jpx.doc@gmail.com"></div>
@@ -6313,12 +6309,9 @@ async function _checkAuth(){
     _currentUser = u;
     const hdrWho = document.getElementById('hdr-who');
     if(hdrWho) hdrWho.textContent = '👤 '+u.ime_prezime;
-    // Postavi "Sastavio" na trenutnog korisnika
-    var refSel = document.getElementById('ref-ime-sel');
-    if(refSel){
-      var opt = Array.from(refSel.options).find(o=>o.text===u.ime_prezime);
-      if(opt) refSel.value=opt.value;
-    }
+    // Postavi "Sastavio" na trenutnog korisnika — automatski, bez izbora
+    const refInp = document.getElementById('ref-ime-inp');
+    if(refInp){ refInp.value = u.ime_prezime; refresh(); }
     _loadConfig();
   }catch(e){ location.href='login.html'; }
 }
