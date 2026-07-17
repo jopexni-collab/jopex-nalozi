@@ -455,6 +455,8 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
           <input type="number" id="das-m2-duzina" step="0.5" min="0" oninput="dasPreview()">
           <label>Visina (cm)</label>
           <input type="number" id="das-m2-visina" step="0.5" min="0" oninput="dasPreview()">
+          <label>Broj komada tog formata</label>
+          <input type="number" id="das-m2-komada" step="1" min="1" value="1" oninput="dasPreview()">
           <div class="das-preview" id="das-m2-preview"></div>
         </div>
       </div>
@@ -475,6 +477,8 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
           <input type="number" id="das-m3-visina" step="0.5" min="0" oninput="dasPreview()">
           <label>Debljina (cm)</label>
           <input type="number" id="das-m3-debljina" step="0.5" min="0" oninput="dasPreview()">
+          <label>Broj komada tog formata</label>
+          <input type="number" id="das-m3-komada" step="1" min="1" value="1" oninput="dasPreview()">
           <div class="das-preview" id="das-m3-preview"></div>
         </div>
       </div>
@@ -738,6 +742,8 @@ function dodajUKosaricu(artikal){
   document.getElementById('das-m3-duzina').value='';
   document.getElementById('das-m3-visina').value='';
   document.getElementById('das-m3-debljina').value='';
+  document.getElementById('das-m2-komada').value='1';
+  document.getElementById('das-m3-komada').value='1';
   dasM2mode='direktno'; dasM3mode='direktno';
   // Podrazumijevano biramo jedinicu iz šifrarnika, ali trgovac je može promijeniti —
   // ako promijeni, ide automatsko signaliziranje odstupanja (vidi otpremnice.js), pa se
@@ -786,20 +792,22 @@ function dasPreview(){
   if(dasJedinica==='m2' && dasM2mode==='racunaj'){
     const d=parseFloat(document.getElementById('das-m2-duzina').value);
     const v=parseFloat(document.getElementById('das-m2-visina').value);
+    const kom=parseInt(document.getElementById('das-m2-komada').value)||1;
     const prev=document.getElementById('das-m2-preview');
     if(!isNaN(d)&&!isNaN(v)&&d>0&&v>0){
-      const m2=(d*v)/10000;
-      prev.textContent=`= ${m2.toFixed(3)} m² (${d} × ${v} cm)`;
+      const m2=(d*v)/10000*kom;
+      prev.textContent=`= ${m2.toFixed(3)} m² (${d} × ${v} cm${kom>1?' × '+kom+' kom':''})`;
     }else prev.textContent='';
   }
   if(dasJedinica==='m3' && dasM3mode==='racunaj'){
     const d=parseFloat(document.getElementById('das-m3-duzina').value);
     const v=parseFloat(document.getElementById('das-m3-visina').value);
     const deb=parseFloat(document.getElementById('das-m3-debljina').value);
+    const kom=parseInt(document.getElementById('das-m3-komada').value)||1;
     const prev=document.getElementById('das-m3-preview');
     if(!isNaN(d)&&!isNaN(v)&&!isNaN(deb)&&d>0&&v>0&&deb>0){
-      const m3=(d*v*deb)/1000000;
-      prev.textContent=`= ${m3.toFixed(4)} m³ (${d} × ${v} × ${deb} cm)`;
+      const m3=(d*v*deb)/1000000*kom;
+      prev.textContent=`= ${m3.toFixed(4)} m³ (${d} × ${v} × ${deb} cm${kom>1?' × '+kom+' kom':''})`;
     }else prev.textContent='';
   }
 }
@@ -811,7 +819,7 @@ function zatvoriDodajStavku(){
 
 function potvrdiDodajStavku(){
   if(!dasArtikal) return;
-  let kolicina=null, duzina_cm=null, visina_cm=null, debljina_cm=null;
+  let kolicina=null, duzina_cm=null, visina_cm=null, debljina_cm=null, broj_komada=null;
 
   if(dasJedinica==='kom'){
     kolicina=parseFloat(document.getElementById('das-kom').value);
@@ -821,9 +829,11 @@ function potvrdiDodajStavku(){
     }else{
       const d=parseFloat(document.getElementById('das-m2-duzina').value);
       const v=parseFloat(document.getElementById('das-m2-visina').value);
+      const kom=parseInt(document.getElementById('das-m2-komada').value)||1;
       if(!d||!v||d<=0||v<=0){alert('Unesite dužinu i visinu (cm).');return;}
-      kolicina=+((d*v)/10000).toFixed(3);
-      duzina_cm=d; visina_cm=v;
+      if(kom<1){alert('Broj komada mora biti bar 1.');return;}
+      kolicina=+((d*v)/10000*kom).toFixed(3);
+      duzina_cm=d; visina_cm=v; broj_komada=kom;
     }
   }else if(dasJedinica==='m3'){
     if(dasM3mode==='direktno'){
@@ -832,9 +842,11 @@ function potvrdiDodajStavku(){
       const d=parseFloat(document.getElementById('das-m3-duzina').value);
       const v=parseFloat(document.getElementById('das-m3-visina').value);
       const deb=parseFloat(document.getElementById('das-m3-debljina').value);
+      const kom=parseInt(document.getElementById('das-m3-komada').value)||1;
       if(!d||!v||!deb||d<=0||v<=0||deb<=0){alert('Unesite dužinu, visinu i debljinu (cm).');return;}
-      kolicina=+((d*v*deb)/1000000).toFixed(4);
-      duzina_cm=d; visina_cm=v; debljina_cm=deb;
+      if(kom<1){alert('Broj komada mora biti bar 1.');return;}
+      kolicina=+((d*v*deb)/1000000*kom).toFixed(4);
+      duzina_cm=d; visina_cm=v; debljina_cm=deb; broj_komada=kom;
     }
   }
 
@@ -852,7 +864,7 @@ function potvrdiDodajStavku(){
       roba_id:dasArtikal.id, sifra:dasArtikal.sifra, naziv:dasArtikal.naziv,
       jed_mjera:dasJedinica, jed_mjera_zadana:dasArtikal.jed_mjera, cijena:parseFloat(dasArtikal.cijena),
       kolicina, stanje_max:parseFloat(dasArtikal.stanje),
-      duzina_cm, visina_cm, debljina_cm,
+      duzina_cm, visina_cm, debljina_cm, broj_komada,
       override:null, // { tip:'posto'|'iznos', vrijednost, razlog, napomena } kad trgovac odstupi od zadane cijene
     });
   }
@@ -943,11 +955,14 @@ function renderKosarica(){
     const odstupa=!!k.override;
     const jedinicaOdstupa=k.jed_mjera_zadana && k.jed_mjera!==k.jed_mjera_zadana;
     const editorOtvoren=uredjivanjeIdx===idx;
+    const dimTxt=k.duzina_cm&&k.visina_cm
+      ? ` <span style="color:#8b96a5;font-weight:400;">(${k.duzina_cm}${k.debljina_cm?`×${k.visina_cm}×${k.debljina_cm}`:`×${k.visina_cm}`} cm${k.broj_komada>1?` × ${k.broj_komada} kom`:''})</span>`
+      : '';
     return `
     <div class="kos-item">
       <div class="kos-item-top">
         <div class="kos-info">
-          <div class="kos-naziv">${esc(k.naziv)}</div>
+          <div class="kos-naziv">${esc(k.naziv)}${dimTxt}</div>
           <div class="kos-cijena ${odstupa?'izmijenjena':''}">≈ ${fm(efCij)} KM / ${esc(k.jed_mjera)}${odstupa?' <s style="opacity:.6">'+fm(k.cijena)+'</s>':''}</div>
         </div>
         <div class="kos-qty">
@@ -1004,6 +1019,7 @@ function stavkeZaSlanje(){
   return kosarica.map(k=>({
     roba_id:k.roba_id, kolicina:k.kolicina, jed_mjera_prodaja:k.jed_mjera,
     duzina_cm:k.duzina_cm||null, visina_cm:k.visina_cm||null, debljina_cm:k.debljina_cm||null,
+    broj_komada:k.broj_komada||null,
     override: k.override ? {
       tip:k.override.tip, vrijednost:k.override.vrijednost,
       razlog:k.override.razlog, napomena:k.override.napomena,

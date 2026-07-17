@@ -102,7 +102,7 @@ async function ucitaj(){
     dok.innerHTML=`
       <div class="memo">
         <div>
-          <div class="memo-naziv">${esc(FIRMA.naziv)}</div>
+          <div class="memo-naziv">${esc(FIRMA.naziv)}${otp.objekt_naziv?` <span style="font-size:13px;font-weight:600;color:#6b7a8d;">— ${esc(otp.objekt_naziv)}</span>`:''}</div>
           <div class="memo-info">
             ${FIRMA.adresa?esc(FIRMA.adresa)+'<br>':''}
             ${FIRMA.pib?esc(FIRMA.pib)+'<br>':''}
@@ -114,7 +114,7 @@ async function ucitaj(){
 
       <div class="meta-red">
         <span>Datum: <b>${fd(otp.datum)}</b></span>
-        <span>Izdao: ${esc(otp.komercijalista_ime||'—')}</span>
+        <span>Izdao: ${esc(otp.komercijalista_ime||'—')}${otp.objekt_naziv?' · '+esc(otp.objekt_naziv):''}</span>
       </div>
 
       <div class="kupac-box">
@@ -136,7 +136,7 @@ async function ucitaj(){
         <tbody>
           ${otp.stavke.map(s=>{
             const dim = s.duzina_cm && s.visina_cm
-              ? ` <span style="color:#9aa5b1;font-size:11px;">(${s.duzina_cm}${s.debljina_cm?`×${s.visina_cm}×${s.debljina_cm}`:`×${s.visina_cm}`} cm)</span>`
+              ? ` <span style="color:#9aa5b1;font-size:11px;">(${s.duzina_cm}${s.debljina_cm?`×${s.visina_cm}×${s.debljina_cm}`:`×${s.visina_cm}`} cm${s.broj_komada>1?` × ${s.broj_komada} kom`:''})</span>`
               : '';
             return `
             <tr>
