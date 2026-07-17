@@ -6551,7 +6551,7 @@ function _prikaziListuPonuda(lista){
 async function _ucitajPonudu(linkJson, naziv){
   if(!linkJson){ alert('Nema linka za učitavanje.'); return; }
   try{
-    const r = await fetch(linkJson);
+    const r = await fetch(API_URL+'/api/ponude/ucitaj?link='+encodeURIComponent(linkJson));
     if(!r.ok) throw new Error('Greška pri preuzimanju.');
     const projekat = await r.json();
     // Popuni klijenta
