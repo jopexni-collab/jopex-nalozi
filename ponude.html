@@ -205,15 +205,17 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
 
   <div class="sec">
     <div class="sec-hd">Klijent</div>
-    <div class="fg" style="position:relative;">
+    <div class="fg">
       <label>Ime / Firma</label>
-      <div style="display:flex;gap:4px;">
-        <input type="text" id="kl-ime" placeholder="Pretraži ili unesi novog..." 
-          oninput="refresh();kupciFilter(this.value)" autocomplete="off" style="flex:1;">
-        <button onclick="kupciToggleDropdown()" title="Prikaži sve kupce"
-          style="font:inherit;font-size:13px;padding:4px 8px;border:1px solid #dde2ea;border-radius:4px;background:#fafbfc;cursor:pointer;">▼</button>
+      <div style="position:relative;">
+        <div style="display:flex;gap:4px;">
+          <input type="text" id="kl-ime" placeholder="Pretraži ili unesi novog..." 
+            oninput="refresh();kupciFilter(this.value)" autocomplete="off" style="flex:1;">
+          <button onclick="kupciToggleDropdown(event)" title="Prikaži sve kupce"
+            style="font:inherit;font-size:13px;padding:4px 8px;border:1px solid #dde2ea;border-radius:4px;background:#fafbfc;cursor:pointer;">▼</button>
+        </div>
+        <div id="kupci-dropdown" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:999;background:#fff;border:1px solid #1a5fa8;border-radius:4px;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.15);"></div>
       </div>
-      <div id="kupci-dropdown" style="display:none;position:absolute;left:0;right:0;z-index:999;background:#fff;border:1px solid #1a5fa8;border-radius:4px;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.15);"></div>
     </div>
     <div class="r2">
       <div class="fg"><label>Telefon</label><input type="text" id="kl-tel"></div>
@@ -6399,7 +6401,8 @@ function kupciFilter(q){
   _renderKupciDropdown(matches);
 }
 
-function kupciToggleDropdown(){
+function kupciToggleDropdown(e){
+  if(e) e.stopPropagation();
   const dd = document.getElementById('kupci-dropdown');
   if(dd.style.display==='block'){ dd.style.display='none'; return; }
   _renderKupciDropdown(_sviKupci.slice(0,20));
