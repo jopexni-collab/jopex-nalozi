@@ -454,8 +454,10 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <div id="prenos-izabrano" style="display:none;background:#f7f8fa;border-radius:8px;padding:10px;margin:8px 0;">
         <div id="prenos-izabrano-naziv" style="font-weight:700;font-size:13px;margin-bottom:6px;"></div>
         <input type="number" id="prenos-kolicina" step="0.001" min="0.001" placeholder="Količina za prebaciti">
-        <button class="btn-import" onclick="potvrdiPrenos()">✓ Prebaci</button>
+        <button class="btn-import" onclick="dodajUPrenosListu()">+ Dodaj u listu</button>
       </div>
+      <div id="prenos-lista"></div>
+      <button id="prenos-izvrsi-btn" class="btn-import" style="display:none;background:var(--green);" onclick="izvrsiPrenosListu()"></button>
     </div>
 
     <!-- XLSX UVOZ (bulk, cijela prenosnica odjednom) -->
@@ -1840,38 +1842,91 @@ async function traziPrenosArtikal(q){
   }
 }
 
+let prenosStavke=[]; // {roba_id, sifra, naziv, jed_mjera, kolicina, stanje_max} — korpa za prenos
+
 function izaberiPrenosArtikal(artikal){
   prenosIzabraniArtikal=artikal;
   document.getElementById('prenos-izabrano-naziv').textContent=
     `${artikal.naziv} — raspoloživo: ${artikal.stanje} ${artikal.jed_mjera}`;
   document.getElementById('prenos-izabrano').style.display='block';
+  document.getElementById('prenos-kolicina').value='';
   document.getElementById('prenos-rezultati').innerHTML='';
   document.getElementById('prenos-search').value='';
 }
 
-async function potvrdiPrenos(){
+function dodajUPrenosListu(){
+  const kolicina=parseFloat(document.getElementById('prenos-kolicina').value);
+  const msg=document.getElementById('prenos-msg');
+  if(!prenosIzabraniArtikal){msg.style.color='red';msg.textContent='Izaberite artikal.';return;}
+  if(!kolicina||kolicina<=0){msg.style.color='red';msg.textContent='Unesite ispravnu količinu.';return;}
+  if(kolicina>parseFloat(prenosIzabraniArtikal.stanje)){msg.style.color='red';msg.textContent='Nema dovoljno na stanju (raspoloživo: '+prenosIzabraniArtikal.stanje+').';return;}
+  msg.textContent='';
+
+  const postojeci=prenosStavke.find(s=>s.roba_id===prenosIzabraniArtikal.id);
+  if(postojeci){
+    postojeci.kolicina=+(postojeci.kolicina+kolicina).toFixed(3);
+  }else{
+    prenosStavke.push({
+      roba_id:prenosIzabraniArtikal.id, sifra:prenosIzabraniArtikal.sifra, naziv:prenosIzabraniArtikal.naziv,
+      jed_mjera:prenosIzabraniArtikal.jed_mjera, kolicina, stanje_max:parseFloat(prenosIzabraniArtikal.stanje),
+    });
+  }
+  prenosIzabraniArtikal=null;
+  document.getElementById('prenos-izabrano').style.display='none';
+  renderPrenosListu();
+}
+
+function ukloniIzPrenosListe(idx){
+  prenosStavke.splice(idx,1);
+  renderPrenosListu();
+}
+
+function renderPrenosListu(){
+  const cont=document.getElementById('prenos-lista');
+  const btn=document.getElementById('prenos-izvrsi-btn');
+  if(!prenosStavke.length){
+    cont.innerHTML='';
+    btn.style.display='none';
+    return;
+  }
+  cont.innerHTML=prenosStavke.map((s,i)=>`
+    <div class="kos-item" style="padding:8px 0;">
+      <div class="kos-item-top">
+        <div class="kos-info">
+          <div class="kos-naziv">${esc(s.naziv)}</div>
+          <div class="kos-cijena">${s.kolicina} ${esc(s.jed_mjera)}</div>
+        </div>
+        <button class="kos-del" onclick="ukloniIzPrenosListe(${i})">🗑</button>
+      </div>
+    </div>
+  `).join('');
+  btn.style.display='block';
+  btn.textContent=`✓ Izvrši prenos (${prenosStavke.length} ${prenosStavke.length===1?'stavka':'stavke'})`;
+}
+
+async function izvrsiPrenosListu(){
   const msg=document.getElementById('prenos-msg');
   const izObjekta=document.getElementById('prenos-iz').value;
   const uObjekat=document.getElementById('prenos-u').value;
-  const kolicina=parseFloat(document.getElementById('prenos-kolicina').value);
-  if(!prenosIzabraniArtikal){msg.style.color='red';msg.textContent='Izaberite artikal.';return;}
   if(!izObjekta||!uObjekat){msg.style.color='red';msg.textContent='Izaberite oba objekta.';return;}
   if(izObjekta===uObjekat){msg.style.color='red';msg.textContent='Izvorni i odredišni objekat moraju biti različiti.';return;}
-  if(!kolicina||kolicina<=0){msg.style.color='red';msg.textContent='Unesite ispravnu količinu.';return;}
+  if(!prenosStavke.length) return;
+
+  msg.style.color='#6b7a8d'; msg.textContent='Izvršavam prenos...';
   try{
-    const r=await fetch(`${API}/api/prenosi`,{
+    const r=await fetch(`${API}/api/prenosi/bulk`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        roba_id: prenosIzabraniArtikal.id, iz_objekta_id: izObjekta, u_objekat_id: uObjekat, kolicina,
+        iz_objekta_id:izObjekta, u_objekat_id:uObjekat,
+        stavke:prenosStavke.map(s=>({roba_id:s.roba_id, kolicina:s.kolicina})),
       }),
     });
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška pri prenosu.');
     msg.style.color='var(--green)';
-    msg.textContent=`✓ Prebačeno ${data.kolicina} ${esc(data.jed_mjera||'')} iz "${esc(data.iz_objekta_naziv)}" u "${esc(data.u_objekat_naziv)}".`;
-    prenosIzabraniArtikal=null;
-    document.getElementById('prenos-izabrano').style.display='none';
-    document.getElementById('prenos-kolicina').value='';
+    msg.textContent=`✓ Prebačeno ${data.prebaceno} stavki.`;
+    prenosStavke=[];
+    renderPrenosListu();
   }catch(e){
     msg.style.color='red'; msg.textContent=e.message;
   }

@@ -68,6 +68,53 @@ async function prebaciStavku(client, { roba, izObjekta, uObjekat, kolicina, kori
   return log.rows[0];
 }
 
+// POST /api/prenosi/bulk - RUČNI unos, VIŠE stavki odjednom (jedna "korpa" prenosa).
+// body: { iz_objekta_id, u_objekat_id, stavke: [{ roba_id, kolicina }, ...] }
+// Sve u JEDNOJ transakciji — ako bilo koja stavka ne prođe (npr. nedovoljno stanje),
+// ništa se ne upisuje (all-or-nothing), da se ne desi da pola liste prođe a pola ne.
+router.post('/bulk', async (req, res) => {
+  const user = req.session.user;
+  const { iz_objekta_id, u_objekat_id, stavke } = req.body;
+
+  if (!iz_objekta_id || !u_objekat_id)
+    return res.status(400).json({ error: 'Nedostaju izvorni i odredišni objekat.' });
+  if (String(iz_objekta_id) === String(u_objekat_id))
+    return res.status(400).json({ error: 'Izvorni i odredišni objekat moraju biti različiti.' });
+  if (!Array.isArray(stavke) || !stavke.length)
+    return res.status(400).json({ error: 'Lista za prenos je prazna.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const objekti = await client.query(
+      'SELECT * FROM prodajni_objekti WHERE id = ANY($1::int[])', [[iz_objekta_id, u_objekat_id]]
+    );
+    const izObjekta = objekti.rows.find(o => String(o.id) === String(iz_objekta_id));
+    const uObjekat = objekti.rows.find(o => String(o.id) === String(u_objekat_id));
+    if (!izObjekta || !uObjekat) throw Object.assign(new Error('Prodajni objekat nije pronađen.'), { status: 404 });
+
+    const zapisi = [];
+    for (const s of stavke) {
+      const robaRes = await client.query('SELECT * FROM roba WHERE id=$1', [s.roba_id]);
+      if (!robaRes.rows.length)
+        throw Object.assign(new Error(`Artikal (id ${s.roba_id}) nije pronađen.`), { status: 404 });
+      const zapis = await prebaciStavku(client, {
+        roba: robaRes.rows[0], izObjekta, uObjekat, kolicina: s.kolicina, korisnik: user,
+      });
+      zapisi.push(zapis);
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ ok: true, prebaceno: zapisi.length, stavke: zapisi });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // POST /api/prenosi - RUČNI unos, jedna stavka.
 // body: { roba_id, iz_objekta_id, u_objekat_id, kolicina }
 router.post('/', async (req, res) => {
