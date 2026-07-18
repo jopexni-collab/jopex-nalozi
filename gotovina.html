@@ -257,10 +257,15 @@ async function predajBlagajniku(id){
 async function obrisi(id){
   if(!confirm('Obrisati zapis?')) return;
   try{
-    await fetch(`${API}/api/gotovina/${id}`,{method:'DELETE'});
+    const r=await fetch(`${API}/api/gotovina/${id}`,{method:'DELETE'});
+    if(!r.ok){
+      const data=await r.json().catch(()=>({}));
+      alert('Nije obrisano: '+(data.error||'nepoznata greška (status '+r.status+')'));
+      return;
+    }
     await load();
     await loadSume();
-  }catch(e){alert('Greška.');}
+  }catch(e){alert('Greška: '+e.message);}
 }
 
 function resetFilteri(){
