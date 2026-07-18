@@ -347,6 +347,10 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <button class="ce-tip-btn" onclick="ucitajLagerListu()">Prikaži</button>
       <button class="ce-tip-btn" onclick="izvezLagerListu()">📥 Izvezi u XLSX</button>
     </div>
+    <div class="ce-row" id="lager-filteri" style="display:none;margin-top:8px;">
+      <select id="lager-filter-grupa" onchange="ucitajLagerListu()"><option value="">Sve grupe</option></select>
+      <select id="lager-filter-debljina" onchange="ucitajLagerListu()"><option value="">Sve debljine</option></select>
+    </div>
     <div id="lager-lista-tabela-wrap" style="overflow-x:auto;margin-top:10px;"></div>
     <div id="lager-total" style="display:none" class="dnevni-total"></div>
   </div>
@@ -390,6 +394,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <div class="map-row"><label>Stanje</label><select id="map-stanje"></select></div>
       <div class="map-row"><label>Jed. mjere</label><select id="map-jed_mjera"></select></div>
       <div class="map-row"><label>Grupa</label><select id="map-grupa"></select></div>
+      <div class="map-row"><label>Debljina</label><select id="map-debljina"></select></div>
       <div class="map-row"><label>Ako nema JM kolone</label><input type="text" id="map-jm-default" value="m2" placeholder="npr. m2, kom"></div>
 
       <button class="btn-import" onclick="potvrdiUvoz()">✓ Uvezi sa ovim mapiranjem</button>
@@ -1390,59 +1395,173 @@ async function popuniLagerObjekat(){
   }catch(e){}
 }
 
+let lagerPodaci=[]; // sirovi podaci sa servera (nakon grupa/debljina dropdown filtera)
+let lagerKolonaFilteri={sifra:'',naziv:'',grupa:'',debljina:'',jm:'',cijena:'',stanje:'',ukupno:''};
+let lagerSort={kolona:'naziv',smjer:'asc'};
+
+const LAGER_KOLONE=[
+  {k:'sifra',lbl:'Šifra',align:'left',tip:'text'},
+  {k:'naziv',lbl:'Naziv',align:'left',tip:'text'},
+  {k:'grupa',lbl:'Grupa',align:'left',tip:'text'},
+  {k:'debljina',lbl:'Deb. (cm)',align:'center',tip:'num'},
+  {k:'jm',lbl:'JM',align:'center',tip:'text'},
+  {k:'cijena',lbl:'Cijena/JM',align:'right',tip:'num'},
+  {k:'stanje',lbl:'Stanje',align:'right',tip:'num'},
+  {k:'ukupno',lbl:'Ukupno',align:'right',tip:'num'},
+];
+
+function lagerVrijednostZaKolonu(s, k){
+  if(k==='debljina') return s.debljina_cm;
+  if(k==='jm') return s.jed_mjera;
+  return s[k];
+}
+
 async function ucitajLagerListu(){
   const objektId=document.getElementById('lager-objekat').value;
   const wrap=document.getElementById('lager-lista-tabela-wrap');
   const totalDiv=document.getElementById('lager-total');
-  if(!objektId){wrap.innerHTML='<div class="empty-msg">Izaberite prodajni objekat.</div>';totalDiv.style.display='none';return;}
+  const filteriDiv=document.getElementById('lager-filteri');
+  if(!objektId){wrap.innerHTML='<div class="empty-msg">Izaberite prodajni objekat.</div>';totalDiv.style.display='none';filteriDiv.style.display='none';return;}
   wrap.innerHTML='<div class="spinner">Učitavanje...</div>';
+
+  // Popuni filtere (grupa/debljina) samo kad se PJ promijeni ili prvi put — ne gaziti izbor korisnika
+  if(lagerFilteriObjekatId!==objektId){
+    await popuniLagerFiltere(objektId);
+    lagerFilteriObjekatId=objektId;
+  }
+  filteriDiv.style.display='flex';
+
+  const grupa=document.getElementById('lager-filter-grupa').value;
+  const debljina=document.getElementById('lager-filter-debljina').value;
+  const params=new URLSearchParams({objekt_id:objektId});
+  if(grupa) params.set('grupa',grupa);
+  if(debljina) params.set('debljina',debljina);
+
   try{
-    const r=await fetch(`${API}/api/roba/lager?objekt_id=${objektId}`);
+    const r=await fetch(`${API}/api/roba/lager?${params}`);
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška.');
-    if(!data.stavke.length){
-      wrap.innerHTML='<div class="empty-msg">Nema robe u ovom objektu.</div>';
-      totalDiv.style.display='none';
-      return;
-    }
-    wrap.innerHTML=`
-      <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
-        <thead><tr style="background:#1f3864;color:#fff;">
-          <th style="padding:6px 8px;text-align:left;">Šifra</th>
-          <th style="padding:6px 8px;text-align:left;">Naziv</th>
-          <th style="padding:6px 8px;text-align:left;">Grupa</th>
-          <th style="padding:6px 8px;text-align:center;">JM</th>
-          <th style="padding:6px 8px;text-align:right;">Cijena/JM</th>
-          <th style="padding:6px 8px;text-align:right;">Stanje</th>
-          <th style="padding:6px 8px;text-align:right;">Ukupno</th>
-        </tr></thead>
-        <tbody>
-          ${data.stavke.map((s,i)=>`
-            <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
-              <td style="padding:5px 8px;">${esc(s.sifra)}</td>
-              <td style="padding:5px 8px;">${esc(s.naziv)}</td>
-              <td style="padding:5px 8px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
-              <td style="padding:5px 8px;text-align:center;">${esc(s.jed_mjera)}</td>
-              <td style="padding:5px 8px;text-align:right;">${fm(s.cijena)} KM</td>
-              <td style="padding:5px 8px;text-align:right;">${s.stanje}</td>
-              <td style="padding:5px 8px;text-align:right;font-weight:700;">${fm(s.ukupno)} KM</td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>`;
-    totalDiv.style.display='block';
-    totalDiv.innerHTML=`${fm(data.total_vrijednost)} KM<span class="cnt">${data.broj_artikala} artikala u lageru</span>`;
+    lagerPodaci=data.stavke;
+    lagerKolonaFilteri={sifra:'',naziv:'',grupa:'',debljina:'',jm:'',cijena:'',stanje:'',ukupno:''};
+    renderLagerTabela();
   }catch(e){
     wrap.innerHTML=`<div class="empty-msg">${esc(e.message)}</div>`;
     totalDiv.style.display='none';
   }
 }
 
+function lagerKlikNaslov(kolona){
+  if(lagerSort.kolona===kolona) lagerSort.smjer = lagerSort.smjer==='asc'?'desc':'asc';
+  else lagerSort={kolona, smjer:'asc'};
+  renderLagerTabela();
+}
+
+function lagerPromijeniFilter(kolona, vrijednost){
+  lagerKolonaFilteri[kolona]=vrijednost;
+  renderLagerTabela();
+}
+
+function renderLagerTabela(){
+  const wrap=document.getElementById('lager-lista-tabela-wrap');
+  const totalDiv=document.getElementById('lager-total');
+
+  // Filter po koloni (podstring, bez razlike velikih/malih slova, na tekstualnom obliku vrijednosti)
+  let prikaz=lagerPodaci.filter(s=>
+    LAGER_KOLONE.every(({k})=>{
+      const f=(lagerKolonaFilteri[k]||'').trim().toLowerCase();
+      if(!f) return true;
+      const v=lagerVrijednostZaKolonu(s,k);
+      return String(v??'').toLowerCase().includes(f);
+    })
+  );
+
+  // Sortiranje
+  const {kolona, smjer}=lagerSort;
+  const tipKolone=LAGER_KOLONE.find(c=>c.k===kolona)?.tip;
+  prikaz=[...prikaz].sort((a,b)=>{
+    let va=lagerVrijednostZaKolonu(a,kolona), vb=lagerVrijednostZaKolonu(b,kolona);
+    let cmp;
+    if(tipKolone==='num'){ cmp=(parseFloat(va)||0)-(parseFloat(vb)||0); }
+    else{ cmp=String(va??'').localeCompare(String(vb??''),'sr-Latn-BA'); }
+    return smjer==='asc'?cmp:-cmp;
+  });
+
+  if(!lagerPodaci.length){
+    wrap.innerHTML='<div class="empty-msg">Nema robe za izabrane filtere.</div>';
+    totalDiv.style.display='none';
+    return;
+  }
+
+  const strelica=k=>lagerSort.kolona===k?(lagerSort.smjer==='asc'?' ▲':' ▼'):'';
+  wrap.innerHTML=`
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+      <thead>
+        <tr style="background:#1f3864;color:#fff;">
+          ${LAGER_KOLONE.map(c=>`
+            <th style="padding:6px 8px;text-align:${c.align};cursor:pointer;white-space:nowrap;" onclick="lagerKlikNaslov('${c.k}')">${c.lbl}${strelica(c.k)}</th>
+          `).join('')}
+        </tr>
+        <tr style="background:#f0f2f5;">
+          ${LAGER_KOLONE.map(c=>`
+            <th style="padding:3px 6px;">
+              <input type="text" value="${esc(lagerKolonaFilteri[c.k]||'')}" placeholder="filter..."
+                oninput="lagerPromijeniFilter('${c.k}',this.value)"
+                style="width:100%;font:inherit;font-size:10.5px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;box-sizing:border-box;">
+            </th>
+          `).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        ${prikaz.map((s,i)=>`
+          <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
+            <td style="padding:5px 8px;">${esc(s.sifra)}</td>
+            <td style="padding:5px 8px;">${esc(s.naziv)}</td>
+            <td style="padding:5px 8px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
+            <td style="padding:5px 8px;text-align:center;color:#6b7a8d;">${s.debljina_cm??'—'}</td>
+            <td style="padding:5px 8px;text-align:center;">${esc(s.jed_mjera)}</td>
+            <td style="padding:5px 8px;text-align:right;">${fm(s.cijena)} KM</td>
+            <td style="padding:5px 8px;text-align:right;">${s.stanje}</td>
+            <td style="padding:5px 8px;text-align:right;font-weight:700;">${fm(s.ukupno)} KM</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>`;
+
+  if(!prikaz.length){
+    wrap.innerHTML+='<div class="empty-msg">Nijedan red ne odgovara filterima kolona.</div>';
+  }
+
+  const ukupnoPrikazano=prikaz.reduce((s,r)=>s+parseFloat(r.ukupno||0),0);
+  totalDiv.style.display='block';
+  totalDiv.innerHTML=`${fm(ukupnoPrikazano)} KM<span class="cnt">${prikaz.length} od ${lagerPodaci.length} artikala${prikaz.length!==lagerPodaci.length?' (filtrirano)':''}</span>`;
+}
+
+let lagerFilteriObjekatId=null;
+
+async function popuniLagerFiltere(objektId){
+  const selGrupa=document.getElementById('lager-filter-grupa');
+  const selDeb=document.getElementById('lager-filter-debljina');
+  selGrupa.innerHTML='<option value="">Sve grupe</option>';
+  selDeb.innerHTML='<option value="">Sve debljine</option>';
+  try{
+    const r=await fetch(`${API}/api/roba/lager/filteri?objekt_id=${objektId}`);
+    const data=await r.json();
+    if(!r.ok) return;
+    selGrupa.innerHTML+=data.grupe.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');
+    selDeb.innerHTML+=data.debljine.map(d=>`<option value="${d}">${d} cm</option>`).join('');
+  }catch(e){}
+}
+
 function izvezLagerListu(){
   const objektId=document.getElementById('lager-objekat').value;
   if(!objektId){alert('Izaberite prodajni objekat.');return;}
+  const grupa=document.getElementById('lager-filter-grupa').value;
+  const debljina=document.getElementById('lager-filter-debljina').value;
+  const params=new URLSearchParams({objekt_id:objektId});
+  if(grupa) params.set('grupa',grupa);
+  if(debljina) params.set('debljina',debljina);
   // Direktan link ka preuzimanju — browser sam otvara "Sačuvaj kao" dijalog za XLSX.
-  window.location.href=`${API}/api/roba/lager/export?objekt_id=${objektId}`;
+  window.location.href=`${API}/api/roba/lager/export?${params}`;
 }
 
 /* ── ADMIN: UPRAVLJANJE PRODAJNIM OBJEKTIMA (PJ) ──────────────────── */
@@ -1739,10 +1858,10 @@ function prikaziMapiranje(predlog, ukupnoRedova){
     uvozUzorak.map(row=>'<tr>'+uvozHeader.map(h=>`<td>${esc(row[h])}</td>`).join('')+'</tr>').join('');
 
   // Dropdown-ovi za mapiranje
-  const polja=['sifra','naziv','cijena','stanje','jed_mjera','grupa'];
+  const polja=['sifra','naziv','cijena','stanje','jed_mjera','grupa','debljina'];
   polja.forEach(p=>{
     const sel=document.getElementById('map-'+p);
-    const prazna=(p==='cijena'||p==='stanje'||p==='jed_mjera'||p==='grupa')?'<option value="">— ne uvozi —</option>':'<option value="">— izaberi kolonu —</option>';
+    const prazna=(p==='cijena'||p==='stanje'||p==='jed_mjera'||p==='grupa'||p==='debljina')?'<option value="">— ne uvozi —</option>':'<option value="">— izaberi kolonu —</option>';
     sel.innerHTML=prazna+uvozHeader.map(h=>`<option value="${esc(h)}" ${predlog[p]===h?'selected':''}>${esc(h)}</option>`).join('');
   });
 
@@ -1767,6 +1886,7 @@ async function potvrdiUvoz(){
     stanje:document.getElementById('map-stanje').value,
     jed_mjera:document.getElementById('map-jed_mjera').value,
     grupa:document.getElementById('map-grupa').value,
+    debljina:document.getElementById('map-debljina').value,
   };
   if(!mapping.sifra||!mapping.naziv){
     msg.style.color='red'; msg.textContent='Morate izabrati kolonu za Šifru i Naziv.'; return;

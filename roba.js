@@ -73,7 +73,30 @@ router.get('/', zahtijevaProdaju, async (req, res) => {
   }
 });
 
-// GET /api/roba/lager?objekt_id=X - kompletna lager lista za PJ (šifra/naziv/JM/cijena/stanje/ukupno) — admin
+// GET /api/roba/lager/filteri?objekt_id=X - distinct vrijednosti grupe i debljine za dropdown-e filtera
+router.get('/lager/filteri', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin može pregledati kompletan lager.' });
+  const objektId = trebaObjekat(req.query.objekt_id);
+  if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
+  try {
+    const r = await pool.query(
+      `SELECT DISTINCT r.grupa, r.debljina_cm
+       FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
+       WHERE r.aktivan=true`,
+      [objektId]
+    );
+    const grupe = [...new Set(r.rows.map(x => x.grupa).filter(Boolean))].sort();
+    const debljine = [...new Set(r.rows.map(x => x.debljina_cm).filter(x => x != null))]
+      .sort((a, b) => a - b);
+    res.json({ grupe, debljine });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/roba/lager?objekt_id=X&grupa=Y&debljina=Z - kompletna lager lista za PJ, opciono filtrirana
+// po grupi i/ili debljini (kombinuju se — npr. samo "Bengal" + "2cm", ili samo "2cm" svih grupa).
 // MORA biti prije "/:id" rute ispod — inače Express tumači "lager" kao vrijednost za :id.
 router.get('/lager', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
@@ -81,13 +104,19 @@ router.get('/lager', async (req, res) => {
   const objektId = trebaObjekat(req.query.objekt_id);
   if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
   try {
+    const uslovi = ['r.aktivan=true'];
+    const vals = [objektId];
+    let i = 2;
+    if (req.query.grupa) { uslovi.push(`r.grupa = $${i++}`); vals.push(req.query.grupa); }
+    if (req.query.debljina) { uslovi.push(`r.debljina_cm = $${i++}`); vals.push(parseFloat(req.query.debljina)); }
+
     const r = await pool.query(
-      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, rp.cijena, rp.stanje,
+      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm, rp.cijena, rp.stanje,
               (rp.cijena * rp.stanje) AS ukupno
        FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
-       WHERE r.aktivan=true
+       WHERE ${uslovi.join(' AND ')}
        ORDER BY r.naziv`,
-      [objektId]
+      vals
     );
     const totalVrijednost = r.rows.reduce((s, row) => s + parseFloat(row.ukupno || 0), 0);
     res.json({ stavke: r.rows, total_vrijednost: +totalVrijednost.toFixed(2), broj_artikala: r.rows.length });
@@ -96,7 +125,7 @@ router.get('/lager', async (req, res) => {
   }
 });
 
-// GET /api/roba/lager/export?objekt_id=X - preuzimanje lager liste kao XLSX (za poređenje sa izvornim fajlom)
+// GET /api/roba/lager/export?objekt_id=X&grupa=Y&debljina=Z - preuzimanje (filtrirane) lager liste kao XLSX
 router.get('/lager/export', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Samo admin može izvoziti lager.' });
@@ -106,26 +135,33 @@ router.get('/lager/export', async (req, res) => {
     const objRes = await pool.query('SELECT naziv FROM prodajni_objekti WHERE id=$1', [objektId]);
     const objektNaziv = objRes.rows[0]?.naziv || 'PJ';
 
+    const uslovi = ['r.aktivan=true'];
+    const vals = [objektId];
+    let i = 2;
+    if (req.query.grupa) { uslovi.push(`r.grupa = $${i++}`); vals.push(req.query.grupa); }
+    if (req.query.debljina) { uslovi.push(`r.debljina_cm = $${i++}`); vals.push(parseFloat(req.query.debljina)); }
+
     const r = await pool.query(
-      `SELECT r.sifra, r.naziv, r.grupa, r.jed_mjera, rp.cijena, rp.stanje,
+      `SELECT r.sifra, r.naziv, r.grupa, r.debljina_cm, r.jed_mjera, rp.cijena, rp.stanje,
               (rp.cijena * rp.stanje) AS ukupno
        FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
-       WHERE r.aktivan=true
+       WHERE ${uslovi.join(' AND ')}
        ORDER BY r.naziv`,
-      [objektId]
+      vals
     );
 
     const podaci = r.rows.map(row => ({
       'Šifra': row.sifra,
       'Naziv': row.naziv,
       'Grupa': row.grupa || '',
+      'Debljina (cm)': row.debljina_cm || '',
       'JM': row.jed_mjera,
       'Cijena po JM': parseFloat(row.cijena),
       'Stanje': parseFloat(row.stanje),
       'Ukupno': parseFloat(row.ukupno),
     }));
     const ukupnaVrijednost = podaci.reduce((s, p) => s + p['Ukupno'], 0);
-    podaci.push({ 'Šifra': '', 'Naziv': '', 'Grupa': '', 'JM': '', 'Cijena po JM': '', 'Stanje': 'UKUPNO:', 'Ukupno': +ukupnaVrijednost.toFixed(2) });
+    podaci.push({ 'Šifra': '', 'Naziv': '', 'Grupa': '', 'Debljina (cm)': '', 'JM': '', 'Cijena po JM': '', 'Stanje': 'UKUPNO:', 'Ukupno': +ukupnaVrijednost.toFixed(2) });
 
     const ws = XLSX.utils.json_to_sheet(podaci);
     const wb = XLSX.utils.book_new();
@@ -284,6 +320,7 @@ const NAGADJANJE = {
   cijena:    ['unit price', 'jedinicna cijena', 'cijena', 'cena', 'mpc', 'maloprodajna cijena', 'prodajna cijena', 'price', 'val'],
   stanje:    ['stanje/m2/m3/kom', 'stanje', 'zaliha', 'kolicina', 'količina', 'kol', 'qty', 'raspolozivo'],
   grupa:     ['code-group', 'code group', 'grupa', 'group', 'kod grupe', 'tip', 'kategorija'],
+  debljina:  ['debljina', 'debljina cm', 'thickness', 'deb'],
 };
 
 function nagadjajMapiranje(header) {
@@ -403,6 +440,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
         const cijenaFajl = mapping.cijena ? parsirajBroj(row[mapping.cijena]) : 0;
         const stanjeFajl = mapping.stanje ? parsirajBroj(row[mapping.stanje]) : 0;
         const grupa = mapping.grupa ? (String(row[mapping.grupa] ?? '').trim() || null) : null;
+        const debljina = mapping.debljina ? (parsirajBroj(row[mapping.debljina]) || null) : null;
 
         // Ako fajl nema posebnu kolonu za jedinicu mjere, pogađamo po obliku broja u
         // koloni stanja: cijeli broj -> "kom", decimalan -> "m2". Samo POLAZNA pretpostavka —
@@ -414,11 +452,12 @@ router.post('/import', upload.single('file'), async (req, res) => {
 
         // 1) Šifrarnik (zajednički za sve PJ) — upsert po šifri
         const robaRes = await pool.query(
-          `INSERT INTO roba (sifra, naziv, jed_mjera, izvor_uvoza, grupa)
-           VALUES ($1,$2,$3,$4,$5)
-           ON CONFLICT (sifra) DO UPDATE SET naziv=$2, jed_mjera=$3, izvor_uvoza=$4, grupa=COALESCE($5, roba.grupa), azurirano=now()
+          `INSERT INTO roba (sifra, naziv, jed_mjera, izvor_uvoza, grupa, debljina_cm)
+           VALUES ($1,$2,$3,$4,$5,$6)
+           ON CONFLICT (sifra) DO UPDATE SET naziv=$2, jed_mjera=$3, izvor_uvoza=$4,
+             grupa=COALESCE($5, roba.grupa), debljina_cm=COALESCE($6, roba.debljina_cm), azurirano=now()
            RETURNING id, (xmax = 0) AS inserted`,
-          [sifra, naziv, jed_mjera, izvor, grupa]
+          [sifra, naziv, jed_mjera, izvor, grupa, debljina]
         );
         const robaId = robaRes.rows[0].id;
 
