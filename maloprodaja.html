@@ -285,6 +285,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 <div class="tabs">
   <button class="tab-btn active" data-tab="prodaja">🛒 Prodaja</button>
+  <button class="tab-btn" data-tab="isplate">💸 Isplate</button>
   <button class="tab-btn" data-tab="admin" id="tab-admin-btn">🧾 Otpremnice</button>
 </div>
 
@@ -326,6 +327,60 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
     <div class="search-hint">Ukucaj šifru ili naziv artikla — dodirni rezultat da dodaš stavku.</div>
     <div class="rez-list" id="rez-list"></div>
+  </div>
+</div>
+
+<!-- ═══ TAB: ISPLATE (gotovinske isplate iz kase) ═══ -->
+<div class="view" id="view-isplate">
+  <div class="import-box">
+    <h3>💸 Nova isplata</h3>
+    <div class="kupac-fld">
+      <label>Razlog isplate</label>
+      <select id="isp-razlog" onchange="promijeniRazlogIsplate()">
+        <option value="">— izaberi razlog —</option>
+        <option value="povrat_komitentu">Povrat komitentu (ranija uplata)</option>
+        <option value="gorivo">Gorivo</option>
+        <option value="sitne_popravke">Sitne popravke</option>
+        <option value="dorucak">Trošak doručka</option>
+        <option value="cistac">Trošak čistača</option>
+        <option value="servis">Servis</option>
+        <option value="drugo">Drugo</option>
+      </select>
+    </div>
+    <div class="kupac-fld" id="isp-napomena-fld">
+      <label id="isp-napomena-lbl">Napomena (opciono)</label>
+      <input type="text" id="isp-napomena" placeholder="Detalji...">
+    </div>
+    <div class="kupac-fld">
+      <label>Iznos (KM)</label>
+      <input type="number" id="isp-iznos" step="0.01" min="0.01" placeholder="0.00">
+    </div>
+    <button class="btn-generisi" onclick="pripremiIsplatu()">Dalje →</button>
+    <div id="isplata-greska" style="display:none;background:#fce8e6;color:var(--red);border-radius:8px;padding:10px 12px;margin-top:8px;font-size:12.5px;font-weight:600;"></div>
+  </div>
+
+  <div class="import-box">
+    <h3>📋 Isplate danas</h3>
+    <div id="isplate-lista"></div>
+    <div id="isplate-total" class="dnevni-total" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ═══ OVERLAY: POTVRDA ISPLATE (primalac potvrđuje) ═══ -->
+<div class="overlay" id="ov-isplata">
+  <div class="ov-header">Potvrda isplate</div>
+  <div class="ov-body">
+    <div class="ov-iznos-lbl">IZNOS ZA ISPLATU</div>
+    <div class="ov-iznos" id="isp-ov-iznos">0.00 KM</div>
+    <div class="ov-stavke" id="isp-ov-detalji" style="width:100%;max-width:420px;"></div>
+    <div class="ov-kupac-fld">
+      <label>Ime i prezime primaoca</label>
+      <input type="text" id="isp-primalac-ime" placeholder="Unesite ime...">
+    </div>
+  </div>
+  <div class="ov-footer">
+    <button class="btn-otkazi" onclick="otkaziIsplatu()">Otkaži</button>
+    <button class="btn-potvrdi" id="isp-btn-potvrdi" onclick="potvrdiIsplatu()">✓ PRIMALAC POTVRĐUJE</button>
   </div>
 </div>
 
@@ -649,6 +704,7 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     btn.classList.add('active');
     document.getElementById('view-'+btn.dataset.tab).classList.add('active');
     if(btn.dataset.tab==='admin') loadOtpremnice();
+    if(btn.dataset.tab==='isplate') ucitajIsplateListu();
   };
 });
 
@@ -747,6 +803,129 @@ function promijeniKupca(){
   document.getElementById('kupac-picker').style.display='block';
   document.getElementById('kupac-search').value='';
   traziKupca('');
+}
+
+/* ── ISPLATE (gotovinske isplate iz kase) ─────────────────────────── */
+const RAZLOG_ISPLATE_LABEL={
+  povrat_komitentu:'Povrat komitentu', gorivo:'Gorivo', sitne_popravke:'Sitne popravke',
+  dorucak:'Trošak doručka', cistac:'Trošak čistača', servis:'Servis', drugo:'Drugo',
+};
+let isplataZaPotvrdu=null;
+
+function promijeniRazlogIsplate(){
+  const razlog=document.getElementById('isp-razlog').value;
+  const lbl=document.getElementById('isp-napomena-lbl');
+  const polje=document.getElementById('isp-napomena');
+  if(razlog==='povrat_komitentu'){
+    lbl.textContent='Ime komitenta (kome se vraća) *';
+    polje.placeholder='Ime i prezime / firma...';
+  }else if(razlog==='servis'){
+    lbl.textContent='Koji servis *';
+    polje.placeholder='Naziv servisa...';
+  }else{
+    lbl.textContent='Napomena (opciono)';
+    polje.placeholder='Detalji...';
+  }
+}
+
+function pripremiIsplatu(){
+  const greskaDiv=document.getElementById('isplata-greska');
+  greskaDiv.style.display='none';
+  if(!trenutniObjekat){alert('Nedostaje izabrani prodajni objekat.');return;}
+  const razlog=document.getElementById('isp-razlog').value;
+  const napomena=document.getElementById('isp-napomena').value.trim();
+  const iznos=parseFloat(document.getElementById('isp-iznos').value);
+
+  if(!razlog){greskaDiv.textContent='⚠ Izaberite razlog isplate.';greskaDiv.style.display='block';return;}
+  if((razlog==='povrat_komitentu'||razlog==='servis') && !napomena){
+    greskaDiv.textContent='⚠ '+(razlog==='povrat_komitentu'?'Unesite ime komitenta.':'Unesite koji servis.');
+    greskaDiv.style.display='block';return;
+  }
+  if(!iznos||iznos<=0){greskaDiv.textContent='⚠ Unesite ispravan iznos.';greskaDiv.style.display='block';return;}
+
+  isplataZaPotvrdu={razlog, napomena: napomena||null, iznos};
+  document.getElementById('isp-ov-iznos').textContent=fm(iznos)+' KM';
+  document.getElementById('isp-ov-detalji').innerHTML=`
+    <div class="ov-stavka"><span>Razlog</span><span>${esc(RAZLOG_ISPLATE_LABEL[razlog])}</span></div>
+    ${napomena?`<div class="ov-stavka"><span>Napomena</span><span>${esc(napomena)}</span></div>`:''}
+    <div class="ov-stavka"><span>Prodajni objekat</span><span>${esc(trenutniObjekat.naziv)}</span></div>
+  `;
+  document.getElementById('isp-primalac-ime').value='';
+  document.getElementById('ov-isplata').classList.add('on');
+}
+
+function otkaziIsplatu(){
+  document.getElementById('ov-isplata').classList.remove('on');
+  isplataZaPotvrdu=null;
+}
+
+async function potvrdiIsplatu(){
+  const ime=document.getElementById('isp-primalac-ime').value.trim();
+  if(!ime){alert('Unesite ime primaoca.');return;}
+  if(!isplataZaPotvrdu||!trenutniObjekat) return;
+  const btn=document.getElementById('isp-btn-potvrdi');
+  btn.disabled=true; btn.textContent='Obrada...';
+  try{
+    const r=await fetch(`${API}/api/isplate`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        objekt_id: trenutniObjekat.id,
+        iznos: isplataZaPotvrdu.iznos,
+        razlog: isplataZaPotvrdu.razlog,
+        napomena: isplataZaPotvrdu.napomena,
+        primalac_ime: ime,
+      }),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri isplati.');
+    document.getElementById('ov-isplata').classList.remove('on');
+    isplataZaPotvrdu=null;
+    document.getElementById('isp-razlog').value='';
+    document.getElementById('isp-napomena').value='';
+    document.getElementById('isp-iznos').value='';
+    promijeniRazlogIsplate();
+    ucitajIsplateListu();
+  }catch(e){
+    alert(e.message);
+  }finally{
+    btn.disabled=false; btn.textContent='✓ PRIMALAC POTVRĐUJE';
+  }
+}
+
+async function ucitajIsplateListu(){
+  const cont=document.getElementById('isplate-lista');
+  const totalDiv=document.getElementById('isplate-total');
+  if(!trenutniObjekat){cont.innerHTML='<div class="empty-msg">Nedostaje izabrani prodajni objekat.</div>';totalDiv.style.display='none';return;}
+  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
+  const danas=new Date().toISOString().split('T')[0];
+  try{
+    const r=await fetch(`${API}/api/isplate?objekt_id=${trenutniObjekat.id}&od=${danas}&do=${danas}`);
+    const rows=await r.json();
+    if(!rows.length){
+      cont.innerHTML='<div class="empty-msg">Danas još nema isplata.</div>';
+      totalDiv.style.display='none';
+      return;
+    }
+    cont.innerHTML=rows.map(o=>`
+      <div class="otp-card">
+        <div class="otp-top">
+          <span class="otp-broj">${esc(RAZLOG_ISPLATE_LABEL[o.razlog]||o.razlog)}</span>
+          <span class="otp-status st-potvrdjena">✓ Potvrđeno</span>
+        </div>
+        <div class="otp-meta">
+          ${fd(o.datum)} &middot; Primalac: ${esc(o.primalac_ime)}<br>
+          ${o.napomena?esc(o.napomena)+'<br>':''}Izdao: ${esc(o.komercijalista_ime||'—')}
+        </div>
+        <div class="otp-iznos" style="color:var(--red);">− ${fm(o.iznos)} KM</div>
+      </div>
+    `).join('');
+    const ukupno=rows.reduce((s,o)=>s+parseFloat(o.iznos||0),0);
+    totalDiv.style.display='block';
+    totalDiv.innerHTML=`− ${fm(ukupno)} KM<span class="cnt">${rows.length} isplat${rows.length===1?'a':'e'} danas</span>`;
+  }catch(e){
+    cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>';
+    totalDiv.style.display='none';
+  }
 }
 
 function prikaziNovogKupca(){
@@ -1250,18 +1429,36 @@ async function loadOtpremnice(){
   if(do_) params.set('do',do_);
   if(objekatId) params.set('objekt_id',objekatId);
   if(document.getElementById('fil-odstupanje').checked) params.set('odstupanje','true');
+
+  // Isplate za isti period/objekat — za neto obračun (prodaja - isplate)
+  let isplateSuma=0;
+  try{
+    const isplateParams=new URLSearchParams();
+    if(od) isplateParams.set('od',od);
+    if(do_) isplateParams.set('do',do_);
+    if(objekatId) isplateParams.set('objekt_id',objekatId);
+    const ir=await fetch(`${API}/api/isplate/suma?${isplateParams}`);
+    if(ir.ok){ const idata=await ir.json(); isplateSuma=idata.ukupno||0; }
+  }catch(e){}
+
   try{
     const r=await fetch(`${API}/api/otpremnice?${params}`);
     const rows=await r.json();
     const totalDiv=document.getElementById('dnevni-total');
     if(!rows.length){
       cont.innerHTML='<div class="empty-msg">Nema otpremnica.</div>';
-      totalDiv.style.display='none';
+      if(isplateSuma>0){
+        totalDiv.style.display='block';
+        totalDiv.innerHTML=`0.00 KM<span class="cnt">Isplate u ovom periodu: − ${fm(isplateSuma)} KM &middot; Neto: ${fm(-isplateSuma)} KM</span>`;
+      }else{
+        totalDiv.style.display='none';
+      }
       return;
     }
     const ukupno=rows.reduce((s,o)=>s+parseFloat(o.ukupan_iznos||0),0);
+    const neto=ukupno-isplateSuma;
     totalDiv.style.display='block';
-    totalDiv.innerHTML=`${fm(ukupno)} KM<span class="cnt">${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'}</span>`;
+    totalDiv.innerHTML=`${fm(ukupno)} KM<span class="cnt">${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'}${isplateSuma>0?` &middot; Isplate: − ${fm(isplateSuma)} KM &middot; Neto: ${fm(neto)} KM`:''}</span>`;
     const stLabel={kreirana:'Kreirana',potvrdjena:'Potvrđena',stornirana:'Stornirana'};
     cont.innerHTML=rows.map(o=>`
       <div class="otp-card ${o.ima_odstupanje?'ima-odstupanje':''}" onclick="prikaziDetaljeOtpremnice(${o.id})">
@@ -1286,7 +1483,9 @@ async function loadOtpremnice(){
     `).join('');
     cont.innerHTML += `
       <div style="text-align:right;padding:14px 6px;font-size:15px;font-weight:800;color:var(--dark);border-top:2px solid var(--border);margin-top:6px;">
-        Ukupno: ${fm(ukupno)} KM <span style="font-weight:400;font-size:11.5px;color:#8b96a5;">(${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'})</span>
+        Prodaja: ${fm(ukupno)} KM <span style="font-weight:400;font-size:11.5px;color:#8b96a5;">(${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'})</span>
+        ${isplateSuma>0?`<br><span style="color:var(--red);">Isplate: − ${fm(isplateSuma)} KM</span>
+        <br><span style="font-size:17px;">Neto: ${fm(neto)} KM</span>`:''}
       </div>`;
     window.__otpDataById=Object.fromEntries(rows.map(o=>[o.id,o]));
   }catch(e){
