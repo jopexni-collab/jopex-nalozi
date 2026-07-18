@@ -73,6 +73,29 @@ router.get('/', zahtijevaProdaju, async (req, res) => {
   }
 });
 
+// GET /api/roba/lager?objekt_id=X - kompletna lager lista za PJ (šifra/naziv/JM/cijena/stanje/ukupno) — admin
+// MORA biti prije "/:id" rute ispod — inače Express tumači "lager" kao vrijednost za :id.
+router.get('/lager', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin može pregledati kompletan lager.' });
+  const objektId = trebaObjekat(req.query.objekt_id);
+  if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
+  try {
+    const r = await pool.query(
+      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, rp.cijena, rp.stanje,
+              (rp.cijena * rp.stanje) AS ukupno
+       FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
+       WHERE r.aktivan=true
+       ORDER BY r.naziv`,
+      [objektId]
+    );
+    const totalVrijednost = r.rows.reduce((s, row) => s + parseFloat(row.ukupno || 0), 0);
+    res.json({ stavke: r.rows, total_vrijednost: +totalVrijednost.toFixed(2), broj_artikala: r.rows.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/roba/:id?objekt_id=1
 router.get('/:id', zahtijevaProdaju, async (req, res) => {
   try {
@@ -385,28 +408,6 @@ router.post('/import', upload.single('file'), async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Greška pri uvozu: ' + err.message });
-  }
-});
-
-// GET /api/roba/lager?objekt_id=X - kompletna lager lista za PJ (šifra/naziv/JM/cijena/stanje/ukupno) — admin
-router.get('/lager', async (req, res) => {
-  if (req.session?.user?.rola !== 'admin')
-    return res.status(403).json({ error: 'Samo admin može pregledati kompletan lager.' });
-  const objektId = trebaObjekat(req.query.objekt_id);
-  if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
-  try {
-    const r = await pool.query(
-      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, rp.cijena, rp.stanje,
-              (rp.cijena * rp.stanje) AS ukupno
-       FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
-       WHERE r.aktivan=true
-       ORDER BY r.naziv`,
-      [objektId]
-    );
-    const totalVrijednost = r.rows.reduce((s, row) => s + parseFloat(row.ukupno || 0), 0);
-    res.json({ stavke: r.rows, total_vrijednost: +totalVrijednost.toFixed(2), broj_artikala: r.rows.length });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
 });
 
