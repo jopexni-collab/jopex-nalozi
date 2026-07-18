@@ -401,10 +401,16 @@ router.post('/import', upload.single('file'), async (req, res) => {
     return res.status(403).json({ error: 'Samo admin može uvoziti robu.' });
   if (!req.file) return res.status(400).json({ error: 'Fajl nije priložen.' });
 
-  const objektId = trebaObjekat(req.body.objekt_id);
-  if (!objektId) return res.status(400).json({ error: 'Morate izabrati prodajni objekat za koji uvozite lager.' });
+  const nacin = ['zamjena', 'nabavka', 'metapodaci'].includes(req.body.nacin) ? req.body.nacin : 'nabavka';
 
-  const nacin = req.body.nacin === 'zamjena' ? 'zamjena' : 'nabavka';
+  // Za "metapodaci" ne treba objekt_id — ništa se ne dira u roba_pj (cijena/stanje), samo
+  // zajednički šifrarnik (grupa/debljina/naziv/jed_mjera). Za ostala dva režima objekt_id je obavezan.
+  let objektId = null;
+  if (nacin !== 'metapodaci') {
+    objektId = trebaObjekat(req.body.objekt_id);
+    if (!objektId) return res.status(400).json({ error: 'Morate izabrati prodajni objekat za koji uvozite lager.' });
+  }
+
   const azurirajCijenu = req.body.azuriraj_cijenu === 'true';
 
   let mapping;
@@ -437,8 +443,6 @@ router.post('/import', upload.single('file'), async (req, res) => {
         const naziv = String(row[mapping.naziv] ?? '').trim();
         if (!sifra || !naziv) { preskoceno++; continue; }
 
-        const cijenaFajl = mapping.cijena ? parsirajBroj(row[mapping.cijena]) : 0;
-        const stanjeFajl = mapping.stanje ? parsirajBroj(row[mapping.stanje]) : 0;
         const grupa = mapping.grupa ? (String(row[mapping.grupa] ?? '').trim() || null) : null;
         const debljina = mapping.debljina ? (parsirajBroj(row[mapping.debljina]) || null) : null;
 
@@ -446,6 +450,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
         // koloni stanja: cijeli broj -> "kom", decimalan -> "m2". Samo POLAZNA pretpostavka —
         // ako trgovac pri prodaji izabere drugačiju jedinicu, sistem to automatski
         // prijavljuje kao odstupanje (vidi otpremnice.js).
+        const stanjeFajl = mapping.stanje ? parsirajBroj(row[mapping.stanje]) : 0;
         const jed_mjera = mapping.jed_mjera
           ? (String(row[mapping.jed_mjera] ?? '').trim() || jmDefault)
           : (Number.isInteger(stanjeFajl) && stanjeFajl !== 0 ? 'kom' : 'm2');
@@ -460,6 +465,14 @@ router.post('/import', upload.single('file'), async (req, res) => {
           [sifra, naziv, jed_mjera, izvor, grupa, debljina]
         );
         const robaId = robaRes.rows[0].id;
+
+        // "metapodaci" režim staje ovdje — NIKAD ne dira roba_pj (cijenu/stanje).
+        if (nacin === 'metapodaci') {
+          if (robaRes.rows[0].inserted) uneseno++; else azurirano++;
+          continue;
+        }
+
+        const cijenaFajl = mapping.cijena ? parsirajBroj(row[mapping.cijena]) : 0;
 
         // 2) Cijena/stanje ZA OVAJ PJ
         if (nacin === 'zamjena') {
