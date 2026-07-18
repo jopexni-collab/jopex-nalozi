@@ -273,7 +273,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <div class="hdr-left">
     <h1>🛒 Maloprodaja</h1>
     <span id="who"></span>
-    <span id="objekt-badge" style="display:none;font-size:10.5px;opacity:.85;cursor:pointer;text-decoration:underline;" onclick="otvoriIzborObjekta()"></span>
+    <span id="objekt-badge" style="display:none;font-size:10.5px;opacity:.85;"></span>
   </div>
   <nav>
     <a href="home.html">← Početna</a>
@@ -373,7 +373,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <div id="objekat-korak1">
       <div style="font-size:12.5px;color:#6b7a8d;text-align:center;margin-bottom:16px;max-width:340px;">
         Cijene i stanje robe se razlikuju po prodajnom objektu — izaberi gdje trenutno prodaješ.
-        Ovo se pamti dok ga ne promijeniš.
+        Ovaj izbor važi za cijelu sesiju i <b>ne može se mijenjati</b> bez odjave.
       </div>
       <div id="objekat-lista" style="width:100%;max-width:340px;"></div>
     </div>
@@ -390,6 +390,20 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <div class="ce-btns">
         <button class="ce-otkazi" onclick="otkaziIzborObjekta()">← Nazad</button>
         <button class="ce-primijeni" id="objekat-lozinka-btn" onclick="potvrdiLozinkuIIzaberi()">✓ Potvrdi</button>
+      </div>
+    </div>
+    <div id="objekat-korak3" style="display:none;width:100%;max-width:340px;">
+      <div style="font-size:32px;text-align:center;margin-bottom:8px;">⚠️</div>
+      <div style="font-size:14px;font-weight:700;color:var(--red);text-align:center;margin-bottom:10px;">
+        Da li ste SIGURNI da želite da uđete u:<br><span id="objekat-finalna-naziv" style="color:var(--blue);font-size:16px;"></span>?
+      </div>
+      <div style="font-size:11.5px;color:#6b7a8d;text-align:center;margin-bottom:16px;line-height:1.5;">
+        Sve prodaje u ovoj sesiji će biti evidentirane na ovaj prodajni objekat.
+        Jednom potvrđeno, PJ se <b>ne može mijenjati</b> bez odjave i ponovne prijave.
+      </div>
+      <div class="ce-btns">
+        <button class="ce-otkazi" onclick="otkaziIzborObjekta()">← Nazad</button>
+        <button class="ce-primijeni" onclick="finalizujIzborObjekta()">✓ Da, uđi u ovaj PJ</button>
       </div>
     </div>
   </div>
@@ -516,15 +530,20 @@ let trenutniObjekat=null; // {id, naziv}
 function ucitajUpamceniObjekat(){
   try{
     const raw=localStorage.getItem(OBJEKAT_KEY);
-    if(raw) trenutniObjekat=JSON.parse(raw);
-  }catch(e){ trenutniObjekat=null; }
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return null;
 }
 
 function azurirajObjekatBadge(){
+  // Značka je sad SAMO informativna (bez klika) — PJ se ne mijenja bez odjave.
   const b=document.getElementById('objekt-badge');
   if(trenutniObjekat){
-    b.textContent='🏢 '+trenutniObjekat.naziv+' (promijeni)';
+    b.textContent='🏢 '+trenutniObjekat.naziv;
     b.style.display='inline';
+    b.style.cursor='default';
+    b.style.textDecoration='none';
+    b.onclick=null;
   }else{
     b.style.display='none';
   }
@@ -535,7 +554,9 @@ async function otvoriIzborObjekta(){
   cont.innerHTML='<div class="spinner">Učitavanje...</div>';
   document.getElementById('objekat-korak1').style.display='block';
   document.getElementById('objekat-korak2').style.display='none';
+  document.getElementById('objekat-korak3').style.display='none';
   document.getElementById('ov-objekat').classList.add('on');
+  const upamceni=ucitajUpamceniObjekat();
   try{
     const r=await fetch(`${API}/api/prodajni-objekti`);
     const rows=await r.json();
@@ -544,7 +565,9 @@ async function otvoriIzborObjekta(){
       return;
     }
     cont.innerHTML=rows.map(o=>`
-      <div class="objekat-item" onclick='zatraziLozinkuZaObjekat(${JSON.stringify({id:o.id,naziv:o.naziv}).replace(/'/g,"&apos;")})'>${esc(o.naziv)}</div>
+      <div class="objekat-item" onclick='zatraziLozinkuZaObjekat(${JSON.stringify({id:o.id,naziv:o.naziv}).replace(/'/g,"&apos;")})'>
+        ${esc(o.naziv)}${upamceni&&upamceni.id===o.id?' <span style="font-size:10.5px;color:#8b96a5;font-weight:400;">(prošli put)</span>':''}
+      </div>
     `).join('');
   }catch(e){
     cont.innerHTML='<div class="empty-msg">Greška pri učitavanju objekata.</div>';
@@ -557,6 +580,7 @@ function zatraziLozinkuZaObjekat(objekat){
   objekatZaPotvrdu=objekat;
   document.getElementById('objekat-korak1').style.display='none';
   document.getElementById('objekat-korak2').style.display='block';
+  document.getElementById('objekat-korak3').style.display='none';
   document.getElementById('objekat-lozinka-naziv').textContent=objekat.naziv;
   document.getElementById('objekat-lozinka-input').value='';
   document.getElementById('objekat-lozinka-greska').style.display='none';
@@ -567,6 +591,7 @@ function otkaziIzborObjekta(){
   objekatZaPotvrdu=null;
   document.getElementById('objekat-korak1').style.display='block';
   document.getElementById('objekat-korak2').style.display='none';
+  document.getElementById('objekat-korak3').style.display='none';
 }
 
 // Enter u polju lozinke = isto što i klik na Potvrdi
@@ -587,8 +612,10 @@ async function potvrdiLozinkuIIzaberi(){
     });
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Neispravna lozinka.');
-    izaberiObjekat(objekatZaPotvrdu);
-    objekatZaPotvrdu=null;
+    // Lozinka je tačna — sad ide DRUGO, eksplicitno pitanje potvrde (ne odmah ulazak).
+    document.getElementById('objekat-korak2').style.display='none';
+    document.getElementById('objekat-korak3').style.display='block';
+    document.getElementById('objekat-finalna-naziv').textContent=objekatZaPotvrdu.naziv;
   }catch(e){
     greska.textContent=e.message;
     greska.style.display='block';
@@ -599,12 +626,16 @@ async function potvrdiLozinkuIIzaberi(){
   }
 }
 
+function finalizujIzborObjekta(){
+  izaberiObjekat(objekatZaPotvrdu);
+  objekatZaPotvrdu=null;
+}
+
 function izaberiObjekat(objekat){
   trenutniObjekat=objekat;
   try{ localStorage.setItem(OBJEKAT_KEY, JSON.stringify(objekat)); }catch(e){}
   azurirajObjekatBadge();
   document.getElementById('ov-objekat').classList.remove('on');
-  // Promjena objekta mijenja cijene/stanje — resetuj košaricu i kupca da ne dođe do zabune.
   kosarica=[];
   renderKosarica();
   if(typeof promijeniKupca==='function') promijeniKupca();
@@ -1367,6 +1398,7 @@ async function prikaziDetaljeOtpremnice(id){
 /* ── AUTH / LOGOUT ──────────────────────────────────────────── */
 document.getElementById('logout').onclick=async e=>{
   e.preventDefault();
+  try{ localStorage.removeItem(OBJEKAT_KEY); }catch(err){}
   await fetch(`${API}/api/auth/logout`,{method:'POST'});
   location.href='login.html';
 };
@@ -1389,12 +1421,9 @@ fetch(`${API}/api/auth/me`).then(r=>{
   popuniFilterObjekata();
   renderKosarica();
 
-  ucitajUpamceniObjekat();
-  if(trenutniObjekat){
-    azurirajObjekatBadge();
-  }else{
-    otvoriIzborObjekta();
-  }
+  // Izbor PJ se UVIJEK traži eksplicitno pri ulasku — nikad se tiho ne preskače na osnovu
+  // ranije upamćenog izbora. Da se promijeni PJ, mora se odjaviti i ponovo prijaviti.
+  otvoriIzborObjekta();
 }).catch(()=>location.href='login.html');
 
 /* ── ZAKLJUČI DAN ─────────────────────────────────────────── */
