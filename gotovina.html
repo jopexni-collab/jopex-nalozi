@@ -135,7 +135,7 @@ td.num{text-align:right;font-weight:700;}
       <th>Iznos</th>
       <th>Primio</th>
       <th>Izvor</th>
-      <th>Nalog</th>
+      <th>Nalog/Otp</th>
       <th>Opis</th>
       <th>Predano blagajniku</th>
       <th></th>
@@ -202,7 +202,7 @@ function render(){
         <span class="chip-izvor ${r.izvor==='Proizvodnja'?'iz-pro':r.izvor==='Maloprodaja'?'iz-malo':'iz-drugo'}">${esc(r.izvor)}</span>
         ${r.izvor==='Maloprodaja'&&r.objekt_naziv?`<span class="izvor-pj">${esc(r.objekt_naziv)}</span>`:''}
       </td>
-      <td>${r.nalog_r_br?`<a class="nalog-link" href="lista.html">#${r.nalog_r_br}</a>${r.narucilac?' — '+esc(r.narucilac):''}`:''}</td>
+      <td>${r.nalog_r_br?(/^\d+$/.test(String(r.nalog_r_br))?`<a class="nalog-link" href="lista.html">#${r.nalog_r_br}</a>${r.narucilac?' — '+esc(r.narucilac):''}`:`<span class="nalog-link" style="cursor:default;">${esc(r.nalog_r_br)}</span>`):''}</td>
       <td>${esc(r.opis||'')}</td>
       <td>${r.predao_blagajniku
         ?`<span class="predano">✓ Predano ${r.datum_predaje?fd(r.datum_predaje):''}</span>`

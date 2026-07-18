@@ -270,9 +270,9 @@ router.post('/potvrdi', async (req, res) => {
 
     const opisKupca = kupac_naziv ? kupac_naziv.trim() : 'kupac nepoznat';
     const g = await client.query(
-      `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv)
-       VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4) RETURNING id`,
-      [ukupanIznos, user.ime_prezime, `Otpremnica ${broj} — ${opisKupca}`, objektNaziv]
+      `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
+       VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5) RETURNING id`,
+      [ukupanIznos, user.ime_prezime, opisKupca, objektNaziv, broj]
     );
     await client.query('UPDATE otpremnice SET gotovina_id=$1 WHERE id=$2', [g.rows[0].id, otpId]);
 

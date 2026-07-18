@@ -14,9 +14,14 @@ router.get('/', async (req, res) => {
     if (primio) { where.push(`primio = $${i++}`); vals.push(primio); }
     if (izvor) { where.push(`izvor = $${i++}`); vals.push(izvor); }
     if (nepredano === 'true') { where.push(`predao_blagajniku = false`); }
-    const sql = `SELECT g.*, p.narucilac, p.zadatak 
+    // "Nalog/Otp" kolona (g.nalog_r_br) sad drži i broj radnog naloga i broj otpremnice iz
+    // maloprodaje (tekst, npr. "OTP-2026-000123") — zato je tip kolone VARCHAR. Ovdje se
+    // poredi kao tekst (p.r_br::text), inače bi Postgres bacio grešku tipa na ne-brojčane
+    // vrijednosti (otpremnica brojevi). Za redove sa OTP brojem JOIN jednostavno neće naći
+    // poklapanje (narucilac/zadatak ostaju NULL), što je ispravno ponašanje.
+    const sql = `SELECT g.*, p.narucilac, p.zadatak
       FROM gotovina g
-      LEFT JOIN proizvodnja_jopex p ON g.nalog_r_br = p.r_br
+      LEFT JOIN proizvodnja_jopex p ON g.nalog_r_br = p.r_br::text
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY g.datum DESC, g.kreirano DESC`;
     const r = await pool.query(sql, vals);
