@@ -57,11 +57,17 @@ function sastaviStavke(inputStavke, zivaRoba) {
     const roba = zivaRoba[s.roba_id];
     if (!roba)
       throw Object.assign(new Error('Artikal nije dostupan (ili nema cijenu/stanje) u ovom prodajnom objektu.'), { status: 400 });
-    if (parseFloat(roba.stanje) < kolicina)
+    if (parseFloat(roba.stanje) < kolicina) {
+      const raspolozivo = parseFloat(roba.stanje);
+      const nedostaje = +(kolicina - raspolozivo).toFixed(3);
       throw Object.assign(
-        new Error(`Nedovoljno stanje za "${roba.naziv}" (raspoloživo: ${roba.stanje} ${roba.jed_mjera}).`),
-        { status: 400 }
+        new Error(
+          `Nedovoljno stanje za "${roba.naziv}": traženo ${kolicina} ${roba.jed_mjera}, ` +
+          `raspoloživo ${raspolozivo} ${roba.jed_mjera} — nedostaje ${nedostaje} ${roba.jed_mjera}.`
+        ),
+        { status: 400, artikal: roba.naziv, trazeno: kolicina, raspolozivo, nedostaje, jed_mjera: roba.jed_mjera }
       );
+    }
 
     const jedMjeraProdaja = DOZVOLJENE_JEDINICE.includes(s.jed_mjera_prodaja) ? s.jed_mjera_prodaja : roba.jed_mjera;
     const jedinicaOdstupa = jedMjeraProdaja !== roba.jed_mjera;
@@ -262,10 +268,11 @@ router.post('/potvrdi', async (req, res) => {
       );
     }
 
+    const opisKupca = kupac_naziv ? kupac_naziv.trim() : 'kupac nepoznat';
     const g = await client.query(
       `INSERT INTO gotovina (datum, iznos, primio, izvor, opis)
        VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3) RETURNING id`,
-      [ukupanIznos, user.ime_prezime, `Otpremnica ${broj} (${objektNaziv})`]
+      [ukupanIznos, user.ime_prezime, `Otpremnica ${broj} — ${opisKupca} (${objektNaziv})`]
     );
     await client.query('UPDATE otpremnice SET gotovina_id=$1 WHERE id=$2', [g.rows[0].id, otpId]);
 

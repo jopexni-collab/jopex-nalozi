@@ -484,6 +484,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       Otpremnica koju kupac dobija NE prikazuje cijene.
     </div>
     <button class="btn-generisi" id="btn-generisi" onclick="generisiOtpremnicu()" disabled>Generiši otpremnicu</button>
+    <div id="generisi-greska" style="display:none;background:#fce8e6;color:var(--red);border-radius:8px;padding:10px 12px;margin-top:8px;font-size:12.5px;font-weight:600;line-height:1.5;"></div>
   </div>
 </div>
 
@@ -1111,6 +1112,8 @@ async function generisiOtpremnicu(){
   if(!trenutniObjekat){alert('Nedostaje izabrani prodajni objekat.');otvoriIzborObjekta();return;}
   if(!trenutniKupac){alert('Prvo izaberite ili unesite kupca.');return;}
   const btn=document.getElementById('btn-generisi');
+  const greskaDiv=document.getElementById('generisi-greska');
+  greskaDiv.style.display='none';
   btn.disabled=true; btn.textContent='Provjera cijena...';
   try{
     const r=await fetch(`${API}/api/otpremnice/pregled`,{
@@ -1121,7 +1124,8 @@ async function generisiOtpremnicu(){
     if(!r.ok) throw new Error(data.error||'Greška pri provjeri.');
     prikaziPotvrduEkran(data);
   }catch(e){
-    alert(e.message);
+    greskaDiv.textContent='⚠ '+e.message;
+    greskaDiv.style.display='block';
   }finally{
     btn.disabled=false; btn.textContent='Generiši otpremnicu';
   }
@@ -1229,6 +1233,7 @@ function novaProdaja(){
   document.getElementById('ov-uspjeh').classList.remove('on');
   document.getElementById('posalji-box').innerHTML='';
   document.getElementById('search').value='';
+  document.getElementById('generisi-greska').style.display='none';
   promijeniKupca();
 }
 
@@ -1287,6 +1292,10 @@ async function loadOtpremnice(){
         <div class="otp-detalji" id="otp-detalji-${o.id}"></div>
       </div>
     `).join('');
+    cont.innerHTML += `
+      <div style="text-align:right;padding:14px 6px;font-size:15px;font-weight:800;color:var(--dark);border-top:2px solid var(--border);margin-top:6px;">
+        Ukupno: ${fm(ukupno)} KM <span style="font-weight:400;font-size:11.5px;color:#8b96a5;">(${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'})</span>
+      </div>`;
     window.__otpDataById=Object.fromEntries(rows.map(o=>[o.id,o]));
   }catch(e){
     cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>';
@@ -1325,7 +1334,7 @@ async function prikaziDetaljeOtpremnice(id){
     const otp=await r.json();
     if(!r.ok) throw new Error(otp.error||'Greška.');
     el.innerHTML=otp.stavke.map(s=>{
-      const odstupa=parseFloat(s.cijena)!==parseFloat(s.cijena_zadana);
+      const odstupa=!!s.razlog_odstupanja;
       return `
       <div class="otp-stavka-red">
         <div class="osr-top"><span>${esc(s.naziv)} × ${s.kolicina}</span><span>${fm(s.iznos)} KM</span></div>
@@ -1424,21 +1433,77 @@ async function ucitajLagerListu(){
 }
 
 /* ── ADMIN: UPRAVLJANJE PRODAJNIM OBJEKTIMA (PJ) ──────────────────── */
+let objektiPodaci=[];
+let uredjivanjeObjektaId=null;
+
 async function ucitajObjektiListu(){
   const cont=document.getElementById('objekti-postojeci-lista');
   cont.innerHTML='<div class="spinner">Učitavanje...</div>';
   try{
     const r=await fetch(`${API}/api/prodajni-objekti`);
-    const rows=await r.json();
-    if(!rows.length){cont.innerHTML='<div class="empty-msg">Još nema definisanih prodajnih objekata.</div>';return;}
-    cont.innerHTML=rows.map(o=>`
-      <div class="kupac-rez-item" style="cursor:default;">
-        <div class="kupac-rez-naziv">🏢 ${esc(o.naziv)}</div>
-        ${o.adresa?`<div class="kupac-rez-meta">${esc(o.adresa)}</div>`:''}
-      </div>
-    `).join('');
+    objektiPodaci=await r.json();
+    renderObjektiListu();
   }catch(e){
     cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>';
+  }
+}
+
+function renderObjektiListu(){
+  const cont=document.getElementById('objekti-postojeci-lista');
+  if(!objektiPodaci.length){cont.innerHTML='<div class="empty-msg">Još nema definisanih prodajnih objekata.</div>';return;}
+  cont.innerHTML=objektiPodaci.map(o=>{
+    const uEdit=uredjivanjeObjektaId===o.id;
+    return `
+    <div class="kupac-rez-item" style="cursor:default;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <div style="flex:1;min-width:0;">
+          <div class="kupac-rez-naziv">🏢 ${esc(o.naziv)}</div>
+          ${o.adresa?`<div class="kupac-rez-meta">${esc(o.adresa)}</div>`:''}
+        </div>
+        <button class="btn-cijena" onclick="otvoriUredjivanjeObjekta(${o.id})">✎ Izmijeni</button>
+      </div>
+      ${uEdit?`
+      <div class="cijena-edit" style="margin-top:8px;">
+        <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Naziv</label>
+        <input type="text" id="edit-objekat-naziv-${o.id}" value="${esc(o.naziv)}" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
+        <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Adresa</label>
+        <input type="text" id="edit-objekat-adresa-${o.id}" value="${esc(o.adresa||'')}" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
+        <div class="ce-btns">
+          <button class="ce-primijeni" onclick="sacuvajIzmjenuObjekta(${o.id})">✓ Sačuvaj</button>
+          <button class="ce-otkazi" onclick="otvoriUredjivanjeObjekta(${o.id})">Zatvori</button>
+        </div>
+      </div>`:''}
+    </div>
+  `;}).join('');
+}
+
+function otvoriUredjivanjeObjekta(id){
+  uredjivanjeObjektaId = uredjivanjeObjektaId===id ? null : id;
+  renderObjektiListu();
+}
+
+async function sacuvajIzmjenuObjekta(id){
+  const naziv=document.getElementById('edit-objekat-naziv-'+id).value.trim();
+  const adresa=document.getElementById('edit-objekat-adresa-'+id).value.trim();
+  const msg=document.getElementById('objekti-msg');
+  if(!naziv){msg.style.color='red';msg.textContent='Naziv ne može biti prazan.';return;}
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti/${id}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({naziv, adresa: adresa||null}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri izmjeni.');
+    msg.style.color='var(--green)';
+    msg.textContent=`✓ Izmijenjeno: ${data.naziv}`;
+    uredjivanjeObjektaId=null;
+    ucitajObjektiListu();
+    popuniFilterObjekata();
+    popuniImportObjekat();
+    popuniPrenosObjekte();
+    popuniLagerObjekat();
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
   }
 }
 
@@ -1835,6 +1900,5 @@ document.getElementById('btn-zakljuci-dan').onclick=e=>{
   loadOtpremnice();
 };
 </script>
-  //uvezi
 </body>
 </html>
