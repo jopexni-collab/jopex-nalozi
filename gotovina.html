@@ -54,6 +54,7 @@ td.num{text-align:right;font-weight:700;}
 .nepredano-txt{color:var(--red);font-weight:700;}
 .btn-predaj{font:inherit;font-size:10.5px;padding:2px 8px;background:var(--green);color:#fff;border:none;border-radius:3px;cursor:pointer;}
 .btn-del{font:inherit;font-size:12px;background:none;border:none;cursor:pointer;color:var(--red);}
+.iznos-isplata{color:#e30613;font-weight:800;}
 .nalog-link{color:var(--blue);text-decoration:none;font-weight:600;}
 </style>
 </head>
@@ -73,7 +74,7 @@ td.num{text-align:right;font-weight:700;}
   <div class="suma-box"><div class="val" id="s-danas">—</div><div class="lbl">Danas</div></div>
   <div class="suma-box"><div class="val" id="s-sedmica">—</div><div class="lbl">Ova sedmica</div></div>
   <div class="suma-box"><div class="val" id="s-mjesec">—</div><div class="lbl">Ovaj mjesec</div></div>
-  <div class="suma-box nepredano"><div class="val" id="s-nepredano">—</div><div class="lbl">Nije predano blagajniku</div></div>
+  <div class="suma-box nepredano"><div class="val" id="s-nepredano">—</div><div class="lbl">Nije odobreno</div></div>
 </div>
 
 <!-- FORMA ZA UNOS -->
@@ -121,7 +122,7 @@ td.num{text-align:right;font-weight:700;}
     <option value="Maloprodaja">Maloprodaja</option>
     <option value="Drugo">Drugo</option>
   </select>
-  <label><input type="checkbox" id="fil-nepredano" onchange="load()"> Samo nepredano</label>
+  <label><input type="checkbox" id="fil-nepredano" onchange="load()"> Samo neodobreno</label>
   <button class="btn-sm" onclick="resetFilteri()">✕ Resetuj</button>
   <span id="stat" style="margin-left:auto;color:#6b7a8d;font-size:11px;"></span>
 </div>
@@ -137,7 +138,7 @@ td.num{text-align:right;font-weight:700;}
       <th>Izvor</th>
       <th>Nalog/Otp</th>
       <th>Opis</th>
-      <th>Predano blagajniku</th>
+      <th>Odobreno</th>
       <th></th>
     </tr>
   </thead>
@@ -196,7 +197,7 @@ function render(){
   document.getElementById('tbody').innerHTML=all.map(r=>`
     <tr>
       <td>${fd(r.datum)}</td>
-      <td class="num">${fm(r.iznos)} KM</td>
+      <td class="num ${parseFloat(r.iznos)<0?'iznos-isplata':''}">${fm(r.iznos)} KM</td>
       <td><b>${esc(r.primio)}</b></td>
       <td>
         <span class="chip-izvor ${r.izvor==='Proizvodnja'?'iz-pro':r.izvor==='Maloprodaja'?'iz-malo':'iz-drugo'}">${esc(r.izvor)}</span>
@@ -205,9 +206,9 @@ function render(){
       <td>${r.nalog_r_br?(/^\d+$/.test(String(r.nalog_r_br))?`<a class="nalog-link" href="lista.html">#${r.nalog_r_br}</a>${r.narucilac?' — '+esc(r.narucilac):''}`:`<span class="nalog-link" style="cursor:default;">${esc(r.nalog_r_br)}</span>`):''}</td>
       <td>${esc(r.opis||'')}</td>
       <td>${r.predao_blagajniku
-        ?`<span class="predano">✓ Predano ${r.datum_predaje?fd(r.datum_predaje):''}</span>`
-        :`<span class="nepredano-txt">Nije predano</span>
-          <button class="btn-predaj" onclick="predajBlagajniku(${r.id})">Predano</button>`
+        ?`<span class="predano">✓ Odobreno ${r.datum_predaje?fd(r.datum_predaje):''}</span>`
+        :`<span class="nepredano-txt">Nije odobreno</span>
+          <button class="btn-predaj" onclick="predajBlagajniku(${r.id})">Odobreno</button>`
       }</td>
       <td>${isAdmin?`<button class="btn-del" onclick="obrisi(${r.id})">🗑</button>`:''}</td>
     </tr>
