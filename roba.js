@@ -177,6 +177,107 @@ router.get('/lager/export', async (req, res) => {
   }
 });
 
+// POST /api/roba/lager/delete?objekt_id=X - briše KOMPLETAN lager (sve roba_pj redove) za PJ.
+// Prije brisanja pravi backup (roba_pj_backup) da bi "Undo" bio moguć. Samo admin.
+router.post('/lager/delete', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin može brisati lager.' });
+  const objektId = trebaObjekat(req.body.objekt_id || req.query.objekt_id);
+  if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const objRes = await client.query('SELECT naziv FROM prodajni_objekti WHERE id=$1', [objektId]);
+    if (!objRes.rows.length) throw Object.assign(new Error('Prodajni objekat nije pronađen.'), { status: 404 });
+    const objektNaziv = objRes.rows[0].naziv;
+
+    const trenutno = await client.query(
+      `SELECT r.id AS roba_id, r.sifra, r.naziv, rp.cijena, rp.stanje
+       FROM roba_pj rp JOIN roba r ON r.id = rp.roba_id
+       WHERE rp.objekt_id = $1`,
+      [objektId]
+    );
+
+    if (!trenutno.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Lager za ovaj objekat je već prazan — nema šta da se briše.' });
+    }
+
+    await client.query(
+      `INSERT INTO roba_pj_backup (objekt_id, objekt_naziv, podaci, kreirao_id, kreirao_ime)
+       VALUES ($1,$2,$3,$4,$5)`,
+      [objektId, objektNaziv, JSON.stringify(trenutno.rows), req.session.user.id, req.session.user.ime_prezime]
+    );
+
+    await client.query('DELETE FROM roba_pj WHERE objekt_id=$1', [objektId]);
+
+    await client.query('COMMIT');
+    res.json({ ok: true, obrisano: trenutno.rows.length, objekt_naziv: objektNaziv });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/roba/lager/backup-postoji?objekt_id=X - da li postoji backup za Undo dugme
+router.get('/lager/backup-postoji', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin.' });
+  const objektId = trebaObjekat(req.query.objekt_id);
+  if (!objektId) return res.status(400).json({ error: 'Nedostaje objekt_id.' });
+  try {
+    const r = await pool.query(
+      `SELECT id, kreiran, kreirao_ime, jsonb_array_length(podaci) AS broj_stavki
+       FROM roba_pj_backup WHERE objekt_id=$1 ORDER BY kreiran DESC LIMIT 1`,
+      [objektId]
+    );
+    res.json(r.rows[0] || null);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/roba/lager/undo?objekt_id=X - vraća poslednji backup (npr. nakon greškom obrisanog lagera)
+router.post('/lager/undo', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin može vršiti undo.' });
+  const objektId = trebaObjekat(req.body.objekt_id || req.query.objekt_id);
+  if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const bRes = await client.query(
+      `SELECT id, podaci FROM roba_pj_backup WHERE objekt_id=$1 ORDER BY kreiran DESC LIMIT 1 FOR UPDATE`,
+      [objektId]
+    );
+    if (!bRes.rows.length) throw Object.assign(new Error('Nema sačuvane rezervne kopije za ovaj objekat.'), { status: 404 });
+
+    const stavke = bRes.rows[0].podaci;
+    for (const s of stavke) {
+      await client.query(
+        `INSERT INTO roba_pj (roba_id, objekt_id, cijena, stanje)
+         VALUES ($1,$2,$3,$4)
+         ON CONFLICT (roba_id, objekt_id) DO UPDATE SET cijena=$3, stanje=$4, azurirano=now()`,
+        [s.roba_id, objektId, s.cijena, s.stanje]
+      );
+    }
+    await client.query('DELETE FROM roba_pj_backup WHERE id=$1', [bRes.rows[0].id]);
+
+    await client.query('COMMIT');
+    res.json({ ok: true, vraceno: stavke.length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // GET /api/roba/:id?objekt_id=1
 router.get('/:id', zahtijevaProdaju, async (req, res) => {
   try {
@@ -426,14 +527,16 @@ router.post('/import', upload.single('file'), async (req, res) => {
     if (!rows.length) return res.status(400).json({ error: 'Fajl je prazan.' });
 
     const izvor = req.body.izvor === 'interni' ? 'interni' : 'bluesoft';
+    const cijenaSeDira = izvor === 'interni'; // Bluesoft NIKAD ne dira cijenu (ni upis ni izmjena)
     const jmDefault = (req.body.jed_mjera_default || 'kom').trim() || 'kom';
     let uneseno = 0, azurirano = 0, preskoceno = 0;
-    const cijenaRazlike = []; // { sifra, naziv, stara, nova } — samo za 'nabavka'
+    const cijenaRazlike = []; // { sifra, naziv, stara, nova } — samo za 'nabavka' + interni
 
     await pool.query('BEGIN');
     try {
       // ZAMJENA: prvo nuliraj stanje SVIH postojećih artikala za ovaj PJ — fajl koji slijedi
-      // je nova kompletna istina. Cijena ostaje netaknuta ovim korakom (postavlja je fajl niže).
+      // je nova kompletna istina. Cijena ostaje netaknuta ovim korakom (postavlja je fajl niže,
+      // osim za Bluesoft gdje se cijena nikad ne dira).
       if (nacin === 'zamjena') {
         await pool.query('UPDATE roba_pj SET stanje=0, azurirano=now() WHERE objekt_id=$1', [objektId]);
       }
@@ -472,14 +575,19 @@ router.post('/import', upload.single('file'), async (req, res) => {
           continue;
         }
 
-        const cijenaFajl = mapping.cijena ? parsirajBroj(row[mapping.cijena]) : 0;
+        // Cijena iz fajla se uopšte NE ČITA za Bluesoft — ostaje null (znači "ne diraj").
+        const cijenaFajl = cijenaSeDira && mapping.cijena ? parsirajBroj(row[mapping.cijena]) : null;
 
         // 2) Cijena/stanje ZA OVAJ PJ
         if (nacin === 'zamjena') {
+          // cijena = CASE: ako je cijenaFajl null (Bluesoft), postojeća cijena OSTAJE; nova
+          // stavka bez postojećeg reda dobija 0. Za interni izvor cijena se uvijek postavlja iz fajla.
           const pjRes = await pool.query(
             `INSERT INTO roba_pj (roba_id, objekt_id, cijena, stanje)
-             VALUES ($1,$2,$3,$4)
-             ON CONFLICT (roba_id, objekt_id) DO UPDATE SET cijena=$3, stanje=$4, azurirano=now()
+             VALUES ($1,$2,COALESCE($3,0),$4)
+             ON CONFLICT (roba_id, objekt_id) DO UPDATE SET
+               cijena = CASE WHEN $3 IS NOT NULL THEN $3 ELSE roba_pj.cijena END,
+               stanje = $4, azurirano = now()
              RETURNING (xmax = 0) AS inserted`,
             [robaId, objektId, cijenaFajl, stanjeFajl]
           );
@@ -490,15 +598,18 @@ router.post('/import', upload.single('file'), async (req, res) => {
             'SELECT cijena, stanje FROM roba_pj WHERE roba_id=$1 AND objekt_id=$2', [robaId, objektId]
           );
           if (!postojeci.rows.length) {
-            // Artikal još nema red za ovaj PJ — nema "stare" cijene, upisuje se ona iz fajla.
+            // Artikal još nema red za ovaj PJ. Interni izvor upisuje cijenu iz fajla; Bluesoft
+            // (cijenaFajl je null) upisuje 0 — admin je mora ručno postaviti kasnije.
             await pool.query(
               `INSERT INTO roba_pj (roba_id, objekt_id, cijena, stanje) VALUES ($1,$2,$3,$4)`,
-              [robaId, objektId, cijenaFajl, stanjeFajl]
+              [robaId, objektId, cijenaFajl ?? 0, stanjeFajl]
             );
             uneseno++;
           } else {
             const staraCijena = parseFloat(postojeci.rows[0].cijena);
-            const razlikaCijene = mapping.cijena && Math.abs(staraCijena - cijenaFajl) > 0.001;
+            // Za Bluesoft je cijenaFajl uvijek null, pa razlikaCijene ostaje false — cijena se
+            // NIKAD ne mijenja, bez obzira na checkbox "ažuriraj cijenu".
+            const razlikaCijene = cijenaFajl != null && Math.abs(staraCijena - cijenaFajl) > 0.001;
             if (razlikaCijene) cijenaRazlike.push({ sifra, naziv, stara: staraCijena, nova: cijenaFajl });
 
             const novaCijena = (razlikaCijene && azurirajCijenu) ? cijenaFajl : staraCijena;

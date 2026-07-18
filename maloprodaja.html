@@ -79,6 +79,9 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   font-size:16px;font-weight:700;color:var(--blue);cursor:pointer;display:flex;align-items:center;justify-content:center;}
 .qty-btn:active{background:#e8eef7;}
 .qty-val{min-width:34px;text-align:center;font-weight:700;font-size:13px;}
+.qty-input{width:56px;min-width:56px;text-align:center;font:inherit;font-size:13px;font-weight:700;
+  border:1px solid var(--border);border-radius:6px;padding:6px 2px;background:#fff;}
+.qty-input:focus{outline:none;border-color:var(--blue);}
 .kos-iznos{font-weight:700;font-size:13px;color:var(--dark);min-width:60px;text-align:right;}
 .kos-del{background:none;border:none;color:var(--red);font-size:16px;cursor:pointer;padding:4px 6px;}
 
@@ -346,10 +349,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <div class="ce-row">
       <button class="ce-tip-btn" onclick="ucitajLagerListu()">Prikaži</button>
       <button class="ce-tip-btn" onclick="izvezLagerListu()">📥 Izvezi u XLSX</button>
-    </div>
-    <div class="ce-row" id="lager-filteri" style="display:none;margin-top:8px;">
-      <select id="lager-filter-grupa" onchange="ucitajLagerListu()"><option value="">Sve grupe</option></select>
-      <select id="lager-filter-debljina" onchange="ucitajLagerListu()"><option value="">Sve debljine</option></select>
+      <button class="ce-tip-btn" style="color:var(--red);" onclick="otvoriBrisanjeLagera()">🗑️ Obriši lager</button>
     </div>
     <div id="lager-lista-tabela-wrap" style="overflow-x:auto;margin-top:10px;"></div>
     <div id="lager-total" style="display:none" class="dnevni-total"></div>
@@ -361,12 +361,21 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <!-- Korak 1: izbor fajla -->
     <div id="imp-korak1">
       <div class="ce-row">
+        <button type="button" class="ce-tip-btn active" data-izvor="bluesoft" onclick="postaviIzvorUvoza('bluesoft')">📀 Bluesoft</button>
+        <button type="button" class="ce-tip-btn" data-izvor="interni" onclick="postaviIzvorUvoza('interni')">📝 Interni XLS</button>
+        <button type="button" class="ce-tip-btn" data-izvor="metapodaci" onclick="postaviIzvorUvoza('metapodaci')">🏷️ Samo grupa/debljina</button>
+      </div>
+      <div id="izvor-opis" style="font-size:11px;color:#6b7a8d;margin:6px 0 10px;line-height:1.5;">
+        Bluesoft izvoz — uvozi SAMO količine, cijena se nikad ne upisuje niti mijenja odavde
+        (nova stavka dobija cijenu 0, admin je ručno postavlja).
+      </div>
+
+      <div id="imp-nacin-red" class="ce-row">
         <button type="button" class="ce-tip-btn active" data-nacin="nabavka" onclick="postaviNacinUvoza('nabavka')">📦 Nova nabavka</button>
         <button type="button" class="ce-tip-btn" data-nacin="zamjena" onclick="postaviNacinUvoza('zamjena')">🔁 Zamjena kompletnog lagera</button>
-        <button type="button" class="ce-tip-btn" data-nacin="metapodaci" onclick="postaviNacinUvoza('metapodaci')">🏷️ Samo grupa/debljina</button>
       </div>
       <div id="nacin-opis" style="font-size:11px;color:#6b7a8d;margin:-4px 0 8px;">
-        Dodaje količinu iz fajla na postojeće stanje. Zadržava stare cijene osim ako ih izričito ažuriraš ispod.
+        Dodaje količinu iz fajla na postojeće stanje.
       </div>
       <div id="imp-objekat-red">
         <select id="imp-objekat"><option value="">— izaberi prodajni objekat —</option></select>
@@ -377,10 +386,6 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         </label>
       </div>
 
-      <select id="imp-izvor">
-        <option value="interni" selected>Interni cjenovnik</option>
-        <option value="bluesoft">Bluesoft izvoz</option>
-      </select>
       <input type="file" id="imp-file" accept=".xlsx,.xls">
       <button class="btn-import" onclick="ucitajPregledUvoza()">Učitaj fajl i prikaži kolone</button>
     </div>
@@ -392,12 +397,12 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
       <div class="map-row"><label>Šifra <span class="req">*</span></label><select id="map-sifra"></select></div>
       <div class="map-row"><label>Naziv <span class="req">*</span></label><select id="map-naziv"></select></div>
-      <div class="map-row"><label>Cijena</label><select id="map-cijena"></select></div>
-      <div class="map-row"><label>Stanje</label><select id="map-stanje"></select></div>
+      <div class="map-row" id="map-cijena-red"><label>Cijena</label><select id="map-cijena"></select></div>
+      <div class="map-row" id="map-stanje-red"><label>Stanje</label><select id="map-stanje"></select></div>
       <div class="map-row"><label>Jed. mjere</label><select id="map-jed_mjera"></select></div>
       <div class="map-row"><label>Grupa</label><select id="map-grupa"></select></div>
       <div class="map-row"><label>Debljina</label><select id="map-debljina"></select></div>
-      <div class="map-row"><label>Ako nema JM kolone</label><input type="text" id="map-jm-default" value="m2" placeholder="npr. m2, kom"></div>
+      <div class="map-row" id="map-jm-default-red"><label>Ako nema JM kolone</label><input type="text" id="map-jm-default" value="m2" placeholder="npr. m2, kom"></div>
 
       <button class="btn-import" onclick="potvrdiUvoz()">✓ Uvezi sa ovim mapiranjem</button>
       <button class="btn-import sec" onclick="otkaziUvoz()">← Nazad / drugi fajl</button>
@@ -740,12 +745,15 @@ document.getElementById('kupac-search').addEventListener('input', e=>{
 });
 traziKupca(''); // prikaži nedavne kupce odmah
 
+let kupacSearchSeq=0; // sprječava da spor/zakasnio odgovor prepiše noviji (trka zahtjeva)
 async function traziKupca(q){
+  const mojSeq=++kupacSearchSeq;
   const list=document.getElementById('kupac-rez-list');
   list.innerHTML='<div class="spinner">Pretraga...</div>';
   try{
     const r=await fetch(`${API}/api/kupci?q=${encodeURIComponent(q)}&limit=20`);
     const rows=await r.json();
+    if(mojSeq!==kupacSearchSeq) return; // stigao je noviji upit u međuvremenu — ignoriši ovaj odgovor
     if(!rows.length){
       list.innerHTML=q?'<div class="empty-msg">Nema rezultata za "'+esc(q)+'".</div>':'<div class="empty-msg">Nema još kupaca — unesi prvog.</div>';
       return;
@@ -757,6 +765,7 @@ async function traziKupca(q){
       </div>
     `).join('');
   }catch(e){
+    if(mojSeq!==kupacSearchSeq) return;
     list.innerHTML='<div class="empty-msg">Greška pri pretrazi.</div>';
   }
 }
@@ -980,6 +989,18 @@ function promijeniKolicinu(idx, delta){
   renderKosarica();
 }
 
+// Direktna izmjena polja količine (korisno za m²/m³ gdje +/-1 dugmad nemaju smisla —
+// tu treba precizna vrijednost, ne pomjeranje za cijeli broj). Koristi "onchange" (ne
+// "oninput") da se ne re-renderuje na svaki taster dok se kuca — samo kad se izađe iz polja.
+function postaviKolicinuDirektno(idx, vrijednost){
+  const it=kosarica[idx];
+  const nova=parseFloat(vrijednost);
+  if(isNaN(nova)||nova<=0){ renderKosarica(); return; } // neispravno — vrati na staru vrijednost
+  if(nova>it.stanje_max){alert('Nema dovoljno na stanju (max '+it.stanje_max+' '+it.jed_mjera+').');renderKosarica();return;}
+  it.kolicina=nova;
+  renderKosarica();
+}
+
 function ukloniStavku(idx){ kosarica.splice(idx,1); renderKosarica(); }
 
 // Okvirna efektivna cijena za prikaz u košarici (samo procjena — konačna se računa na serveru uživo)
@@ -1058,7 +1079,8 @@ function renderKosarica(){
         </div>
         <div class="kos-qty">
           <button class="qty-btn" onclick="promijeniKolicinu(${idx},-1)">−</button>
-          <div class="qty-val">${k.kolicina}</div>
+          <input type="number" class="qty-input" value="${k.kolicina}" step="0.001" min="0.001"
+            onchange="postaviKolicinuDirektno(${idx},this.value)">
           <button class="qty-btn" onclick="promijeniKolicinu(${idx},1)">+</button>
         </div>
         <div class="kos-iznos">≈ ${fm(k.kolicina*efCij)} KM</div>
@@ -1371,25 +1393,52 @@ async function popuniImportObjekat(){
   }catch(e){}
 }
 
+let uvozIzvor='bluesoft';
 let uvozNacin='nabavka';
+
+function postaviIzvorUvoza(izvor){
+  uvozIzvor=izvor;
+  document.querySelectorAll('.ce-tip-btn[data-izvor]').forEach(b=>b.classList.toggle('active', b.dataset.izvor===izvor));
+  const opis=document.getElementById('izvor-opis');
+  const nacinRed=document.getElementById('imp-nacin-red');
+  const objekatRed=document.getElementById('imp-objekat-red');
+
+  if(izvor==='metapodaci'){
+    opis.innerHTML='🏷️ Ažurira SAMO grupu i debljinu u šifrarniku (po šifri) — cijena i stanje se uopšte ne diraju, ni za jedan PJ. Bezbjedno za ponovni uvoz starog fajla samo da bi se dopunili ovi podaci.';
+    nacinRed.style.display='none';
+    objekatRed.style.display='none';
+    document.getElementById('nacin-opis').style.display='none';
+    document.getElementById('nabavka-cijena-opcija').style.display='none';
+  }else{
+    nacinRed.style.display='flex';
+    objekatRed.style.display='block';
+    document.getElementById('nacin-opis').style.display='block';
+    if(izvor==='bluesoft'){
+      opis.innerHTML='📀 Bluesoft izvoz — uvozi SAMO količine. Cijena se <b>nikad</b> ne upisuje niti mijenja odavde (nova stavka koja još ne postoji za ovaj PJ dobija cijenu 0, admin je ručno postavlja preko lager liste).';
+    }else{
+      opis.innerHTML='📝 Interni XLS — cjenovnik koji sami praviš prema šemi (šifra/naziv/cijena/stanje/JM/grupa/debljina). Puna kontrola nad cijenom, po pravilima ispod (nova nabavka / zamjena).';
+    }
+    postaviNacinUvoza(uvozNacin); // osvježi opis/checkbox u skladu sa izvorom
+  }
+}
+
 function postaviNacinUvoza(nacin){
   uvozNacin=nacin;
   document.querySelectorAll('.ce-tip-btn[data-nacin]').forEach(b=>b.classList.toggle('active', b.dataset.nacin===nacin));
   const opis=document.getElementById('nacin-opis');
   const cijenaOpcija=document.getElementById('nabavka-cijena-opcija');
-  const objekatRed=document.getElementById('imp-objekat-red');
+  const cijenaDira = uvozIzvor==='interni'; // Bluesoft NIKAD ne dira cijenu, bez obzira na nacin
+
   if(nacin==='nabavka'){
-    opis.textContent='Dodaje količinu iz fajla na postojeće stanje. Zadržava stare cijene osim ako ih izričito ažuriraš ispod.';
-    cijenaOpcija.style.display='block';
-    objekatRed.style.display='block';
-  }else if(nacin==='zamjena'){
-    opis.innerHTML='⚠ <b>Nulira stanje svih artikala</b> za izabrani objekat, pa upisuje potpuno novo stanje i cijenu iz fajla. Koristi kad fajl predstavlja CIJELI trenutni lager (ne dodatak).';
+    opis.textContent = cijenaDira
+      ? 'Dodaje količinu iz fajla na postojeće stanje. Zadržava stare cijene osim ako ih izričito ažuriraš ispod.'
+      : 'Dodaje količinu iz fajla na postojeće stanje. Cijena se ne dira (Bluesoft izvor).';
+    cijenaOpcija.style.display = cijenaDira ? 'block' : 'none';
+  }else{ // zamjena
+    opis.innerHTML = cijenaDira
+      ? '⚠ <b>Nulira stanje svih artikala</b> za izabrani objekat, pa upisuje potpuno novo stanje i cijenu iz fajla. Koristi kad fajl predstavlja CIJELI trenutni lager (ne dodatak).'
+      : '⚠ <b>Nulira stanje svih artikala</b> za izabrani objekat, pa upisuje potpuno novo stanje iz fajla. Cijena se ne dira (Bluesoft izvor).';
     cijenaOpcija.style.display='none';
-    objekatRed.style.display='block';
-  }else{ // metapodaci
-    opis.innerHTML='🏷️ Ažurira SAMO grupu i debljinu u šifrarniku (po šifri) — cijena i stanje se uopšte ne diraju, ni za jedan PJ. Bezbjedno za ponovni uvoz starog fajla samo da bi se dopunili ovi podaci.';
-    cijenaOpcija.style.display='none';
-    objekatRed.style.display='none';
   }
 }
 
@@ -1429,31 +1478,18 @@ async function ucitajLagerListu(){
   const objektId=document.getElementById('lager-objekat').value;
   const wrap=document.getElementById('lager-lista-tabela-wrap');
   const totalDiv=document.getElementById('lager-total');
-  const filteriDiv=document.getElementById('lager-filteri');
-  if(!objektId){wrap.innerHTML='<div class="empty-msg">Izaberite prodajni objekat.</div>';totalDiv.style.display='none';filteriDiv.style.display='none';return;}
+  if(!objektId){wrap.innerHTML='<div class="empty-msg">Izaberite prodajni objekat.</div>';totalDiv.style.display='none';return;}
   wrap.innerHTML='<div class="spinner">Učitavanje...</div>';
 
-  // Popuni filtere (grupa/debljina) samo kad se PJ promijeni ili prvi put — ne gaziti izbor korisnika
-  if(lagerFilteriObjekatId!==objektId){
-    await popuniLagerFiltere(objektId);
-    lagerFilteriObjekatId=objektId;
-  }
-  filteriDiv.style.display='flex';
-
-  const grupa=document.getElementById('lager-filter-grupa').value;
-  const debljina=document.getElementById('lager-filter-debljina').value;
-  const params=new URLSearchParams({objekt_id:objektId});
-  if(grupa) params.set('grupa',grupa);
-  if(debljina) params.set('debljina',debljina);
-
   try{
-    const r=await fetch(`${API}/api/roba/lager?${params}`);
+    const r=await fetch(`${API}/api/roba/lager?objekt_id=${objektId}`);
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška.');
     lagerPodaci=data.stavke;
     lagerKolonaFilteri={sifra:'',naziv:'',grupa:'',debljina:'',jm:'',cijena:'',stanje:'',ukupno:''};
     renderLagerZaglavlje(); // pravi tabelu + zaglavlje SAMO JEDNOM po učitavanju
     renderLagerRedovi();    // puni tbody (ovo se poziva ponovo pri svakom filteru/sortiranju)
+    prikaziUndoDugmeAkoPostoji(objektId);
   }catch(e){
     wrap.innerHTML=`<div class="empty-msg">${esc(e.message)}</div>`;
     totalDiv.style.display='none';
@@ -1572,32 +1608,83 @@ function renderLagerRedovi(){
   totalDiv.innerHTML=`${fm(ukupnoPrikazano)} KM<span class="cnt">${prikaz.length} od ${lagerPodaci.length} artikala${prikaz.length!==lagerPodaci.length?' (filtrirano)':''}</span>`;
 }
 
-let lagerFilteriObjekatId=null;
 
-async function popuniLagerFiltere(objektId){
-  const selGrupa=document.getElementById('lager-filter-grupa');
-  const selDeb=document.getElementById('lager-filter-debljina');
-  selGrupa.innerHTML='<option value="">Sve grupe</option>';
-  selDeb.innerHTML='<option value="">Sve debljine</option>';
-  try{
-    const r=await fetch(`${API}/api/roba/lager/filteri?objekt_id=${objektId}`);
-    const data=await r.json();
-    if(!r.ok) return;
-    selGrupa.innerHTML+=data.grupe.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('');
-    selDeb.innerHTML+=data.debljine.map(d=>`<option value="${d}">${d} cm</option>`).join('');
-  }catch(e){}
-}
 
 function izvezLagerListu(){
   const objektId=document.getElementById('lager-objekat').value;
   if(!objektId){alert('Izaberite prodajni objekat.');return;}
-  const grupa=document.getElementById('lager-filter-grupa').value;
-  const debljina=document.getElementById('lager-filter-debljina').value;
   const params=new URLSearchParams({objekt_id:objektId});
-  if(grupa) params.set('grupa',grupa);
-  if(debljina) params.set('debljina',debljina);
+  if(lagerKolonaFilteri.grupa) params.set('grupa',lagerKolonaFilteri.grupa);
+  if(lagerKolonaFilteri.debljina) params.set('debljina',lagerKolonaFilteri.debljina);
   // Direktan link ka preuzimanju — browser sam otvara "Sačuvaj kao" dijalog za XLSX.
   window.location.href=`${API}/api/roba/lager/export?${params}`;
+}
+
+/* ── BRISANJE KOMPLETNOG LAGERA (sa backup-om i Undo opcijom) ────────── */
+async function otvoriBrisanjeLagera(){
+  const objektId=document.getElementById('lager-objekat').value;
+  const objektNaziv=document.getElementById('lager-objekat').selectedOptions[0]?.textContent||'';
+  if(!objektId){alert('Prvo izaberi prodajni objekat (dropdown iznad).');return;}
+
+  const potvrda1=confirm(
+    `⚠️ Ovo BRIŠE KOMPLETAN lager (sve cijene i stanje) za "${objektNaziv}".\n\n`+
+    `Prije brisanja se automatski pravi rezervna kopija na serveru — moći ćeš je vratiti dugmetom "Undo" `+
+    `koje će se pojaviti nakon brisanja, ALI SAMO dok ne uradiš novi uvoz preko ovog brisanja.\n\n`+
+    `Preporuka: klikni Otkaži, prvo izvezi trenutni lager u XLSX (dugme iznad) da imaš i svoju kopiju.\n\n`+
+    `Nastaviti sa brisanjem?`
+  );
+  if(!potvrda1) return;
+  const potvrda2=confirm(`Poslednja potvrda — zaista obrisati kompletan lager za "${objektNaziv}"?`);
+  if(!potvrda2) return;
+
+  const msg=document.getElementById('lager-total');
+  try{
+    const r=await fetch(`${API}/api/roba/lager/delete`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({objekt_id:objektId}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri brisanju.');
+    alert(`✓ Obrisano ${data.obrisano} artikala iz lagera "${data.objekt_naziv}". Rezervna kopija je sačuvana — dugme "Undo" je sad dostupno.`);
+    ucitajLagerListu();
+    prikaziUndoDugmeAkoPostoji(objektId);
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function prikaziUndoDugmeAkoPostoji(objektId){
+  const postojeceDugme=document.getElementById('lager-undo-btn');
+  if(postojeceDugme) postojeceDugme.remove();
+  try{
+    const r=await fetch(`${API}/api/roba/lager/backup-postoji?objekt_id=${objektId}`);
+    const backup=await r.json();
+    if(!backup) return;
+    const dugme=document.createElement('button');
+    dugme.id='lager-undo-btn';
+    dugme.className='ce-tip-btn';
+    dugme.style.color='var(--green)';
+    dugme.textContent=`↩️ Undo (vrati ${backup.broj_stavki} stavki, ${backup.kreirao_ime})`;
+    dugme.onclick=()=>vratiLagerIzBackupa(objektId);
+    document.querySelector('#lager-lista-box .ce-row').appendChild(dugme);
+  }catch(e){}
+}
+
+async function vratiLagerIzBackupa(objektId){
+  if(!confirm('Vratiti lager iz poslednje rezervne kopije? Ovo prepisuje trenutno stanje/cijene.')) return;
+  try{
+    const r=await fetch(`${API}/api/roba/lager/undo`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({objekt_id:objektId}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri vraćanju.');
+    alert(`✓ Vraćeno ${data.vraceno} artikala.`);
+    document.getElementById('lager-undo-btn')?.remove();
+    ucitajLagerListu();
+  }catch(e){
+    alert(e.message);
+  }
 }
 
 /* ── ADMIN: UPRAVLJANJE PRODAJNIM OBJEKTIMA (PJ) ──────────────────── */
@@ -1870,7 +1957,7 @@ async function potvrdiUvozPrenosa(){
 async function ucitajPregledUvoza(){
   const fileInput=document.getElementById('imp-file');
   const msg=document.getElementById('import-msg');
-  if(!document.getElementById('imp-objekat').value){msg.style.color='red';msg.textContent='Izaberite prodajni objekat za koji uvozite lager.';return;}
+  if(uvozIzvor!=='metapodaci' && !document.getElementById('imp-objekat').value){msg.style.color='red';msg.textContent='Izaberite prodajni objekat za koji uvozite lager.';return;}
   if(!fileInput.files.length){msg.style.color='red';msg.textContent='Izaberite fajl.';return;}
   msg.style.color='#6b7a8d'; msg.textContent='Čitanje fajla...';
   const fd_=new FormData();
@@ -1927,17 +2014,20 @@ async function potvrdiUvoz(){
   if(!mapping.sifra||!mapping.naziv){
     msg.style.color='red'; msg.textContent='Morate izabrati kolonu za Šifru i Naziv.'; return;
   }
-  if(uvozNacin!=='metapodaci' && !document.getElementById('imp-objekat').value){
+  if(uvozIzvor!=='metapodaci' && !document.getElementById('imp-objekat').value){
     msg.style.color='red'; msg.textContent='Izaberite prodajni objekat.'; return;
   }
+  const backendNacin = uvozIzvor==='metapodaci' ? 'metapodaci' : uvozNacin;
+  const backendIzvor = uvozIzvor==='bluesoft' ? 'bluesoft' : 'interni'; // metapodaci -> tagira se kao 'interni'
+
   const fileInput=document.getElementById('imp-file');
   const fd_=new FormData();
   fd_.append('file', fileInput.files[0]);
-  if(uvozNacin!=='metapodaci') fd_.append('objekt_id', document.getElementById('imp-objekat').value);
-  fd_.append('izvor', document.getElementById('imp-izvor').value);
+  if(uvozIzvor!=='metapodaci') fd_.append('objekt_id', document.getElementById('imp-objekat').value);
+  fd_.append('izvor', backendIzvor);
   fd_.append('mapping', JSON.stringify(mapping));
   fd_.append('jed_mjera_default', document.getElementById('map-jm-default').value.trim()||'kom');
-  fd_.append('nacin', uvozNacin);
+  fd_.append('nacin', backendNacin);
   fd_.append('azuriraj_cijenu', document.getElementById('imp-azuriraj-cijenu').checked ? 'true' : 'false');
 
   msg.style.color='#6b7a8d'; msg.textContent='Uvoz u toku...';
@@ -2044,6 +2134,7 @@ fetch(`${API}/api/auth/me`).then(r=>{
   document.getElementById('tab-admin-btn').textContent = isAdmin ? '📋 Sve otpremnice' : '🧾 Moje otpremnice';
   if(isAdmin){
     document.getElementById('tab-magacin-btn').style.display='';
+    postaviIzvorUvoza('bluesoft');
     popuniImportObjekat();
     ucitajObjektiListu();
     popuniPrenosObjekte();

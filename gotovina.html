@@ -49,6 +49,7 @@ td.num{text-align:right;font-weight:700;}
 .iz-pro{background:#e8f0fe;color:#1a5fa8;}
 .iz-malo{background:#fef3e2;color:#e67e22;}
 .iz-drugo{background:#f3e5f5;color:#7b1fa2;}
+.izvor-pj{display:block;font-size:9.5px;color:#8b96a5;margin-top:2px;font-weight:600;}
 .predano{color:var(--green);font-weight:700;}
 .nepredano-txt{color:var(--red);font-weight:700;}
 .btn-predaj{font:inherit;font-size:10.5px;padding:2px 8px;background:var(--green);color:#fff;border:none;border-radius:3px;cursor:pointer;}
@@ -61,7 +62,8 @@ td.num{text-align:right;font-weight:700;}
   <h1>💵 Gotovinska naplata</h1>
   <nav>
     <span id="who"></span>
-    <a href="lista.html">← Nalozi</a>
+    <a href="home.html">← Početna</a>
+    <a href="lista.html">Nalozi</a>
     <a href="#" id="logout">Izlaz</a>
   </nav>
 </header>
@@ -196,7 +198,10 @@ function render(){
       <td>${fd(r.datum)}</td>
       <td class="num">${fm(r.iznos)} KM</td>
       <td><b>${esc(r.primio)}</b></td>
-      <td><span class="chip-izvor ${r.izvor==='Proizvodnja'?'iz-pro':r.izvor==='Maloprodaja'?'iz-malo':'iz-drugo'}">${esc(r.izvor)}</span></td>
+      <td>
+        <span class="chip-izvor ${r.izvor==='Proizvodnja'?'iz-pro':r.izvor==='Maloprodaja'?'iz-malo':'iz-drugo'}">${esc(r.izvor)}</span>
+        ${r.izvor==='Maloprodaja'&&r.objekt_naziv?`<span class="izvor-pj">${esc(r.objekt_naziv)}</span>`:''}
+      </td>
       <td>${r.nalog_r_br?`<a class="nalog-link" href="lista.html">#${r.nalog_r_br}</a>${r.narucilac?' — '+esc(r.narucilac):''}`:''}</td>
       <td>${esc(r.opis||'')}</td>
       <td>${r.predao_blagajniku
