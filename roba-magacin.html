@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Roba i magacini – JoPeX</title>
+<style>
+
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f0f2f5;--border:#d0d7de;--red:#c0392b;--green:#1f8a4c;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);font-size:14px;color:#222;
+  -webkit-text-size-adjust:100%;overscroll-behavior-y:contain;}
+
+/* ── HEADER ───────────────────────────────────────────────── */
+header{background:var(--blue);color:#fff;padding:10px 14px;display:flex;align-items:center;
+  justify-content:space-between;position:sticky;top:0;z-index:50;box-shadow:0 1px 4px rgba(0,0,0,.15);}
+header h1{font-size:16px;font-weight:700;}
+header nav{display:flex;gap:6px;align-items:center;}
+header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgba(255,255,255,.4);
+  padding:5px 9px;border-radius:5px;min-height:30px;display:flex;align-items:center;}
+#who{font-size:10.5px;opacity:.8;display:block;margin-top:1px;}
+.hdr-left{display:flex;flex-direction:column;}
+
+/* ── TABS ─────────────────────────────────────────────────── */
+.tabs{display:flex;background:#fff;border-bottom:1px solid var(--border);position:sticky;top:53px;z-index:40;}
+.tab-btn{flex:1;padding:12px 6px;text-align:center;font-size:13px;font-weight:700;color:#6b7a8d;
+  background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;min-height:44px;}
+.tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);}
+
+.view{display:none;padding:12px;padding-bottom:100px;}
+.view.active{display:block;}
+
+/* ── PRETRAGA ─────────────────────────────────────────────── */
+.search-box{position:relative;margin-bottom:10px;}
+.search-box input{width:100%;font:inherit;font-size:16px;padding:12px 14px;border:1.5px solid var(--border);
+  border-radius:10px;background:#fff;min-height:48px;}
+.search-box input:focus{outline:none;border-color:var(--blue);}
+.search-hint{font-size:11px;color:#8b96a5;margin:4px 2px 10px;}
+
+.rez-list{display:flex;flex-direction:column;gap:8px;}
+.rez-item{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+  display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;min-height:56px;}
+.rez-item:active{background:#eef4fc;}
+.rez-info{flex:1;min-width:0;}
+.rez-naziv{font-weight:700;font-size:13.5px;color:#1a2733;}
+.rez-sifra{font-size:11px;color:#8b96a5;margin-top:1px;}
+.rez-right{text-align:right;flex-shrink:0;}
+.rez-cijena{font-weight:700;color:var(--dark);font-size:14px;}
+.rez-stanje{font-size:10.5px;margin-top:2px;}
+.chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;}
+.chip-ok{background:#e6f4ea;color:var(--green);}
+.chip-nisko{background:#fff3e0;color:#e67e22;}
+.chip-nema{background:#fce8e6;color:var(--red);}
+.empty-msg{text-align:center;color:#9aa5b1;font-size:12.5px;padding:24px 10px;}
+
+/* ── KOŠARICA (donji sticky panel) ───────────────────────────── */
+.kosarica-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--border);
+  box-shadow:0 -2px 10px rgba(0,0,0,.08);z-index:60;transition:max-height .25s ease;overflow:hidden;}
+.kb-summary{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;
+  min-height:56px;}
+.kb-summary-left{display:flex;align-items:center;gap:8px;}
+.kb-badge{background:var(--blue);color:#fff;font-weight:700;font-size:13px;border-radius:50%;
+  width:26px;height:26px;display:flex;align-items:center;justify-content:center;}
+.kb-badge.kb-pulse{animation:kbPulse .5s ease;}
+@keyframes kbPulse{0%{transform:scale(1);}30%{transform:scale(1.4);background:var(--green);}100%{transform:scale(1);}}
+.kb-total{font-weight:700;font-size:16px;color:var(--dark);}
+.kb-chevron{font-size:12px;color:#8b96a5;}
+.kb-body{max-height:0;overflow:auto;transition:max-height .25s ease;padding:0 14px;}
+.kosarica-bar.open .kb-body{max-height:50vh;padding:6px 14px 14px;}
+
+.kos-item{padding:9px 0;border-bottom:1px solid #eef0f3;}
+.kos-item-top{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.kos-info{flex:1;min-width:0;}
+.kos-naziv{font-size:12.5px;font-weight:600;color:#1a2733;}
+.kos-cijena{font-size:11px;color:#8b96a5;}
+.kos-cijena.izmijenjena{color:var(--red);font-weight:700;}
+.kos-qty{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.qty-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:#f7f8fa;
+  font-size:16px;font-weight:700;color:var(--blue);cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.qty-btn:active{background:#e8eef7;}
+.qty-val{min-width:34px;text-align:center;font-weight:700;font-size:13px;}
+.qty-input{width:56px;min-width:56px;text-align:center;font:inherit;font-size:13px;font-weight:700;
+  border:1px solid var(--border);border-radius:6px;padding:6px 2px;background:#fff;}
+.qty-input:focus{outline:none;border-color:var(--blue);}
+.kos-iznos{font-weight:700;font-size:13px;color:var(--dark);min-width:60px;text-align:right;}
+.kos-del{background:none;border:none;color:var(--red);font-size:16px;cursor:pointer;padding:4px 6px;}
+
+.kos-item-bottom{display:flex;align-items:center;gap:8px;margin-top:5px;flex-wrap:wrap;}
+.btn-cijena{font:inherit;font-size:10.5px;font-weight:600;color:var(--blue);background:#eef4fc;
+  border:none;border-radius:6px;padding:4px 9px;cursor:pointer;min-height:26px;}
+.chip-odstupanje{display:inline-flex;align-items:center;gap:3px;font-size:10px;font-weight:700;
+  color:var(--red);background:#fce8e6;border-radius:8px;padding:2px 8px;}
+.chip-odstupanje button{background:none;border:none;color:var(--red);font-size:11px;cursor:pointer;
+  padding:0 0 0 4px;font-weight:700;}
+
+.cijena-edit{background:#f7f8fa;border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:6px;}
+.ce-row{display:flex;gap:6px;margin-bottom:7px;}
+.ce-tip-btn{flex:1;font:inherit;font-size:11px;font-weight:600;padding:7px;border-radius:6px;
+  border:1px solid var(--border);background:#fff;color:#6b7a8d;cursor:pointer;}
+.ce-tip-btn.active{background:var(--blue);color:#fff;border-color:var(--blue);}
+.cijena-edit input[type=number]{width:100%;font:inherit;font-size:15px;padding:9px 10px;
+  border:1px solid var(--border);border-radius:6px;margin-bottom:7px;text-align:center;}
+.cijena-edit select{width:100%;font:inherit;font-size:12.5px;padding:8px;border:1px solid var(--border);
+  border-radius:6px;margin-bottom:7px;}
+.cijena-edit input[type=text]{width:100%;font:inherit;font-size:12px;padding:8px;
+  border:1px solid var(--border);border-radius:6px;margin-bottom:7px;}
+.ce-btns{display:flex;gap:6px;}
+.ce-btns button{flex:1;font:inherit;font-size:12px;font-weight:700;padding:9px;border-radius:6px;
+  border:none;cursor:pointer;min-height:38px;}
+.ce-primijeni{background:var(--green);color:#fff;}
+.ce-otkazi{background:#eee;color:#444;}
+.ce-preview{font-size:11px;color:#6b7a8d;text-align:center;margin-bottom:7px;}
+
+.kupac-fld{margin:10px 0;}
+.kupac-fld label{font-size:11px;font-weight:600;color:#6b7a8d;display:block;margin-bottom:4px;}
+.kupac-fld input{width:100%;font:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--border);
+  border-radius:8px;min-height:44px;}
+
+.btn-generisi{width:100%;background:var(--green);color:#fff;border:none;border-radius:10px;
+  font:inherit;font-size:15px;font-weight:700;padding:14px;min-height:52px;cursor:pointer;margin-top:6px;}
+.btn-generisi:disabled{background:#a9b4bf;}
+.btn-generisi:active{background:#176e3d;}
+
+/* ── OVERLAY: POTVRDA KUPCA ──────────────────────────────────── */
+.overlay{position:fixed;inset:0;background:#fff;z-index:100;display:none;flex-direction:column;}
+.overlay.on{display:flex;}
+.ov-header{background:var(--blue);color:#fff;padding:14px;text-align:center;font-weight:700;font-size:15px;}
+.ov-body{flex:1;overflow:auto;padding:20px;display:flex;flex-direction:column;align-items:center;}
+.ov-broj{font-size:13px;color:#8b96a5;margin-bottom:6px;}
+.ov-iznos-lbl{font-size:13px;color:#6b7a8d;margin-top:10px;}
+.ov-iznos{font-size:42px;font-weight:800;color:var(--dark);margin:4px 0 18px;}
+.ov-stavke{width:100%;max-width:420px;background:#f7f8fa;border-radius:10px;padding:10px 14px;margin-bottom:20px;}
+.ov-stavka{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0;border-bottom:1px solid #e8eaed;}
+.ov-stavka:last-child{border-bottom:none;}
+.ov-kupac-fld{width:100%;max-width:420px;margin-top:auto;}
+.ov-kupac-fld label{font-size:13px;font-weight:600;color:#1a2733;display:block;margin-bottom:6px;}
+.ov-kupac-fld input{width:100%;font:inherit;font-size:18px;padding:14px;border:2px solid var(--border);
+  border-radius:10px;min-height:52px;text-align:center;}
+.ov-kupac-fld input:focus{outline:none;border-color:var(--blue);}
+.ov-footer{padding:16px;border-top:1px solid var(--border);display:flex;gap:10px;}
+.btn-otkazi{flex:1;background:#eee;color:#444;border:none;border-radius:10px;font:inherit;font-size:14px;
+  font-weight:700;padding:14px;min-height:52px;cursor:pointer;}
+.btn-potvrdi{flex:2;background:var(--green);color:#fff;border:none;border-radius:10px;font:inherit;
+  font-size:17px;font-weight:800;padding:14px;min-height:56px;cursor:pointer;}
+.btn-potvrdi:disabled{background:#a9b4bf;}
+.btn-potvrdi:active{background:#176e3d;}
+
+/* ── USPJEH ───────────────────────────────────────────────── */
+.ov-success{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;}
+.ov-success .ico{font-size:64px;margin-bottom:14px;}
+.ov-success h2{color:var(--green);font-size:20px;margin-bottom:8px;}
+.ov-success p{color:#6b7a8d;font-size:13px;text-align:center;margin-bottom:16px;}
+.btn-nova{background:var(--blue);color:#fff;border:none;border-radius:10px;font:inherit;font-size:15px;
+  font-weight:700;padding:14px 28px;min-height:52px;cursor:pointer;}
+
+.posalji-box{width:100%;max-width:340px;margin-bottom:20px;}
+.posalji-lbl{font-size:11.5px;font-weight:700;color:#6b7a8d;text-align:center;margin-bottom:8px;
+  text-transform:uppercase;letter-spacing:.4px;}
+.posalji-btns{display:flex;gap:8px;}
+.btn-posalji{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font:inherit;
+  font-size:11px;font-weight:700;padding:10px 4px;border-radius:10px;border:1px solid var(--border);
+  background:#fff;color:#1a2733;cursor:pointer;min-height:56px;text-decoration:none;}
+.btn-posalji .ic{font-size:20px;}
+.btn-posalji.viber{color:#7360f2;}
+.btn-posalji.whatsapp{color:#25d366;}
+.btn-posalji.email{color:var(--blue);}
+.posalji-link{font-size:10.5px;color:#8b96a5;text-align:center;margin-top:8px;word-break:break-all;}
+
+/* ── ADMIN: SVE OTPREMNICE ───────────────────────────────────── */
+.filt-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;}
+.filt-row select,.filt-row input[type=date]{font:inherit;font-size:12.5px;padding:8px 10px;border:1px solid var(--border);
+  border-radius:8px;min-height:40px;flex:1;min-width:110px;}
+.filt-row label.chk{font-size:11.5px;color:#6b7a8d;display:flex;align-items:center;gap:5px;white-space:nowrap;}
+.otp-card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;cursor:pointer;}
+.otp-card.ima-odstupanje{border-color:#f3c7c2;}
+.otp-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:6px;}
+.otp-broj{font-weight:700;font-size:13px;color:var(--dark);}
+.otp-badges{display:flex;gap:5px;flex-shrink:0;}
+.otp-status{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;white-space:nowrap;}
+.st-kreirana{background:#fff3e0;color:#e67e22;}
+.st-potvrdjena{background:#e6f4ea;color:var(--green);}
+.st-stornirana{background:#fce8e6;color:var(--red);}
+.badge-odstupanje{background:#fce8e6;color:var(--red);font-size:10px;font-weight:700;
+  padding:2px 8px;border-radius:8px;white-space:nowrap;}
+.otp-meta{font-size:11.5px;color:#6b7a8d;line-height:1.5;}
+.otp-iznos{font-weight:700;color:var(--dark);font-size:14px;margin-top:4px;}
+.otp-actions{display:flex;gap:6px;margin-top:8px;}
+.dnevni-total{background:var(--dark);color:#fff;border-radius:10px;padding:14px;text-align:center;
+  font-size:16px;font-weight:700;margin-bottom:12px;}
+.dnevni-total .cnt{font-size:11.5px;font-weight:400;opacity:.8;display:block;margin-top:2px;}
+.btn-otp-posalji{flex:1;font:inherit;font-size:11px;font-weight:700;padding:8px;border-radius:6px;
+  border:1px solid var(--border);background:#f7f8fa;color:var(--blue);cursor:pointer;min-height:36px;}
+.mini-posalji{display:none;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);}
+.mini-posalji.on{display:flex;}
+.mini-posalji a,.mini-posalji button{flex:1;text-align:center;font:inherit;font-size:10.5px;font-weight:700;
+  padding:7px 2px;border-radius:6px;border:1px solid var(--border);background:#fff;text-decoration:none;
+  cursor:pointer;min-height:32px;}
+.otp-detalji{display:none;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);}
+.otp-detalji.on{display:block;}
+.otp-stavka-red{font-size:11.5px;padding:5px 0;border-bottom:1px solid #f0f2f5;}
+.otp-stavka-red .osr-top{display:flex;justify-content:space-between;}
+.otp-stavka-red .osr-odst{font-size:10.5px;color:var(--red);margin-top:2px;}
+
+.import-box{background:#fff;border:1px dashed var(--border);border-radius:10px;padding:14px;margin-bottom:14px;}
+.import-box h3{font-size:13px;color:var(--dark);margin-bottom:8px;}
+.import-box select,.import-box input[type=file],.import-box input[type=text]{font:inherit;font-size:12.5px;padding:8px;
+  border:1px solid var(--border);border-radius:6px;margin-bottom:8px;width:100%;}
+.btn-import{width:100%;background:var(--blue);color:#fff;border:none;border-radius:8px;font:inherit;
+  font-size:13px;font-weight:700;padding:10px;min-height:44px;cursor:pointer;}
+.btn-import.sec{background:#eee;color:#444;}
+#import-msg{font-size:12px;margin-top:8px;}
+
+.map-row{display:grid;grid-template-columns:120px 1fr;gap:8px;align-items:center;margin-bottom:7px;}
+.map-row label{font-size:12px;font-weight:600;color:#1a2733;}
+.map-row label .req{color:var(--red);}
+.map-row select{margin-bottom:0;}
+.uzorak-box{background:#f7f8fa;border-radius:8px;padding:8px 10px;margin:10px 0;overflow-x:auto;}
+.uzorak-box table{border-collapse:collapse;font-size:10.5px;white-space:nowrap;}
+.uzorak-box th,.uzorak-box td{padding:3px 8px;border-bottom:1px solid #e8eaed;text-align:left;}
+.uzorak-box th{color:#6b7a8d;font-weight:700;}
+.uzorak-hint{font-size:10.5px;color:#8b96a5;margin-bottom:6px;}
+
+.spinner{text-align:center;padding:20px;color:#9aa5b1;font-size:12.5px;}
+
+/* ── KUPAC (picker/banner) ───────────────────────────────────── */
+.kupac-rez-item{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+  margin-bottom:8px;cursor:pointer;min-height:48px;}
+.kupac-rez-item:active{background:#eef4fc;}
+.kupac-rez-naziv{font-weight:700;font-size:13.5px;color:#1a2733;}
+.kupac-rez-meta{font-size:11px;color:#8b96a5;margin-top:1px;}
+.btn-novi-kupac{width:100%;background:#eef4fc;color:var(--blue);border:1px dashed var(--blue);
+  border-radius:10px;font:inherit;font-size:13px;font-weight:700;padding:12px;cursor:pointer;
+  min-height:44px;margin-top:4px;}
+.novi-kupac-forma{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:10px;}
+.novi-kupac-forma .kupac-fld{margin:0 0 10px;}
+.nk-btns{display:flex;gap:8px;}
+.nk-btns button{flex:1;font:inherit;font-size:13px;font-weight:700;padding:11px;border-radius:8px;
+  border:none;cursor:pointer;min-height:44px;}
+.nk-sacuvaj{background:var(--green);color:#fff;}
+.nk-otkazi{background:#eee;color:#444;}
+
+.kupac-banner{background:#fff;border:1px solid var(--border);border-left:4px solid var(--blue);
+  border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;
+  justify-content:space-between;gap:10px;}
+.kb-naziv{font-weight:700;font-size:14px;color:#1a2733;}
+.kb-meta{font-size:11.5px;color:#8b96a5;margin-top:2px;}
+.btn-promijeni-kupca{flex-shrink:0;font:inherit;font-size:11px;font-weight:700;color:var(--blue);
+  background:#eef4fc;border:none;border-radius:6px;padding:8px 12px;cursor:pointer;min-height:36px;}
+
+/* ── OVERLAY: DODAJ STAVKU (jedinica mjere + kalkulator dimenzija) ──── */
+.das-artikal-naziv{font-weight:700;font-size:15px;color:#1a2733;margin-bottom:2px;}
+.das-artikal-sifra{font-size:11px;color:#8b96a5;margin-bottom:16px;}
+.das-jedinica-info{background:#eef4fc;color:var(--dark);font-weight:700;font-size:13px;
+  text-align:center;border-radius:8px;padding:9px;margin-bottom:14px;width:100%;max-width:420px;}
+.das-blok{width:100%;max-width:420px;}
+.das-blok label{font-size:12px;font-weight:600;color:#1a2733;display:block;margin:10px 0 5px;}
+.das-blok input[type=number]{width:100%;font:inherit;font-size:16px;padding:11px 12px;
+  border:1.5px solid var(--border);border-radius:8px;text-align:center;}
+.das-blok input[type=number]:focus{outline:none;border-color:var(--blue);}
+.das-preview{font-size:13px;font-weight:700;color:var(--dark);text-align:center;margin-top:8px;
+  background:#eef4fc;border-radius:8px;padding:8px;}
+
+/* ── PRODAJNI OBJEKAT (PJ) ───────────────────────────────────── */
+.objekat-item{background:#fff;border:1.5px solid var(--border);border-radius:10px;padding:14px;
+  margin-bottom:10px;cursor:pointer;font-weight:700;font-size:14px;color:#1a2733;text-align:center;
+  min-height:48px;display:flex;align-items:center;justify-content:center;}
+.objekat-item:active{background:#eef4fc;border-color:var(--blue);}
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hdr-left">
+    <h1>🏭 Roba i magacini</h1>
+    <span id="who"></span>
+  </div>
+  <nav>
+    <a href="home.html">← Početna</a>
+    <a href="#" id="logout">Izlaz</a>
+  </nav>
+</header>
+
+<div style="padding:12px;padding-bottom:40px;">
+  <div class="import-box" id="lager-lista-box">
+    <h3>📋 Kompletna lager lista</h3>
+    <select id="lager-objekat"><option value="">— izaberi prodajni objekat —</option></select>
+    <div class="ce-row">
+      <button class="ce-tip-btn" onclick="ucitajLagerListu()">Prikaži</button>
+      <button class="ce-tip-btn" onclick="izvezLagerListu()">📥 Izvezi u XLSX</button>
+      <button class="ce-tip-btn" style="color:var(--red);" onclick="otvoriBrisanjeLagera()">🗑️ Obriši lager</button>
+    </div>
+    <div id="lager-lista-tabela-wrap" style="overflow-x:auto;margin-top:10px;"></div>
+    <div id="lager-total" style="display:none" class="dnevni-total"></div>
+  </div>
+
+  <div class="import-box" id="import-box">
+    <h3>📥 Uvoz robe iz XLSX</h3>
+
+    <!-- Korak 1: izbor fajla -->
+    <div id="imp-korak1">
+      <div class="ce-row">
+        <button type="button" class="ce-tip-btn active" data-izvor="bluesoft" onclick="postaviIzvorUvoza('bluesoft')">📀 Bluesoft</button>
+        <button type="button" class="ce-tip-btn" data-izvor="interni" onclick="postaviIzvorUvoza('interni')">📝 Interni XLS</button>
+        <button type="button" class="ce-tip-btn" data-izvor="metapodaci" onclick="postaviIzvorUvoza('metapodaci')">🏷️ Samo grupa/debljina</button>
+      </div>
+      <div id="izvor-opis" style="font-size:11px;color:#6b7a8d;margin:6px 0 10px;line-height:1.5;">
+        Bluesoft izvoz — uvozi SAMO količine, cijena se nikad ne upisuje niti mijenja odavde
+        (nova stavka dobija cijenu 0, admin je ručno postavlja).
+      </div>
+
+      <div id="imp-nacin-red" class="ce-row">
+        <button type="button" class="ce-tip-btn active" data-nacin="nabavka" onclick="postaviNacinUvoza('nabavka')">📦 Nova nabavka</button>
+        <button type="button" class="ce-tip-btn" data-nacin="zamjena" onclick="postaviNacinUvoza('zamjena')">🔁 Zamjena kompletnog lagera</button>
+      </div>
+      <div id="nacin-opis" style="font-size:11px;color:#6b7a8d;margin:-4px 0 8px;">
+        Dodaje količinu iz fajla na postojeće stanje.
+      </div>
+      <div id="imp-objekat-red">
+        <select id="imp-objekat"><option value="">— izaberi prodajni objekat —</option></select>
+      </div>
+      <div id="nabavka-cijena-opcija">
+        <label class="chk" style="margin-bottom:8px;">
+          <input type="checkbox" id="imp-azuriraj-cijenu"> Ažuriraj cijenu ako se razlikuje od fajla
+        </label>
+      </div>
+
+      <input type="file" id="imp-file" accept=".xlsx,.xls">
+      <button class="btn-import" onclick="ucitajPregledUvoza()">Učitaj fajl i prikaži kolone</button>
+    </div>
+
+    <!-- Korak 2: potvrda mapiranja kolona (prikazuje se nakon učitavanja) -->
+    <div id="imp-korak2" style="display:none">
+      <div class="uzorak-hint">Zaglavlja pronađena u fajlu i prvih par redova — provjeri mapiranje:</div>
+      <div class="uzorak-box"><table id="uzorak-tabela"></table></div>
+
+      <div class="map-row"><label>Šifra <span class="req">*</span></label><select id="map-sifra"></select></div>
+      <div class="map-row"><label>Naziv <span class="req">*</span></label><select id="map-naziv"></select></div>
+      <div class="map-row" id="map-cijena-red"><label>Cijena</label><select id="map-cijena"></select></div>
+      <div class="map-row" id="map-stanje-red"><label>Stanje</label><select id="map-stanje"></select></div>
+      <div class="map-row"><label>Jed. mjere</label><select id="map-jed_mjera"></select></div>
+      <div class="map-row"><label>Grupa</label><select id="map-grupa"></select></div>
+      <div class="map-row"><label>Debljina</label><select id="map-debljina"></select></div>
+      <div class="map-row" id="map-jm-default-red"><label>Ako nema JM kolone</label><input type="text" id="map-jm-default" value="m2" placeholder="npr. m2, kom"></div>
+
+      <button class="btn-import" onclick="potvrdiUvoz()">✓ Uvezi sa ovim mapiranjem</button>
+      <button class="btn-import sec" onclick="otkaziUvoz()">← Nazad / drugi fajl</button>
+    </div>
+
+    <div id="import-msg"></div>
+  </div>
+
+  <div class="import-box" id="blic-izbor-box">
+    <h3>📏 Blic izbor jedinice mjere</h3>
+    <div class="uzorak-hint">Brzo grupno podešavanje — pretraži artikle, označi ih, pa jednim dodirom postavi jedinicu za sve izabrane. Bitno je da jedinica ovdje odgovara jedinici za koju važi cijena artikla.</div>
+    <input type="text" id="blic-search" placeholder="Pretraga po šifri ili nazivu...">
+    <button class="btn-import sec" onclick="blicTrazi()">Pretraži</button>
+    <div id="blic-lista"></div>
+    <div id="blic-akcije" style="display:none;margin-top:10px;">
+      <div style="font-size:11.5px;color:#6b7a8d;margin-bottom:6px;">Izabrano: <b id="blic-broj">0</b></div>
+      <div class="ce-row">
+        <button type="button" class="ce-tip-btn" onclick="blicPostavi('kom')">Postavi: Kom</button>
+        <button type="button" class="ce-tip-btn" onclick="blicPostavi('m2')">Postavi: m²</button>
+        <button type="button" class="ce-tip-btn" onclick="blicPostavi('m3')">Postavi: m³</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="import-box" id="objekti-box">
+    <h3>🏢 Prodajni objekti (PJ)</h3>
+    <div id="objekti-postojeci-lista" style="margin-bottom:10px;"></div>
+    <input type="text" id="novi-objekat-naziv" placeholder="Naziv novog PJ (npr. PJ Prijedor)">
+    <input type="text" id="novi-objekat-adresa" placeholder="Adresa (opciono, za memorandum ako se razlikuje)">
+    <button class="btn-import" onclick="dodajProdajniObjekat()">+ Dodaj prodajni objekat</button>
+    <div id="objekti-msg" style="font-size:12px;margin-top:8px;"></div>
+  </div>
+
+  <div class="import-box" id="prenos-box">
+    <h3>🔄 Prebacivanje robe između objekata</h3>
+    <div class="uzorak-hint">Interni transfer stanja — ne prodaja. Cijena u odredišnom PJ se preuzima iz izvornog PJ ako artikal tamo još nema svoju cijenu (možeš je odmah izmijeniti nakon prenosa).</div>
+
+    <div class="ce-row">
+      <button type="button" class="ce-tip-btn active" data-pmode="rucno" onclick="postaviPrenosMode('rucno')">Ručno (1 artikal)</button>
+      <button type="button" class="ce-tip-btn" data-pmode="xlsx" onclick="postaviPrenosMode('xlsx')">Uvezi iz XLSX</button>
+    </div>
+
+    <!-- RUČNI UNOS -->
+    <div id="prenos-rucno-blok">
+      <select id="prenos-iz" onchange="document.getElementById('prenos-search').value='';document.getElementById('prenos-rezultati').innerHTML='';"><option value="">— iz objekta —</option></select>
+      <select id="prenos-u"><option value="">— u objekat —</option></select>
+      <input type="text" id="prenos-search" placeholder="Pretraga artikla po šifri/nazivu...">
+      <div id="prenos-rezultati"></div>
+      <div id="prenos-izabrano" style="display:none;background:#f7f8fa;border-radius:8px;padding:10px;margin:8px 0;">
+        <div id="prenos-izabrano-naziv" style="font-weight:700;font-size:13px;margin-bottom:6px;"></div>
+        <input type="number" id="prenos-kolicina" step="0.001" min="0.001" placeholder="Količina za prebaciti">
+        <button class="btn-import" onclick="dodajUPrenosListu()">+ Dodaj u listu</button>
+      </div>
+      <div id="prenos-lista"></div>
+      <button id="prenos-izvrsi-btn" class="btn-import" style="display:none;background:var(--green);" onclick="izvrsiPrenosListu()"></button>
+    </div>
+
+    <!-- XLSX UVOZ (bulk, cijela prenosnica odjednom) -->
+    <div id="prenos-xlsx-blok" style="display:none">
+      <select id="prenos-xlsx-iz"><option value="">— iz objekta —</option></select>
+      <select id="prenos-xlsx-u"><option value="">— u objekat —</option></select>
+      <div id="prenos-xlsx-k1">
+        <input type="file" id="prenos-xlsx-file" accept=".xlsx,.xls">
+        <button class="btn-import sec" onclick="ucitajPregledPrenosa()">Učitaj fajl i prikaži kolone</button>
+      </div>
+      <div id="prenos-xlsx-k2" style="display:none">
+        <div class="uzorak-hint">Zaglavlja pronađena u fajlu i prvih par redova — provjeri mapiranje:</div>
+        <div class="uzorak-box"><table id="prenos-uzorak-tabela"></table></div>
+        <div class="map-row"><label>Šifra <span class="req">*</span></label><select id="prenos-map-sifra"></select></div>
+        <div class="map-row"><label>Količina <span class="req">*</span></label><select id="prenos-map-kolicina"></select></div>
+        <button class="btn-import" onclick="potvrdiUvozPrenosa()">✓ Uvezi prenosnicu</button>
+        <button class="btn-import sec" onclick="otkaziUvozPrenosa()">← Nazad / drugi fajl</button>
+      </div>
+    </div>
+
+    <div id="prenos-msg" style="font-size:12px;margin-top:8px;"></div>
+  </div>
+
+</div>
+
+<script>
+const API='';
+let currentUser=null;
+
+let uvozHeader=[], uvozUzorak=[];
+let uvozIzvor='bluesoft';
+let uvozNacin='nabavka';
+
+let lagerPodaci=[]; // sirovi podaci sa servera
+let lagerKolonaFilteri={sifra:'',naziv:'',grupa:'',debljina:'',jm:'',cijena:'',stanje:'',ukupno:''};
+let lagerSort={kolona:'naziv',smjer:'asc'};
+const LAGER_KOLONE=[
+  {k:'sifra',lbl:'Šifra',align:'left',tip:'text'},
+  {k:'naziv',lbl:'Naziv',align:'left',tip:'text'},
+  {k:'grupa',lbl:'Grupa',align:'left',tip:'select'},
+  {k:'debljina',lbl:'Deb. (cm)',align:'center',tip:'select-num'},
+  {k:'jm',lbl:'JM',align:'center',tip:'select'},
+  {k:'cijena',lbl:'Cijena/JM',align:'right',tip:'num'},
+  {k:'stanje',lbl:'Stanje',align:'right',tip:'num'},
+  {k:'ukupno',lbl:'Ukupno',align:'right',tip:'num'},
+];
+
+let objektiPodaci=[];
+let uredjivanjeObjektaId=null;
+
+let prenosIzabraniArtikal=null;
+let prenosSearchTimer=null;
+let prenosStavke=[]; // {roba_id, sifra, naziv, jed_mjera, kolicina, stanje_max} — korpa za prenos
+let prenosUvozHeader=[], prenosUvozUzorak=[];
+
+let blicSelected=new Set();
+
+function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+function fd(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('sr-Latn-BA')+' '+dt.toLocaleTimeString('sr-Latn-BA',{hour:'2-digit',minute:'2-digit'});}
+
+async function popuniImportObjekat(){
+  const sel=document.getElementById('imp-objekat');
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`);
+    const rows=await r.json();
+    sel.innerHTML='<option value="">— izaberi prodajni objekat —</option>'+rows.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');
+    if(trenutniObjekat) sel.value=trenutniObjekat.id;
+  }catch(e){}
+}
+
+function postaviIzvorUvoza(izvor){
+  uvozIzvor=izvor;
+  document.querySelectorAll('.ce-tip-btn[data-izvor]').forEach(b=>b.classList.toggle('active', b.dataset.izvor===izvor));
+  const opis=document.getElementById('izvor-opis');
+  const nacinRed=document.getElementById('imp-nacin-red');
+  const objekatRed=document.getElementById('imp-objekat-red');
+
+  if(izvor==='metapodaci'){
+    opis.innerHTML='🏷️ Ažurira SAMO grupu i debljinu u šifrarniku (po šifri) — cijena i stanje se uopšte ne diraju, ni za jedan PJ. Bezbjedno za ponovni uvoz starog fajla samo da bi se dopunili ovi podaci.';
+    nacinRed.style.display='none';
+    objekatRed.style.display='none';
+    document.getElementById('nacin-opis').style.display='none';
+    document.getElementById('nabavka-cijena-opcija').style.display='none';
+  }else{
+    nacinRed.style.display='flex';
+    objekatRed.style.display='block';
+    document.getElementById('nacin-opis').style.display='block';
+    if(izvor==='bluesoft'){
+      opis.innerHTML='📀 Bluesoft izvoz — uvozi SAMO količine. Cijena se <b>nikad</b> ne upisuje niti mijenja odavde (nova stavka koja još ne postoji za ovaj PJ dobija cijenu 0, admin je ručno postavlja preko lager liste).';
+    }else{
+      opis.innerHTML='📝 Interni XLS — cjenovnik koji sami praviš prema šemi (šifra/naziv/cijena/stanje/JM/grupa/debljina). Puna kontrola nad cijenom, po pravilima ispod (nova nabavka / zamjena).';
+    }
+    postaviNacinUvoza(uvozNacin); // osvježi opis/checkbox u skladu sa izvorom
+  }
+}
+
+function postaviNacinUvoza(nacin){
+  uvozNacin=nacin;
+  document.querySelectorAll('.ce-tip-btn[data-nacin]').forEach(b=>b.classList.toggle('active', b.dataset.nacin===nacin));
+  const opis=document.getElementById('nacin-opis');
+  const cijenaOpcija=document.getElementById('nabavka-cijena-opcija');
+  const cijenaDira = uvozIzvor==='interni'; // Bluesoft NIKAD ne dira cijenu, bez obzira na nacin
+
+  if(nacin==='nabavka'){
+    opis.textContent = cijenaDira
+      ? 'Dodaje količinu iz fajla na postojeće stanje. Zadržava stare cijene osim ako ih izričito ažuriraš ispod.'
+      : 'Dodaje količinu iz fajla na postojeće stanje. Cijena se ne dira (Bluesoft izvor).';
+    cijenaOpcija.style.display = cijenaDira ? 'block' : 'none';
+  }else{ // zamjena
+    opis.innerHTML = cijenaDira
+      ? '⚠ <b>Nulira stanje svih artikala</b> za izabrani objekat, pa upisuje potpuno novo stanje i cijenu iz fajla. Koristi kad fajl predstavlja CIJELI trenutni lager (ne dodatak).'
+      : '⚠ <b>Nulira stanje svih artikala</b> za izabrani objekat, pa upisuje potpuno novo stanje iz fajla. Cijena se ne dira (Bluesoft izvor).';
+    cijenaOpcija.style.display='none';
+  }
+}
+
+async function ucitajPregledUvoza(){
+  const fileInput=document.getElementById('imp-file');
+  const msg=document.getElementById('import-msg');
+  if(uvozIzvor!=='metapodaci' && !document.getElementById('imp-objekat').value){msg.style.color='red';msg.textContent='Izaberite prodajni objekat za koji uvozite lager.';return;}
+  if(!fileInput.files.length){msg.style.color='red';msg.textContent='Izaberite fajl.';return;}
+  msg.style.color='#6b7a8d'; msg.textContent='Čitanje fajla...';
+  const fd_=new FormData();
+  fd_.append('file', fileInput.files[0]);
+  try{
+    const r=await fetch(`${API}/api/roba/import/pregled`,{method:'POST',body:fd_});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri čitanju fajla.');
+    uvozHeader=data.header; uvozUzorak=data.uzorak;
+    prikaziMapiranje(data.predlog, data.ukupno_redova);
+    msg.textContent='';
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+function prikaziMapiranje(predlog, ukupnoRedova){
+  // Tabela sa uzorkom
+  const tbl=document.getElementById('uzorak-tabela');
+  tbl.innerHTML='<tr>'+uvozHeader.map(h=>`<th>${esc(h)}</th>`).join('')+'</tr>'+
+    uvozUzorak.map(row=>'<tr>'+uvozHeader.map(h=>`<td>${esc(row[h])}</td>`).join('')+'</tr>').join('');
+
+  // Dropdown-ovi za mapiranje
+  const polja=['sifra','naziv','cijena','stanje','jed_mjera','grupa','debljina'];
+  polja.forEach(p=>{
+    const sel=document.getElementById('map-'+p);
+    const prazna=(p==='cijena'||p==='stanje'||p==='jed_mjera'||p==='grupa'||p==='debljina')?'<option value="">— ne uvozi —</option>':'<option value="">— izaberi kolonu —</option>';
+    sel.innerHTML=prazna+uvozHeader.map(h=>`<option value="${esc(h)}" ${predlog[p]===h?'selected':''}>${esc(h)}</option>`).join('');
+  });
+
+  document.getElementById('imp-korak1').style.display='none';
+  document.getElementById('imp-korak2').style.display='block';
+  document.getElementById('import-msg').textContent=`Pronađeno ${ukupnoRedova} redova u fajlu.`;
+  document.getElementById('import-msg').style.color='#6b7a8d';
+}
+
+function otkaziUvoz(){
+  document.getElementById('imp-korak1').style.display='block';
+  document.getElementById('imp-korak2').style.display='none';
+  document.getElementById('imp-file').value='';
+}
+
+async function potvrdiUvoz(){
+  const msg=document.getElementById('import-msg');
+  const mapping={
+    sifra:document.getElementById('map-sifra').value,
+    naziv:document.getElementById('map-naziv').value,
+    cijena:document.getElementById('map-cijena').value,
+    stanje:document.getElementById('map-stanje').value,
+    jed_mjera:document.getElementById('map-jed_mjera').value,
+    grupa:document.getElementById('map-grupa').value,
+    debljina:document.getElementById('map-debljina').value,
+  };
+  if(!mapping.sifra||!mapping.naziv){
+    msg.style.color='red'; msg.textContent='Morate izabrati kolonu za Šifru i Naziv.'; return;
+  }
+  if(uvozIzvor!=='metapodaci' && !document.getElementById('imp-objekat').value){
+    msg.style.color='red'; msg.textContent='Izaberite prodajni objekat.'; return;
+  }
+  const backendNacin = uvozIzvor==='metapodaci' ? 'metapodaci' : uvozNacin;
+  const backendIzvor = uvozIzvor==='bluesoft' ? 'bluesoft' : 'interni'; // metapodaci -> tagira se kao 'interni'
+
+  const fileInput=document.getElementById('imp-file');
+  const fd_=new FormData();
+  fd_.append('file', fileInput.files[0]);
+  if(uvozIzvor!=='metapodaci') fd_.append('objekt_id', document.getElementById('imp-objekat').value);
+  fd_.append('izvor', backendIzvor);
+  fd_.append('mapping', JSON.stringify(mapping));
+  fd_.append('jed_mjera_default', document.getElementById('map-jm-default').value.trim()||'kom');
+  fd_.append('nacin', backendNacin);
+  fd_.append('azuriraj_cijenu', document.getElementById('imp-azuriraj-cijenu').checked ? 'true' : 'false');
+
+  msg.style.color='#6b7a8d'; msg.textContent='Uvoz u toku...';
+  try{
+    const r=await fetch(`${API}/api/roba/import`,{method:'POST',body:fd_});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri uvozu.');
+    msg.style.color='var(--green)';
+    let poruka=`✓ Uneseno: ${data.uneseno}, ažurirano: ${data.azurirano}, preskočeno (bez šifre/naziva): ${data.preskoceno}.`;
+    if(data.nacin==='nabavka' && data.broj_cijena_razlike>0){
+      poruka+=` ⚠ ${data.broj_cijena_razlike} artikal(a) imalo je drugačiju cijenu u fajlu — `+
+        (data.cijena_azurirana?'cijene su ažurirane na nove.':'STARE cijene su zadržane (nisi tražio ažuriranje).');
+    }
+    msg.textContent=poruka;
+    otkaziUvoz();
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+async function blicTrazi(){
+  const q=document.getElementById('blic-search').value;
+  const cont=document.getElementById('blic-lista');
+  cont.innerHTML='<div class="spinner">Pretraga...</div>';
+  try{
+    const r=await fetch(`${API}/api/roba?q=${encodeURIComponent(q)}&limit=100`);
+    const rows=await r.json();
+    blicSelected.clear();
+    renderBlicLista(rows);
+  }catch(e){
+    cont.innerHTML='<div class="empty-msg">Greška pri pretrazi.</div>';
+  }
+}
+
+function renderBlicLista(rows){
+  const cont=document.getElementById('blic-lista');
+  if(!rows.length){
+    cont.innerHTML='<div class="empty-msg">Nema rezultata.</div>';
+    document.getElementById('blic-akcije').style.display='none';
+    return;
+  }
+  cont.innerHTML=rows.map(a=>`
+    <label class="kupac-rez-item" style="display:flex;align-items:center;gap:10px;">
+      <input type="checkbox" onchange="blicToggle(${a.id},this.checked)" style="width:20px;height:20px;flex-shrink:0;">
+      <div style="flex:1;min-width:0;">
+        <div class="kupac-rez-naziv">${esc(a.naziv)}</div>
+        <div class="kupac-rez-meta">Šifra: ${esc(a.sifra)} · Trenutno: <b>${esc(a.jed_mjera)}</b></div>
+      </div>
+    </label>
+  `).join('');
+  document.getElementById('blic-akcije').style.display='block';
+  blicAzurirajBroj();
+}
+
+function blicToggle(id, checked){
+  if(checked) blicSelected.add(id); else blicSelected.delete(id);
+  blicAzurirajBroj();
+}
+
+function blicAzurirajBroj(){
+  document.getElementById('blic-broj').textContent=blicSelected.size;
+}
+
+async function blicPostavi(jm){
+  if(!blicSelected.size){alert('Izaberite bar jedan artikal.');return;}
+  if(!confirm(`Postaviti jedinicu "${jm}" za ${blicSelected.size} artikal(a)? Ovo mijenja jedinicu za koju važi njihova cijena.`)) return;
+  try{
+    const r=await fetch(`${API}/api/roba/bulk-jedinica`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ids:[...blicSelected], jed_mjera:jm}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška.');
+    alert(`✓ Ažurirano ${data.izmijenjeno} artikal(a).`);
+    blicTrazi();
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function ucitajObjektiListu(){
+  const cont=document.getElementById('objekti-postojeci-lista');
+  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`);
+    objektiPodaci=await r.json();
+    renderObjektiListu();
+  }catch(e){
+    cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>';
+  }
+}
+
+function renderObjektiListu(){
+  const cont=document.getElementById('objekti-postojeci-lista');
+  if(!objektiPodaci.length){cont.innerHTML='<div class="empty-msg">Još nema definisanih prodajnih objekata.</div>';return;}
+  cont.innerHTML=objektiPodaci.map(o=>{
+    const uEdit=uredjivanjeObjektaId===o.id;
+    return `
+    <div class="kupac-rez-item" style="cursor:default;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <div style="flex:1;min-width:0;">
+          <div class="kupac-rez-naziv">🏢 ${esc(o.naziv)}</div>
+          ${o.adresa?`<div class="kupac-rez-meta">${esc(o.adresa)}</div>`:''}
+        </div>
+        <button class="btn-cijena" onclick="otvoriUredjivanjeObjekta(${o.id})">✎ Izmijeni</button>
+      </div>
+      ${uEdit?`
+      <div class="cijena-edit" style="margin-top:8px;">
+        <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Naziv</label>
+        <input type="text" id="edit-objekat-naziv-${o.id}" value="${esc(o.naziv)}" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
+        <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Adresa</label>
+        <input type="text" id="edit-objekat-adresa-${o.id}" value="${esc(o.adresa||'')}" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
+        <div class="ce-btns">
+          <button class="ce-primijeni" onclick="sacuvajIzmjenuObjekta(${o.id})">✓ Sačuvaj</button>
+          <button class="ce-otkazi" onclick="otvoriUredjivanjeObjekta(${o.id})">Zatvori</button>
+        </div>
+      </div>`:''}
+    </div>
+  `;}).join('');
+}
+
+function otvoriUredjivanjeObjekta(id){
+  uredjivanjeObjektaId = uredjivanjeObjektaId===id ? null : id;
+  renderObjektiListu();
+}
+
+async function sacuvajIzmjenuObjekta(id){
+  const naziv=document.getElementById('edit-objekat-naziv-'+id).value.trim();
+  const adresa=document.getElementById('edit-objekat-adresa-'+id).value.trim();
+  const msg=document.getElementById('objekti-msg');
+  if(!naziv){msg.style.color='red';msg.textContent='Naziv ne može biti prazan.';return;}
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti/${id}`,{
+      method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({naziv, adresa: adresa||null}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri izmjeni.');
+    msg.style.color='var(--green)';
+    msg.textContent=`✓ Izmijenjeno: ${data.naziv}`;
+    uredjivanjeObjektaId=null;
+    ucitajObjektiListu();
+    popuniFilterObjekata();
+    popuniImportObjekat();
+    popuniPrenosObjekte();
+    popuniLagerObjekat();
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+async function dodajProdajniObjekat(){
+  const naziv=document.getElementById('novi-objekat-naziv').value.trim();
+  const adresa=document.getElementById('novi-objekat-adresa').value.trim();
+  const msg=document.getElementById('objekti-msg');
+  if(!naziv){msg.style.color='red';msg.textContent='Unesite naziv prodajnog objekta.';return;}
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({naziv, adresa: adresa||null}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri dodavanju.');
+    msg.style.color='var(--green)';
+    msg.textContent=`✓ Dodano: ${data.naziv}`;
+    document.getElementById('novi-objekat-naziv').value='';
+    document.getElementById('novi-objekat-adresa').value='';
+    ucitajObjektiListu();
+    popuniFilterObjekata();
+    popuniImportObjekat();
+    popuniPrenosObjekte();
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+async function popuniPrenosObjekte(){
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`);
+    const rows=await r.json();
+    const opcije='<option value="">— izaberi —</option>'+rows.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');
+    document.getElementById('prenos-iz').innerHTML=opcije;
+    document.getElementById('prenos-u').innerHTML=opcije;
+    document.getElementById('prenos-xlsx-iz').innerHTML=opcije;
+    document.getElementById('prenos-xlsx-u').innerHTML=opcije;
+  }catch(e){}
+}
+
+function postaviPrenosMode(mode){
+  document.querySelectorAll('.ce-tip-btn[data-pmode]').forEach(b=>b.classList.toggle('active', b.dataset.pmode===mode));
+  document.getElementById('prenos-rucno-blok').style.display = mode==='rucno' ? 'block':'none';
+  document.getElementById('prenos-xlsx-blok').style.display = mode==='xlsx' ? 'block':'none';
+  document.getElementById('prenos-msg').textContent='';
+}
+
+async function traziPrenosArtikal(q){
+  const izObjekta=document.getElementById('prenos-iz').value;
+  const cont=document.getElementById('prenos-rezultati');
+  if(!izObjekta){cont.innerHTML='<div class="empty-msg">Prvo izaberi IZ kojeg objekta prebacuješ.</div>';return;}
+  if(!q||!q.trim()){cont.innerHTML='';return;}
+  cont.innerHTML='<div class="spinner">Pretraga...</div>';
+  try{
+    const r=await fetch(`${API}/api/roba?q=${encodeURIComponent(q)}&limit=15&objekt_id=${izObjekta}`);
+    const rows=await r.json();
+    if(!rows.length){cont.innerHTML='<div class="empty-msg">Nema rezultata (ili artikal nema stanje u ovom objektu).</div>';return;}
+    cont.innerHTML=rows.map(a=>`
+      <div class="rez-item" onclick='izaberiPrenosArtikal(${JSON.stringify(a).replace(/'/g,"&apos;")})'>
+        <div class="rez-info">
+          <div class="rez-naziv">${esc(a.naziv)}</div>
+          <div class="rez-sifra">Šifra: ${esc(a.sifra)}</div>
+        </div>
+        <div class="rez-right"><div class="rez-stanje">${a.stanje} ${esc(a.jed_mjera)}</div></div>
+      </div>
+    `).join('');
+  }catch(e){
+    cont.innerHTML='<div class="empty-msg">Greška pri pretrazi.</div>';
+  }
+}
+
+function izaberiPrenosArtikal(artikal){
+  prenosIzabraniArtikal=artikal;
+  document.getElementById('prenos-izabrano-naziv').textContent=
+    `${artikal.naziv} — raspoloživo: ${artikal.stanje} ${artikal.jed_mjera}`;
+  document.getElementById('prenos-izabrano').style.display='block';
+  document.getElementById('prenos-kolicina').value='';
+  document.getElementById('prenos-rezultati').innerHTML='';
+  document.getElementById('prenos-search').value='';
+}
+
+function dodajUPrenosListu(){
+  const kolicina=parseFloat(document.getElementById('prenos-kolicina').value);
+  const msg=document.getElementById('prenos-msg');
+  if(!prenosIzabraniArtikal){msg.style.color='red';msg.textContent='Izaberite artikal.';return;}
+  if(!kolicina||kolicina<=0){msg.style.color='red';msg.textContent='Unesite ispravnu količinu.';return;}
+  if(kolicina>parseFloat(prenosIzabraniArtikal.stanje)){msg.style.color='red';msg.textContent='Nema dovoljno na stanju (raspoloživo: '+prenosIzabraniArtikal.stanje+').';return;}
+  msg.textContent='';
+
+  const postojeci=prenosStavke.find(s=>s.roba_id===prenosIzabraniArtikal.id);
+  if(postojeci){
+    postojeci.kolicina=+(postojeci.kolicina+kolicina).toFixed(3);
+  }else{
+    prenosStavke.push({
+      roba_id:prenosIzabraniArtikal.id, sifra:prenosIzabraniArtikal.sifra, naziv:prenosIzabraniArtikal.naziv,
+      jed_mjera:prenosIzabraniArtikal.jed_mjera, kolicina, stanje_max:parseFloat(prenosIzabraniArtikal.stanje),
+    });
+  }
+  prenosIzabraniArtikal=null;
+  document.getElementById('prenos-izabrano').style.display='none';
+  renderPrenosListu();
+}
+
+function ukloniIzPrenosListe(idx){
+  prenosStavke.splice(idx,1);
+  renderPrenosListu();
+}
+
+function renderPrenosListu(){
+  const cont=document.getElementById('prenos-lista');
+  const btn=document.getElementById('prenos-izvrsi-btn');
+  if(!prenosStavke.length){
+    cont.innerHTML='';
+    btn.style.display='none';
+    return;
+  }
+  cont.innerHTML=prenosStavke.map((s,i)=>`
+    <div class="kos-item" style="padding:8px 0;">
+      <div class="kos-item-top">
+        <div class="kos-info">
+          <div class="kos-naziv">${esc(s.naziv)}</div>
+          <div class="kos-cijena">${s.kolicina} ${esc(s.jed_mjera)}</div>
+        </div>
+        <button class="kos-del" onclick="ukloniIzPrenosListe(${i})">🗑</button>
+      </div>
+    </div>
+  `).join('');
+  btn.style.display='block';
+  btn.textContent=`✓ Izvrši prenos (${prenosStavke.length} ${prenosStavke.length===1?'stavka':'stavke'})`;
+}
+
+async function izvrsiPrenosListu(){
+  const msg=document.getElementById('prenos-msg');
+  const izObjekta=document.getElementById('prenos-iz').value;
+  const uObjekat=document.getElementById('prenos-u').value;
+  if(!izObjekta||!uObjekat){msg.style.color='red';msg.textContent='Izaberite oba objekta.';return;}
+  if(izObjekta===uObjekat){msg.style.color='red';msg.textContent='Izvorni i odredišni objekat moraju biti različiti.';return;}
+  if(!prenosStavke.length) return;
+
+  msg.style.color='#6b7a8d'; msg.textContent='Izvršavam prenos...';
+  try{
+    const r=await fetch(`${API}/api/prenosi/bulk`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        iz_objekta_id:izObjekta, u_objekat_id:uObjekat,
+        stavke:prenosStavke.map(s=>({roba_id:s.roba_id, kolicina:s.kolicina})),
+      }),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri prenosu.');
+    msg.style.color='var(--green)';
+    msg.textContent=`✓ Prebačeno ${data.prebaceno} stavki.`;
+    prenosStavke=[];
+    renderPrenosListu();
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+async function ucitajPregledPrenosa(){
+  const msg=document.getElementById('prenos-msg');
+  const fileInput=document.getElementById('prenos-xlsx-file');
+  const izObjekta=document.getElementById('prenos-xlsx-iz').value;
+  const uObjekat=document.getElementById('prenos-xlsx-u').value;
+  if(!izObjekta||!uObjekat){msg.style.color='red';msg.textContent='Izaberite oba objekta.';return;}
+  if(izObjekta===uObjekat){msg.style.color='red';msg.textContent='Izvorni i odredišni objekat moraju biti različiti.';return;}
+  if(!fileInput.files.length){msg.style.color='red';msg.textContent='Izaberite fajl.';return;}
+  msg.style.color='#6b7a8d'; msg.textContent='Čitanje fajla...';
+  const fd_=new FormData();
+  fd_.append('file', fileInput.files[0]);
+  try{
+    const r=await fetch(`${API}/api/prenosi/import/pregled`,{method:'POST',body:fd_});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri čitanju fajla.');
+    prenosUvozHeader=data.header; prenosUvozUzorak=data.uzorak;
+
+    const tbl=document.getElementById('prenos-uzorak-tabela');
+    tbl.innerHTML='<tr>'+prenosUvozHeader.map(h=>`<th>${esc(h)}</th>`).join('')+'</tr>'+
+      prenosUvozUzorak.map(row=>'<tr>'+prenosUvozHeader.map(h=>`<td>${esc(row[h])}</td>`).join('')+'</tr>').join('');
+
+    ['sifra','kolicina'].forEach(p=>{
+      const sel=document.getElementById('prenos-map-'+p);
+      sel.innerHTML='<option value="">— izaberi kolonu —</option>'+
+        prenosUvozHeader.map(h=>`<option value="${esc(h)}" ${data.predlog[p]===h?'selected':''}>${esc(h)}</option>`).join('');
+    });
+
+    document.getElementById('prenos-xlsx-k1').style.display='none';
+    document.getElementById('prenos-xlsx-k2').style.display='block';
+    msg.style.color='#6b7a8d';
+    msg.textContent=`Pronađeno ${data.ukupno_redova} redova u fajlu.`;
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+function otkaziUvozPrenosa(){
+  document.getElementById('prenos-xlsx-k1').style.display='block';
+  document.getElementById('prenos-xlsx-k2').style.display='none';
+  document.getElementById('prenos-xlsx-file').value='';
+  document.getElementById('prenos-msg').textContent='';
+}
+
+async function potvrdiUvozPrenosa(){
+  const msg=document.getElementById('prenos-msg');
+  const mapping={
+    sifra: document.getElementById('prenos-map-sifra').value,
+    kolicina: document.getElementById('prenos-map-kolicina').value,
+  };
+  if(!mapping.sifra||!mapping.kolicina){msg.style.color='red';msg.textContent='Morate mapirati Šifru i Količinu.';return;}
+
+  const fileInput=document.getElementById('prenos-xlsx-file');
+  const fd_=new FormData();
+  fd_.append('file', fileInput.files[0]);
+  fd_.append('iz_objekta_id', document.getElementById('prenos-xlsx-iz').value);
+  fd_.append('u_objekat_id', document.getElementById('prenos-xlsx-u').value);
+  fd_.append('mapping', JSON.stringify(mapping));
+
+  msg.style.color='#6b7a8d'; msg.textContent='Uvoz u toku...';
+  try{
+    const r=await fetch(`${API}/api/prenosi/import`,{method:'POST',body:fd_});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri uvozu.');
+    msg.style.color='var(--green)';
+    let poruka=`✓ Prebačeno: ${data.uspjesno}, preskočeno: ${data.preskoceno} (od ${data.ukupno_redova} redova).`;
+    if(data.greske&&data.greske.length) poruka+=' Greške: '+data.greske.slice(0,5).join('; ');
+    msg.textContent=poruka;
+    otkaziUvozPrenosa();
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+async function popuniLagerObjekat(){
+  const sel=document.getElementById('lager-objekat');
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`);
+    const rows=await r.json();
+    sel.innerHTML='<option value="">— izaberi prodajni objekat —</option>'+rows.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');
+    if(trenutniObjekat) sel.value=trenutniObjekat.id;
+  }catch(e){}
+}
+
+async function ucitajLagerListu(){
+  const objektId=document.getElementById('lager-objekat').value;
+  const wrap=document.getElementById('lager-lista-tabela-wrap');
+  const totalDiv=document.getElementById('lager-total');
+  if(!objektId){wrap.innerHTML='<div class="empty-msg">Izaberite prodajni objekat.</div>';totalDiv.style.display='none';return;}
+  wrap.innerHTML='<div class="spinner">Učitavanje...</div>';
+
+  try{
+    const r=await fetch(`${API}/api/roba/lager?objekt_id=${objektId}`);
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška.');
+    lagerPodaci=data.stavke;
+    lagerKolonaFilteri={sifra:'',naziv:'',grupa:'',debljina:'',jm:'',cijena:'',stanje:'',ukupno:''};
+    renderLagerZaglavlje(); // pravi tabelu + zaglavlje SAMO JEDNOM po učitavanju
+    renderLagerRedovi();    // puni tbody (ovo se poziva ponovo pri svakom filteru/sortiranju)
+    prikaziUndoDugmeAkoPostoji(objektId);
+  }catch(e){
+    wrap.innerHTML=`<div class="empty-msg">${esc(e.message)}</div>`;
+    totalDiv.style.display='none';
+  }
+}
+
+function lagerKlikNaslov(kolona){
+  if(lagerSort.kolona===kolona) lagerSort.smjer = lagerSort.smjer==='asc'?'desc':'asc';
+  else lagerSort={kolona, smjer:'asc'};
+  renderLagerZaglavlje(); // strelica se promijenila
+  renderLagerRedovi();
+}
+
+function lagerPromijeniFilter(kolona, vrijednost){
+  lagerKolonaFilteri[kolona]=vrijednost;
+  renderLagerRedovi(); // NE dira zaglavlje/input polja — zato fokus ostaje dok kucaš
+}
+
+function lagerFiltrirajISortiraj(){
+  let prikaz=lagerPodaci.filter(s=>
+    LAGER_KOLONE.every(({k,tip})=>{
+      const f=(lagerKolonaFilteri[k]??'').toString().trim().toLowerCase();
+      if(!f) return true;
+      const v=lagerVrijednostZaKolonu(s,k);
+      if(tip==='select'||tip==='select-num') return String(v??'').toLowerCase()===f;
+      return String(v??'').toLowerCase().includes(f);
+    })
+  );
+  const {kolona, smjer}=lagerSort;
+  const tipKolone=LAGER_KOLONE.find(c=>c.k===kolona)?.tip;
+  const jeNumericko = tipKolone==='num'||tipKolone==='select-num';
+  prikaz=[...prikaz].sort((a,b)=>{
+    let va=lagerVrijednostZaKolonu(a,kolona), vb=lagerVrijednostZaKolonu(b,kolona);
+    let cmp;
+    if(jeNumericko){ cmp=(parseFloat(va)||0)-(parseFloat(vb)||0); }
+    else{ cmp=String(va??'').localeCompare(String(vb??''),'sr-Latn-BA'); }
+    return smjer==='asc'?cmp:-cmp;
+  });
+  return prikaz;
+}
+
+function renderLagerZaglavlje(){
+  const wrap=document.getElementById('lager-lista-tabela-wrap');
+  const totalDiv=document.getElementById('lager-total');
+  if(!lagerPodaci.length){
+    wrap.innerHTML='<div class="empty-msg">Nema robe za izabrane filtere.</div>';
+    totalDiv.style.display='none';
+    return;
+  }
+
+  // Distinct vrijednosti za dropdown kolone, izvučene iz trenutno učitanih podataka.
+  const distinct=k=>[...new Set(lagerPodaci.map(s=>lagerVrijednostZaKolonu(s,k)).filter(v=>v!=null&&v!==''))]
+    .sort((a,b)=>typeof a==='number'?a-b:String(a).localeCompare(String(b),'sr-Latn-BA'));
+
+  const strelica=k=>lagerSort.kolona===k?(lagerSort.smjer==='asc'?' ▲':' ▼'):'';
+  const filterPolje=c=>{
+    if(c.tip==='select'||c.tip==='select-num'){
+      const opcije=distinct(c.k);
+      return `<select onchange="lagerPromijeniFilter('${c.k}',this.value)"
+                style="width:100%;font:inherit;font-size:10.5px;padding:4px 2px;border:1px solid var(--border);border-radius:4px;box-sizing:border-box;">
+                <option value="">Sve</option>
+                ${opcije.map(o=>`<option value="${esc(String(o))}">${esc(String(o))}${c.k==='debljina'?' cm':''}</option>`).join('')}
+              </select>`;
+    }
+    return `<input type="text" placeholder="filter..."
+              oninput="lagerPromijeniFilter('${c.k}',this.value)"
+              style="width:100%;font:inherit;font-size:10.5px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;box-sizing:border-box;">`;
+  };
+
+  wrap.innerHTML=`
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+      <thead>
+        <tr style="background:#1f3864;color:#fff;">
+          ${LAGER_KOLONE.map(c=>`
+            <th style="padding:6px 8px;text-align:${c.align};cursor:pointer;white-space:nowrap;" onclick="lagerKlikNaslov('${c.k}')">${c.lbl}${strelica(c.k)}</th>
+          `).join('')}
+        </tr>
+        <tr style="background:#f0f2f5;">
+          ${LAGER_KOLONE.map(c=>`<th style="padding:3px 6px;">${filterPolje(c)}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody id="lager-tbody"></tbody>
+    </table>
+    <div id="lager-prazno" class="empty-msg" style="display:none;">Nijedan red ne odgovara filterima kolona.</div>`;
+}
+
+function renderLagerRedovi(){
+  const tbody=document.getElementById('lager-tbody');
+  const prazno=document.getElementById('lager-prazno');
+  const totalDiv=document.getElementById('lager-total');
+  if(!tbody) return;
+
+  const prikaz=lagerFiltrirajISortiraj();
+
+  tbody.innerHTML=prikaz.map((s,i)=>`
+    <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
+      <td style="padding:5px 8px;">${esc(s.sifra)}</td>
+      <td style="padding:5px 8px;">${esc(s.naziv)}</td>
+      <td style="padding:5px 8px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
+      <td style="padding:5px 8px;text-align:center;color:#6b7a8d;">${s.debljina_cm??'—'}</td>
+      <td style="padding:5px 8px;text-align:center;">${esc(s.jed_mjera)}</td>
+      <td style="padding:5px 8px;text-align:right;">${fm(s.cijena)} KM</td>
+      <td style="padding:5px 8px;text-align:right;">${s.stanje}</td>
+      <td style="padding:5px 8px;text-align:right;font-weight:700;">${fm(s.ukupno)} KM</td>
+    </tr>
+  `).join('');
+
+  prazno.style.display=prikaz.length?'none':'block';
+
+  const ukupnoPrikazano=prikaz.reduce((s,r)=>s+parseFloat(r.ukupno||0),0);
+  totalDiv.style.display='block';
+  totalDiv.innerHTML=`${fm(ukupnoPrikazano)} KM<span class="cnt">${prikaz.length} od ${lagerPodaci.length} artikala${prikaz.length!==lagerPodaci.length?' (filtrirano)':''}</span>`;
+}
+
+function lagerVrijednostZaKolonu(s, k){
+  if(k==='debljina') return s.debljina_cm;
+  if(k==='jm') return s.jed_mjera;
+  return s[k];
+}
+
+function izvezLagerListu(){
+  const objektId=document.getElementById('lager-objekat').value;
+  if(!objektId){alert('Izaberite prodajni objekat.');return;}
+  const params=new URLSearchParams({objekt_id:objektId});
+  if(lagerKolonaFilteri.grupa) params.set('grupa',lagerKolonaFilteri.grupa);
+  if(lagerKolonaFilteri.debljina) params.set('debljina',lagerKolonaFilteri.debljina);
+  // Direktan link ka preuzimanju — browser sam otvara "Sačuvaj kao" dijalog za XLSX.
+  window.location.href=`${API}/api/roba/lager/export?${params}`;
+}
+
+async function otvoriBrisanjeLagera(){
+  const objektId=document.getElementById('lager-objekat').value;
+  const objektNaziv=document.getElementById('lager-objekat').selectedOptions[0]?.textContent||'';
+  if(!objektId){alert('Prvo izaberi prodajni objekat (dropdown iznad).');return;}
+
+  const potvrda1=confirm(
+    `⚠️ Ovo BRIŠE KOMPLETAN lager (sve cijene i stanje) za "${objektNaziv}".\n\n`+
+    `Prije brisanja se automatski pravi rezervna kopija na serveru — moći ćeš je vratiti dugmetom "Undo" `+
+    `koje će se pojaviti nakon brisanja, ALI SAMO dok ne uradiš novi uvoz preko ovog brisanja.\n\n`+
+    `Preporuka: klikni Otkaži, prvo izvezi trenutni lager u XLSX (dugme iznad) da imaš i svoju kopiju.\n\n`+
+    `Nastaviti sa brisanjem?`
+  );
+  if(!potvrda1) return;
+  const potvrda2=confirm(`Poslednja potvrda — zaista obrisati kompletan lager za "${objektNaziv}"?`);
+  if(!potvrda2) return;
+
+  const msg=document.getElementById('lager-total');
+  try{
+    const r=await fetch(`${API}/api/roba/lager/delete`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({objekt_id:objektId}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri brisanju.');
+    alert(`✓ Obrisano ${data.obrisano} artikala iz lagera "${data.objekt_naziv}". Rezervna kopija je sačuvana — dugme "Undo" je sad dostupno.`);
+    ucitajLagerListu();
+    prikaziUndoDugmeAkoPostoji(objektId);
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+async function prikaziUndoDugmeAkoPostoji(objektId){
+  const postojeceDugme=document.getElementById('lager-undo-btn');
+  if(postojeceDugme) postojeceDugme.remove();
+  try{
+    const r=await fetch(`${API}/api/roba/lager/backup-postoji?objekt_id=${objektId}`);
+    const backup=await r.json();
+    if(!backup) return;
+    const dugme=document.createElement('button');
+    dugme.id='lager-undo-btn';
+    dugme.className='ce-tip-btn';
+    dugme.style.color='var(--green)';
+    dugme.textContent=`↩️ Undo (vrati ${backup.broj_stavki} stavki, ${backup.kreirao_ime})`;
+    dugme.onclick=()=>vratiLagerIzBackupa(objektId);
+    document.querySelector('#lager-lista-box .ce-row').appendChild(dugme);
+  }catch(e){}
+}
+
+async function vratiLagerIzBackupa(objektId){
+  if(!confirm('Vratiti lager iz poslednje rezervne kopije? Ovo prepisuje trenutno stanje/cijene.')) return;
+  try{
+    const r=await fetch(`${API}/api/roba/lager/undo`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({objekt_id:objektId}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri vraćanju.');
+    alert(`✓ Vraćeno ${data.vraceno} artikala.`);
+    document.getElementById('lager-undo-btn')?.remove();
+    ucitajLagerListu();
+  }catch(e){
+    alert(e.message);
+  }
+}
+
+/* ── INICIJALIZACIJA ─────────────────────────────────────────── */
+document.getElementById('blic-search').addEventListener('input', e=>{
+  // Enter-triggered pretraga vec postoji preko dugmeta; ovdje samo omoguci Enter u polju.
+});
+document.getElementById('blic-search').addEventListener('keydown', e=>{ if(e.key==='Enter') blicTrazi(); });
+
+document.getElementById('prenos-search').addEventListener('input', e=>{
+  clearTimeout(prenosSearchTimer);
+  const q=e.target.value;
+  prenosSearchTimer=setTimeout(()=>traziPrenosArtikal(q), 250);
+});
+
+document.getElementById('logout').onclick=async e=>{
+  e.preventDefault();
+  await fetch(`${API}/api/auth/logout`,{method:'POST'});
+  location.href='login.html';
+};
+
+fetch(`${API}/api/auth/me`).then(r=>{
+  if(!r.ok){location.href='login.html';return;}
+  return r.json();
+}).then(u=>{
+  if(!u) return;
+  currentUser=u;
+  const isAdmin=u.rola==='admin';
+  if(!isAdmin && !u.moze_roba_magacin){
+    alert('Nemate dozvolu za pristup modulu Roba i magacini. Obratite se administratoru.');
+    location.href='home.html';
+    return;
+  }
+  document.getElementById('who').textContent='👤 '+u.ime_prezime;
+  postaviIzvorUvoza('bluesoft');
+  popuniImportObjekat();
+  ucitajObjektiListu();
+  popuniPrenosObjekte();
+  popuniLagerObjekat();
+}).catch(()=>location.href='login.html');
+
+</script>
+</body>
+</html>

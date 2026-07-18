@@ -70,6 +70,13 @@ main{max-width:700px;margin:32px auto;padding:0 16px;}
       <div class="card-arrow">→</div>
     </a>
 
+    <a href="roba-magacin.html" class="card hidden" id="card-roba-magacin" style="border-left:4px solid #0d6e6e;">
+      <div class="card-icon">🏭</div>
+      <div class="card-title">Roba i magacini</div>
+      <div class="card-desc">Šifrarnik, uvoz robe, prodajni objekti, prenos između magacina, lager lista.</div>
+      <div class="card-arrow">→</div>
+    </a>
+
     <a href="ponude.html" class="card violet hidden" id="card-ponude">
       <div class="card-icon">📝</div>
       <div class="card-title">Generator ponuda</div>
@@ -124,6 +131,7 @@ async function checkAuth(){
 
     // Maloprodaja — moze_prodavati ili admin
     if(admin || u.moze_prodavati) show('card-maloprodaja');
+    if(admin || u.moze_roba_magacin) show('card-roba-magacin');
 
     // Ponude — moze_ugovarati ili admin
     if(admin || u.moze_ugovarati) show('card-ponude');
