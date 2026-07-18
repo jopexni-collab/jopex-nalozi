@@ -16,11 +16,11 @@ const ADMIN_COLS = `
 const GOTOVINA_JOINS = `
   LEFT JOIN LATERAL (
     SELECT bool_and(predao_blagajniku) AS predano
-    FROM gotovina g WHERE g.nalog_r_br = p.r_br AND g.opis LIKE 'Avans%'
+    FROM gotovina g WHERE g.nalog_r_br = p.r_br::text AND g.opis LIKE 'Avans%'
   ) ga ON true
   LEFT JOIN LATERAL (
     SELECT bool_and(predao_blagajniku) AS predano
-    FROM gotovina g WHERE g.nalog_r_br = p.r_br AND g.opis LIKE 'Naplata%'
+    FROM gotovina g WHERE g.nalog_r_br = p.r_br::text AND g.opis LIKE 'Naplata%'
   ) gn ON true
 `;
 
