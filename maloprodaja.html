@@ -343,7 +343,10 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <div class="import-box" id="lager-lista-box">
     <h3>📋 Kompletna lager lista</h3>
     <select id="lager-objekat"><option value="">— izaberi prodajni objekat —</option></select>
-    <button class="btn-import sec" onclick="ucitajLagerListu()">Prikaži</button>
+    <div class="ce-row">
+      <button class="ce-tip-btn" onclick="ucitajLagerListu()">Prikaži</button>
+      <button class="ce-tip-btn" onclick="izvezLagerListu()">📥 Izvezi u XLSX</button>
+    </div>
     <div id="lager-lista-tabela-wrap" style="overflow-x:auto;margin-top:10px;"></div>
     <div id="lager-total" style="display:none" class="dnevni-total"></div>
   </div>
@@ -386,6 +389,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <div class="map-row"><label>Cijena</label><select id="map-cijena"></select></div>
       <div class="map-row"><label>Stanje</label><select id="map-stanje"></select></div>
       <div class="map-row"><label>Jed. mjere</label><select id="map-jed_mjera"></select></div>
+      <div class="map-row"><label>Grupa</label><select id="map-grupa"></select></div>
       <div class="map-row"><label>Ako nema JM kolone</label><input type="text" id="map-jm-default" value="m2" placeholder="npr. m2, kom"></div>
 
       <button class="btn-import" onclick="potvrdiUvoz()">✓ Uvezi sa ovim mapiranjem</button>
@@ -1406,6 +1410,7 @@ async function ucitajLagerListu(){
         <thead><tr style="background:#1f3864;color:#fff;">
           <th style="padding:6px 8px;text-align:left;">Šifra</th>
           <th style="padding:6px 8px;text-align:left;">Naziv</th>
+          <th style="padding:6px 8px;text-align:left;">Grupa</th>
           <th style="padding:6px 8px;text-align:center;">JM</th>
           <th style="padding:6px 8px;text-align:right;">Cijena/JM</th>
           <th style="padding:6px 8px;text-align:right;">Stanje</th>
@@ -1416,6 +1421,7 @@ async function ucitajLagerListu(){
             <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
               <td style="padding:5px 8px;">${esc(s.sifra)}</td>
               <td style="padding:5px 8px;">${esc(s.naziv)}</td>
+              <td style="padding:5px 8px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
               <td style="padding:5px 8px;text-align:center;">${esc(s.jed_mjera)}</td>
               <td style="padding:5px 8px;text-align:right;">${fm(s.cijena)} KM</td>
               <td style="padding:5px 8px;text-align:right;">${s.stanje}</td>
@@ -1430,6 +1436,13 @@ async function ucitajLagerListu(){
     wrap.innerHTML=`<div class="empty-msg">${esc(e.message)}</div>`;
     totalDiv.style.display='none';
   }
+}
+
+function izvezLagerListu(){
+  const objektId=document.getElementById('lager-objekat').value;
+  if(!objektId){alert('Izaberite prodajni objekat.');return;}
+  // Direktan link ka preuzimanju — browser sam otvara "Sačuvaj kao" dijalog za XLSX.
+  window.location.href=`${API}/api/roba/lager/export?objekt_id=${objektId}`;
 }
 
 /* ── ADMIN: UPRAVLJANJE PRODAJNIM OBJEKTIMA (PJ) ──────────────────── */
@@ -1726,10 +1739,10 @@ function prikaziMapiranje(predlog, ukupnoRedova){
     uvozUzorak.map(row=>'<tr>'+uvozHeader.map(h=>`<td>${esc(row[h])}</td>`).join('')+'</tr>').join('');
 
   // Dropdown-ovi za mapiranje
-  const polja=['sifra','naziv','cijena','stanje','jed_mjera'];
+  const polja=['sifra','naziv','cijena','stanje','jed_mjera','grupa'];
   polja.forEach(p=>{
     const sel=document.getElementById('map-'+p);
-    const prazna=(p==='cijena'||p==='stanje'||p==='jed_mjera')?'<option value="">— ne uvozi —</option>':'<option value="">— izaberi kolonu —</option>';
+    const prazna=(p==='cijena'||p==='stanje'||p==='jed_mjera'||p==='grupa')?'<option value="">— ne uvozi —</option>':'<option value="">— izaberi kolonu —</option>';
     sel.innerHTML=prazna+uvozHeader.map(h=>`<option value="${esc(h)}" ${predlog[p]===h?'selected':''}>${esc(h)}</option>`).join('');
   });
 
@@ -1753,6 +1766,7 @@ async function potvrdiUvoz(){
     cijena:document.getElementById('map-cijena').value,
     stanje:document.getElementById('map-stanje').value,
     jed_mjera:document.getElementById('map-jed_mjera').value,
+    grupa:document.getElementById('map-grupa').value,
   };
   if(!mapping.sifra||!mapping.naziv){
     msg.style.color='red'; msg.textContent='Morate izabrati kolonu za Šifru i Naziv.'; return;
@@ -1900,6 +1914,5 @@ document.getElementById('btn-zakljuci-dan').onclick=e=>{
   loadOtpremnice();
 };
 </script>
-  // uvezi
 </body>
 </html>

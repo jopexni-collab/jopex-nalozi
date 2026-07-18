@@ -35,7 +35,7 @@ router.get('/', zahtijevaProdaju, async (req, res) => {
     if (objektId) {
       if (!term) {
         const r = await pool.query(
-          `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, rp.cijena, rp.stanje
+          `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, r.grupa, rp.cijena, rp.stanje
            FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
            WHERE r.aktivan=true ORDER BY r.naziv LIMIT $2`,
           [objektId, lim]
@@ -43,7 +43,7 @@ router.get('/', zahtijevaProdaju, async (req, res) => {
         return res.json(r.rows);
       }
       const r = await pool.query(
-        `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, rp.cijena, rp.stanje
+        `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, r.grupa, rp.cijena, rp.stanje
          FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
          WHERE r.aktivan=true AND (r.sifra ILIKE $2 OR r.naziv ILIKE $3)
          ORDER BY (r.sifra ILIKE $2) DESC, r.naziv
@@ -56,12 +56,12 @@ router.get('/', zahtijevaProdaju, async (req, res) => {
     // Bez objekt_id — samo šifrarnik (npr. za blic izbor jedinice mjere), bez cijene/stanja.
     if (!term) {
       const r = await pool.query(
-        'SELECT id, sifra, naziv, jed_mjera, aktivan FROM roba WHERE aktivan=true ORDER BY naziv LIMIT $1', [lim]
+        'SELECT id, sifra, naziv, jed_mjera, aktivan, grupa FROM roba WHERE aktivan=true ORDER BY naziv LIMIT $1', [lim]
       );
       return res.json(r.rows);
     }
     const r = await pool.query(
-      `SELECT id, sifra, naziv, jed_mjera, aktivan FROM roba
+      `SELECT id, sifra, naziv, jed_mjera, aktivan, grupa FROM roba
        WHERE aktivan=true AND (sifra ILIKE $1 OR naziv ILIKE $2)
        ORDER BY (sifra ILIKE $1) DESC, naziv
        LIMIT $3`,
@@ -82,7 +82,7 @@ router.get('/lager', async (req, res) => {
   if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
   try {
     const r = await pool.query(
-      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, rp.cijena, rp.stanje,
+      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, rp.cijena, rp.stanje,
               (rp.cijena * rp.stanje) AS ukupno
        FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
        WHERE r.aktivan=true
@@ -91,6 +91,51 @@ router.get('/lager', async (req, res) => {
     );
     const totalVrijednost = r.rows.reduce((s, row) => s + parseFloat(row.ukupno || 0), 0);
     res.json({ stavke: r.rows, total_vrijednost: +totalVrijednost.toFixed(2), broj_artikala: r.rows.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/roba/lager/export?objekt_id=X - preuzimanje lager liste kao XLSX (za poređenje sa izvornim fajlom)
+router.get('/lager/export', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin može izvoziti lager.' });
+  const objektId = trebaObjekat(req.query.objekt_id);
+  if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
+  try {
+    const objRes = await pool.query('SELECT naziv FROM prodajni_objekti WHERE id=$1', [objektId]);
+    const objektNaziv = objRes.rows[0]?.naziv || 'PJ';
+
+    const r = await pool.query(
+      `SELECT r.sifra, r.naziv, r.grupa, r.jed_mjera, rp.cijena, rp.stanje,
+              (rp.cijena * rp.stanje) AS ukupno
+       FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
+       WHERE r.aktivan=true
+       ORDER BY r.naziv`,
+      [objektId]
+    );
+
+    const podaci = r.rows.map(row => ({
+      'Šifra': row.sifra,
+      'Naziv': row.naziv,
+      'Grupa': row.grupa || '',
+      'JM': row.jed_mjera,
+      'Cijena po JM': parseFloat(row.cijena),
+      'Stanje': parseFloat(row.stanje),
+      'Ukupno': parseFloat(row.ukupno),
+    }));
+    const ukupnaVrijednost = podaci.reduce((s, p) => s + p['Ukupno'], 0);
+    podaci.push({ 'Šifra': '', 'Naziv': '', 'Grupa': '', 'JM': '', 'Cijena po JM': '', 'Stanje': 'UKUPNO:', 'Ukupno': +ukupnaVrijednost.toFixed(2) });
+
+    const ws = XLSX.utils.json_to_sheet(podaci);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Lager');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const fajlNaziv = `lager_${objektNaziv.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    res.setHeader('Content-Disposition', `attachment; filename="${fajlNaziv}"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buf);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -238,6 +283,7 @@ const NAGADJANJE = {
   jed_mjera: ['jm', 'j.m.', 'jed mjera', 'jed. mjere', 'jedinica mjere', 'mjera'],
   cijena:    ['unit price', 'jedinicna cijena', 'cijena', 'cena', 'mpc', 'maloprodajna cijena', 'prodajna cijena', 'price', 'val'],
   stanje:    ['stanje/m2/m3/kom', 'stanje', 'zaliha', 'kolicina', 'količina', 'kol', 'qty', 'raspolozivo'],
+  grupa:     ['code-group', 'code group', 'grupa', 'group', 'kod grupe', 'tip', 'kategorija'],
 };
 
 function nagadjajMapiranje(header) {
@@ -259,6 +305,25 @@ function citajRadniList(buffer) {
   const wb = XLSX.read(buffer, { type: 'buffer' });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   return XLSX.utils.sheet_to_json(sheet, { defval: '' });
+}
+
+// Parsira broj iz Excel ćelije, hvatajući i evropski format (tačka=hiljade, zarez=decimale,
+// npr. "1.234,56") i standardni JS format ("1234.56"). Prije ovoga se koristio samo
+// .replace(',', '.') koji je "1.234,56" pretvarao u "1.234.56" — parseFloat bi to pročitao
+// kao 1.234 (stao na drugoj tački), gubeći tri nule iz cijene/stanja.
+function parsirajBroj(raw) {
+  let s = String(raw ?? '').trim();
+  if (!s) return 0;
+  if (s.includes(',') && s.includes('.')) {
+    // Oba znaka prisutna -> evropski format: tačka je hiljade, zarez je decimalni separator.
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (s.includes(',')) {
+    // Samo zarez -> decimalni separator.
+    s = s.replace(',', '.');
+  }
+  // Samo tačka (ili ništa posebno) -> već je u standardnom formatu, ostaje kako jest.
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
 }
 
 // POST /api/roba/import/pregled - vraća zaglavlja + par primjera redova + predloženo mapiranje
@@ -335,10 +400,9 @@ router.post('/import', upload.single('file'), async (req, res) => {
         const naziv = String(row[mapping.naziv] ?? '').trim();
         if (!sifra || !naziv) { preskoceno++; continue; }
 
-        const cijenaRaw = mapping.cijena ? row[mapping.cijena] : 0;
-        const stanjeRaw = mapping.stanje ? row[mapping.stanje] : 0;
-        const cijenaFajl = parseFloat(String(cijenaRaw).replace(',', '.')) || 0;
-        const stanjeFajl = parseFloat(String(stanjeRaw).replace(',', '.')) || 0;
+        const cijenaFajl = mapping.cijena ? parsirajBroj(row[mapping.cijena]) : 0;
+        const stanjeFajl = mapping.stanje ? parsirajBroj(row[mapping.stanje]) : 0;
+        const grupa = mapping.grupa ? (String(row[mapping.grupa] ?? '').trim() || null) : null;
 
         // Ako fajl nema posebnu kolonu za jedinicu mjere, pogađamo po obliku broja u
         // koloni stanja: cijeli broj -> "kom", decimalan -> "m2". Samo POLAZNA pretpostavka —
@@ -350,11 +414,11 @@ router.post('/import', upload.single('file'), async (req, res) => {
 
         // 1) Šifrarnik (zajednički za sve PJ) — upsert po šifri
         const robaRes = await pool.query(
-          `INSERT INTO roba (sifra, naziv, jed_mjera, izvor_uvoza)
-           VALUES ($1,$2,$3,$4)
-           ON CONFLICT (sifra) DO UPDATE SET naziv=$2, jed_mjera=$3, izvor_uvoza=$4, azurirano=now()
+          `INSERT INTO roba (sifra, naziv, jed_mjera, izvor_uvoza, grupa)
+           VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (sifra) DO UPDATE SET naziv=$2, jed_mjera=$3, izvor_uvoza=$4, grupa=COALESCE($5, roba.grupa), azurirano=now()
            RETURNING id, (xmax = 0) AS inserted`,
-          [sifra, naziv, jed_mjera, izvor]
+          [sifra, naziv, jed_mjera, izvor, grupa]
         );
         const robaId = robaRes.rows[0].id;
 

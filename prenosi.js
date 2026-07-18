@@ -135,6 +135,19 @@ function citajRadniList(buffer) {
   return XLSX.utils.sheet_to_json(sheet, { defval: '' });
 }
 
+// Isti parser kao u roba.js — hvata i evropski format ("1.234,56") ispravno.
+function parsirajBroj(raw) {
+  let s = String(raw ?? '').trim();
+  if (!s) return 0;
+  if (s.includes(',') && s.includes('.')) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (s.includes(',')) {
+    s = s.replace(',', '.');
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
 // POST /api/prenosi/import/pregled - vraća zaglavlja + uzorak + predlog mapiranja (ne piše u bazu)
 router.post('/import/pregled', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Fajl nije priložen.' });
@@ -184,7 +197,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
 
     for (const row of rows) {
       const sifra = String(row[mapping.sifra] ?? '').trim();
-      const kolicina = parseFloat(String(row[mapping.kolicina] ?? '').replace(',', '.'));
+      const kolicina = parsirajBroj(row[mapping.kolicina]);
       if (!sifra || !kolicina || kolicina <= 0) { preskoceno++; continue; }
 
       const client = await pool.connect();
