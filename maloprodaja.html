@@ -363,6 +363,12 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         <option value="drugo">Drugo</option>
       </select>
     </div>
+    <div class="kupac-fld" id="isp-komitent-fld" style="display:none;">
+      <label>Komitent (pretraga iz baze kupaca) *</label>
+      <input type="text" id="isp-komitent-search" placeholder="Pretraga po imenu/telefonu..." oninput="debounceTraziKomitentaIsplata()">
+      <div id="isp-komitent-rezultati"></div>
+      <div id="isp-komitent-izabran" style="display:none;background:#f7f8fa;border-radius:8px;padding:10px;margin-top:8px;font-size:13px;font-weight:700;"></div>
+    </div>
     <div class="kupac-fld" id="isp-napomena-fld">
       <label id="isp-napomena-lbl">Napomena (opciono)</label>
       <input type="text" id="isp-napomena" placeholder="Detalji...">
@@ -1023,16 +1029,57 @@ function promijeniRazlogIsplate(){
   const razlog=document.getElementById('isp-razlog').value;
   const lbl=document.getElementById('isp-napomena-lbl');
   const polje=document.getElementById('isp-napomena');
+  const komitentFld=document.getElementById('isp-komitent-fld');
   if(razlog==='povrat_komitentu'){
-    lbl.textContent='Ime komitenta (kome se vraća) *';
-    polje.placeholder='Ime i prezime / firma...';
-  }else if(razlog==='servis'){
-    lbl.textContent='Koji servis *';
-    polje.placeholder='Naziv servisa...';
-  }else{
+    komitentFld.style.display='block';
     lbl.textContent='Napomena (opciono)';
-    polje.placeholder='Detalji...';
+    polje.placeholder='Dodatni detalji o povratu...';
+  }else{
+    komitentFld.style.display='none';
+    isplataKomitent=null;
+    document.getElementById('isp-komitent-izabran').style.display='none';
+    document.getElementById('isp-komitent-search').value='';
+    if(razlog==='servis'){
+      lbl.textContent='Koji servis *';
+      polje.placeholder='Naziv servisa...';
+    }else{
+      lbl.textContent='Napomena (opciono)';
+      polje.placeholder='Detalji...';
+    }
   }
+}
+
+let isplataKomitent=null;
+let isplataKomitentTimer=null;
+function debounceTraziKomitentaIsplata(){
+  clearTimeout(isplataKomitentTimer);
+  const q=document.getElementById('isp-komitent-search').value;
+  isplataKomitentTimer=setTimeout(()=>traziKomitentaIsplata(q), 250);
+}
+async function traziKomitentaIsplata(q){
+  const cont=document.getElementById('isp-komitent-rezultati');
+  if(!q||!q.trim()){cont.innerHTML='';return;}
+  cont.innerHTML='<div class="spinner">Pretraga...</div>';
+  try{
+    const r=await fetch(`${API}/api/kupci?q=${encodeURIComponent(q)}&limit=15`);
+    const rows=await r.json();
+    if(!rows.length){cont.innerHTML='<div class="empty-msg">Nema rezultata.</div>';return;}
+    cont.innerHTML=rows.map(k=>`
+      <div class="kupac-rez-item" onclick='izaberiKomitentaIsplata(${JSON.stringify(k).replace(/'/g,"&apos;")})'>
+        <div class="kupac-rez-naziv">${esc(k.naziv)}</div>
+        <div class="kupac-rez-meta">${[k.telefon,k.grad].filter(Boolean).map(esc).join(' · ')||'—'}</div>
+      </div>
+    `).join('');
+  }catch(e){
+    cont.innerHTML='<div class="empty-msg">Greška pri pretrazi.</div>';
+  }
+}
+function izaberiKomitentaIsplata(kupac){
+  isplataKomitent=kupac;
+  document.getElementById('isp-komitent-izabran').style.display='block';
+  document.getElementById('isp-komitent-izabran').textContent=`${kupac.naziv}${kupac.telefon?' · '+kupac.telefon:''}`;
+  document.getElementById('isp-komitent-rezultati').innerHTML='';
+  document.getElementById('isp-komitent-search').value='';
 }
 
 function pripremiIsplatu(){
@@ -1044,20 +1091,25 @@ function pripremiIsplatu(){
   const iznos=parseFloat(document.getElementById('isp-iznos').value);
 
   if(!razlog){greskaDiv.textContent='⚠ Izaberite razlog isplate.';greskaDiv.style.display='block';return;}
-  if((razlog==='povrat_komitentu'||razlog==='servis') && !napomena){
-    greskaDiv.textContent='⚠ '+(razlog==='povrat_komitentu'?'Unesite ime komitenta.':'Unesite koji servis.');
-    greskaDiv.style.display='block';return;
+  if(razlog==='povrat_komitentu' && !isplataKomitent){
+    greskaDiv.textContent='⚠ Izaberite komitenta iz baze kupaca.';greskaDiv.style.display='block';return;
+  }
+  if(razlog==='servis' && !napomena){
+    greskaDiv.textContent='⚠ Unesite koji servis.';greskaDiv.style.display='block';return;
   }
   if(!iznos||iznos<=0){greskaDiv.textContent='⚠ Unesite ispravan iznos.';greskaDiv.style.display='block';return;}
 
-  isplataZaPotvrdu={razlog, napomena: napomena||null, iznos};
+  isplataZaPotvrdu={razlog, napomena: napomena||null, iznos, kupac_id: razlog==='povrat_komitentu'?isplataKomitent.id:null};
   document.getElementById('isp-ov-iznos').textContent=fm(iznos)+' KM';
   document.getElementById('isp-ov-detalji').innerHTML=`
     <div class="ov-stavka"><span>Razlog</span><span>${esc(RAZLOG_ISPLATE_LABEL[razlog])}</span></div>
+    ${razlog==='povrat_komitentu'?`<div class="ov-stavka"><span>Komitent</span><span>${esc(isplataKomitent.naziv)}</span></div>`:''}
     ${napomena?`<div class="ov-stavka"><span>Napomena</span><span>${esc(napomena)}</span></div>`:''}
     <div class="ov-stavka"><span>Prodajni objekat</span><span>${esc(trenutniObjekat.naziv)}</span></div>
   `;
-  document.getElementById('isp-primalac-ime').value='';
+  // Za povrat komitentu, primalac je logično sam komitent — predlaži njegovo ime,
+  // ostaje izmjenjivo (npr. ako fizički preuzima neko drugi u njegovo ime).
+  document.getElementById('isp-primalac-ime').value=razlog==='povrat_komitentu'?(isplataKomitent.naziv||''):'';
   document.getElementById('ov-isplata').classList.add('on');
 }
 
@@ -1081,6 +1133,7 @@ async function potvrdiIsplatu(){
         razlog: isplataZaPotvrdu.razlog,
         napomena: isplataZaPotvrdu.napomena,
         primalac_ime: ime,
+        kupac_id: isplataZaPotvrdu.kupac_id,
       }),
     });
     const data=await r.json();
@@ -1258,7 +1311,7 @@ async function ucitajSaldoPoKupcima(){
 
 const TIP_TRANSAKCIJE_LABEL={
   avans_uplata:'Avansna uplata', otpremnica_dug:'Dug (otpremnica)', naplata_duga:'Naplata duga',
-  avans_iskoristen:'Iskorišten avans', visak_u_avans:'Višak → avans',
+  avans_iskoristen:'Iskorišten avans', visak_u_avans:'Višak → avans', povrat_komitentu:'Povrat (isplata)',
 };
 
 async function otvoriKarticuKupca(kupacId, kupacNaziv){

@@ -68,11 +68,12 @@ const RAZLOG_LABEL = {
 // POST /api/isplate - nova isplata, potvrđena od primaoca (jedini trenutak upisa).
 // Upisuje se i u "isplate" (detaljan zapis) i u "gotovina" (kao NEGATIVAN iznos, izvor
 // 'Maloprodaja') — istom logikom kao prodaja (otpremnice.js) — da blagajna prikazuje
-// kompletnu sliku, ne samo prodaju.
-// body: { objekt_id, iznos, razlog, napomena, primalac_ime }
+// kompletnu sliku, ne samo prodaju. Ako je razlog 'povrat_komitentu' i vezan je stvaran
+// kupac (kupac_id), povrat se upisuje i u njegovu karticu (smanjuje avans/saldo).
+// body: { objekt_id, iznos, razlog, napomena, primalac_ime, kupac_id }
 router.post('/', async (req, res) => {
   const user = req.session.user;
-  const { objekt_id, iznos, razlog, napomena, primalac_ime } = req.body;
+  const { objekt_id, iznos, razlog, napomena, primalac_ime, kupac_id } = req.body;
 
   if (!objekt_id) return res.status(400).json({ error: 'Nedostaje prodajni objekat.' });
   const izn = parseFloat(iznos);
@@ -80,6 +81,8 @@ router.post('/', async (req, res) => {
   if (!RAZLOZI.includes(razlog)) return res.status(400).json({ error: 'Neispravan razlog isplate.' });
   if (!primalac_ime || !primalac_ime.trim())
     return res.status(400).json({ error: 'Ime primaoca je obavezno za potvrdu isplate.' });
+  if (razlog === 'povrat_komitentu' && !kupac_id)
+    return res.status(400).json({ error: 'Za povrat komitentu morate izabrati stvarnog kupca iz baze.' });
 
   const client = await pool.connect();
   try {
@@ -94,9 +97,10 @@ router.post('/', async (req, res) => {
     const r = await client.query(
       `INSERT INTO isplate
          (objekt_id, objekt_naziv, iznos, razlog, napomena, primalac_ime,
-          potvrdjeno_vrijeme, komercijalista_id, komercijalista_ime, javni_token)
-       VALUES ($1,$2,$3,$4,$5,$6, now(), $7,$8,$9) RETURNING *`,
-      [objekt_id, objektNaziv, izn, razlog, napomenaTrim, primalac_ime.trim(), user.id, user.ime_prezime, javniToken]
+          potvrdjeno_vrijeme, komercijalista_id, komercijalista_ime, javni_token, kupac_id)
+       VALUES ($1,$2,$3,$4,$5,$6, now(), $7,$8,$9,$10) RETURNING *`,
+      [objekt_id, objektNaziv, izn, razlog, napomenaTrim, primalac_ime.trim(), user.id, user.ime_prezime,
+       javniToken, kupac_id || null]
     );
     const isplata = r.rows[0];
 
@@ -106,6 +110,19 @@ router.post('/', async (req, res) => {
        VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5, $6) RETURNING id`,
       [-izn, user.ime_prezime, opis, objektNaziv, `ISP-${isplata.id}`, javniToken]
     );
+
+    // Povrat komitentu — upiši i u njegovu karticu (kartica kupca), kao smanjenje
+    // avansa/saldo (novac fizički napušta njegov "račun" kod nas, vraća mu se u ruke).
+    if (razlog === 'povrat_komitentu' && kupac_id) {
+      await client.query(
+        `INSERT INTO kupac_transakcije
+           (kupac_id, tip, iznos, opis, objekt_id, objekt_naziv,
+            komercijalista_id, komercijalista_ime, gotovina_id)
+         VALUES ($1,'povrat_komitentu',$2,$3,$4,$5,$6,$7,$8)`,
+        [kupac_id, -izn, `Povrat — ISP-${isplata.id}${napomenaTrim ? ' (' + napomenaTrim + ')' : ''}`,
+         objekt_id, objektNaziv, user.id, user.ime_prezime, g.rows[0].id]
+      );
+    }
 
     await client.query('COMMIT');
     res.status(201).json({ ...isplata, gotovina_id: g.rows[0].id });
