@@ -47,6 +47,7 @@ app.use('/api/auth',   require('./auth'));
 app.use('/api/config', require('./config'));
 app.use('/api/otpremnice-javno', require('./otpremnice-javno'));
 app.use('/api/isplate-javno', require('./isplate-javno'));
+app.use('/api/uplate-javno', require('./uplate-javno'));
 // ─── Zaštićene rute ───────────────────────────────────────────────────────
 app.use('/api/upload',     requireLoginOrApiKey, require('./upload'));
 app.use('/api/zaposleni',   requireLoginOrApiKey, require('./zaposleni'));
@@ -59,6 +60,7 @@ app.use('/api/ponude',      requireLoginOrApiKey, require('./ponude'));
 app.use('/api/prodajni-objekti', requireLoginOrApiKey, require('./prodajni-objekti'));
 app.use('/api/prenosi', requireLoginOrApiKey, require('./prenosi'));
 app.use('/api/isplate', requireLoginOrApiKey, require('./isplate'));
+app.use('/api/uplate', requireLoginOrApiKey, require('./uplate'));
 // ─── Statički fajlovi ─────────────────────────────────────────────────────
 app.use((req, res, next) => {
   if (req.path.endsWith('.html')) {

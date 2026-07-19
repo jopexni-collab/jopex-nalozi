@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Potvrda o uplati – JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f0f2f5;--border:#d0d7de;--green:#1f8a4c;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:#1a2733;font-size:14px;}
+
+.toolbar{background:var(--blue);color:#fff;padding:10px 16px;display:flex;justify-content:space-between;
+  align-items:center;position:sticky;top:0;}
+.toolbar h1{font-size:15px;font-weight:700;}
+.btn-print{background:#fff;color:var(--blue);border:none;border-radius:6px;font:inherit;font-weight:700;
+  font-size:12.5px;padding:8px 14px;cursor:pointer;min-height:36px;}
+
+.dok{max-width:640px;margin:18px auto;background:#fff;border:1px solid var(--border);border-radius:10px;
+  padding:28px 24px;}
+
+.memo{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--green);
+  padding-bottom:16px;margin-bottom:20px;}
+.memo-naziv{font-size:22px;font-weight:800;color:var(--dark);letter-spacing:.5px;}
+.memo-info{font-size:11.5px;color:#6b7a8d;line-height:1.6;margin-top:4px;}
+.memo-doc-tip{text-align:right;font-size:13px;color:#6b7a8d;}
+.memo-doc-tip b{display:block;font-size:16px;color:var(--green);}
+
+.meta-red{display:flex;justify-content:space-between;font-size:12.5px;color:#6b7a8d;margin-bottom:18px;
+  flex-wrap:wrap;gap:8px;}
+
+.iznos-box{text-align:center;background:#e8f5ec;border-radius:10px;padding:20px;margin-bottom:20px;}
+.iznos-box .lbl{font-size:11px;font-weight:700;color:#8b96a5;text-transform:uppercase;letter-spacing:.5px;}
+.iznos-box .val{font-size:34px;font-weight:800;color:var(--green);margin-top:4px;}
+
+.info-box{background:#f7f8fa;border-radius:8px;padding:14px 16px;margin-bottom:16px;}
+.info-red{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e8eaed;font-size:13px;}
+.info-red:last-child{border-bottom:none;}
+.info-red span:first-child{color:#6b7a8d;}
+.info-red span:last-child{font-weight:700;text-align:right;}
+
+.napomena-txt{font-size:11px;color:#9aa5b1;margin-top:16px;line-height:1.5;text-align:center;}
+.stanje-msg{text-align:center;color:#9aa5b1;font-size:13px;padding:60px 20px;}
+
+@media print{
+  body{background:#fff;}
+  .toolbar{display:none;}
+  .dok{border:none;margin:0;max-width:100%;}
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <h1>💳 Potvrda o uplati</h1>
+  <button class="btn-print" onclick="window.print()">🖨️ Štampaj / Sačuvaj kao PDF</button>
+</div>
+
+<div class="dok" id="dok">
+  <div class="stanje-msg" id="stanje-msg">Učitavanje...</div>
+</div>
+
+<script>
+const FIRMA = { naziv: 'JoPeX', adresa: '', pib: '', kontakt: '' };
+const API='';
+function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fd(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('sr-Latn-BA')+' '+dt.toLocaleTimeString('sr-Latn-BA',{hour:'2-digit',minute:'2-digit'});}
+function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function getToken(){return new URLSearchParams(location.search).get('token')||'';}
+
+async function ucitaj(){
+  const token=getToken();
+  const dok=document.getElementById('dok');
+  if(!token){dok.innerHTML='<div class="stanje-msg">Nedostaje link ka potvrdi o uplati.</div>';return;}
+  try{
+    const r=await fetch(`${API}/api/uplate-javno/${encodeURIComponent(token)}`);
+    const u=await r.json();
+    if(!r.ok) throw new Error(u.error||'Uplata nije pronađena.');
+
+    document.title=`Potvrda o uplati ${u.broj} – JoPeX`;
+    dok.innerHTML=`
+      <div class="memo">
+        <div>
+          <div class="memo-naziv">${esc(FIRMA.naziv)}${u.objekt_naziv?` <span style="font-size:13px;font-weight:600;color:#6b7a8d;">— ${esc(u.objekt_naziv)}</span>`:''}</div>
+          <div class="memo-info">
+            ${FIRMA.adresa?esc(FIRMA.adresa)+'<br>':''}
+            ${FIRMA.pib?esc(FIRMA.pib)+'<br>':''}
+            ${FIRMA.kontakt?esc(FIRMA.kontakt):''}
+          </div>
+        </div>
+        <div class="memo-doc-tip"><b>POTVRDA O UPLATI</b>${esc(u.broj)}</div>
+      </div>
+
+      <div class="meta-red">
+        <span>Datum: <b>${fd(u.datum)}</b></span>
+        <span>Primio: ${esc(u.komercijalista_ime||'—')}${u.objekt_naziv?' · '+esc(u.objekt_naziv):''}</span>
+      </div>
+
+      <div class="iznos-box">
+        <div class="lbl">Uplaćeni avans</div>
+        <div class="val">${fm(u.iznos)} KM</div>
+      </div>
+
+      <div class="info-box">
+        <div class="info-red"><span>Kupac</span><span>${esc(u.kupac_naziv)}</span></div>
+        ${u.opis?`<div class="info-red"><span>Napomena</span><span>${esc(u.opis)}</span></div>`:''}
+        <div class="info-red"><span>Trenutni saldo (avans kod nas)</span><span>${fm(u.trenutni_saldo)} KM</span></div>
+      </div>
+
+      <div class="napomena-txt">Ovaj dokument potvrđuje uplatu avansa kod JoPeX. Avans se koristi za buduće kupovine. Ne predstavlja fiskalni račun.</div>
+    `;
+  }catch(e){
+    dok.innerHTML=`<div class="stanje-msg">${esc(e.message)}</div>`;
+  }
+}
+ucitaj();
+</script>
+</body>
+</html>

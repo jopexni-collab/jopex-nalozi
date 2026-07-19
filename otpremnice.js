@@ -5,7 +5,7 @@ const crypto = require('crypto');
 
 const RAZLOZI = ['kvalitet', 'kolicina', 'lom', 'jedinica', 'drugo'];
 
-// Admin uvijek prolazi; ostali moraju imati moze_prodavati=true (dozvola iz korisnici.html).  uvezi sto pre
+// Admin uvijek prolazi; ostali moraju imati moze_prodavati=true (dozvola iz korisnici.html).
 router.use((req, res, next) => {
   const u = req.session?.user;
   if (u?.rola === 'admin' || u?.moze_prodavati) return next();
@@ -199,6 +199,26 @@ router.post('/pregled', async (req, res) => {
 });
 
 // GET /api/otpremnice/:id - zaglavlje + stavke
+// GET /api/otpremnice/saldo-po-kupcima?objekt_id=X - lista SVIH kupaca sa saldom != 0
+// (pozitivan = avans/zeleno, negativan = duguje/crveno) — za tab "Ne saldirano".
+// MORA biti prije "/:id" ispod — inače Express tumači ovo kao vrijednost za :id.
+router.get('/saldo-po-kupcima', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT k.id AS kupac_id, k.naziv, k.telefon, k.grad,
+              COALESCE(SUM(t.iznos),0) AS saldo
+       FROM kupac_transakcije t
+       JOIN kupci k ON k.id = t.kupac_id
+       GROUP BY k.id, k.naziv, k.telefon, k.grad
+       HAVING COALESCE(SUM(t.iznos),0) != 0
+       ORDER BY SUM(t.iznos) ASC`
+    );
+    res.json(r.rows.map(row => ({ ...row, saldo: +parseFloat(row.saldo).toFixed(2) })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const user = req.session?.user;
@@ -270,6 +290,21 @@ router.post('/potvrdi', async (req, res) => {
         throw Object.assign(new Error('Iznos koji kupac plaća sada ne može biti veći od ukupnog iznosa otpremnice.'), { status: 400 });
     }
     iznosPlaceno = +iznosPlaceno.toFixed(2);
+
+    // Ako kupac ima avans (pozitivan saldo u kartici) i traženo je da se iskoristi, prvo
+    // to primijeni na ovu kupovinu — smanjuje koliko stvarno treba platiti/duguje.
+    let iznosIzAvansa = 0;
+    if (kupac_id && req.body.koristi_avans) {
+      const saldoRes = await client.query(
+        `SELECT COALESCE(SUM(iznos),0) AS saldo FROM kupac_transakcije WHERE kupac_id=$1`, [kupac_id]
+      );
+      const trenutniSaldo = parseFloat(saldoRes.rows[0].saldo);
+      if (trenutniSaldo > 0) {
+        const josDuguje = +(ukupanIznos - iznosPlaceno).toFixed(2);
+        iznosIzAvansa = +Math.min(trenutniSaldo, josDuguje).toFixed(2);
+        if (iznosIzAvansa > 0) iznosPlaceno = +(iznosPlaceno + iznosIzAvansa).toFixed(2);
+      }
+    }
     const statusPlacanja = iznosPlaceno >= ukupanIznos ? 'placeno' : (iznosPlaceno > 0 ? 'djelimicno' : 'duguje');
 
     const broj = await noviBroj(client);
@@ -308,22 +343,52 @@ router.post('/potvrdi', async (req, res) => {
     }
 
     const opisKupca = kupac_naziv ? kupac_naziv.trim() : 'kupac nepoznat';
-    // U blagajnu ide SAMO ono što je stvarno plaćeno SAD — ne cio ukupan_iznos ako je
-    // djelimično/na dug. Ako ništa nije plaćeno (nacin='dug'), gotovina se uopšte ne dira.
+    // U blagajnu ide SAMO SVJEŽA gotovina — ne dio pokriven avansom (taj novac je već
+    // ubrojan kad je avans prvobitno uplaćen, ne bi trebalo da se broji dva puta).
+    const iznosGotovine = +(iznosPlaceno - iznosIzAvansa).toFixed(2);
     let gotovinaId = null;
-    if (iznosPlaceno > 0) {
+    if (iznosGotovine > 0) {
       const opisSuffiks = statusPlacanja === 'djelimicno' ? ' (djelimično plaćanje)' : '';
       const g = await client.query(
         `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
          VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5) RETURNING id`,
-        [iznosPlaceno, user.ime_prezime, opisKupca + opisSuffiks, objektNaziv, broj]
+        [iznosGotovine, user.ime_prezime, opisKupca + opisSuffiks, objektNaziv, broj]
       );
       gotovinaId = g.rows[0].id;
       await client.query('UPDATE otpremnice SET gotovina_id=$1 WHERE id=$2', [gotovinaId, otpId]);
     }
 
+    // Kartica kupca: prvo zapiši korišćen avans (ako ga je bilo), pa preostali (novi) dug.
+    if (kupac_id) {
+      if (iznosIzAvansa > 0) {
+        await client.query(
+          `INSERT INTO kupac_transakcije
+             (kupac_id, tip, iznos, opis, otpremnica_id, otpremnica_broj, objekt_id, objekt_naziv,
+              komercijalista_id, komercijalista_ime)
+           VALUES ($1,'avans_iskoristen',$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [kupac_id, -iznosIzAvansa, `Iskorišten avans za ${broj}`, otpId, broj, objektId, objektNaziv,
+           user.id, user.ime_prezime]
+        );
+      }
+      const preostaliDug = +(ukupanIznos - iznosPlaceno).toFixed(2);
+      if (preostaliDug > 0) {
+        await client.query(
+          `INSERT INTO kupac_transakcije
+             (kupac_id, tip, iznos, opis, otpremnica_id, otpremnica_broj, objekt_id, objekt_naziv,
+              komercijalista_id, komercijalista_ime)
+           VALUES ($1,'otpremnica_dug',$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [kupac_id, -preostaliDug, `Dug po otpremnici ${broj}`, otpId, broj, objektId, objektNaziv,
+           user.id, user.ime_prezime]
+        );
+      }
+    }
+
     await client.query('COMMIT');
-    res.status(201).json({ ...h.rows[0], gotovina_id: gotovinaId, stavke: sastavljene, iznos_placeno: iznosPlaceno, status_placanja: statusPlacanja, duguje: +(ukupanIznos - iznosPlaceno).toFixed(2) });
+    res.status(201).json({
+      ...h.rows[0], gotovina_id: gotovinaId, stavke: sastavljene, iznos_placeno: iznosPlaceno,
+      status_placanja: statusPlacanja, duguje: +(ukupanIznos - iznosPlaceno).toFixed(2),
+      iznos_iz_avansa: iznosIzAvansa,
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(err.status || 500).json({ error: err.message });
@@ -384,6 +449,7 @@ router.post('/:id/naplati-dug', async (req, res) => {
   if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
   const iznos = parseFloat(req.body.iznos);
   if (!iznos || iznos <= 0) return res.status(400).json({ error: 'Unesite ispravan iznos.' });
+  const izvor = req.body.izvor === 'avans' ? 'avans' : 'gotovina';
 
   const client = await pool.connect();
   try {
@@ -394,10 +460,24 @@ router.post('/:id/naplati-dug', async (req, res) => {
     const trenutnoDuguje = +(parseFloat(otp.ukupan_iznos) - parseFloat(otp.iznos_placeno)).toFixed(2);
     if (trenutnoDuguje <= 0)
       throw Object.assign(new Error('Ova otpremnica je već u potpunosti plaćena.'), { status: 400 });
-    if (iznos > trenutnoDuguje)
-      throw Object.assign(new Error(`Iznos ne može biti veći od trenutnog duga (${trenutnoDuguje} KM).`), { status: 400 });
 
-    const noviIznosPlaceno = +(parseFloat(otp.iznos_placeno) + iznos).toFixed(2);
+    if (izvor === 'avans') {
+      if (!otp.kupac_id) throw Object.assign(new Error('Otpremnica nema povezanog kupca — avans nije moguć.'), { status: 400 });
+      const saldoRes = await client.query(
+        `SELECT COALESCE(SUM(iznos),0) AS saldo FROM kupac_transakcije WHERE kupac_id=$1`, [otp.kupac_id]
+      );
+      const saldo = parseFloat(saldoRes.rows[0].saldo);
+      if (iznos > saldo)
+        throw Object.assign(new Error(`Kupac nema dovoljno avansa (raspoloživo: ${saldo.toFixed(2)} KM).`), { status: 400 });
+      if (iznos > trenutnoDuguje)
+        throw Object.assign(new Error(`Iznos ne može biti veći od trenutnog duga (${trenutnoDuguje} KM).`), { status: 400 });
+    }
+    // Za gotovinu dozvoljavamo iznos > trenutnoDuguje (kupac daje više nego što duguje) —
+    // višak automatski postaje novi avans (vidi ispod), ne odbija se zahtjev.
+
+    const iznosZaDug = Math.min(iznos, trenutnoDuguje);
+    const visak = +(iznos - iznosZaDug).toFixed(2);
+    const noviIznosPlaceno = +(parseFloat(otp.iznos_placeno) + iznosZaDug).toFixed(2);
     const noviStatus = noviIznosPlaceno >= parseFloat(otp.ukupan_iznos) ? 'placeno' : 'djelimicno';
 
     await client.query(
@@ -406,18 +486,46 @@ router.post('/:id/naplati-dug', async (req, res) => {
     );
 
     const opisKupca = otp.kupac_naziv ? otp.kupac_naziv.trim() : 'kupac nepoznat';
-    const g = await client.query(
-      `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
-       VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5) RETURNING id`,
-      [iznos, user.ime_prezime, `Naplata duga — ${opisKupca}`, otp.objekt_naziv, otp.broj]
-    );
+    let gotovinaId = null;
+
+    if (izvor === 'gotovina') {
+      // Sva gotovina (uključujući eventualni višak) STVARNO ulazi u kasu sada.
+      const g = await client.query(
+        `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
+         VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5) RETURNING id`,
+        [iznos, user.ime_prezime, `Naplata duga — ${opisKupca}${visak > 0 ? ' (uklj. višak u avans)' : ''}`, otp.objekt_naziv, otp.broj]
+      );
+      gotovinaId = g.rows[0].id;
+    }
+
+    if (otp.kupac_id) {
+      await client.query(
+        `INSERT INTO kupac_transakcije
+           (kupac_id, tip, iznos, opis, otpremnica_id, otpremnica_broj, objekt_id, objekt_naziv,
+            komercijalista_id, komercijalista_ime, gotovina_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [otp.kupac_id, izvor === 'avans' ? 'avans_iskoristen' : 'naplata_duga', iznosZaDug,
+         `Naplata duga za ${otp.broj}`, otp.id, otp.broj, otp.objekt_id, otp.objekt_naziv,
+         user.id, user.ime_prezime, gotovinaId]
+      );
+      if (visak > 0) {
+        await client.query(
+          `INSERT INTO kupac_transakcije
+             (kupac_id, tip, iznos, opis, otpremnica_id, otpremnica_broj, objekt_id, objekt_naziv,
+              komercijalista_id, komercijalista_ime, gotovina_id)
+           VALUES ($1,'visak_u_avans',$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [otp.kupac_id, visak, `Višak pri naplati ${otp.broj} — postaje avans`, otp.id, otp.broj,
+           otp.objekt_id, otp.objekt_naziv, user.id, user.ime_prezime, gotovinaId]
+        );
+      }
+    }
 
     await client.query('COMMIT');
     res.json({
-      ok: true, otpremnica_id: otp.id, broj: otp.broj, naplaceno_sada: iznos,
+      ok: true, otpremnica_id: otp.id, broj: otp.broj, naplaceno_sada: iznosZaDug, visak_u_avans: visak,
       iznos_placeno: noviIznosPlaceno, status_placanja: noviStatus,
       preostalo_duguje: +(parseFloat(otp.ukupan_iznos) - noviIznosPlaceno).toFixed(2),
-      gotovina_id: g.rows[0].id,
+      gotovina_id: gotovinaId,
     });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -427,6 +535,37 @@ router.post('/:id/naplati-dug', async (req, res) => {
   }
 });
 
+// GET /api/otpremnice/kupac/:kupac_id/saldo - trenutni saldo kupca (pozitivan = avans,
+// negativan = duguje) — koristi se za predlog "iskoristi avans" pri prodaji/naplati.
+router.get('/kupac/:kupac_id/saldo', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT COALESCE(SUM(iznos),0) AS saldo FROM kupac_transakcije WHERE kupac_id=$1`,
+      [req.params.kupac_id]
+    );
+    res.json({ saldo: +parseFloat(r.rows[0].saldo).toFixed(2) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/otpremnice/kupac/:kupac_id/kartica - istorija svih transakcija (avansi,
+// dugovi, naplate) jednog kupca, sa saldom.
+router.get('/kupac/:kupac_id/kartica', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT * FROM kupac_transakcije WHERE kupac_id=$1 ORDER BY datum DESC`,
+      [req.params.kupac_id]
+    );
+    const saldo = r.rows.reduce((s, t) => s + parseFloat(t.iznos), 0);
+    res.json({ transakcije: r.rows, saldo: +saldo.toFixed(2) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/otpremnice/saldo-po-kupcima?objekt_id=X - lista SVIH kupaca sa saldom != 0
+// (pozitivan = avans/zeleno, negativan = duguje/crveno) — za tab "Ne saldirano".
 // POST /api/otpremnice/rucni-dug - RUČNI unos istorijskog duga (nastao PRIJE uvođenja
 // ovog sistema, npr. iz Excel/papirne evidencije) — BEZ stavki robe i BEZ diranja stanja
 // (roba je odavno izašla nekim drugim putem, ne kroz ovaj sistem). Samo admin, jer je ovo
