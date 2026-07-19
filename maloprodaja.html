@@ -135,7 +135,8 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 .ov-iznos-lbl{font-size:13px;color:#6b7a8d;margin-top:10px;}
 .ov-iznos{font-size:42px;font-weight:800;color:var(--dark);margin:4px 0 18px;}
 .ov-stavke{width:100%;max-width:420px;background:#f7f8fa;border-radius:10px;padding:10px 14px;margin-bottom:20px;}
-.ov-stavka{display:flex;justify-content:space-between;font-size:12.5px;padding:5px 0;border-bottom:1px solid #e8eaed;}
+.ov-stavka{display:flex;justify-content:space-between;font-size:13.5px;font-weight:700;color:#1a2733;
+  padding:6px 0;border-bottom:1px solid #e8eaed;}
 .ov-stavka:last-child{border-bottom:none;}
 .ov-kupac-fld{width:100%;max-width:420px;margin-top:auto;}
 .ov-kupac-fld label{font-size:13px;font-weight:600;color:#1a2733;display:block;margin-bottom:6px;}
@@ -1196,7 +1197,33 @@ function izgradiIDodajStavku(){
   return true;
 }
 
+// Da li su polja za TRENUTNO izabranu jedinicu/mod prazna — koristi se da "Dodaj u
+// košaricu" zna da li uopšte ima šta novo da doda, ili korisnik samo želi da završi
+// (nakon što je već dodao jednu ili više dimenzija preko zelenog dugmeta).
+function suPoljaZaTrenutnuJedinicuPrazna(){
+  if(dasJedinica==='kom') return !document.getElementById('das-kom').value;
+  if(dasJedinica==='m2'){
+    if(dasM2mode==='direktno') return !document.getElementById('das-m2-vr').value;
+    return !document.getElementById('das-m2-duzina').value && !document.getElementById('das-m2-visina').value;
+  }
+  if(dasJedinica==='m3'){
+    if(dasM3mode==='direktno') return !document.getElementById('das-m3-vr').value;
+    return !document.getElementById('das-m3-duzina').value && !document.getElementById('das-m3-visina').value && !document.getElementById('das-m3-debljina').value;
+  }
+  return true;
+}
+
 function potvrdiDodajStavku(){
+  const vecImaDodatih = dasArtikal && kosarica.some(k=>k.roba_id===dasArtikal.id);
+  if(vecImaDodatih && suPoljaZaTrenutnuJedinicuPrazna()){
+    // Ništa novo nije uneseno u poljima, ali već postoji bar jedna dodata dimenzija ovog
+    // artikla (preko "+ Dodaj novu dimenziju") — samo završi, ne traži da se nešto unese.
+    zatvoriDodajStavku();
+    document.getElementById('search').value='';
+    document.getElementById('search').focus();
+    trazi('');
+    return;
+  }
   if(!izgradiIDodajStavku()) return;
   // Namjerno NE otvaramo košaricu — ostaje skupljena (samo brojka+iznos) da pretraga
   // sledećeg artikla ima pun ekran.
@@ -1216,29 +1243,47 @@ function dodajJosDimenzija(){
     document.getElementById('das-m2-visina').value='';
     document.getElementById('das-m2-komada').value='1';
     document.getElementById('das-m2-preview').textContent='';
-    document.getElementById('das-m2-duzina').focus();
   }else if(dasJedinica==='m3'){
     document.getElementById('das-m3-duzina').value='';
     document.getElementById('das-m3-visina').value='';
     document.getElementById('das-m3-debljina').value='';
     document.getElementById('das-m3-komada').value='1';
     document.getElementById('das-m3-preview').textContent='';
-    document.getElementById('das-m3-duzina').focus();
   }
+  // Namjerno BEZ .focus() ovdje — na mobilnom to odmah otvara tastaturu koja
+  // zaklanja/blokira dugme "Dodaj u košaricu" ispod. Korisnik sam dodirne sledeće polje.
   azurirajBrojacDodatihDimenzija();
 }
 
 function azurirajBrojacDodatihDimenzija(){
   if(!dasArtikal) return;
-  const broj=kosarica.filter(k=>k.roba_id===dasArtikal.id).length;
   const el=document.getElementById('das-dimenzije-brojac');
   if(!el) return;
-  if(broj>0){
-    el.style.display='block';
-    el.textContent=`✓ Dodano ${broj} ${broj===1?'stavka':'stavke'} ovog artikla u košaricu`;
-  }else{
-    el.style.display='none';
-  }
+  const stavke=kosarica.map((k,i)=>({...k,idx:i})).filter(k=>k.roba_id===dasArtikal.id);
+  if(!stavke.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='block';
+  el.innerHTML=`
+    <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:4px;">
+      ✓ Dodano ${stavke.length} ${stavke.length===1?'stavka':'stavke'} ovog artikla:
+    </div>
+    <div style="max-height:96px;overflow-y:auto;">
+      ${stavke.map(k=>{
+        const dim=k.duzina_cm?`${k.duzina_cm}${k.debljina_cm?`×${k.visina_cm}×${k.debljina_cm}`:`×${k.visina_cm}`} cm${k.broj_komada>1?` × ${k.broj_komada}kom`:''} — `:'';
+        return `
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;padding:3px 2px;border-bottom:1px solid #e8eaed;">
+          <span>${dim}<b>${k.kolicina} ${esc(k.jed_mjera)}</b></span>
+          <button type="button" onclick="ukloniDimenzijuIzOverlaya(${k.idx})"
+            style="background:none;border:none;color:var(--red);font-size:14px;font-weight:700;cursor:pointer;padding:2px 8px;">✕</button>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function ukloniDimenzijuIzOverlaya(idx){
+  kosarica.splice(idx,1);
+  renderKosarica();
+  azurirajBrojacDodatihDimenzija();
 }
 
 function promijeniKolicinu(idx, delta){
@@ -1430,7 +1475,7 @@ function prikaziPotvrduEkran(pregled){
   document.getElementById('ov-iznos').textContent=fm(pregled.ukupan_iznos)+' KM';
   document.getElementById('ov-stavke').innerHTML=pregled.stavke.map(s=>`
     <div class="ov-stavka">
-      <span>${esc(s.naziv)} × ${s.kolicina}${s.odstupa?' ⚠':''}</span>
+      <span>${esc(s.naziv)} × ${s.kolicina} × ${fm(s.cijena)} KM${s.odstupa?' ⚠':''}</span>
       <span>${s.odstupa?`<s style="opacity:.5">${fm(s.kolicina*s.cijena_zadana)}</s> `:''}${fm(s.iznos)} KM</span>
     </div>
     ${s.odstupa?`<div style="font-size:10.5px;color:var(--red);margin:-4px 0 6px;">
