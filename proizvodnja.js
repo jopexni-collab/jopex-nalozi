@@ -1,4 +1,4 @@
-// routes/proizvodnja.js
+// routes/proizvodnja.js DODAJ NA RAIL
 const express = require('express');
 const router = express.Router();
 const pool = require('./db');
@@ -11,7 +11,7 @@ const ADMIN_COLS = `
   ga.predano AS avans_predano, gn.predano AS naplata_predano
 `;
 
-// JOIN koji provjerava da li je gotovina za avans/naplatu ovog naloga
+// JOIN koji provjerava da li je gotovina za avans/naplatu ovog naloga I OVDE
 // već predata blagajniku (sve odgovarajuće stavke moraju biti predane)
 const GOTOVINA_JOINS = `
   LEFT JOIN LATERAL (
