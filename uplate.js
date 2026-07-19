@@ -34,6 +34,43 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/uplate/suma?objekt_id=&od=&do= - suma uplata za period (za kartice danas/sedmica/period)
+router.get('/suma', async (req, res) => {
+  try {
+    const user = req.session.user;
+    const { objekt_id, od, do: do_ } = req.query;
+    let where = [`tip IN ('avans_uplata','naplata_duga')`];
+    let vals = [];
+    let i = 1;
+    if (user.rola !== 'admin') { where.push(`komercijalista_id = $${i++}`); vals.push(user.id); }
+    if (objekt_id) { where.push(`objekt_id = $${i++}`); vals.push(objekt_id); }
+    if (od) { where.push(`datum >= $${i++}`); vals.push(od); }
+    if (do_) { where.push(`datum <= $${i++}`); vals.push(do_ + ' 23:59:59'); }
+    const sql = `SELECT COALESCE(SUM(iznos),0) AS ukupno, COUNT(*) AS broj FROM kupac_transakcije
+      WHERE ${where.join(' AND ')}`;
+    const r = await pool.query(sql, vals);
+    res.json({ ukupno: +parseFloat(r.rows[0].ukupno).toFixed(2), broj: parseInt(r.rows[0].broj) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/uplate/ne-saldirano - ukupan zbir SVIH pozitivnih saldi (neiskorišćeni avansi)
+// preko svih kupaca — za karticu "Ne saldirane uplate" u Uplata tabu.
+router.get('/ne-saldirano', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT COALESCE(SUM(saldo),0) AS ukupno, COUNT(*) AS broj FROM (
+         SELECT kupac_id, SUM(iznos) AS saldo FROM kupac_transakcije
+         GROUP BY kupac_id HAVING SUM(iznos) > 0
+       ) t`
+    );
+    res.json({ ukupno: +parseFloat(r.rows[0].ukupno).toFixed(2), broj: parseInt(r.rows[0].broj) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/uplate - nova uplata od kupca. Ako kupac ima otvoren dug (negativan saldo,
 // tj. neplaćene otpremnice), uplata se PRVO koristi da ga pokrije (najstarije prvo);
 // ostatak (ako ga ima) ostaje kao čist avans na kartici kupca.

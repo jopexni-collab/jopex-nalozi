@@ -42,7 +42,29 @@ router.get('/suma', async (req, res) => {
         SUM(iznos) FILTER (WHERE predao_blagajniku = false) AS nepredano
       FROM gotovina
     `);
-    res.json(r.rows[0]);
+    // Očekivano od (radnih) naloga — zbir "za naplatu" (ugovorena_suma - avans) preko svih
+    // naloga koji još nisu u potpunosti naplaćeni. Logično se smanjuje kad se nešto naplati
+    // (avans/naplaceno_opis se ažurira u proizvodnja.js, za_naplatu prati taj pad automatski).
+    let ocekivanoNalozi = 0;
+    try {
+      const rn = await pool.query(`
+        SELECT COALESCE(SUM(GREATEST(COALESCE(ugovorena_suma,0) - COALESCE(avans,0), 0)),0) AS ukupno
+        FROM proizvodnja_jopex
+      `);
+      ocekivanoNalozi = parseFloat(rn.rows[0].ukupno) || 0;
+    } catch (e) { /* tabela/kolona se možda razlikuje — ne rušimo cijelu rutu zbog ovoga */ }
+
+    // Očekivano od maloprodaje — zbir svih neplaćenih/djelimično plaćenih otpremnica.
+    let ocekivanoMalo = 0;
+    try {
+      const rm = await pool.query(`
+        SELECT COALESCE(SUM(ukupan_iznos - iznos_placeno),0) AS ukupno
+        FROM otpremnice WHERE status='potvrdjena' AND status_placanja != 'placeno'
+      `);
+      ocekivanoMalo = parseFloat(rm.rows[0].ukupno) || 0;
+    } catch (e) { /* isto — ne rušimo rutu ako tabela/kolona iz nekog razloga ne postoji */ }
+
+    res.json({ ...r.rows[0], ocekivano_nalozi: ocekivanoNalozi.toFixed(2), ocekivano_malo: ocekivanoMalo.toFixed(2) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -110,5 +132,5 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// uvezi
+
 module.exports = router;

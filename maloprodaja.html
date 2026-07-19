@@ -198,6 +198,11 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 .dnevni-total{background:var(--dark);color:#fff;border-radius:10px;padding:14px;text-align:center;
   font-size:16px;font-weight:700;margin-bottom:12px;}
 .dnevni-total .cnt{font-size:11.5px;font-weight:400;opacity:.8;display:block;margin-top:2px;}
+.sume-red{display:flex;gap:8px;padding:12px 14px 0;}
+.suma-mini{flex:1;background:#f7f8fa;border:1px solid var(--border);border-radius:8px;padding:10px 6px;text-align:center;}
+.suma-mini-val{font-size:16px;font-weight:800;color:var(--dark);}
+.suma-mini-lbl{font-size:10px;color:#6b7a8d;margin-top:2px;}
+.suma-mini-zeleno .suma-mini-val{color:var(--green);}
 .btn-otp-posalji{flex:1;font:inherit;font-size:11px;font-weight:700;padding:8px;border-radius:6px;
   border:1px solid var(--border);background:#f7f8fa;color:var(--blue);cursor:pointer;min-height:36px;}
 .mini-posalji{display:none;gap:6px;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);}
@@ -295,9 +300,9 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 <div class="tabs">
   <button class="tab-btn active" data-tab="prodaja">🛒 Prodaja</button>
+  <button class="tab-btn" data-tab="admin" id="tab-admin-btn">🧾 Otpremnice</button>
   <button class="tab-btn" data-tab="isplate">💸 Isplate</button>
   <button class="tab-btn" data-tab="uplata">💳 Uplata</button>
-  <button class="tab-btn" data-tab="admin" id="tab-admin-btn">🧾 Otpremnice</button>
   <button class="tab-btn" data-tab="dugovanja">⚖️ Ne saldirano</button>
 </div>
 
@@ -348,6 +353,15 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 <!-- ═══ TAB: ISPLATE (gotovinske isplate iz kase) ═══ -->
 <div class="view" id="view-isplate">
+  <div class="sume-red" id="isp-sume">
+    <div class="suma-mini"><div class="suma-mini-val" id="isp-suma-danas">—</div><div class="suma-mini-lbl">Danas</div></div>
+    <div class="suma-mini"><div class="suma-mini-val" id="isp-suma-sedmica">—</div><div class="suma-mini-lbl">Ova sedmica</div></div>
+    <div class="suma-mini"><div class="suma-mini-val" id="isp-suma-period">—</div><div class="suma-mini-lbl">Period (od-do)</div></div>
+  </div>
+  <div class="filt-row">
+    <input type="date" id="isp-period-od" onchange="ucitajIsplateSume()">
+    <input type="date" id="isp-period-do" onchange="ucitajIsplateSume()">
+  </div>
   <div class="import-box" id="isplata-forma-box">
     <h3>💸 Nova isplata</h3>
     <div class="kupac-fld">
@@ -447,6 +461,11 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 <!-- ═══ TAB: UPLATA ═══ -->
 <div class="view" id="view-uplata">
+  <div class="sume-red" id="upl-sume">
+    <div class="suma-mini"><div class="suma-mini-val" id="upl-suma-danas">—</div><div class="suma-mini-lbl">Danas</div></div>
+    <div class="suma-mini"><div class="suma-mini-val" id="upl-suma-sedmica">—</div><div class="suma-mini-lbl">Ova sedmica</div></div>
+    <div class="suma-mini suma-mini-zeleno"><div class="suma-mini-val" id="upl-suma-nesaldirano">—</div><div class="suma-mini-lbl">Ne saldirane uplate (avans)</div></div>
+  </div>
   <div class="import-box">
     <h3>💳 Nova uplata (avans)</h3>
     <div class="uzorak-hint">Ako kupac ima otvoren dug, uplata ga automatski pokriva (najstariji prvo). Ostatak (ako ga ima) ostaje kao avans za buduće kupovine.</div>
@@ -687,6 +706,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <label class="chk" style="margin-top:6px;">
         <input type="checkbox" id="ov-koristi-avans" onchange="azurirajPreostaliDug()"> Iskoristi avans za ovu kupovinu
       </label>
+      <div id="ov-avans-efekat" style="font-size:12px;font-weight:700;margin-top:6px;"></div>
     </div>
 
     <div class="kupac-fld" style="width:100%;max-width:420px;">
@@ -894,9 +914,9 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     btn.classList.add('active');
     document.getElementById('view-'+btn.dataset.tab).classList.add('active');
     if(btn.dataset.tab==='admin') loadOtpremnice();
-    if(btn.dataset.tab==='isplate') ucitajIsplateListu();
+    if(btn.dataset.tab==='isplate'){ ucitajIsplateListu(); ucitajIsplateSume(); }
     if(btn.dataset.tab==='dugovanja') ucitajDugovanja();
-    if(btn.dataset.tab==='uplata') {} // nema početnog učitavanja, samo forma
+    if(btn.dataset.tab==='uplata') ucitajUplateSume();
   };
 });
 
@@ -1154,6 +1174,57 @@ async function potvrdiIsplatu(){
   }finally{
     btn.disabled=false; btn.textContent='✓ PRIMALAC POTVRĐUJE';
   }
+}
+
+function nedeljaOd(){
+  const d=new Date();
+  const dan=(d.getDay()+6)%7; // ponedjeljak=0
+  d.setDate(d.getDate()-dan);
+  return d.toISOString().split('T')[0];
+}
+
+async function ucitajIsplateSume(){
+  if(!trenutniObjekat) return;
+  const danas=new Date().toISOString().split('T')[0];
+  const pocetakSedmice=nedeljaOd();
+  try{
+    const [rDanas,rSedmica]=await Promise.all([
+      fetch(`${API}/api/isplate/suma?objekt_id=${trenutniObjekat.id}&od=${danas}&do=${danas}`).then(r=>r.json()),
+      fetch(`${API}/api/isplate/suma?objekt_id=${trenutniObjekat.id}&od=${pocetakSedmice}&do=${danas}`).then(r=>r.json()),
+    ]);
+    document.getElementById('isp-suma-danas').textContent=fm(rDanas.ukupno)+' KM';
+    document.getElementById('isp-suma-sedmica').textContent=fm(rSedmica.ukupno)+' KM';
+  }catch(e){}
+
+  const od=document.getElementById('isp-period-od').value;
+  const do_=document.getElementById('isp-period-do').value;
+  if(od||do_){
+    try{
+      const params=new URLSearchParams({objekt_id:trenutniObjekat.id});
+      if(od) params.set('od',od);
+      if(do_) params.set('do',do_);
+      const r=await fetch(`${API}/api/isplate/suma?${params}`).then(r=>r.json());
+      document.getElementById('isp-suma-period').textContent=fm(r.ukupno)+' KM';
+    }catch(e){}
+  }else{
+    document.getElementById('isp-suma-period').textContent='—';
+  }
+}
+
+async function ucitajUplateSume(){
+  if(!trenutniObjekat) return;
+  const danas=new Date().toISOString().split('T')[0];
+  const pocetakSedmice=nedeljaOd();
+  try{
+    const [rDanas,rSedmica,rNesaldirano]=await Promise.all([
+      fetch(`${API}/api/uplate/suma?objekt_id=${trenutniObjekat.id}&od=${danas}&do=${danas}`).then(r=>r.json()),
+      fetch(`${API}/api/uplate/suma?objekt_id=${trenutniObjekat.id}&od=${pocetakSedmice}&do=${danas}`).then(r=>r.json()),
+      fetch(`${API}/api/uplate/ne-saldirano`).then(r=>r.json()),
+    ]);
+    document.getElementById('upl-suma-danas').textContent=fm(rDanas.ukupno)+' KM';
+    document.getElementById('upl-suma-sedmica').textContent=fm(rSedmica.ukupno)+' KM';
+    document.getElementById('upl-suma-nesaldirano').textContent=fm(rNesaldirano.ukupno)+' KM';
+  }catch(e){}
 }
 
 async function ucitajIsplateListu(){
@@ -1975,15 +2046,31 @@ function postaviNacinPlacanja(nacin){
   document.querySelectorAll('.ce-tip-btn[data-nacin-pl]').forEach(b=>b.classList.toggle('active', b.dataset.nacinPl===nacin));
   document.getElementById('ov-djelimicno-fld').style.display = nacin==='djelimicno' ? 'block' : 'none';
   document.getElementById('ov-dug-napomena').style.display = nacin==='dug' ? 'block' : 'none';
-  if(nacin==='djelimicno') azurirajPreostaliDug();
+  azurirajPreostaliDug();
 }
 
 let kupacAvansSaldo=0;
 function azurirajPreostaliDug(){
   const placeno=parseFloat(document.getElementById('ov-iznos-djelimicno').value)||0;
   const koristiAvans=document.getElementById('ov-koristi-avans')?.checked;
-  const avansPrimjenjen=koristiAvans?Math.min(kupacAvansSaldo, potvrdaUkupanIznos-placeno):0;
-  const preostalo=potvrdaUkupanIznos-placeno-avansPrimjenjen;
+  const bazniOstatak = nacinPlacanjaTrenutni==='djelimicno' ? (potvrdaUkupanIznos-placeno)
+                      : nacinPlacanjaTrenutni==='dug' ? potvrdaUkupanIznos
+                      : potvrdaUkupanIznos; // 'kompletno' — avans se primjenjuje na cio iznos
+  const avansPrimjenjen=koristiAvans?+Math.min(kupacAvansSaldo, bazniOstatak).toFixed(2):0;
+  const preostalo=+(bazniOstatak-avansPrimjenjen).toFixed(2);
+
+  // Efekat avansa — prikazuje se UVIJEK kad je čekiran, bez obzira na način plaćanja
+  // (ranije je ovo bilo vidljivo samo u modu "djelimično", pa je djelovalo da avans "ne radi").
+  const efEl=document.getElementById('ov-avans-efekat');
+  if(koristiAvans && avansPrimjenjen>0){
+    efEl.style.color='var(--green)';
+    efEl.textContent = preostalo>0.004
+      ? `→ Nakon avansa: ${fm(preostalo)} KM ostaje za platiti/dug`
+      : `→ Avans pokriva cio iznos — nema duga`;
+  }else{
+    efEl.textContent='';
+  }
+
   const el=document.getElementById('ov-preostali-dug');
   let tekst;
   if(preostalo>0.004) tekst=`Ostatak na dug: ${fm(preostalo)} KM`+(avansPrimjenjen>0?` (nakon ${fm(avansPrimjenjen)} KM iz avansa)`:'');

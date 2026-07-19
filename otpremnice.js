@@ -278,33 +278,33 @@ router.post('/potvrdi', async (req, res) => {
     const imaOdstupanje = sastavljene.some(s => s.odstupa);
     const javniToken = crypto.randomBytes(20).toString('hex');
 
-    // Iznos koji se STVARNO plaća u ovom trenutku — zavisi od načina plaćanja.
-    let iznosPlaceno;
-    if (nacin === 'kompletno') iznosPlaceno = ukupanIznos;
-    else if (nacin === 'dug') iznosPlaceno = 0;
-    else { // djelimicno
-      iznosPlaceno = parseFloat(iznos_placeno_sada);
-      if (isNaN(iznosPlaceno) || iznosPlaceno < 0)
-        throw Object.assign(new Error('Unesite ispravan iznos koji kupac plaća sada.'), { status: 400 });
-      if (iznosPlaceno > ukupanIznos)
-        throw Object.assign(new Error('Iznos koji kupac plaća sada ne može biti veći od ukupnog iznosa otpremnice.'), { status: 400 });
-    }
-    iznosPlaceno = +iznosPlaceno.toFixed(2);
-
-    // Ako kupac ima avans (pozitivan saldo u kartici) i traženo je da se iskoristi, prvo
-    // to primijeni na ovu kupovinu — smanjuje koliko stvarno treba platiti/duguje.
+    // Avans se PRVO primjenjuje na cio iznos (ako je zatraženo) — nezavisno od načina
+    // plaćanja, jer inače kod "kompletno" (plaća sve odmah) avans nikad ne bi imao šta
+    // da pokrije (iznosPlaceno bi već bio pun ukupanIznos prije nego se avans provjeri).
     let iznosIzAvansa = 0;
     if (kupac_id && req.body.koristi_avans) {
       const saldoRes = await client.query(
         `SELECT COALESCE(SUM(iznos),0) AS saldo FROM kupac_transakcije WHERE kupac_id=$1`, [kupac_id]
       );
       const trenutniSaldo = parseFloat(saldoRes.rows[0].saldo);
-      if (trenutniSaldo > 0) {
-        const josDuguje = +(ukupanIznos - iznosPlaceno).toFixed(2);
-        iznosIzAvansa = +Math.min(trenutniSaldo, josDuguje).toFixed(2);
-        if (iznosIzAvansa > 0) iznosPlaceno = +(iznosPlaceno + iznosIzAvansa).toFixed(2);
-      }
+      if (trenutniSaldo > 0) iznosIzAvansa = +Math.min(trenutniSaldo, ukupanIznos).toFixed(2);
     }
+    const preostaloNakonAvansa = +(ukupanIznos - iznosIzAvansa).toFixed(2);
+
+    // Iznos koji se plaća SVJEŽOM gotovinom SAD — zavisi od načina plaćanja, ali se
+    // odnosi na ono što je OSTALO nakon avansa, ne na cio ukupanIznos.
+    let iznosGotovinomSada;
+    if (nacin === 'kompletno') iznosGotovinomSada = preostaloNakonAvansa;
+    else if (nacin === 'dug') iznosGotovinomSada = 0;
+    else { // djelimicno
+      iznosGotovinomSada = parseFloat(iznos_placeno_sada);
+      if (isNaN(iznosGotovinomSada) || iznosGotovinomSada < 0)
+        throw Object.assign(new Error('Unesite ispravan iznos koji kupac plaća sada.'), { status: 400 });
+      if (iznosGotovinomSada > preostaloNakonAvansa)
+        throw Object.assign(new Error('Iznos koji kupac plaća sada ne može biti veći od preostalog iznosa (nakon avansa).'), { status: 400 });
+    }
+    iznosGotovinomSada = +iznosGotovinomSada.toFixed(2);
+    let iznosPlaceno = +(iznosIzAvansa + iznosGotovinomSada).toFixed(2);
     const statusPlacanja = iznosPlaceno >= ukupanIznos ? 'placeno' : (iznosPlaceno > 0 ? 'djelimicno' : 'duguje');
 
     const broj = await noviBroj(client);
@@ -343,20 +343,40 @@ router.post('/potvrdi', async (req, res) => {
     }
 
     const opisKupca = kupac_naziv ? kupac_naziv.trim() : 'kupac nepoznat';
-    // U blagajnu ide SAMO SVJEŽA gotovina — ne dio pokriven avansom (taj novac je već
-    // ubrojan kad je avans prvobitno uplaćen, ne bi trebalo da se broji dva puta).
-    const iznosGotovine = +(iznosPlaceno - iznosIzAvansa).toFixed(2);
+    const preostaliDug = +(ukupanIznos - iznosPlaceno).toFixed(2);
+    // Bruto vrijednost prodaje umanjena za avans (avans je već upisan u blagajnu kad je
+    // prvobitno uplaćen — ne broji se ponovo ovdje).
+    const brutoZaBlagajnu = +(ukupanIznos - iznosIzAvansa).toFixed(2);
+
     let gotovinaId = null;
-    if (iznosGotovine > 0) {
-      const opisSuffiks = statusPlacanja === 'djelimicno' ? ' (djelimično plaćanje)' : '';
+    if (preostaliDug > 0) {
+      // Ima duga (djelimično ili ništa plaćeno) — upiši DVA reda: cijelu preostalu
+      // vrijednost kao PLUS (bruto prodaja), i nenaplaćeni dio kao MINUS (dug). Njihov
+      // zbir = tačno svježa gotovina primljena sad, ali ostaju vidljiva DVA reda —
+      // jedan pokazuje ukupnu prodaju, drugi šta konkretno nije naplaćeno.
+      if (brutoZaBlagajnu > 0) {
+        const g = await client.query(
+          `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
+           VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5) RETURNING id`,
+          [brutoZaBlagajnu, user.ime_prezime, `Prodaja (bruto) — ${opisKupca}`, objektNaziv, broj]
+        );
+        gotovinaId = g.rows[0].id;
+      }
+      await client.query(
+        `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
+         VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5)`,
+        [-preostaliDug, user.ime_prezime, `Dug po otpremnici — ${opisKupca}`, objektNaziv, broj]
+      );
+    } else if (iznosGotovinomSada > 0) {
+      // Sve plaćeno (gotovinom i/ili avansom), nema duga — jedan običan red kao i do sad.
       const g = await client.query(
         `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
          VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5) RETURNING id`,
-        [iznosGotovine, user.ime_prezime, opisKupca + opisSuffiks, objektNaziv, broj]
+        [iznosGotovinomSada, user.ime_prezime, opisKupca, objektNaziv, broj]
       );
       gotovinaId = g.rows[0].id;
-      await client.query('UPDATE otpremnice SET gotovina_id=$1 WHERE id=$2', [gotovinaId, otpId]);
     }
+    if (gotovinaId) await client.query('UPDATE otpremnice SET gotovina_id=$1 WHERE id=$2', [gotovinaId, otpId]);
 
     // Kartica kupca: prvo zapiši korišćen avans (ako ga je bilo), pa preostali (novi) dug.
     if (kupac_id) {
@@ -370,7 +390,6 @@ router.post('/potvrdi', async (req, res) => {
            user.id, user.ime_prezime]
         );
       }
-      const preostaliDug = +(ukupanIznos - iznosPlaceno).toFixed(2);
       if (preostaliDug > 0) {
         await client.query(
           `INSERT INTO kupac_transakcije
