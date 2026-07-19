@@ -42,16 +42,19 @@ router.get('/suma', async (req, res) => {
         SUM(iznos) FILTER (WHERE predao_blagajniku = false) AS nepredano
       FROM gotovina
     `);
-    // Očekivano od (radnih) naloga — zbir "za naplatu" (ugovorena_suma - avans) preko svih
-    // naloga koji još nisu u potpunosti naplaćeni. Logično se smanjuje kad se nešto naplati
-    // (avans/naplaceno_opis se ažurira u proizvodnja.js, za_naplatu prati taj pad automatski).
-    let ocekivanoNalozi = 0;
+    // Naloga — koristi STVARNU kolonu "naplaceno" (checkbox/štiklirano u lista.html), ne
+    // izračunato polje. "Naplaćeno" = zbir ugovorena_suma za sve naloge gdje JE štiklirano;
+    // "Očekivano od naloga" = zbir za_naplatu (ugovorena_suma - avans) za one koji NISU.
+    let naplacenoNalozi = 0, ocekivanoNalozi = 0;
     try {
       const rn = await pool.query(`
-        SELECT COALESCE(SUM(GREATEST(COALESCE(ugovorena_suma,0) - COALESCE(avans,0), 0)),0) AS ukupno
+        SELECT
+          COALESCE(SUM(COALESCE(ugovorena_suma,0)) FILTER (WHERE naplaceno IS TRUE), 0) AS naplaceno_ukupno,
+          COALESCE(SUM(GREATEST(COALESCE(ugovorena_suma,0) - COALESCE(avans,0), 0)) FILTER (WHERE naplaceno IS NOT TRUE), 0) AS ocekivano_ukupno
         FROM proizvodnja_jopex
       `);
-      ocekivanoNalozi = parseFloat(rn.rows[0].ukupno) || 0;
+      naplacenoNalozi = parseFloat(rn.rows[0].naplaceno_ukupno) || 0;
+      ocekivanoNalozi = parseFloat(rn.rows[0].ocekivano_ukupno) || 0;
     } catch (e) { /* tabela/kolona se možda razlikuje — ne rušimo cijelu rutu zbog ovoga */ }
 
     // Očekivano od maloprodaje — zbir svih neplaćenih/djelimično plaćenih otpremnica.
@@ -64,7 +67,12 @@ router.get('/suma', async (req, res) => {
       ocekivanoMalo = parseFloat(rm.rows[0].ukupno) || 0;
     } catch (e) { /* isto — ne rušimo rutu ako tabela/kolona iz nekog razloga ne postoji */ }
 
-    res.json({ ...r.rows[0], ocekivano_nalozi: ocekivanoNalozi.toFixed(2), ocekivano_malo: ocekivanoMalo.toFixed(2) });
+    res.json({
+      ...r.rows[0],
+      naplaceno_nalozi: naplacenoNalozi.toFixed(2),
+      ocekivano_nalozi: ocekivanoNalozi.toFixed(2),
+      ocekivano_malo: ocekivanoMalo.toFixed(2),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

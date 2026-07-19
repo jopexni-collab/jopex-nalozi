@@ -76,6 +76,7 @@ td.num{text-align:right;font-weight:700;}
   <div class="suma-box"><div class="val" id="s-sedmica">—</div><div class="lbl">Ova sedmica</div></div>
   <div class="suma-box"><div class="val" id="s-mjesec">—</div><div class="lbl">Ovaj mjesec</div></div>
   <div class="suma-box nepredano"><div class="val" id="s-nepredano">—</div><div class="lbl">Nije predano blagajniku</div></div>
+  <div class="suma-box"><div class="val" id="s-naplaceno-nalozi">—</div><div class="lbl">Naplaćeno (nalozi)</div></div>
   <div class="suma-box ocekivano"><div class="val" id="s-ocekivano-nalozi">—</div><div class="lbl">Očekivano od naloga</div></div>
   <div class="suma-box ocekivano"><div class="val" id="s-ocekivano-malo">—</div><div class="lbl">Očekivano od maloprodaje</div></div>
 </div>
@@ -171,6 +172,7 @@ async function loadSume(){
     document.getElementById('s-sedmica').textContent=fm(d.ova_sedmica||0)+' KM';
     document.getElementById('s-mjesec').textContent=fm(d.ovaj_mjesec||0)+' KM';
     document.getElementById('s-nepredano').textContent=fm(d.nepredano||0)+' KM';
+    document.getElementById('s-naplaceno-nalozi').textContent=fm(d.naplaceno_nalozi||0)+' KM';
     document.getElementById('s-ocekivano-nalozi').textContent=fm(d.ocekivano_nalozi||0)+' KM';
     document.getElementById('s-ocekivano-malo').textContent=fm(d.ocekivano_malo||0)+' KM';
   }catch(e){}
