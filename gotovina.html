@@ -207,7 +207,12 @@ function render(){
         <span class="chip-izvor ${r.izvor==='Proizvodnja'?'iz-pro':r.izvor==='Maloprodaja'?'iz-malo':'iz-drugo'}">${esc(r.izvor)}</span>
         ${r.izvor==='Maloprodaja'&&r.objekt_naziv?`<span class="izvor-pj">${esc(r.objekt_naziv)}</span>`:''}
       </td>
-      <td>${r.nalog_r_br?(/^\d+$/.test(String(r.nalog_r_br))?`<a class="nalog-link" href="lista.html">#${r.nalog_r_br}</a>${r.narucilac?' — '+esc(r.narucilac):''}`:`<span class="nalog-link" style="cursor:default;">${esc(r.nalog_r_br)}</span>`):''}</td>
+      <td>${r.nalog_r_br?(/^\d+$/.test(String(r.nalog_r_br))
+        ?`<a class="nalog-link" href="lista.html">#${r.nalog_r_br}</a>${r.narucilac?' — '+esc(r.narucilac):''}`
+        :String(r.nalog_r_br).startsWith('OTP-')
+          ?`<a class="nalog-link" href="maloprodaja.html?otp=${encodeURIComponent(r.nalog_r_br)}">${esc(r.nalog_r_br)}</a>`
+          :`<span class="nalog-link" style="cursor:default;">${esc(r.nalog_r_br)}</span>`
+      ):''}</td>
       <td>${esc(r.opis||'')}</td>
       <td>${r.predao_blagajniku
         ?`<span class="predano">✓ ${rijecPozitivno} ${r.datum_predaje?fd(r.datum_predaje):''}</span>`

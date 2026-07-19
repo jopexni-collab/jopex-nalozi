@@ -127,12 +127,18 @@ function sastaviStavke(inputStavke, zivaRoba) {
 router.get('/', async (req, res) => {
   try {
     const user = req.session?.user;
-    const { status, od, do: do_, komercijalista_id, odstupanje, objekt_id } = req.query;
+    const { status, od, do: do_, komercijalista_id, odstupanje, objekt_id, broj } = req.query;
     let where = [];
     let vals = [];
     let i = 1;
 
-    if (user?.rola !== 'admin') {
+    // "broj" (deep-link iz blagajne, npr. klik na OTP broj) — admin vidi BILO KOJU
+    // otpremnicu po broju, bez obzira ko ju je napravio; ostali i dalje samo svoje.
+    if (broj) {
+      where.push(`broj = $${i++}`);
+      vals.push(broj);
+      if (user?.rola !== 'admin') { where.push(`komercijalista_id = $${i++}`); vals.push(user.id); }
+    } else if (user?.rola !== 'admin') {
       where.push(`komercijalista_id = $${i++}`);
       vals.push(user.id);
     } else if (komercijalista_id) {

@@ -710,6 +710,31 @@ function izaberiObjekat(objekat){
   kosarica=[];
   renderKosarica();
   if(typeof promijeniKupca==='function') promijeniKupca();
+  otvoriDeepLinkOtpremnicuAkoPostoji();
+}
+
+// Podržava direktan link ka konkretnoj otpremnici, npr. sa blagajne:
+// maloprodaja.html?otp=OTP-2026-000123 — nakon izbora PJ (obavezan korak), automatski
+// prebacuje na tab Otpremnice i otvara detalje te konkretne otpremnice.
+async function otvoriDeepLinkOtpremnicuAkoPostoji(){
+  const params=new URLSearchParams(location.search);
+  const broj=params.get('otp');
+  if(!broj) return;
+  try{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.querySelector('.tab-btn[data-tab="admin"]').classList.add('active');
+    document.getElementById('view-admin').classList.add('active');
+    await loadOtpremnice(broj);
+    const otp=Object.values(window.__otpDataById||{}).find(o=>o.broj===broj);
+    if(!otp){ alert('Otpremnica "'+broj+'" nije pronađena (ili nemate pristup njoj).'); return; }
+    prikaziDetaljeOtpremnice(otp.id);
+  }catch(e){
+    alert('Greška pri otvaranju otpremnice.');
+  }finally{
+    // Očisti parametar iz URL-a da osvježavanje stranice ne ponavlja isto svaki put.
+    history.replaceState(null, '', location.pathname);
+  }
 }
 
 /* ── TABOVI ─────────────────────────────────────────────── */
@@ -1504,28 +1529,39 @@ async function popuniFilterObjekata(){
   }catch(e){}
 }
 
-async function loadOtpremnice(){
+async function loadOtpremnice(brojOverride){
   const cont=document.getElementById('otp-list');
   cont.innerHTML='<div class="spinner">Učitavanje...</div>';
   const params=new URLSearchParams();
-  const od=document.getElementById('fil-od').value;
-  const do_=document.getElementById('fil-do').value;
-  const objekatId=document.getElementById('fil-objekat').value;
-  if(od) params.set('od',od);
-  if(do_) params.set('do',do_);
-  if(objekatId) params.set('objekt_id',objekatId);
-  if(document.getElementById('fil-odstupanje').checked) params.set('odstupanje','true');
+  if(brojOverride){
+    // Deep-link na konkretnu otpremnicu (npr. sa blagajne) — zaobilazi UI filtere i
+    // eventualni limit generičke liste, garantovano dovlači baš tu jednu.
+    params.set('broj', brojOverride);
+  }else{
+    const od=document.getElementById('fil-od').value;
+    const do_=document.getElementById('fil-do').value;
+    const objekatId=document.getElementById('fil-objekat').value;
+    if(od) params.set('od',od);
+    if(do_) params.set('do',do_);
+    if(objekatId) params.set('objekt_id',objekatId);
+    if(document.getElementById('fil-odstupanje').checked) params.set('odstupanje','true');
+  }
 
   // Isplate za isti period/objekat — za neto obračun (prodaja - isplate)
   let isplateSuma=0;
-  try{
-    const isplateParams=new URLSearchParams();
-    if(od) isplateParams.set('od',od);
-    if(do_) isplateParams.set('do',do_);
-    if(objekatId) isplateParams.set('objekt_id',objekatId);
-    const ir=await fetch(`${API}/api/isplate/suma?${isplateParams}`);
-    if(ir.ok){ const idata=await ir.json(); isplateSuma=idata.ukupno||0; }
-  }catch(e){}
+  if(!brojOverride){
+    try{
+      const isplateParams=new URLSearchParams();
+      const od=document.getElementById('fil-od').value;
+      const do_=document.getElementById('fil-do').value;
+      const objekatId=document.getElementById('fil-objekat').value;
+      if(od) isplateParams.set('od',od);
+      if(do_) isplateParams.set('do',do_);
+      if(objekatId) isplateParams.set('objekt_id',objekatId);
+      const ir=await fetch(`${API}/api/isplate/suma?${isplateParams}`);
+      if(ir.ok){ const idata=await ir.json(); isplateSuma=idata.ukupno||0; }
+    }catch(e){}
+  }
 
   try{
     const r=await fetch(`${API}/api/otpremnice?${params}`);
