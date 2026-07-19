@@ -915,7 +915,7 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     document.getElementById('view-'+btn.dataset.tab).classList.add('active');
     if(btn.dataset.tab==='admin') loadOtpremnice();
     if(btn.dataset.tab==='isplate'){ ucitajIsplateListu(); ucitajIsplateSume(); }
-    if(btn.dataset.tab==='dugovanja') ucitajDugovanja();
+    if(btn.dataset.tab==='dugovanja'){ if(dugPrikaz==='kupci') ucitajSaldoPoKupcima(); else ucitajDugovanja(); }
     if(btn.dataset.tab==='uplata') ucitajUplateSume();
   };
 });

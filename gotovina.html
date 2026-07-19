@@ -314,6 +314,13 @@ fetch(`${API}/api/auth/me`).then(r=>{
   document.getElementById('who').textContent='👤 '+u.ime_prezime;
   load();
   loadSume();
+
+  // Automatsko osvježavanje — bez ovoga, promjene iz drugih ekrana (npr. štikliranje
+  // "naplaćeno" u radnim nalozima) ne bi se vidjele dok se ručno ne osvježi stranica.
+  // Osvježava samo ako je tab/prozor vidljiv (ne troši nepotrebno kad je u pozadini).
+  setInterval(()=>{
+    if(document.visibilityState==='visible'){ load(); loadSume(); }
+  }, 20000);
 }).catch(()=>location.href='login.html');
 </script>
 </body>
