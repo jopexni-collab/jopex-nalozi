@@ -822,6 +822,7 @@ async function ucitajNajprodavanije(){
 /* ── KUPAC (bira se/kreira PRIJE pretrage robe) ──────────────────── */
 let trenutniKupac=null; // {id, naziv, telefon, grad, adresa}
 let kupacSearchTimer=null;
+let kupacSearchSeq=0; // sprječava da spor/zakasnio odgovor prepiše noviji (trka zahtjeva)
 
 document.getElementById('kupac-search').addEventListener('input', e=>{
   clearTimeout(kupacSearchTimer);
@@ -830,7 +831,6 @@ document.getElementById('kupac-search').addEventListener('input', e=>{
 });
 traziKupca(''); // prikaži nedavne kupce odmah
 
-let kupacSearchSeq=0; // sprječava da spor/zakasnio odgovor prepiše noviji (trka zahtjeva)
 async function traziKupca(q){
   const mojSeq=++kupacSearchSeq;
   const list=document.getElementById('kupac-rez-list');
