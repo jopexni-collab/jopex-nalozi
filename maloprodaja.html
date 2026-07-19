@@ -297,6 +297,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <button class="tab-btn active" data-tab="prodaja">🛒 Prodaja</button>
   <button class="tab-btn" data-tab="isplate">💸 Isplate</button>
   <button class="tab-btn" data-tab="admin" id="tab-admin-btn">🧾 Otpremnice</button>
+  <button class="tab-btn" data-tab="dugovanja">💳 Dugovanja</button>
 </div>
 
 <!-- ═══ TAB: PRODAJA ═══ -->
@@ -385,6 +386,48 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <h3>📋 Isplate danas</h3>
     <div id="isplate-lista"></div>
     <div id="isplate-total" class="dnevni-total" style="display:none"></div>
+  </div>
+</div>
+
+<!-- ═══ TAB: DUGOVANJA ═══ -->
+<div class="view" id="view-dugovanja">
+  <div class="import-box" id="rucni-dug-box" style="display:none;">
+    <h3>📝 Ručni unos istorijskog duga</h3>
+    <div class="uzorak-hint">Za dugove koji su nastali PRIJE ovog sistema (npr. iz Excel/papirne evidencije) — ne dira stanje robe, samo evidentira dug.</div>
+    <select id="rd-objekat"><option value="">— izaberi prodajni objekat —</option></select>
+    <input type="text" id="rd-kupac" placeholder="Ime i prezime / naziv kupca *">
+    <input type="number" id="rd-ukupno" step="0.01" min="0.01" placeholder="Ukupan iznos duga (KM) *">
+    <input type="number" id="rd-placeno" step="0.01" min="0" placeholder="Već plaćeno do sad (KM, 0 ako ništa)">
+    <input type="date" id="rd-datum" placeholder="Datum nastanka duga (opciono)">
+    <input type="text" id="rd-napomena" placeholder="Napomena (npr. koji nalog/otpremnica, opis robe...)">
+    <button class="btn-import" onclick="unesiRucniDug()">+ Unesi dug</button>
+    <div id="rucni-dug-msg" style="font-size:12px;margin-top:8px;"></div>
+  </div>
+
+  <div class="filt-row">
+    <select id="dug-fil-objekat" onchange="ucitajDugovanja()"><option value="">Svi objekti</option></select>
+    <button class="ce-tip-btn" id="btn-toggle-rucni-dug" style="display:none;" onclick="toggleRucniDugBox()">📝 Ručni unos</button>
+  </div>
+  <div class="dnevni-total" id="dug-total" style="display:none"></div>
+  <div id="dugovanja-lista"></div>
+</div>
+
+<!-- ═══ OVERLAY: NAPLATA DUGA ═══ -->
+<div class="overlay" id="ov-naplata-duga">
+  <div class="ov-header">Naplata duga</div>
+  <div class="ov-body">
+    <div class="ov-broj" id="nd-broj">OTP-...</div>
+    <div style="font-size:13px;color:#6b7a8d;margin-bottom:16px;text-align:center;" id="nd-kupac"></div>
+    <div class="ov-iznos-lbl">TRENUTNO DUGUJE</div>
+    <div class="ov-iznos" id="nd-duguje" style="color:var(--red);">0.00 KM</div>
+    <div class="ov-kupac-fld">
+      <label>Iznos koji SADA plaća</label>
+      <input type="number" id="nd-iznos" step="0.01" min="0.01" placeholder="0.00">
+    </div>
+  </div>
+  <div class="ov-footer">
+    <button class="btn-otkazi" onclick="document.getElementById('ov-naplata-duga').classList.remove('on')">Otkaži</button>
+    <button class="btn-potvrdi" id="nd-btn-potvrdi" onclick="potvrdiNaplatuDuga()">✓ Naplati</button>
   </div>
 </div>
 
@@ -566,6 +609,24 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <div class="ov-stavke" id="ov-stavke"></div>
     <div class="ov-iznos-lbl">IZNOS ZA NAPLATU</div>
     <div class="ov-iznos" id="ov-iznos">0.00 KM</div>
+
+    <div class="kupac-fld" style="width:100%;max-width:420px;">
+      <label>Način plaćanja</label>
+      <div class="ce-row">
+        <button type="button" class="ce-tip-btn active" data-nacin-pl="kompletno" onclick="postaviNacinPlacanja('kompletno')">Plaća sve odmah</button>
+        <button type="button" class="ce-tip-btn" data-nacin-pl="djelimicno" onclick="postaviNacinPlacanja('djelimicno')">Plaća djelimično</button>
+        <button type="button" class="ce-tip-btn" data-nacin-pl="dug" onclick="postaviNacinPlacanja('dug')">Na dug (ne plaća sad)</button>
+      </div>
+      <div id="ov-djelimicno-fld" style="display:none;margin-top:8px;">
+        <label>Iznos koji kupac plaća SADA (KM)</label>
+        <input type="number" id="ov-iznos-djelimicno" step="0.01" min="0.01" placeholder="0.00" oninput="azurirajPreostaliDug()">
+        <div id="ov-preostali-dug" style="font-size:12px;color:var(--red);font-weight:700;margin-top:4px;"></div>
+      </div>
+      <div id="ov-dug-napomena" style="display:none;font-size:11.5px;color:var(--red);margin-top:6px;line-height:1.4;">
+        ⚠ Kupac ne plaća ništa sada — cio iznos ide na dug. Naplatiće se kasnije kroz tab "Dugovanja".
+      </div>
+    </div>
+
     <div class="ov-kupac-fld">
       <label>Ime i prezime — ko fizički preuzima (izmijeni ako nije kupac)</label>
       <input type="text" id="ov-kupac-ime" placeholder="Unesite ime...">
@@ -755,6 +816,7 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     document.getElementById('view-'+btn.dataset.tab).classList.add('active');
     if(btn.dataset.tab==='admin') loadOtpremnice();
     if(btn.dataset.tab==='isplate') ucitajIsplateListu();
+    if(btn.dataset.tab==='dugovanja') ucitajDugovanja();
   };
 });
 
@@ -1000,6 +1062,150 @@ async function ucitajIsplateListu(){
   }catch(e){
     cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>';
     totalDiv.style.display='none';
+  }
+}
+
+/* ── DUGOVANJA (djelimično/odloženo plaćanje otpremnica) ─────────────── */
+const STATUS_PLACANJA_LABEL={djelimicno:'Djelimično plaćeno',duguje:'Ništa plaćeno'};
+let dugFilterPopunjen=false;
+
+async function ucitajDugovanja(){
+  if(!dugFilterPopunjen){
+    try{
+      const r=await fetch(`${API}/api/prodajni-objekti`);
+      const rows=await r.json();
+      document.getElementById('dug-fil-objekat').innerHTML='<option value="">Svi objekti</option>'+
+        rows.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');
+      dugFilterPopunjen=true;
+    }catch(e){}
+  }
+  const cont=document.getElementById('dugovanja-lista');
+  const totalDiv=document.getElementById('dug-total');
+  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
+  const objekatId=document.getElementById('dug-fil-objekat').value;
+  const params=new URLSearchParams();
+  if(objekatId) params.set('objekt_id',objekatId);
+  try{
+    const r=await fetch(`${API}/api/otpremnice/dugovanja/lista?${params}`);
+    const rows=await r.json();
+    if(!rows.length){
+      cont.innerHTML='<div class="empty-msg">Nema otvorenih dugovanja. 🎉</div>';
+      totalDiv.style.display='none';
+      return;
+    }
+    cont.innerHTML=rows.map(o=>`
+      <div class="otp-card ima-odstupanje" onclick='otvoriNaplatuDuga(${JSON.stringify(o).replace(/'/g,"&apos;")})'>
+        <div class="otp-top">
+          <span class="otp-broj">${esc(o.broj)}</span>
+          <span class="badge-odstupanje">${esc(STATUS_PLACANJA_LABEL[o.status_placanja]||o.status_placanja)}</span>
+        </div>
+        <div class="otp-meta">
+          ${fd(o.datum)} &middot; ${esc(o.objekt_naziv||'—')} &middot; Komercijalista: ${esc(o.komercijalista_ime||'—')}<br>
+          Kupac: ${esc(o.kupac_naziv||'—')}${o.kupac_telefon?' · '+esc(o.kupac_telefon):''}
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7a8d;margin-top:4px;">
+          <span>Ukupno: ${fm(o.ukupan_iznos)} KM</span>
+          <span>Plaćeno: ${fm(o.iznos_placeno)} KM</span>
+        </div>
+        <div class="otp-iznos" style="color:var(--red);">Duguje: ${fm(o.duguje)} KM</div>
+      </div>
+    `).join('');
+    const ukupnoDuguje=rows.reduce((s,o)=>s+parseFloat(o.duguje||0),0);
+    totalDiv.style.display='block';
+    totalDiv.innerHTML=`${fm(ukupnoDuguje)} KM<span class="cnt">${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'} sa dugom</span>`;
+  }catch(e){
+    cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>';
+    totalDiv.style.display='none';
+  }
+}
+
+let dugZaNaplatu=null;
+function otvoriNaplatuDuga(otp){
+  dugZaNaplatu=otp;
+  document.getElementById('nd-broj').textContent=otp.broj;
+  document.getElementById('nd-kupac').textContent=`${otp.kupac_naziv||'—'} · ${otp.objekt_naziv||''}`;
+  document.getElementById('nd-duguje').textContent=fm(otp.duguje)+' KM';
+  document.getElementById('nd-iznos').value='';
+  document.getElementById('ov-naplata-duga').classList.add('on');
+}
+
+async function potvrdiNaplatuDuga(){
+  const iznos=parseFloat(document.getElementById('nd-iznos').value);
+  if(!iznos||iznos<=0){alert('Unesite ispravan iznos.');return;}
+  if(iznos>parseFloat(dugZaNaplatu.duguje)){alert('Iznos ne može biti veći od trenutnog duga ('+fm(dugZaNaplatu.duguje)+' KM).');return;}
+  const btn=document.getElementById('nd-btn-potvrdi');
+  btn.disabled=true; btn.textContent='Obrada...';
+  try{
+    const r=await fetch(`${API}/api/otpremnice/${dugZaNaplatu.id}/naplati-dug`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({iznos}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri naplati.');
+    document.getElementById('ov-naplata-duga').classList.remove('on');
+    alert(`✓ Naplaćeno ${fm(data.naplaceno_sada)} KM za ${data.broj}.`+
+      (data.preostalo_duguje>0?` Preostalo duguje: ${fm(data.preostalo_duguje)} KM.`:' Otpremnica je sad u potpunosti plaćena.'));
+    dugZaNaplatu=null;
+    ucitajDugovanja();
+  }catch(e){
+    alert(e.message);
+  }finally{
+    btn.disabled=false; btn.textContent='✓ Naplati';
+  }
+}
+
+/* ── RUČNI UNOS ISTORIJSKOG DUGA (admin) ──────────────────────────────── */
+let rucniDugObjektiPopunjeni=false;
+async function toggleRucniDugBox(){
+  const box=document.getElementById('rucni-dug-box');
+  const otvara=box.style.display==='none';
+  box.style.display=otvara?'block':'none';
+  if(otvara && !rucniDugObjektiPopunjeni){
+    try{
+      const r=await fetch(`${API}/api/prodajni-objekti`);
+      const rows=await r.json();
+      document.getElementById('rd-objekat').innerHTML='<option value="">— izaberi prodajni objekat —</option>'+
+        rows.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');
+      rucniDugObjektiPopunjeni=true;
+    }catch(e){}
+  }
+}
+
+async function unesiRucniDug(){
+  const msg=document.getElementById('rucni-dug-msg');
+  const objektId=document.getElementById('rd-objekat').value;
+  const kupac=document.getElementById('rd-kupac').value.trim();
+  const ukupno=parseFloat(document.getElementById('rd-ukupno').value);
+  const placeno=parseFloat(document.getElementById('rd-placeno').value)||0;
+  const datum=document.getElementById('rd-datum').value||null;
+  const napomena=document.getElementById('rd-napomena').value.trim()||null;
+
+  if(!objektId){msg.style.color='red';msg.textContent='Izaberite prodajni objekat.';return;}
+  if(!kupac){msg.style.color='red';msg.textContent='Unesite ime kupca.';return;}
+  if(!ukupno||ukupno<=0){msg.style.color='red';msg.textContent='Unesite ispravan ukupan iznos.';return;}
+  if(placeno<0||placeno>ukupno){msg.style.color='red';msg.textContent='Već plaćeno mora biti između 0 i ukupnog iznosa.';return;}
+
+  msg.style.color='#6b7a8d'; msg.textContent='Unos u toku...';
+  try{
+    const r=await fetch(`${API}/api/otpremnice/rucni-dug`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        objekt_id:objektId, kupac_naziv:kupac, ukupan_iznos:ukupno,
+        iznos_vec_placeno:placeno, datum, napomena,
+      }),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri unosu.');
+    msg.style.color='var(--green)';
+    msg.textContent=`✓ Uneseno: ${data.broj} — duguje ${fm(data.duguje)} KM.`;
+    document.getElementById('rd-kupac').value='';
+    document.getElementById('rd-ukupno').value='';
+    document.getElementById('rd-placeno').value='';
+    document.getElementById('rd-datum').value='';
+    document.getElementById('rd-napomena').value='';
+    ucitajDugovanja();
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
   }
 }
 
@@ -1470,7 +1676,9 @@ async function generisiOtpremnicu(){
   }
 }
 
+let potvrdaUkupanIznos=0;
 function prikaziPotvrduEkran(pregled){
+  potvrdaUkupanIznos=parseFloat(pregled.ukupan_iznos);
   document.getElementById('ov-broj').textContent='Broj se dodjeljuje nakon potvrde';
   document.getElementById('ov-iznos').textContent=fm(pregled.ukupan_iznos)+' KM';
   document.getElementById('ov-stavke').innerHTML=pregled.stavke.map(s=>`
@@ -1488,6 +1696,8 @@ function prikaziPotvrduEkran(pregled){
         ⚠ Otpremnica ima odstupanje od zadanih cijena — razlika: ${fm(pregled.razlika)} KM (zadano: ${fm(pregled.ukupno_zadano)} KM)
       </div>`;
   }
+  postaviNacinPlacanja('kompletno'); // svaki put počinje od podrazumijevanog (plaća sve)
+  document.getElementById('ov-iznos-djelimicno').value='';
   // Kupac je već izabran na početku (trenutniKupac) — ne treba ponovo kucati ime,
   // samo se predlaže i ostaje izmjenjivo (npr. ako fizički preuzima neko drugi).
   document.getElementById('ov-kupac-ime').value=trenutniKupac?.naziv||'';
@@ -1504,10 +1714,32 @@ function otkaziOtpremnicu(){
    JEDINI trenutak upisa u bazu. Server ponovo (uživo, u transakciji)
    čita cijenu i stanje iz roba tabele — ovdje se sve konačno zaključava,
    uključujući i eventualna odstupanja od zadane cijene. */
+let nacinPlacanjaTrenutni='kompletno';
+function postaviNacinPlacanja(nacin){
+  nacinPlacanjaTrenutni=nacin;
+  document.querySelectorAll('.ce-tip-btn[data-nacin-pl]').forEach(b=>b.classList.toggle('active', b.dataset.nacinPl===nacin));
+  document.getElementById('ov-djelimicno-fld').style.display = nacin==='djelimicno' ? 'block' : 'none';
+  document.getElementById('ov-dug-napomena').style.display = nacin==='dug' ? 'block' : 'none';
+  if(nacin==='djelimicno') azurirajPreostaliDug();
+}
+
+function azurirajPreostaliDug(){
+  const placeno=parseFloat(document.getElementById('ov-iznos-djelimicno').value)||0;
+  const preostalo=potvrdaUkupanIznos-placeno;
+  const el=document.getElementById('ov-preostali-dug');
+  el.textContent = preostalo>0 ? `Ostatak na dug: ${fm(preostalo)} KM` : (preostalo<0 ? '⚠ Uneseno je više od ukupnog iznosa' : '✓ Plaća se sve — nema duga');
+}
+
 async function potvrdiOtpremnicu(){
   const ime=document.getElementById('ov-kupac-ime').value.trim();
   if(!ime){alert('Unesite ime kupca.');return;}
   if(!trenutniKupac){alert('Nedostaje izabrani kupac.');return;}
+  let iznosPlacenoSada=null;
+  if(nacinPlacanjaTrenutni==='djelimicno'){
+    iznosPlacenoSada=parseFloat(document.getElementById('ov-iznos-djelimicno').value);
+    if(!iznosPlacenoSada||iznosPlacenoSada<=0){alert('Unesite iznos koji kupac plaća sada.');return;}
+    if(iznosPlacenoSada>potvrdaUkupanIznos){alert('Iznos ne može biti veći od ukupnog iznosa otpremnice.');return;}
+  }
   const btn=document.getElementById('btn-potvrdi');
   btn.disabled=true; btn.textContent='Obrada...';
   try{
@@ -1522,6 +1754,8 @@ async function potvrdiOtpremnicu(){
         kupac_grad: trenutniKupac.grad||null,
         stavke: stavkeZaSlanje(),
         potvrdio_kupac_ime: ime,
+        nacin_placanja: nacinPlacanjaTrenutni,
+        iznos_placeno_sada: iznosPlacenoSada,
       }),
     });
     const data=await r.json();
@@ -1529,7 +1763,8 @@ async function potvrdiOtpremnicu(){
     document.getElementById('ov-potvrda').classList.remove('on');
     document.getElementById('uspjeh-detalji').textContent=
       `${data.broj} — ${fm(data.ukupan_iznos)} KM — potvrdio: ${data.potvrdio_kupac_ime}`
-      +(data.ima_odstupanje?' ⚠ (ima odstupanje od zadane cijene)':'');
+      +(data.ima_odstupanje?' ⚠ (ima odstupanje od zadane cijene)':'')
+      +(data.duguje>0?` ⚠ DUGUJE: ${fm(data.duguje)} KM`:'');
     document.getElementById('posalji-box').innerHTML=
       renderPosaljiDugmad(data.javni_token, data.broj, data.kupac_telefon, data.kupac_email);
     document.getElementById('ov-uspjeh').classList.add('on');
@@ -1829,6 +2064,7 @@ fetch(`${API}/api/auth/me`).then(r=>{
   document.getElementById('who').textContent='👤 '+u.ime_prezime;
   document.getElementById('tab-admin-btn').textContent = isAdmin ? '📋 Sve otpremnice' : '🧾 Moje otpremnice';
   if(isAdmin || u.moze_roba_magacin) document.getElementById('link-roba-magacin').style.display='';
+  if(isAdmin) document.getElementById('btn-toggle-rucni-dug').style.display='';
   popuniFilterObjekata();
   renderKosarica();
 
