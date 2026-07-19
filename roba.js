@@ -278,6 +278,32 @@ router.post('/lager/undo', async (req, res) => {
   }
 });
 
+// GET /api/roba/najprodavaniji?objekt_id=X&limit=6 - predlog najprodavanijih artikala
+// za taj PJ (iz poslednjih potvrđenih otpremnica), za brzi izbor na početku prodaje.
+router.get('/najprodavaniji', zahtijevaProdaju, async (req, res) => {
+  const objektId = trebaObjekat(req.query.objekt_id);
+  if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat.' });
+  const lim = Math.min(parseInt(req.query.limit) || 6, 20);
+  try {
+    const r = await pool.query(
+      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, r.grupa, rp.cijena, rp.stanje,
+              COUNT(*) AS broj_prodaja
+       FROM otpremnica_stavke os
+       JOIN otpremnice o ON o.id = os.otpremnica_id
+       JOIN roba r ON r.id = os.roba_id
+       JOIN roba_pj rp ON rp.roba_id = r.id AND rp.objekt_id = $1
+       WHERE o.objekt_id = $1 AND o.status = 'potvrdjena' AND r.aktivan = true AND rp.stanje > 0
+       GROUP BY r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, r.grupa, rp.cijena, rp.stanje
+       ORDER BY broj_prodaja DESC
+       LIMIT $2`,
+      [objektId, lim]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/roba/:id?objekt_id=1
 router.get('/:id', zahtijevaProdaju, async (req, res) => {
   try {

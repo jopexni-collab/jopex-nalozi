@@ -41,6 +41,11 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 .rez-item{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 12px;
   display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;min-height:56px;}
 .rez-item:active{background:#eef4fc;}
+.np-chip{flex-shrink:0;background:#fff;border:1px solid var(--border);border-radius:10px;
+  padding:8px 12px;cursor:pointer;min-width:110px;max-width:150px;}
+.np-chip:active{background:#eef4fc;}
+.np-naziv{font-size:11.5px;font-weight:700;color:var(--dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.np-cijena{font-size:10.5px;color:#6b7a8d;margin-top:2px;}
 .rez-info{flex:1;min-width:0;}
 .rez-naziv{font-weight:700;font-size:13.5px;color:#1a2733;}
 .rez-sifra{font-size:11px;color:#8b96a5;margin-top:1px;}
@@ -144,6 +149,10 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   font-size:17px;font-weight:800;padding:14px;min-height:56px;cursor:pointer;}
 .btn-potvrdi:disabled{background:#a9b4bf;}
 .btn-potvrdi:active{background:#176e3d;}
+.btn-dodaj-dimenziju{display:block;width:100%;margin-top:8px;background:#e8f5ec;color:var(--green);
+  border:1px solid var(--green);border-radius:7px;font:inherit;font-size:11.5px;font-weight:700;
+  padding:7px;cursor:pointer;}
+.btn-dodaj-dimenziju:active{background:var(--green);color:#fff;}
 
 /* ── USPJEH ───────────────────────────────────────────────── */
 .ov-success{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;}
@@ -322,6 +331,10 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
   <!-- KORAK 2: PRETRAGA ROBE (vidljivo tek nakon izbora kupca) -->
   <div id="prodaja-roba" style="display:none">
+    <div id="najprodavaniji-box" style="display:none;padding:10px 14px 0;">
+      <div style="font-size:11px;font-weight:700;color:#6b7a8d;margin-bottom:6px;">⭐ Najprodavaniji</div>
+      <div id="najprodavaniji-lista" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;"></div>
+    </div>
     <div class="search-box">
       <input type="text" id="search" placeholder="🔍 Pretraga po šifri ili nazivu..." autocomplete="off">
     </div>
@@ -501,6 +514,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
           <label>Broj komada tog formata</label>
           <input type="number" id="das-m2-komada" step="1" min="1" value="1" oninput="dasPreview()">
           <div class="das-preview" id="das-m2-preview"></div>
+          <button type="button" class="btn-dodaj-dimenziju" onclick="dodajJosDimenzija()">+ Dodaj novu dimenziju istog artikla</button>
         </div>
       </div>
 
@@ -523,10 +537,12 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
           <label>Broj komada tog formata</label>
           <input type="number" id="das-m3-komada" step="1" min="1" value="1" oninput="dasPreview()">
           <div class="das-preview" id="das-m3-preview"></div>
+          <button type="button" class="btn-dodaj-dimenziju" onclick="dodajJosDimenzija()">+ Dodaj novu dimenziju istog artikla</button>
         </div>
       </div>
     </div>
   </div>
+  <div id="das-dimenzije-brojac" style="display:none;text-align:center;font-size:11.5px;font-weight:700;color:var(--green);padding:6px 0 0;"></div>
   <div class="ov-footer">
     <button class="btn-otkazi" onclick="zatvoriDodajStavku()">Otkaži</button>
     <button class="btn-potvrdi" onclick="potvrdiDodajStavku()">+ Dodaj u košaricu</button>
@@ -749,6 +765,26 @@ async function trazi(q){
 // Prikaži početnu listu (top artikli) odmah po prijavi
 function trazi_init(){ trazi(''); }
 
+async function ucitajNajprodavanije(){
+  const box=document.getElementById('najprodavaniji-box');
+  const cont=document.getElementById('najprodavaniji-lista');
+  if(!trenutniObjekat){box.style.display='none';return;}
+  try{
+    const r=await fetch(`${API}/api/roba/najprodavaniji?objekt_id=${trenutniObjekat.id}&limit=6`);
+    const rows=await r.json();
+    if(!r.ok || !rows.length){ box.style.display='none'; return; }
+    cont.innerHTML=rows.map(a=>`
+      <div class="np-chip" onclick='dodajUKosaricu(${JSON.stringify(a).replace(/'/g,"&apos;")})'>
+        <div class="np-naziv">${esc(a.naziv)}</div>
+        <div class="np-cijena">${fm(a.cijena)} KM/${esc(a.jed_mjera)}</div>
+      </div>
+    `).join('');
+    box.style.display='block';
+  }catch(e){
+    box.style.display='none';
+  }
+}
+
 /* ── KUPAC (bira se/kreira PRIJE pretrage robe) ──────────────────── */
 let trenutniKupac=null; // {id, naziv, telefon, grad, adresa}
 let kupacSearchTimer=null;
@@ -794,6 +830,7 @@ function izaberiKupca(kupac){
   document.getElementById('kb-meta').textContent=[kupac.telefon,kupac.grad].filter(Boolean).join(' · ')||'Bez dodatnih podataka';
   document.getElementById('prodaja-roba').style.display='block';
   trazi_init();
+  ucitajNajprodavanije();
 }
 
 function promijeniKupca(){
@@ -988,6 +1025,7 @@ function dodajUKosaricu(artikal){
   // ne mora ništa provjeravati unaprijed pri svakom uvozu.
   const jedinica=['kom','m2','m3'].includes(artikal.jed_mjera)?artikal.jed_mjera:'kom';
   dasIzaberiJedinicu(jedinica);
+  azurirajBrojacDodatihDimenzija();
   document.getElementById('ov-dodaj-stavka').classList.add('on');
 }
 
@@ -1055,8 +1093,11 @@ function zatvoriDodajStavku(){
   dasArtikal=null;
 }
 
-function potvrdiDodajStavku(){
-  if(!dasArtikal) return;
+// Vraća true ako je stavka uspješno izgrađena i dodana u košaricu, false ako je greška
+// (i sam prikazuje alert za grešku) — dijeli je i potvrdiDodajStavku (dodaj pa zatvori)
+// i dodajJosDimenzija (dodaj pa ostani otvoren za sledeću dimenziju istog artikla).
+function izgradiIDodajStavku(){
+  if(!dasArtikal) return false;
   let kolicina=null, duzina_cm=null, visina_cm=null, debljina_cm=null, broj_komada=null;
 
   if(dasJedinica==='kom'){
@@ -1068,8 +1109,8 @@ function potvrdiDodajStavku(){
       const d=parseFloat(document.getElementById('das-m2-duzina').value);
       const v=parseFloat(document.getElementById('das-m2-visina').value);
       const kom=parseInt(document.getElementById('das-m2-komada').value)||1;
-      if(!d||!v||d<=0||v<=0){alert('Unesite dužinu i visinu (cm).');return;}
-      if(kom<1){alert('Broj komada mora biti bar 1.');return;}
+      if(!d||!v||d<=0||v<=0){alert('Unesite dužinu i visinu (cm).');return false;}
+      if(kom<1){alert('Broj komada mora biti bar 1.');return false;}
       kolicina=+((d*v)/10000*kom).toFixed(3);
       duzina_cm=d; visina_cm=v; broj_komada=kom;
     }
@@ -1081,17 +1122,22 @@ function potvrdiDodajStavku(){
       const v=parseFloat(document.getElementById('das-m3-visina').value);
       const deb=parseFloat(document.getElementById('das-m3-debljina').value);
       const kom=parseInt(document.getElementById('das-m3-komada').value)||1;
-      if(!d||!v||!deb||d<=0||v<=0||deb<=0){alert('Unesite dužinu, visinu i debljinu (cm).');return;}
-      if(kom<1){alert('Broj komada mora biti bar 1.');return;}
+      if(!d||!v||!deb||d<=0||v<=0||deb<=0){alert('Unesite dužinu, visinu i debljinu (cm).');return false;}
+      if(kom<1){alert('Broj komada mora biti bar 1.');return false;}
       kolicina=+((d*v*deb)/1000000*kom).toFixed(4);
       duzina_cm=d; visina_cm=v; debljina_cm=deb; broj_komada=kom;
     }
   }
 
-  if(!kolicina||isNaN(kolicina)||kolicina<=0){alert('Unesite ispravnu količinu.');return;}
-  if(kolicina>parseFloat(dasArtikal.stanje)){
-    alert(`Nema dovoljno na stanju (raspoloživo: ${dasArtikal.stanje} ${dasArtikal.jed_mjera}). Napomena: stanje je vođeno u jedinici iz šifrarnika — provjerite da li se poklapa sa izabranom jedinicom.`);
-    return;
+  if(!kolicina||isNaN(kolicina)||kolicina<=0){alert('Unesite ispravnu količinu.');return false;}
+
+  // Stanje mora pokriti SVE što je do sad dodano za ovaj artikal u ovoj sesiji unosa +
+  // ono što se upravo dodaje (ne samo ovu jednu stavku), inače bi moglo da se doda više
+  // dimenzija nego što fizički ima na stanju.
+  const vecUKosarici=kosarica.filter(k=>k.roba_id===dasArtikal.id).reduce((s,k)=>s+k.kolicina,0);
+  if(vecUKosarici+kolicina>parseFloat(dasArtikal.stanje)){
+    alert(`Nema dovoljno na stanju (raspoloživo: ${dasArtikal.stanje} ${dasArtikal.jed_mjera}, već dodano u ovoj prodaji: ${vecUKosarici}). Napomena: stanje je vođeno u jedinici iz šifrarnika — provjerite da li se poklapa sa izabranom jedinicom.`);
+    return false;
   }
 
   const postojeciIdx=kosarica.findIndex(k=>k.roba_id===dasArtikal.id && k.jed_mjera===dasJedinica && !duzina_cm && !k.duzina_cm);
@@ -1108,14 +1154,54 @@ function potvrdiDodajStavku(){
   }
 
   renderKosarica();
-  // Namjerno NE otvaramo košaricu — ostaje skupljena (samo brojka+iznos) da pretraga
-  // sledećeg artikla ima pun ekran. Kratak "pulse" na značku potvrđuje da je dodano.
   const badge=document.getElementById('kb-count');
   badge.classList.remove('kb-pulse'); void badge.offsetWidth; badge.classList.add('kb-pulse');
+  return true;
+}
+
+function potvrdiDodajStavku(){
+  if(!izgradiIDodajStavku()) return;
+  // Namjerno NE otvaramo košaricu — ostaje skupljena (samo brojka+iznos) da pretraga
+  // sledećeg artikla ima pun ekran.
   zatvoriDodajStavku();
   document.getElementById('search').value='';
   document.getElementById('search').focus();
   trazi('');
+}
+
+// "+ Dodaj drugu dimenziju (isti artikal)" — dodaje trenutnu stavku u košaricu ALI ne
+// zatvara overlay, samo resetuje polja dužine/visine/debljine/komada da se odmah unese
+// sledeći format iste robe (npr. 5 tabli kamena, svaka druge veličine).
+function dodajJosDimenzija(){
+  if(!izgradiIDodajStavku()) return;
+  if(dasJedinica==='m2'){
+    document.getElementById('das-m2-duzina').value='';
+    document.getElementById('das-m2-visina').value='';
+    document.getElementById('das-m2-komada').value='1';
+    document.getElementById('das-m2-preview').textContent='';
+    document.getElementById('das-m2-duzina').focus();
+  }else if(dasJedinica==='m3'){
+    document.getElementById('das-m3-duzina').value='';
+    document.getElementById('das-m3-visina').value='';
+    document.getElementById('das-m3-debljina').value='';
+    document.getElementById('das-m3-komada').value='1';
+    document.getElementById('das-m3-preview').textContent='';
+    document.getElementById('das-m3-duzina').focus();
+  }
+  azurirajBrojacDodatihDimenzija();
+}
+
+function azurirajBrojacDodatihDimenzija(){
+  if(!dasArtikal) return;
+  const broj=kosarica.filter(k=>k.roba_id===dasArtikal.id).length;
+  const el=document.getElementById('das-dimenzije-brojac');
+  if(!el) return;
+  if(broj>0){
+    el.style.display='block';
+    el.textContent=`✓ Dodano ${broj} ${broj===1?'stavka':'stavke'} ovog artikla u košaricu`;
+  }else{
+    el.style.display='none';
+  }
 }
 
 function promijeniKolicinu(idx, delta){
