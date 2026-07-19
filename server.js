@@ -46,6 +46,7 @@ function requireLoginOrApiKey(req, res, next) {
 app.use('/api/auth',   require('./auth'));
 app.use('/api/config', require('./config'));
 app.use('/api/otpremnice-javno', require('./otpremnice-javno'));
+app.use('/api/isplate-javno', require('./isplate-javno'));
 // ─── Zaštićene rute ───────────────────────────────────────────────────────
 app.use('/api/upload',     requireLoginOrApiKey, require('./upload'));
 app.use('/api/zaposleni',   requireLoginOrApiKey, require('./zaposleni'));

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Potvrda o isplati – JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f0f2f5;--border:#d0d7de;--red:#c0392b;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:#1a2733;font-size:14px;}
+
+.toolbar{background:var(--blue);color:#fff;padding:10px 16px;display:flex;justify-content:space-between;
+  align-items:center;position:sticky;top:0;}
+.toolbar h1{font-size:15px;font-weight:700;}
+.btn-print{background:#fff;color:var(--blue);border:none;border-radius:6px;font:inherit;font-weight:700;
+  font-size:12.5px;padding:8px 14px;cursor:pointer;min-height:36px;}
+
+.dok{max-width:640px;margin:18px auto;background:#fff;border:1px solid var(--border);border-radius:10px;
+  padding:28px 24px;}
+
+.memo{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--red);
+  padding-bottom:16px;margin-bottom:20px;}
+.memo-naziv{font-size:22px;font-weight:800;color:var(--dark);letter-spacing:.5px;}
+.memo-info{font-size:11.5px;color:#6b7a8d;line-height:1.6;margin-top:4px;}
+.memo-doc-tip{text-align:right;font-size:13px;color:#6b7a8d;}
+.memo-doc-tip b{display:block;font-size:16px;color:var(--red);}
+
+.meta-red{display:flex;justify-content:space-between;font-size:12.5px;color:#6b7a8d;margin-bottom:18px;
+  flex-wrap:wrap;gap:8px;}
+
+.iznos-box{text-align:center;background:#fce8e6;border-radius:10px;padding:20px;margin-bottom:20px;}
+.iznos-box .lbl{font-size:11px;font-weight:700;color:#8b96a5;text-transform:uppercase;letter-spacing:.5px;}
+.iznos-box .val{font-size:34px;font-weight:800;color:var(--red);margin-top:4px;}
+
+.info-box{background:#f7f8fa;border-radius:8px;padding:14px 16px;margin-bottom:16px;}
+.info-red{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #e8eaed;font-size:13px;}
+.info-red:last-child{border-bottom:none;}
+.info-red span:first-child{color:#6b7a8d;}
+.info-red span:last-child{font-weight:700;text-align:right;}
+
+.potpisi{display:flex;justify-content:space-between;margin-top:44px;}
+.potpis-polje{width:42%;text-align:center;}
+.potpis-linija{border-top:1px solid #999;padding-top:6px;font-size:11px;color:#6b7a8d;}
+
+.napomena-txt{font-size:11px;color:#9aa5b1;margin-top:16px;line-height:1.5;text-align:center;}
+
+.stanje-msg{text-align:center;color:#9aa5b1;font-size:13px;padding:60px 20px;}
+
+@media print{
+  body{background:#fff;}
+  .toolbar{display:none;}
+  .dok{border:none;margin:0;max-width:100%;}
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <h1>💸 Potvrda o isplati</h1>
+  <button class="btn-print" onclick="window.print()">🖨️ Štampaj / Sačuvaj kao PDF</button>
+</div>
+
+<div class="dok" id="dok">
+  <div class="stanje-msg" id="stanje-msg">Učitavanje...</div>
+</div>
+
+<script>
+/* ── PODACI O FIRMI (MEMORANDUM) ────────────────────────────────────────
+   TODO: JoPeX — po potrebi izmijeni ove podatke na tačne (adresa, PIB, kontakt). */
+const FIRMA = {
+  naziv: 'JoPeX',
+  adresa: '', // npr. "Ulica i broj, 88000 Mostar, BiH"
+  pib: '',    // npr. "PIB: 123456789012"
+  kontakt: '', // npr. "Tel: +387 XX XXX XXX  ·  info@jopex.ba"
+};
+
+const API='';
+function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fd(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('sr-Latn-BA')+' '+dt.toLocaleTimeString('sr-Latn-BA',{hour:'2-digit',minute:'2-digit'});}
+function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+function getToken(){
+  return new URLSearchParams(location.search).get('token')||'';
+}
+
+async function ucitaj(){
+  const token=getToken();
+  const dok=document.getElementById('dok');
+  if(!token){
+    dok.innerHTML='<div class="stanje-msg">Nedostaje link ka potvrdi o isplati.</div>';
+    return;
+  }
+  try{
+    const r=await fetch(`${API}/api/isplate-javno/${encodeURIComponent(token)}`);
+    const isp=await r.json();
+    if(!r.ok) throw new Error(isp.error||'Isplata nije pronađena.');
+
+    document.title=`Potvrda o isplati ${isp.broj} – JoPeX`;
+
+    dok.innerHTML=`
+      <div class="memo">
+        <div>
+          <div class="memo-naziv">${esc(FIRMA.naziv)}${isp.objekt_naziv?` <span style="font-size:13px;font-weight:600;color:#6b7a8d;">— ${esc(isp.objekt_naziv)}</span>`:''}</div>
+          <div class="memo-info">
+            ${FIRMA.adresa?esc(FIRMA.adresa)+'<br>':''}
+            ${FIRMA.pib?esc(FIRMA.pib)+'<br>':''}
+            ${FIRMA.kontakt?esc(FIRMA.kontakt):''}
+          </div>
+        </div>
+        <div class="memo-doc-tip"><b>POTVRDA O ISPLATI</b>${esc(isp.broj)}</div>
+      </div>
+
+      <div class="meta-red">
+        <span>Datum: <b>${fd(isp.datum)}</b></span>
+        <span>Isplatio: ${esc(isp.komercijalista_ime||'—')}${isp.objekt_naziv?' · '+esc(isp.objekt_naziv):''}</span>
+      </div>
+
+      <div class="iznos-box">
+        <div class="lbl">Isplaćeni iznos</div>
+        <div class="val">${fm(isp.iznos)} KM</div>
+      </div>
+
+      <div class="info-box">
+        <div class="info-red"><span>Primalac</span><span>${esc(isp.primalac_ime)}</span></div>
+        <div class="info-red"><span>Razlog isplate</span><span>${esc(isp.razlog_label)}</span></div>
+        ${isp.napomena?`<div class="info-red"><span>Napomena</span><span>${esc(isp.napomena)}</span></div>`:''}
+      </div>
+
+      <div class="potpisi">
+        <div class="potpis-polje"><div class="potpis-linija">Isplatio (JoPeX)</div></div>
+        <div class="potpis-polje"><div class="potpis-linija">Primio</div></div>
+      </div>
+
+      <div class="napomena-txt">Ovaj dokument potvrđuje da je JoPeX isplatio navedeni iznos navedenoj osobi. Ne predstavlja fiskalni račun.</div>
+    `;
+  }catch(e){
+    dok.innerHTML=`<div class="stanje-msg">${esc(e.message)}</div>`;
+  }
+}
+ucitaj();
+</script>
+</body>
+</html>

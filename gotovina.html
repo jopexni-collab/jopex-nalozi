@@ -211,7 +211,9 @@ function render(){
         ?`<a class="nalog-link" href="lista.html">#${r.nalog_r_br}</a>${r.narucilac?' — '+esc(r.narucilac):''}`
         :String(r.nalog_r_br).startsWith('OTP-')
           ?`<a class="nalog-link" href="maloprodaja.html?otp=${encodeURIComponent(r.nalog_r_br)}">${esc(r.nalog_r_br)}</a>`
-          :`<span class="nalog-link" style="cursor:default;">${esc(r.nalog_r_br)}</span>`
+          :String(r.nalog_r_br).startsWith('ISP-')&&r.javni_token
+            ?`<a class="nalog-link" href="isplata-dokument.html?token=${encodeURIComponent(r.javni_token)}" target="_blank" rel="noopener">${esc(r.nalog_r_br)}</a>`
+            :`<span class="nalog-link" style="cursor:default;">${esc(r.nalog_r_br)}</span>`
       ):''}</td>
       <td>${esc(r.opis||'')}</td>
       <td>${r.predao_blagajniku

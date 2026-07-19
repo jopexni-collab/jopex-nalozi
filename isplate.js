@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('./db');
+const crypto = require('crypto');
 
 const RAZLOZI = ['povrat_komitentu', 'gorivo', 'sitne_popravke', 'dorucak', 'cistac', 'servis', 'drugo'];
 
@@ -88,21 +89,22 @@ router.post('/', async (req, res) => {
     if (!objRes.rows.length) throw Object.assign(new Error('Prodajni objekat nije pronađen.'), { status: 404 });
     const objektNaziv = objRes.rows[0].naziv;
     const napomenaTrim = (napomena || '').trim() || null;
+    const javniToken = crypto.randomBytes(20).toString('hex');
 
     const r = await client.query(
       `INSERT INTO isplate
          (objekt_id, objekt_naziv, iznos, razlog, napomena, primalac_ime,
-          potvrdjeno_vrijeme, komercijalista_id, komercijalista_ime)
-       VALUES ($1,$2,$3,$4,$5,$6, now(), $7,$8) RETURNING *`,
-      [objekt_id, objektNaziv, izn, razlog, napomenaTrim, primalac_ime.trim(), user.id, user.ime_prezime]
+          potvrdjeno_vrijeme, komercijalista_id, komercijalista_ime, javni_token)
+       VALUES ($1,$2,$3,$4,$5,$6, now(), $7,$8,$9) RETURNING *`,
+      [objekt_id, objektNaziv, izn, razlog, napomenaTrim, primalac_ime.trim(), user.id, user.ime_prezime, javniToken]
     );
     const isplata = r.rows[0];
 
     const opis = `Isplata — ${RAZLOG_LABEL[razlog]} — ${primalac_ime.trim()}${napomenaTrim ? ' (' + napomenaTrim + ')' : ''}`;
     const g = await client.query(
-      `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
-       VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5) RETURNING id`,
-      [-izn, user.ime_prezime, opis, objektNaziv, `ISP-${isplata.id}`]
+      `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br, javni_token)
+       VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5, $6) RETURNING id`,
+      [-izn, user.ime_prezime, opis, objektNaziv, `ISP-${isplata.id}`, javniToken]
     );
 
     await client.query('COMMIT');

@@ -345,7 +345,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 <!-- ═══ TAB: ISPLATE (gotovinske isplate iz kase) ═══ -->
 <div class="view" id="view-isplate">
-  <div class="import-box">
+  <div class="import-box" id="isplata-forma-box">
     <h3>💸 Nova isplata</h3>
     <div class="kupac-fld">
       <label>Razlog isplate</label>
@@ -370,6 +370,14 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
     <button class="btn-generisi" onclick="pripremiIsplatu()">Dalje →</button>
     <div id="isplata-greska" style="display:none;background:#fce8e6;color:var(--red);border-radius:8px;padding:10px 12px;margin-top:8px;font-size:12.5px;font-weight:600;"></div>
+  </div>
+
+  <div class="import-box" id="isplata-uspjeh-box" style="display:none;text-align:center;">
+    <div style="font-size:36px;">✅</div>
+    <h3 style="margin:8px 0 4px;">Isplata zabilježena</h3>
+    <p id="isplata-uspjeh-detalji" style="font-size:13px;color:#6b7a8d;margin-bottom:14px;"></p>
+    <div class="posalji-box" id="isplata-posalji-box"></div>
+    <button class="btn-generisi" style="margin-top:14px;" onclick="novaIsplata()">+ Nova isplata</button>
   </div>
 
   <div class="import-box">
@@ -942,10 +950,14 @@ async function potvrdiIsplatu(){
     if(!r.ok) throw new Error(data.error||'Greška pri isplati.');
     document.getElementById('ov-isplata').classList.remove('on');
     isplataZaPotvrdu=null;
-    document.getElementById('isp-razlog').value='';
-    document.getElementById('isp-napomena').value='';
-    document.getElementById('isp-iznos').value='';
-    promijeniRazlogIsplate();
+
+    document.getElementById('isplata-forma-box').style.display='none';
+    document.getElementById('isplata-uspjeh-box').style.display='block';
+    document.getElementById('isplata-uspjeh-detalji').textContent=
+      `${fm(data.iznos)} KM — ${RAZLOG_ISPLATE_LABEL[data.razlog]} — primio: ${data.primalac_ime}`;
+    document.getElementById('isplata-posalji-box').innerHTML=
+      renderPosaljiDugmadIsplata(data.javni_token, `ISP-${data.id}`);
+
     ucitajIsplateListu();
   }catch(e){
     alert(e.message);
@@ -1505,6 +1517,39 @@ function renderPosaljiDugmad(token, broj, telefon, email){
     </div>
     <div class="posalji-link">${esc(link)}</div>
   `;
+}
+
+// Isti obrazac kao renderPosaljiDugmad, ali za "Potvrdu o isplati" — nema unaprijed
+// poznat telefon/email primaoca (nije se prikupljao pri unosu), pa su linkovi uvijek
+// generički (WhatsApp/Viber otvaraju birač kontakta, Email ide bez unaprijed upisane adrese).
+function linkDokumentaIsplata(token){
+  return `${location.origin}/isplata-dokument.html?token=${encodeURIComponent(token)}`;
+}
+
+function renderPosaljiDugmadIsplata(token, broj){
+  const link=linkDokumentaIsplata(token);
+  const poruka=encodeURIComponent(`Potvrda o isplati ${broj} — JoPeX\n${link}`);
+  const waHref = `https://wa.me/?text=${poruka}`;
+  const viberHref = `viber://forward?text=${poruka}`;
+  const mailHref = `mailto:?subject=${encodeURIComponent('Potvrda o isplati '+broj+' — JoPeX')}&body=${poruka}`;
+  return `
+    <div class="posalji-lbl">Pošalji potvrdu primaocu</div>
+    <div class="posalji-btns">
+      <a class="btn-posalji viber" href="${viberHref}"><span class="ic">📱</span>Viber</a>
+      <a class="btn-posalji whatsapp" href="${waHref}" target="_blank" rel="noopener"><span class="ic">💬</span>WhatsApp</a>
+      <a class="btn-posalji email" href="${mailHref}"><span class="ic">✉️</span>Email</a>
+    </div>
+    <div class="posalji-link">${esc(link)}</div>
+  `;
+}
+
+function novaIsplata(){
+  document.getElementById('isplata-forma-box').style.display='block';
+  document.getElementById('isplata-uspjeh-box').style.display='none';
+  document.getElementById('isp-razlog').value='';
+  document.getElementById('isp-napomena').value='';
+  document.getElementById('isp-iznos').value='';
+  promijeniRazlogIsplate();
 }
 
 function novaProdaja(){
