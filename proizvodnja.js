@@ -1,8 +1,7 @@
-// routes/proizvodnja.js DODAJ NA RAIL
+// routes/proizvodnja.js
 const express = require('express');
 const router = express.Router();
 const pool = require('./db');
-console.log('VERZIJA-PROVERA: proizvodnja.js sa ::text popravkom, ucitan', new Date().toISOString());
 
 // Finansijske kolone - vide ih samo admini
 const ADMIN_COLS = `
@@ -12,7 +11,7 @@ const ADMIN_COLS = `
   ga.predano AS avans_predano, gn.predano AS naplata_predano
 `;
 
-// JOIN koji provjerava da li je gotovina za avans/naplatu ovog naloga I OVDE
+// JOIN koji provjerava da li je gotovina za avans/naplatu ovog naloga
 // već predata blagajniku (sve odgovarajuće stavke moraju biti predane)
 const GOTOVINA_JOINS = `
   LEFT JOIN LATERAL (
@@ -212,40 +211,49 @@ router.patch('/:r_br', async (req, res) => {
     const novo = r.rows[0];
 
     if (trebaProvjeruGotovine) {
-      // AVANS -> ako je postavljen na gotovinu, promijenjen je, I iznos je > 0
+      // AVANS -> ako se avans_opis promijenio, prvo ukloni STARI gotovinski zapis (ako
+      // postoji) — bez obzira da li se sad prebacuje NA gotovinu, SA gotovine na banku,
+      // ili samo mijenja ko je primio. Bez ovoga, svaki povratak na "gotovina" pravi
+      // duplikat, a prebacivanje na "banka" ostavlja stari (sad netačan) zapis u blagajni.
       const avansIznos = Number(novo.avans || 0);
-      if ('avans_opis' in req.body &&
-          novo.avans_opis !== staro.avans_opis &&
-          jeGotovina(novo.avans_opis) &&
-          avansIznos > 0) {
+      if ('avans_opis' in req.body && novo.avans_opis !== staro.avans_opis) {
         await pool.query(
-          `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis)
-           VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4)`,
-          [
-            avansIznos,
-            izvuciPrimio(novo.avans_opis),
-            novo.r_br,
-            `Avans - nalog #${novo.r_br}${novo.narucilac ? ' (' + novo.narucilac + ')' : ''}`,
-          ]
+          `DELETE FROM gotovina WHERE nalog_r_br = $1::text AND opis LIKE 'Avans%'`,
+          [String(novo.r_br)]
         );
+        if (jeGotovina(novo.avans_opis) && avansIznos > 0) {
+          await pool.query(
+            `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis)
+             VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4)`,
+            [
+              avansIznos,
+              izvuciPrimio(novo.avans_opis),
+              String(novo.r_br),
+              `Avans - nalog #${novo.r_br}${novo.narucilac ? ' (' + novo.narucilac + ')' : ''}`,
+            ]
+          );
+        }
       }
 
-      // NAPLATA (preostali iznos) -> isto, ako je gotovina, promijenjena, I iznos je > 0
+      // NAPLATA (preostali iznos) -> ista logika: prvo obriši stari zapis, pa eventualno upiši novi.
       const zaNaplatu = Number(novo.ugovorena_suma || 0) - Number(novo.avans || 0);
-      if ('naplaceno_opis' in req.body &&
-          novo.naplaceno_opis !== staro.naplaceno_opis &&
-          jeGotovina(novo.naplaceno_opis) &&
-          zaNaplatu > 0) {
+      if ('naplaceno_opis' in req.body && novo.naplaceno_opis !== staro.naplaceno_opis) {
         await pool.query(
-          `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis)
-           VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4)`,
-          [
-            zaNaplatu,
-            izvuciPrimio(novo.naplaceno_opis),
-            novo.r_br,
-            `Naplata - nalog #${novo.r_br}${novo.narucilac ? ' (' + novo.narucilac + ')' : ''}`,
-          ]
+          `DELETE FROM gotovina WHERE nalog_r_br = $1::text AND opis LIKE 'Naplata%'`,
+          [String(novo.r_br)]
         );
+        if (jeGotovina(novo.naplaceno_opis) && zaNaplatu > 0) {
+          await pool.query(
+            `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis)
+             VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4)`,
+            [
+              zaNaplatu,
+              izvuciPrimio(novo.naplaceno_opis),
+              String(novo.r_br),
+              `Naplata - nalog #${novo.r_br}${novo.narucilac ? ' (' + novo.narucilac + ')' : ''}`,
+            ]
+          );
+        }
       }
     }
 
