@@ -5,7 +5,7 @@ const crypto = require('crypto');
 
 const RAZLOZI = ['kvalitet', 'kolicina', 'lom', 'jedinica', 'drugo'];
 
-// Admin uvijek prolazi; ostali moraju imati moze_prodavati=true (dozvola iz korisnici.html).
+// Admin uvijek prolazi; ostali moraju imati moze_prodavati=true (dozvola iz korisnici.html).  uvezi sto pre
 router.use((req, res, next) => {
   const u = req.session?.user;
   if (u?.rola === 'admin' || u?.moze_prodavati) return next();
