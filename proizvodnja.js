@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('./db');
+console.log('VERZIJA-PROVERA: proizvodnja.js sa ::text popravkom, ucitan', new Date().toISOString());
 
 // Finansijske kolone - vide ih samo admini
 const ADMIN_COLS = `
