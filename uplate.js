@@ -67,6 +67,9 @@ router.post('/', async (req, res) => {
       [iznos, user.ime_prezime, `Uplata — ${kupacNaziv}${napomena ? ' (' + napomena.trim() + ')' : ''}`, objektNaziv]
     );
     const gotovinaId = g.rows[0].id;
+    // Isti pattern kao ISP- za isplate — daje koloni "Nalog/Otp" u blagajni prepoznatljiv
+    // identifikator i za uplate (do sad je ta kolona ostajala prazna za uplate).
+    await client.query('UPDATE gotovina SET nalog_r_br=$1 WHERE id=$2', [`UPL-${gotovinaId}`, gotovinaId]);
 
     let preostalo = iznos;
     const pokriveneOtpremnice = [];
@@ -115,6 +118,9 @@ router.post('/', async (req, res) => {
         [kupac_id, preostalo, napomena || 'Avansna uplata', objekt_id, objektNaziv,
          user.id, user.ime_prezime, gotovinaId, avansToken]
       );
+      // Isti token i na gotovina red — da gotovina.html može direktno linkovati na
+      // dokument "Potvrda o uplati", isti pattern kao za isplate.
+      await client.query('UPDATE gotovina SET javni_token=$1 WHERE id=$2', [avansToken, gotovinaId]);
     }
 
     await client.query('COMMIT');
