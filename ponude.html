@@ -6,8 +6,8 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:"Segoe UI",Tahoma,sans-serif;background:#f0f2f5;color:#1a2332;font-size:13px;}
-header{background:#1a5fa8;color:#fff;min-height:48px;padding:4px 12px 4px 10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px;}
-.hdr-btns{display:flex;gap:3px;flex-wrap:wrap;flex:1;}
+header{background:#1a5fa8;color:#fff;height:48px;padding:0 12px 0 10px;display:flex;align-items:center;justify-content:space-between;overflow:hidden;}
+.hdr-btns{display:flex;gap:3px;flex-shrink:0;}
 .hdr-btn{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);
   color:#fff;border-radius:4px;padding:4px 10px;font-size:11px;font-weight:600;
   cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:4px;
@@ -171,18 +171,18 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
 <body>
 <header>
   <div class="hdr-btns">
-    <button class="hdr-btn" onclick="location.href='home.html'" title="Početna" style="background:rgba(255,255,255,0.2);">🏠</button>
-    <button class="hdr-btn" onclick="saveProject()" title="Sačuvaj lokalno (Ctrl+S)">💾</button>
-    <button class="hdr-btn" onclick="loadProject()" title="Učitaj lokalno (Ctrl+O)">📂</button>
-    <button class="hdr-btn" onclick="cloudSave()" title="Sačuvaj na server" style="background:rgba(100,200,120,0.25);border-color:rgba(100,200,120,0.6);">☁💾</button>
-    <button class="hdr-btn" onclick="cloudLoad()" title="Učitaj sa servera" style="background:rgba(100,200,120,0.25);border-color:rgba(100,200,120,0.6);">☁📂</button>
-    <button class="hdr-btn" onclick="undo()" title="Poništi (Ctrl+Z)">↩</button>
-    <button class="hdr-btn" onclick="genPon()" title="Generiši ponudu" style="background:rgba(255,255,255,0.25);border-color:rgba(255,255,255,0.5);">📄 Pon.</button>
-    <button class="hdr-btn" onclick="genRadniNalog()" title="Generiši radni nalog" style="background:rgba(255,255,255,0.25);border-color:rgba(255,255,255,0.5);">🔧 R.N.</button>
+    <button class="hdr-btn" onclick="location.href='home.html'" title="Početna" style="background:rgba(255,255,255,0.2);">🏠 Home</button>
+    <button class="hdr-btn" onclick="saveProject()" title="Sačuvaj lokalno (Ctrl+S)">💾 Sačuvaj</button>
+    <button class="hdr-btn" onclick="loadProject()" title="Učitaj lokalno (Ctrl+O)">📂 Učitaj</button>
+    <button class="hdr-btn" onclick="cloudSave()" title="Sačuvaj na server" style="background:rgba(100,200,120,0.25);border-color:rgba(100,200,120,0.6);">☁ Sačuvaj</button>
+    <button class="hdr-btn" onclick="cloudLoad()" title="Učitaj sa servera" style="background:rgba(100,200,120,0.25);border-color:rgba(100,200,120,0.6);">☁ Učitaj</button>
+    <button class="hdr-btn" onclick="undo()" title="Poništi (Ctrl+Z)">↩ Undo</button>
+    <button class="hdr-btn" onclick="genPon()" title="Generiši ponudu" style="background:rgba(255,255,255,0.25);border-color:rgba(255,255,255,0.5);">📄 Gen.Pon</button>
+    <button class="hdr-btn" onclick="genRadniNalog()" title="Generiši radni nalog" style="background:rgba(255,255,255,0.25);border-color:rgba(255,255,255,0.5);">🔧 R.Nalog</button>
     <button class="hdr-btn" onclick="genDXF()" title="Generiši DXF za CNC">DXF</button>
     <button class="hdr-btn" onclick="savePonudaWord()" title="Sačuvaj kao Word">WORD</button>
-    <button class="hdr-btn" onclick="window.print()" title="Štampaj / PDF">🖨</button>
-    <button class="hdr-btn" onclick="odjava()" title="Odjava" style="background:rgba(200,50,50,0.25);">🚪</button>
+    <button class="hdr-btn" onclick="window.print()" title="Štampaj / PDF">🖨 Print</button>
+    <button class="hdr-btn" onclick="odjava()" title="Odjava" style="background:rgba(200,50,50,0.25);">🚪 Izlaz</button>
   </div>
   <div class="logo">JoPeX <em>d.o.o.</em> <span style="font-size:10px;opacity:.55;font-weight:400">Generator Ponuda v276-1</span><span id="hdr-who" style="font-size:10px;opacity:.75;margin-left:10px;font-weight:400"></span></div>
   <div class="hinfo">Auto-Put, Aleksandrovačka petlja bb · 78255 Aleksandrovac<br>+387 51/42 52 50 · +387 65 512 868</div>
