@@ -327,6 +327,10 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       </div>
 
       <input type="file" id="imp-file" accept=".xlsx,.xls">
+      <div id="imp-sheet-red" style="display:none;">
+        <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin:6px 0 4px;">Fajl ima više listova (sheet-ova) — izaberi koji da uvezeš:</label>
+        <select id="imp-sheet" onchange="ucitajPregledUvoza()"></select>
+      </div>
       <button class="btn-import" onclick="ucitajPregledUvoza()">Učitaj fajl i prikaži kolone</button>
     </div>
 
@@ -525,13 +529,28 @@ async function ucitajPregledUvoza(){
   msg.style.color='#6b7a8d'; msg.textContent='Čitanje fajla...';
   const fd_=new FormData();
   fd_.append('file', fileInput.files[0]);
+  const sheetSelect=document.getElementById('imp-sheet');
+  if(sheetSelect.value) fd_.append('sheet', sheetSelect.value);
   try{
     const r=await fetch(`${API}/api/roba/import/pregled`,{method:'POST',body:fd_});
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška pri čitanju fajla.');
     uvozHeader=data.header; uvozUzorak=data.uzorak;
+
+    // Ako fajl ima više listova, prikaži izbor (jednom — ne ponovo praznimo listu ako
+    // je korisnik već birao, da ne izgubi izbor pri ponovnom pozivu preko onchange).
+    if(data.sheetovi && data.sheetovi.length>1){
+      document.getElementById('imp-sheet-red').style.display='block';
+      if(!sheetSelect.value){
+        sheetSelect.innerHTML=data.sheetovi.map(s=>`<option value="${esc(s)}" ${s===data.izabrani_sheet?'selected':''}>${esc(s)}</option>`).join('');
+      }
+    }else{
+      document.getElementById('imp-sheet-red').style.display='none';
+    }
+
     prikaziMapiranje(data.predlog, data.ukupno_redova);
-    msg.textContent='';
+    msg.style.color='#6b7a8d';
+    msg.textContent=data.sheetovi&&data.sheetovi.length>1?`List "${data.izabrani_sheet}" učitan (${data.sheetovi.length} listova u fajlu).`:'';
   }catch(e){
     msg.style.color='red'; msg.textContent=e.message;
   }
@@ -561,6 +580,8 @@ function otkaziUvoz(){
   document.getElementById('imp-korak1').style.display='block';
   document.getElementById('imp-korak2').style.display='none';
   document.getElementById('imp-file').value='';
+  document.getElementById('imp-sheet').value='';
+  document.getElementById('imp-sheet-red').style.display='none';
 }
 
 async function potvrdiUvoz(){
@@ -586,6 +607,8 @@ async function potvrdiUvoz(){
   const fileInput=document.getElementById('imp-file');
   const fd_=new FormData();
   fd_.append('file', fileInput.files[0]);
+  const sheetVal=document.getElementById('imp-sheet').value;
+  if(sheetVal) fd_.append('sheet', sheetVal);
   if(uvozIzvor!=='metapodaci') fd_.append('objekt_id', document.getElementById('imp-objekat').value);
   fd_.append('izvor', backendIzvor);
   fd_.append('mapping', JSON.stringify(mapping));
@@ -604,6 +627,10 @@ async function potvrdiUvoz(){
       poruka+=` ⚠ ${data.broj_cijena_razlike} artikal(a) imalo je drugačiju cijenu u fajlu — `+
         (data.cijena_azurirana?'cijene su ažurirane na nove.':'STARE cijene su zadržane (nisi tražio ažuriranje).');
     }
+    if(data._debug){
+      poruka+=`\n[Dijagnostika: izvor="${data._debug.izvor_primljen}", cijena_se_dira=${data._debug.cijena_se_dira}, mapping.cijena="${data._debug.mapping_cijena}"]`;
+    }
+    msg.style.whiteSpace='pre-line';
     msg.textContent=poruka;
     otkaziUvoz();
   }catch(e){

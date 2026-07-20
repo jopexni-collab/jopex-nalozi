@@ -400,9 +400,9 @@ router.patch('/:id', async (req, res) => {
       if (!objektId) return res.status(400).json({ error: 'Za izmjenu cijene/stanja potreban je objekt_id.' });
       const rp = await pool.query(
         `INSERT INTO roba_pj (roba_id, objekt_id, cijena, stanje)
-         VALUES ($1,$2,COALESCE($3,0),COALESCE($4,0))
+         VALUES ($1,$2,COALESCE($3::numeric,0),COALESCE($4::numeric,0))
          ON CONFLICT (roba_id, objekt_id) DO UPDATE SET
-           cijena=COALESCE($3, roba_pj.cijena), stanje=COALESCE($4, roba_pj.stanje), azurirano=now()
+           cijena=COALESCE($3::numeric, roba_pj.cijena), stanje=COALESCE($4::numeric, roba_pj.stanje), azurirano=now()
          RETURNING *`,
         [req.params.id, objektId, cijena, stanje]
       );
@@ -465,10 +465,18 @@ function nagadjajMapiranje(header) {
   return predlog;
 }
 
-function citajRadniList(buffer) {
+function citajRadniList(buffer, sheetName) {
   const wb = XLSX.read(buffer, { type: 'buffer' });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const ime = sheetName && wb.SheetNames.includes(sheetName) ? sheetName : wb.SheetNames[0];
+  const sheet = wb.Sheets[ime];
   return XLSX.utils.sheet_to_json(sheet, { defval: '' });
+}
+
+// Vraća samo listu naziva listova (sheet-ova) u fajlu — koristi se da frontend ponudi
+// izbor kad fajl ima više od jednog lista.
+function listaSheetova(buffer) {
+  const wb = XLSX.read(buffer, { type: 'buffer' });
+  return wb.SheetNames;
 }
 
 // Parsira broj iz Excel ćelije, hvatajući i evropski format (tačka=hiljade, zarez=decimale,
@@ -498,13 +506,18 @@ router.post('/import/pregled', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Fajl nije priložen.' });
 
   try {
-    const rows = citajRadniList(req.file.buffer);
-    if (!rows.length) return res.status(400).json({ error: 'Fajl je prazan.' });
+    const sheetovi = listaSheetova(req.file.buffer);
+    const izabraniSheet = req.body.sheet || sheetovi[0];
+    const rows = citajRadniList(req.file.buffer, izabraniSheet);
+    if (!rows.length) return res.status(400).json({ error: `List "${izabraniSheet}" je prazan.` });
 
     const header = Object.keys(rows[0]);
     const predlog = nagadjajMapiranje(header);
 
-    res.json({ header, uzorak: rows.slice(0, 5), predlog, ukupno_redova: rows.length });
+    res.json({
+      header, uzorak: rows.slice(0, 5), predlog, ukupno_redova: rows.length,
+      sheetovi, izabrani_sheet: izabraniSheet,
+    });
   } catch (err) {
     res.status(500).json({ error: 'Greška pri čitanju fajla: ' + err.message });
   }
@@ -549,7 +562,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
   }
 
   try {
-    const rows = citajRadniList(req.file.buffer);
+    const rows = citajRadniList(req.file.buffer, req.body.sheet);
     if (!rows.length) return res.status(400).json({ error: 'Fajl je prazan.' });
 
     const izvor = req.body.izvor === 'interni' ? 'interni' : 'bluesoft';
@@ -610,10 +623,10 @@ router.post('/import', upload.single('file'), async (req, res) => {
           // stavka bez postojećeg reda dobija 0. Za interni izvor cijena se uvijek postavlja iz fajla.
           const pjRes = await pool.query(
             `INSERT INTO roba_pj (roba_id, objekt_id, cijena, stanje)
-             VALUES ($1,$2,COALESCE($3,0),$4)
+             VALUES ($1,$2,COALESCE($3::numeric,0),$4::numeric)
              ON CONFLICT (roba_id, objekt_id) DO UPDATE SET
-               cijena = CASE WHEN $3 IS NOT NULL THEN $3 ELSE roba_pj.cijena END,
-               stanje = $4, azurirano = now()
+               cijena = CASE WHEN $3::numeric IS NOT NULL THEN $3::numeric ELSE roba_pj.cijena END,
+               stanje = $4::numeric, azurirano = now()
              RETURNING (xmax = 0) AS inserted`,
             [robaId, objektId, cijenaFajl, stanjeFajl]
           );
@@ -658,6 +671,10 @@ router.post('/import', upload.single('file'), async (req, res) => {
       ok: true, uneseno, azurirano, preskoceno, ukupno_redova: rows.length, kolone: mapping,
       nacin, cijena_razlike: cijenaRazlike.slice(0, 50), broj_cijena_razlike: cijenaRazlike.length,
       cijena_azurirana: nacin === 'nabavka' ? azurirajCijenu : null,
+      // Dijagnostika (privremeno) — da vidimo tačno šta je server primio ako cijena
+      // opet ne bude uvezena: izvor koji je stigao, da li se cijena uopšte dira, i
+      // koja kolona je mapirana na cijenu.
+      _debug: { izvor_primljen: izvor, cijena_se_dira: cijenaSeDira, mapping_cijena: mapping.cijena || null },
     });
   } catch (err) {
     res.status(500).json({ error: 'Greška pri uvozu: ' + err.message });
