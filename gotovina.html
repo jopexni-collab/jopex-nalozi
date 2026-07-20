@@ -83,25 +83,28 @@ td.num{text-align:right;font-weight:700;}
 
 <!-- BLAGAJNA (blagajnik: svoj PJ; admin: pregled) -->
 <div class="forma" id="blagajna-box" style="display:none;">
-  <h3>🏦 Blagajna<span id="blagajna-pj-naziv" style="font-weight:400;color:#6b7a8d;"></span></h3>
-  <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
-    <div>
-      <div style="font-size:11px;color:#6b7a8d;">Trenutno u blagajni</div>
-      <div id="blagajna-stanje" style="font-size:24px;font-weight:800;color:var(--dark);">—</div>
+  <h3>🏦 Blagajna</h3>
+  <div id="blagajna-pj-tabovi" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;"></div>
+  <div id="blagajna-panel" style="display:none;">
+    <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+      <div>
+        <div style="font-size:11px;color:#6b7a8d;">Trenutno u blagajni<span id="blagajna-pj-naziv" style="font-weight:400;"></span></div>
+        <div id="blagajna-stanje" style="font-size:24px;font-weight:800;color:var(--dark);">—</div>
+      </div>
+      <button class="btn-add" onclick="otvoriRazduzenje('banka')">🏦 Razduži u Banku</button>
+      <button class="btn-add" onclick="otvoriRazduzenje('sef')" style="background:var(--orange);">🔒 Ostavi u Sef</button>
     </div>
-    <button class="btn-add" onclick="otvoriRazduzenje('banka')">🏦 Razduži u Banku</button>
-    <button class="btn-add" onclick="otvoriRazduzenje('sef')" style="background:var(--orange);">🔒 Ostavi u Sef</button>
-  </div>
-  <div id="razduzenje-forma" style="display:none;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
-    <div style="font-weight:700;margin-bottom:8px;" id="razduzenje-naslov"></div>
-    <div class="forma-grid">
-      <div class="fg"><label>Iznos (KM)</label><input type="number" id="razd-iznos" step="0.01" min="0.01"></div>
-      <div class="fg"><label>Napomena (opciono)</label><input type="text" id="razd-napomena"></div>
-      <div class="fg"><label>&nbsp;</label><button class="btn-add" onclick="potvrdiRazduzenje()">✓ Zabilježi</button></div>
+    <div id="razduzenje-forma" style="display:none;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
+      <div style="font-weight:700;margin-bottom:8px;" id="razduzenje-naslov"></div>
+      <div class="forma-grid">
+        <div class="fg"><label>Iznos</label><input type="number" id="razd-iznos" step="0.01" min="0.01"></div>
+        <div class="fg"><label>Napomena (opciono)</label><input type="text" id="razd-napomena"></div>
+        <div class="fg"><label>&nbsp;</label><button class="btn-add" onclick="potvrdiRazduzenje()">✓ Zabilježi</button></div>
+      </div>
+      <div id="razduzenje-msg" style="font-size:12px;margin-top:6px;"></div>
     </div>
-    <div id="razduzenje-msg" style="font-size:12px;margin-top:6px;"></div>
+    <div id="razduzenja-lista"></div>
   </div>
-  <div id="razduzenja-lista"></div>
 </div>
 
 <!-- ADMIN: razduženja na čekanju potvrde (sve PJ) -->
@@ -193,7 +196,46 @@ function gv(id){return(document.getElementById(id)||{}).value||'';}
 // Postavi defaultni datum = danas
 document.getElementById('f-datum').value=new Date().toISOString().split('T')[0];
 
-/* ── BLAGAJNA (razduženja banka/sef) ──────────────────────────────── */
+/* ── BLAGAJNA (razduženja banka/sef) — više PJ po osobi ──────────────── */
+let mojiPJovi=[];
+
+// Prikazuje iznos u NATIVNOJ valuti tog PJ, sa KM-ekvivalentom u zagradi ako je EUR
+// (fiksni kurs 1€=1,95KM — samo za prikaz, ne mijenja stvarno sačuvanu vrijednost).
+function fmValuta(iznos, valuta, kmEkvivalent){
+  if(valuta==='EUR') return `${fm(iznos)} € (${fm(kmEkvivalent!=null?kmEkvivalent:iznos*1.95)} KM)`;
+  return `${fm(iznos)} KM`;
+}
+
+async function ucitajMojePJ(){
+  try{
+    const r=await fetch(`${API}/api/blagajna-razduzenja/moji-pj`);
+    mojiPJovi=await r.json();
+  }catch(e){ mojiPJovi=[]; }
+  const tabovi=document.getElementById('blagajna-pj-tabovi');
+  if(!mojiPJovi.length){
+    tabovi.innerHTML='<div style="color:#8b96a5;font-size:12px;">Nema dodijeljenih PJ.</div>';
+    return;
+  }
+  tabovi.innerHTML=mojiPJovi.map(p=>`
+    <button class="btn-add pj-tab" data-pj="${p.id}" onclick="izaberiBlagajnaPJ(${p.id})"
+      style="background:#f0f2f5;color:var(--dark);border:1px solid var(--border);">
+      🏢 ${esc(p.naziv)}${p.valuta==='EUR'?' (€)':''}
+    </button>
+  `).join('');
+  izaberiBlagajnaPJ(mojiPJovi[0].id);
+}
+
+function izaberiBlagajnaPJ(objektId){
+  blagajnaObjektId=objektId;
+  document.querySelectorAll('.pj-tab').forEach(b=>{
+    const aktivan=String(b.dataset.pj)===String(objektId);
+    b.style.background=aktivan?'var(--blue)':'#f0f2f5';
+    b.style.color=aktivan?'#fff':'var(--dark)';
+  });
+  document.getElementById('blagajna-panel').style.display='block';
+  ucitajBlagajnaStanje();
+}
+
 async function ucitajBlagajnaStanje(){
   if(!blagajnaObjektId) return;
   try{
@@ -201,7 +243,7 @@ async function ucitajBlagajnaStanje(){
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Greška.');
     document.getElementById('blagajna-pj-naziv').textContent=' — '+d.objekt_naziv;
-    document.getElementById('blagajna-stanje').textContent=fm(d.trenutno_u_blagajni)+' KM';
+    document.getElementById('blagajna-stanje').textContent=fmValuta(d.trenutno_u_blagajni, d.valuta, d.trenutno_km_ekvivalent);
   }catch(e){
     document.getElementById('blagajna-stanje').textContent='Greška';
   }
@@ -210,13 +252,15 @@ async function ucitajBlagajnaStanje(){
 
 async function ucitajMojaRazduzenja(){
   const cont=document.getElementById('razduzenja-lista');
+  const pj=mojiPJovi.find(p=>String(p.id)===String(blagajnaObjektId));
+  const valuta=pj?pj.valuta:'KM';
   try{
     const r=await fetch(`${API}/api/blagajna-razduzenja?objekt_id=${blagajnaObjektId}`);
     const rows=await r.json();
     if(!rows.length){cont.innerHTML='<div style="color:#8b96a5;font-size:12px;padding:8px;">Nema još razduženja.</div>';return;}
     cont.innerHTML=rows.map(rz=>`
       <div style="display:flex;justify-content:space-between;padding:6px 8px;border-bottom:1px solid #eee;font-size:12px;">
-        <span>${rz.tip==='banka'?'🏦 Banka':'🔒 Sef'} — ${fm(rz.iznos)} KM${rz.napomena?' · '+esc(rz.napomena):''}</span>
+        <span>${rz.tip==='banka'?'🏦 Banka':'🔒 Sef'} — ${fmValuta(rz.iznos, valuta)}${rz.napomena?' · '+esc(rz.napomena):''}</span>
         <span style="color:${rz.status==='potvrdjeno'?'var(--green)':'var(--orange)'};font-weight:700;">
           ${rz.status==='potvrdjeno'?'✓ Potvrđeno':'⏳ Na čekanju'}
         </span>
@@ -227,7 +271,9 @@ async function ucitajMojaRazduzenja(){
 
 function otvoriRazduzenje(tip){
   razduzenjeTipTrenutni=tip;
-  document.getElementById('razduzenje-naslov').textContent=tip==='banka'?'🏦 Razduženje u Banku':'🔒 Ostavljanje u Sef';
+  const pj=mojiPJovi.find(p=>String(p.id)===String(blagajnaObjektId));
+  document.getElementById('razduzenje-naslov').textContent=
+    (tip==='banka'?'🏦 Razduženje u Banku':'🔒 Ostavljanje u Sef')+(pj&&pj.valuta==='EUR'?' (u €)':'');
   document.getElementById('razd-iznos').value='';
   document.getElementById('razd-napomena').value='';
   document.getElementById('razduzenje-msg').textContent='';
@@ -429,14 +475,13 @@ fetch(`${API}/api/auth/me`).then(r=>{
   trenutniUser=u;
   document.getElementById('who').textContent='👤 '+u.ime_prezime;
 
-  if(!isAdmin && u.blagajnik_objekat_id){
-    // Blagajnik — sakrij širu finansijsku sliku, pokaži samo svoju blagajnu.
+  if(!isAdmin){
+    // Blagajnik (jedan ili više PJ) — sakrij širu finansijsku sliku, pokaži samo blagajnu.
     ['card-danas','card-sedmica','card-mjesec','card-naplaceno-nalozi','card-ocekivano-nalozi','card-ocekivano-malo']
       .forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
     document.getElementById('blagajna-box').style.display='block';
-    blagajnaObjektId=u.blagajnik_objekat_id;
-    ucitajBlagajnaStanje();
-  } else if(isAdmin){
+    ucitajMojePJ();
+  } else {
     document.getElementById('admin-razduzenja-box').style.display='block';
     ucitajAdminRazduzenja();
   }

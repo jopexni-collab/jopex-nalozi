@@ -2,20 +2,25 @@ const express = require('express');
 const router = express.Router();
 const pool = require('./db');
 
-// Pristup: admin (sve) ili blagajnik (samo svoj PJ — server ga FORSIRA na taj PJ bez
+const KURS_EUR_KM = 1.95;
+
+// Pristup: admin (sve) ili blagajnik (samo svoje PJ — server ga FORSIRA na te PJ bez
 // obzira šta klijent pošalje, da niko ne može da vidi tuđu blagajnu mijenjajući parametre).
+// Jedna osoba može biti blagajnik za VIŠE PJ (blagajnici_pj tabela).
 router.use(async (req, res, next) => {
   const u = req.session?.user;
   if (!u) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
   if (u.rola === 'admin') return next();
-  if (u.blagajnik_objekat_id) {
-    try {
-      const r = await pool.query('SELECT naziv FROM prodajni_objekti WHERE id=$1', [u.blagajnik_objekat_id]);
-      req.blagajnikObjektNaziv = r.rows[0]?.naziv || null;
-      return next();
-    } catch (e) { return res.status(500).json({ error: e.message }); }
-  }
-  return res.status(403).json({ error: 'Nemate pristup blagajni.' });
+  try {
+    const r = await pool.query(
+      `SELECT p.naziv FROM blagajnici_pj b JOIN prodajni_objekti p ON p.id = b.objekat_id
+       WHERE b.zaposleni_id = $1`,
+      [u.id]
+    );
+    if (!r.rows.length) return res.status(403).json({ error: 'Nemate pristup blagajni.' });
+    req.blagajnikObjektNazivi = r.rows.map(row => row.naziv);
+    return next();
+  } catch (e) { return res.status(500).json({ error: e.message }); }
 });
 
 // GET /api/gotovina - lista svih uplata
@@ -30,8 +35,8 @@ router.get('/', async (req, res) => {
     if (primio) { where.push(`primio = $${i++}`); vals.push(primio); }
     if (izvor) { where.push(`izvor = $${i++}`); vals.push(izvor); }
     if (nepredano === 'true') { where.push(`predao_blagajniku = false`); }
-    // Blagajnik je FORSIRAN na svoj PJ, bez obzira šta klijent pošalje.
-    if (req.blagajnikObjektNaziv) { where.push(`g.objekt_naziv = $${i++}`); vals.push(req.blagajnikObjektNaziv); }
+    // Blagajnik je FORSIRAN na SVOJE PJ (jedan ili više), bez obzira šta klijent pošalje.
+    if (req.blagajnikObjektNazivi) { where.push(`g.objekt_naziv = ANY($${i++}::text[])`); vals.push(req.blagajnikObjektNazivi); }
     // "Nalog/Otp" kolona (g.nalog_r_br) sad drži i broj radnog naloga i broj otpremnice iz
     // maloprodaje (tekst, npr. "OTP-2026-000123") — zato je tip kolone VARCHAR. Ovdje se
     // poredi kao tekst (p.r_br::text), inače bi Postgres bacio grešku tipa na ne-brojčane
@@ -49,16 +54,23 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/gotovina/suma - suma po danu/sedmici/mjesecu
+// GET /api/gotovina/suma - suma po danu/sedmici/mjesecu. Ako neki PJ radi u EUR, njegovi
+// iznosi se KONVERTUJU u KM-ekvivalent (fiksni kurs) PRIJE sabiranja — inače bi zbir preko
+// više PJ bio netačan (mešanje KM i EUR kao da su ista jedinica).
 router.get('/suma', async (req, res) => {
   try {
     const r = await pool.query(`
-      SELECT 
-        SUM(iznos) FILTER (WHERE datum = CURRENT_DATE) AS danas,
-        SUM(iznos) FILTER (WHERE datum >= date_trunc('week', CURRENT_DATE)) AS ova_sedmica,
-        SUM(iznos) FILTER (WHERE date_trunc('month', datum) = date_trunc('month', CURRENT_DATE)) AS ovaj_mjesec,
-        SUM(iznos) FILTER (WHERE predao_blagajniku = false) AS nepredano
-      FROM gotovina
+      SELECT
+        SUM(iznos_km) FILTER (WHERE datum = CURRENT_DATE) AS danas,
+        SUM(iznos_km) FILTER (WHERE datum >= date_trunc('week', CURRENT_DATE)) AS ova_sedmica,
+        SUM(iznos_km) FILTER (WHERE date_trunc('month', datum) = date_trunc('month', CURRENT_DATE)) AS ovaj_mjesec,
+        SUM(iznos_km) FILTER (WHERE predao_blagajniku = false) AS nepredano
+      FROM (
+        SELECT g.datum, g.predao_blagajniku,
+          CASE WHEN p.valuta = 'EUR' THEN g.iznos * ${KURS_EUR_KM} ELSE g.iznos END AS iznos_km
+        FROM gotovina g
+        LEFT JOIN prodajni_objekti p ON p.naziv = g.objekt_naziv
+      ) sub
     `);
     // Naloga — koristi STVARNU kolonu "naplaceno" (checkbox/štiklirano u lista.html), ne
     // izračunato polje. "Naplaćeno" = zbir ugovorena_suma za sve naloge gdje JE štiklirano;
@@ -76,11 +88,17 @@ router.get('/suma', async (req, res) => {
     } catch (e) { /* tabela/kolona se možda razlikuje — ne rušimo cijelu rutu zbog ovoga */ }
 
     // Očekivano od maloprodaje — zbir svih neplaćenih/djelimično plaćenih otpremnica.
+    // Konvertuje EUR PJ u KM-ekvivalent prije sabiranja (isti razlog kao gore).
     let ocekivanoMalo = 0;
     try {
       const rm = await pool.query(`
-        SELECT COALESCE(SUM(ukupan_iznos - iznos_placeno),0) AS ukupno
-        FROM otpremnice WHERE status='potvrdjena' AND status_placanja != 'placeno'
+        SELECT COALESCE(SUM(
+          CASE WHEN p.valuta = 'EUR' THEN (o.ukupan_iznos - o.iznos_placeno) * ${KURS_EUR_KM}
+               ELSE (o.ukupan_iznos - o.iznos_placeno) END
+        ),0) AS ukupno
+        FROM otpremnice o
+        LEFT JOIN prodajni_objekti p ON p.id = o.objekt_id
+        WHERE o.status='potvrdjena' AND o.status_placanja != 'placeno'
       `);
       ocekivanoMalo = parseFloat(rm.rows[0].ukupno) || 0;
     } catch (e) { /* isto — ne rušimo rutu ako tabela/kolona iz nekog razloga ne postoji */ }

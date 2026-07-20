@@ -2,11 +2,45 @@ const express = require('express');
 const router = express.Router();
 const pool = require('./db');
 
-// Provjera da li je korisnik blagajnik ZA KONKRETAN PJ (ili admin, koji prolazi svugdje).
-function jeBlagajnikZaObjekat(user, objektId) {
-  if (user?.rola === 'admin') return true;
-  return user?.blagajnik_objekat_id != null && String(user.blagajnik_objekat_id) === String(objektId);
+const KURS_EUR_KM = 1.95; // fiksni kurs, primjenjuje se samo za prikaz/sabiranje preko PJ
+
+// Vraća listu PJ (id, naziv, valuta) za koje je korisnik blagajnik. Admin nema ovu listu
+// (admin ide direktno preko objekt_id parametra, vidi sve).
+async function dobaviBlagajnikPJ(userId) {
+  const r = await pool.query(
+    `SELECT p.id, p.naziv, p.valuta FROM blagajnici_pj b
+     JOIN prodajni_objekti p ON p.id = b.objekat_id
+     WHERE b.zaposleni_id = $1 ORDER BY p.naziv`,
+    [userId]
+  );
+  return r.rows;
 }
+
+// Provjera da li je korisnik blagajnik ZA KONKRETAN PJ (ili admin, koji prolazi svugdje).
+async function jeBlagajnikZaObjekat(user, objektId) {
+  if (user?.rola === 'admin') return true;
+  const r = await pool.query(
+    'SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 AND objekat_id=$2',
+    [user.id, objektId]
+  );
+  return r.rows.length > 0;
+}
+
+// GET /api/blagajna-razduzenja/moji-pj - PJ za koje je prijavljeni korisnik blagajnik
+// (koristi frontend da nacrta dugme/karticu za SVAKI PJ koji ta osoba pokriva).
+router.get('/moji-pj', async (req, res) => {
+  try {
+    const user = req.session?.user;
+    if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+    if (user.rola === 'admin') {
+      const r = await pool.query('SELECT id, naziv, valuta FROM prodajni_objekti WHERE aktivan=true ORDER BY naziv');
+      return res.json(r.rows);
+    }
+    res.json(await dobaviBlagajnikPJ(user.id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET /api/blagajna-razduzenja?objekt_id=X&status=Y - lista razduženja
 router.get('/', async (req, res) => {
@@ -15,13 +49,19 @@ router.get('/', async (req, res) => {
     if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
     const { objekt_id, status } = req.query;
 
-    // Blagajnik vidi SAMO svoj PJ; admin vidi sve (ili filtrira po objekt_id ako izabere).
     let where = [];
     let vals = [];
     let i = 1;
     if (user.rola !== 'admin') {
-      if (!user.blagajnik_objekat_id) return res.status(403).json({ error: 'Nemate ovlašćenje blagajnika.' });
-      where.push(`objekt_id = $${i++}`); vals.push(user.blagajnik_objekat_id);
+      const mojiPJ = await dobaviBlagajnikPJ(user.id);
+      if (!mojiPJ.length) return res.status(403).json({ error: 'Nemate ovlašćenje blagajnika.' });
+      const dozvoljeni = mojiPJ.map(p => p.id);
+      if (objekt_id) {
+        if (!dozvoljeni.includes(parseInt(objekt_id))) return res.status(403).json({ error: 'Nemate pristup ovom PJ.' });
+        where.push(`objekt_id = $${i++}`); vals.push(objekt_id);
+      } else {
+        where.push(`objekt_id = ANY($${i++}::int[])`); vals.push(dozvoljeni);
+      }
     } else if (objekt_id) {
       where.push(`objekt_id = $${i++}`); vals.push(objekt_id);
     }
@@ -40,18 +80,18 @@ router.get('/', async (req, res) => {
 // GET /api/blagajna-razduzenja/stanje?objekt_id=X - trenutno "u blagajni" za taj PJ
 // = sve što je predano blagajniku (gotovina.predao_blagajniku=true) MINUS sve što je
 // razduženo (bez obzira da li je admin već potvrdio — fizički je novac već izašao iz
-// kase čim ga blagajnik uzme).
+// kase čim ga blagajnik uzme). Vraća i valutu tog PJ + KM-ekvivalent ako je PJ u EUR.
 router.get('/stanje', async (req, res) => {
   try {
     const user = req.session?.user;
     if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
-    const objektId = req.query.objekt_id || user.blagajnik_objekat_id;
+    const objektId = req.query.objekt_id;
     if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat.' });
-    if (!jeBlagajnikZaObjekat(user, objektId)) return res.status(403).json({ error: 'Nemate pristup ovom PJ.' });
+    if (!(await jeBlagajnikZaObjekat(user, objektId))) return res.status(403).json({ error: 'Nemate pristup ovom PJ.' });
 
-    const objRes = await pool.query('SELECT naziv FROM prodajni_objekti WHERE id=$1', [objektId]);
+    const objRes = await pool.query('SELECT naziv, valuta FROM prodajni_objekti WHERE id=$1', [objektId]);
     if (!objRes.rows.length) return res.status(404).json({ error: 'Prodajni objekat nije pronađen.' });
-    const objektNaziv = objRes.rows[0].naziv;
+    const { naziv: objektNaziv, valuta } = objRes.rows[0];
 
     const predanoRes = await pool.query(
       `SELECT COALESCE(SUM(iznos),0) AS ukupno FROM gotovina
@@ -64,7 +104,11 @@ router.get('/stanje', async (req, res) => {
     );
     const predano = parseFloat(predanoRes.rows[0].ukupno);
     const razduzeno = parseFloat(razduzenoRes.rows[0].ukupno);
-    res.json({ objekt_naziv: objektNaziv, predano, razduzeno, trenutno_u_blagajni: +(predano - razduzeno).toFixed(2) });
+    const trenutno = +(predano - razduzeno).toFixed(2);
+    res.json({
+      objekt_naziv: objektNaziv, valuta, predano, razduzeno, trenutno_u_blagajni: trenutno,
+      trenutno_km_ekvivalent: valuta === 'EUR' ? +(trenutno * KURS_EUR_KM).toFixed(2) : null,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -80,13 +124,13 @@ router.post('/', async (req, res) => {
     const iznos = parseFloat(req.body.iznos);
 
     if (!objekt_id) return res.status(400).json({ error: 'Nedostaje prodajni objekat.' });
-    if (!jeBlagajnikZaObjekat(user, objekt_id)) return res.status(403).json({ error: 'Nemate ovlašćenje blagajnika za ovaj PJ.' });
+    if (!(await jeBlagajnikZaObjekat(user, objekt_id))) return res.status(403).json({ error: 'Nemate ovlašćenje blagajnika za ovaj PJ.' });
     if (!['banka', 'sef'].includes(tip)) return res.status(400).json({ error: 'Tip mora biti "banka" ili "sef".' });
     if (!iznos || iznos <= 0) return res.status(400).json({ error: 'Unesite ispravan iznos.' });
 
-    const objRes = await pool.query('SELECT naziv FROM prodajni_objekti WHERE id=$1', [objekt_id]);
+    const objRes = await pool.query('SELECT naziv, valuta FROM prodajni_objekti WHERE id=$1', [objekt_id]);
     if (!objRes.rows.length) return res.status(404).json({ error: 'Prodajni objekat nije pronađen.' });
-    const objektNaziv = objRes.rows[0].naziv;
+    const { naziv: objektNaziv, valuta } = objRes.rows[0];
 
     // Provjeri da ne razdužuje više nego što stvarno ima u blagajni.
     const predanoRes = await pool.query(
@@ -99,14 +143,14 @@ router.post('/', async (req, res) => {
     );
     const trenutno = parseFloat(predanoRes.rows[0].ukupno) - parseFloat(razduzenoRes.rows[0].ukupno);
     if (iznos > trenutno + 0.01)
-      return res.status(400).json({ error: `Nema dovoljno u blagajni (trenutno: ${trenutno.toFixed(2)} KM).` });
+      return res.status(400).json({ error: `Nema dovoljno u blagajni (trenutno: ${trenutno.toFixed(2)} ${valuta}).` });
 
     const r = await pool.query(
       `INSERT INTO blagajna_razduzenja (objekt_id, objekt_naziv, tip, iznos, napomena, blagajnik_id, blagajnik_ime)
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
       [objekt_id, objektNaziv, tip, iznos, napomena || null, user.id, user.ime_prezime]
     );
-    res.status(201).json(r.rows[0]);
+    res.status(201).json({ ...r.rows[0], valuta });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

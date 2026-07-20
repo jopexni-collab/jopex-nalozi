@@ -97,6 +97,19 @@ input:checked+.slider:before{transform:translateX(16px);}
   </div>
 </div>
 
+<div class="modal" id="blagajnik-modal">
+  <div class="modal-box">
+    <h3 id="blagajnik-ime">Blagajnik za PJ</h3>
+    <div style="font-size:11.5px;color:#6b7a8d;margin-bottom:8px;">Štikliraj sve PJ za koje je ova osoba blagajnik (može biti više odjednom).</div>
+    <div id="blagajnik-lista" style="max-height:280px;overflow-y:auto;"></div>
+    <div id="blagajnik-msg"></div>
+    <div class="modal-btns" style="margin-top:8px">
+      <button class="btn-primary" onclick="saveBlagajnikPopup()">Sačuvaj</button>
+      <button class="btn-sec" onclick="closeModal()">Otkaži</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API='';
 let korisnici=[], currentLozId=null;
@@ -130,11 +143,9 @@ function render(){
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_prodavati?'checked':''} onchange="togglePravo(${k.id},'moze_prodavati',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_roba_magacin?'checked':''} onchange="togglePravo(${k.id},'moze_roba_magacin',this.checked)"><span class="slider"></span></label></td>
       <td>
-        <select style="font:inherit;font-size:11px;padding:3px 4px;border:1px solid #ddd;border-radius:4px;width:100%;"
-          onchange="togglePravo(${k.id},'blagajnik_objekat_id',this.value||null)">
-          <option value="">— nije blagajnik —</option>
-          ${(window.__prodajniObjekti||[]).map(o=>`<option value="${o.id}" ${String(k.blagajnik_objekat_id)===String(o.id)?'selected':''}>${esc(o.naziv)}</option>`).join('')}
-        </select>
+        <button class="btn-loz" style="font-size:10.5px;" onclick="openBlagajnikPopup(${k.id},'${esc(k.ime_prezime)}')">
+          🏦 ${k.blagajnik_pj_nazivi ? esc(k.blagajnik_pj_nazivi) : '— nije blagajnik —'}
+        </button>
       </td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.aktivan?'checked':''} onchange="togglePravo(${k.id},'aktivan',this.checked)"><span class="slider"></span></label></td>
       <td><button class="btn-loz" onclick="openLozinka(${k.id},'${esc(k.ime_prezime)}')">🔑 Postavi</button></td>
@@ -165,7 +176,53 @@ function openLozinka(id,ime){
   document.getElementById('loz1').focus();
 }
 
-function closeModal(){document.getElementById('loz-modal').classList.remove('on');currentLozId=null;}
+let currentBlagajnikId=null;
+async function openBlagajnikPopup(id,ime){
+  currentBlagajnikId=id;
+  document.getElementById('blagajnik-ime').textContent='Blagajnik za PJ: '+ime;
+  document.getElementById('blagajnik-msg').innerHTML='';
+  const lista=document.getElementById('blagajnik-lista');
+  lista.innerHTML='Učitavanje...';
+  document.getElementById('blagajnik-modal').classList.add('on');
+  try{
+    const [trenutni, sviPJ] = await Promise.all([
+      fetch(`${API}/api/zaposleni/${id}/blagajnik-pj`).then(r=>r.json()),
+      window.__prodajniObjekti ? Promise.resolve(window.__prodajniObjekti) : fetch(`${API}/api/prodajni-objekti`).then(r=>r.json()),
+    ]);
+    if(!window.__prodajniObjekti) window.__prodajniObjekti = sviPJ;
+    lista.innerHTML = sviPJ.map(o=>`
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:13px;">
+        <input type="checkbox" value="${o.id}" ${trenutni.includes(o.id)?'checked':''}>
+        ${esc(o.naziv)}${o.valuta==='EUR'?' <span style="color:#8b96a5;font-size:11px;">(EUR)</span>':''}
+      </label>
+    `).join('') || '<div style="color:#8b96a5;">Nema definisanih prodajnih objekata.</div>';
+  }catch(e){
+    lista.innerHTML='<div style="color:red;">Greška pri učitavanju.</div>';
+  }
+}
+
+async function saveBlagajnikPopup(){
+  const checked=[...document.querySelectorAll('#blagajnik-lista input[type="checkbox"]:checked')].map(c=>parseInt(c.value));
+  const msg=document.getElementById('blagajnik-msg');
+  try{
+    const r=await fetch(`${API}/api/zaposleni/${currentBlagajnikId}/blagajnik-pj`,{
+      method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({objekat_idjevi:checked}),
+    });
+    if(!r.ok) throw new Error();
+    closeModal();
+    load();
+  }catch(e){
+    msg.style.color='red'; msg.textContent='Greška pri čuvanju.';
+  }
+}
+
+function closeModal(){
+  document.getElementById('loz-modal').classList.remove('on');
+  document.getElementById('blagajnik-modal').classList.remove('on');
+  currentLozId=null;
+  currentBlagajnikId=null;
+}
 
 async function saveLozinka(){
   const l1=document.getElementById('loz1').value;
