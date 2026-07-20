@@ -146,6 +146,35 @@ td.num{text-align:right;font-weight:700;}
   <div id="f-msg" style="margin-top:8px;font-size:12px;"></div>
 </div>
 
+<!-- FORMA ZA RUČNU ISPLATU (blagajnik bilježi izlazak novca iz kase - ne dolazi iz -->
+<!-- maloprodaje/otpremnica, npr. neki trošak koji nije evidentiran drugdje). Ostaje sa -->
+<!-- statusom "Nije odobreno" dok admin ne provjeri i klikne Odobreno u listi ispod. -->
+<div class="forma" style="border-left:4px solid var(--red);">
+  <h3 style="color:var(--red);">− Nova isplata</h3>
+  <div class="forma-grid">
+    <div class="fg"><label>Datum</label><input type="date" id="i-datum"></div>
+    <div class="fg"><label>Iznos (KM)</label><input type="number" id="i-iznos" step="0.01" min="0" placeholder="0.00"></div>
+    <div class="fg"><label>Primio (ko je isplatio)</label>
+      <select id="i-primio">
+        <option value="">— izaberi —</option>
+        <option>Boban</option><option>Marija</option><option>Nenad</option>
+        <option>Rade</option><option>Edo</option>
+      </select>
+    </div>
+    <div class="fg"><label>Izvor</label>
+      <select id="i-izvor">
+        <option value="Proizvodnja">Proizvodnja</option>
+        <option value="Maloprodaja">Maloprodaja</option>
+        <option value="Drugo">Drugo</option>
+      </select>
+    </div>
+    <div class="fg"><label>Nalog R.Br. (opciono)</label><input type="number" id="i-nalog" placeholder="npr. 342"></div>
+    <div class="fg"><label>Opis (razlog isplate) *</label><input type="text" id="i-opis" placeholder="npr. gorivo, sitna popravka..."></div>
+    <div class="fg"><label>&nbsp;</label><button class="btn-add" style="background:var(--red);" onclick="dodajIsplatuRucno()">− Dodaj isplatu</button></div>
+  </div>
+  <div id="i-msg" style="margin-top:8px;font-size:12px;"></div>
+</div>
+
 <!-- FILTERI -->
 <div class="filteri">
   <label>Period:</label>
@@ -266,9 +295,9 @@ async function ucitajMojaRazduzenja(){
     if(!rows.length){cont.innerHTML='<div style="color:#8b96a5;font-size:12px;padding:8px;">Nema još razduženja.</div>';return;}
     cont.innerHTML=rows.map(rz=>`
       <div style="display:flex;justify-content:space-between;padding:6px 8px;border-bottom:1px solid #eee;font-size:12px;">
-        <span>${rz.tip==='banka'?'🏦 Banka':'🔒 Sef'} — ${fmValuta(rz.iznos, valuta)}${rz.napomena?' · '+esc(rz.napomena):''}</span>
+        <span>${rz.tip==='banka'?'🏦 Banka':'🔒 Sef'} — ${fmValuta(rz.iznos, valuta)}${rz.napomena?' · '+esc(rz.napomena):''} · <span style="color:#8b96a5;">${fd(rz.kreirano)}</span></span>
         <span style="color:${rz.status==='potvrdjeno'?'var(--green)':'var(--orange)'};font-weight:700;">
-          ${rz.status==='potvrdjeno'?'✓ Potvrđeno':'⏳ Na čekanju'}
+          ${rz.status==='potvrdjeno'?'✓ Potvrđeno '+fd(rz.datum_potvrde):'⏳ Na čekanju'}
         </span>
       </div>
     `).join('');
@@ -425,6 +454,8 @@ async function dodajNaplatu(){
   const msg=document.getElementById('f-msg');
   if(!iznos||iznos<=0){msg.style.color='red';msg.textContent='Unesite iznos.';return;}
   if(!primio){msg.style.color='red';msg.textContent='Izaberite ko je primio.';return;}
+  const pj=mojiPJovi.find(p=>String(p.id)===String(blagajnaObjektId));
+  if(!isAdmin && !pj){msg.style.color='red';msg.textContent='Izaberite prvo PJ (tab iznad) za koji unosite naplatu.';return;}
   try{
     const r=await fetch(`${API}/api/gotovina`,{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -434,6 +465,7 @@ async function dodajNaplatu(){
         izvor:gv('f-izvor')||'Proizvodnja',
         nalog_r_br:parseInt(gv('f-nalog'))||null,
         opis:gv('f-opis')||null,
+        objekt_naziv: pj?pj.naziv:null,
       }),
     });
     if(!r.ok) throw new Error();
@@ -444,6 +476,40 @@ async function dodajNaplatu(){
     await load();
     await loadSume();
     setTimeout(()=>msg.textContent='',2000);
+  }catch(e){msg.style.color='red';msg.textContent='Greška pri upisu.';}
+}
+
+async function dodajIsplatuRucno(){
+  const iznos=parseFloat(document.getElementById('i-iznos').value);
+  const primio=gv('i-primio');
+  const opis=gv('i-opis');
+  const msg=document.getElementById('i-msg');
+  if(!iznos||iznos<=0){msg.style.color='red';msg.textContent='Unesite iznos.';return;}
+  if(!primio){msg.style.color='red';msg.textContent='Izaberite ko je isplatio.';return;}
+  if(!opis){msg.style.color='red';msg.textContent='Unesite razlog isplate (opis).';return;}
+  const pj=mojiPJovi.find(p=>String(p.id)===String(blagajnaObjektId));
+  if(!isAdmin && !pj){msg.style.color='red';msg.textContent='Izaberite prvo PJ (tab iznad) za koji unosite isplatu.';return;}
+  try{
+    const r=await fetch(`${API}/api/gotovina`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        datum:gv('i-datum')||new Date().toISOString().split('T')[0],
+        iznos: -iznos, primio,
+        izvor:gv('i-izvor')||'Proizvodnja',
+        nalog_r_br:parseInt(gv('i-nalog'))||null,
+        opis: 'Ručna isplata — '+opis,
+        objekt_naziv: pj?pj.naziv:null,
+      }),
+    });
+    if(!r.ok) throw new Error();
+    msg.style.color='green';msg.textContent='✓ Upisano — čeka odobrenje admina.';
+    document.getElementById('i-iznos').value='';
+    document.getElementById('i-nalog').value='';
+    document.getElementById('i-opis').value='';
+    await load();
+    await loadSume();
+    if(blagajnaObjektId) await ucitajBlagajnaStanje();
+    setTimeout(()=>msg.textContent='',3000);
   }catch(e){msg.style.color='red';msg.textContent='Greška pri upisu.';}
 }
 

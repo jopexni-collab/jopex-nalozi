@@ -130,13 +130,13 @@ router.get('/nalog/:r_br', async (req, res) => {
 // POST /api/gotovina - nova uplata
 router.post('/', async (req, res) => {
   try {
-    const { datum, iznos, primio, izvor, nalog_r_br, opis } = req.body;
+    const { datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv } = req.body;
     if (!iznos || !primio) return res.status(400).json({ error: 'iznos i primio su obavezni.' });
     const r = await pool.query(
-      `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
       [datum || new Date().toISOString().split('T')[0], iznos, primio,
-       izvor || 'Proizvodnja', nalog_r_br || null, opis || null]
+       izvor || 'Proizvodnja', nalog_r_br || null, opis || null, objekt_naziv || null]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
