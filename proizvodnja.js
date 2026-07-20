@@ -41,7 +41,7 @@ router.get('/', async (req, res) => {
   const joins = isAdmin ? GOTOVINA_JOINS : '';
   try {
     const r = await pool.query(
-      `SELECT ${cols} FROM proizvodnja_jopex p ${joins} ORDER BY p.r_br DESC`
+      `SELECT ${cols} FROM proizvodnja_jopex p ${joins} WHERE COALESCE(p.stornirano,false)=false ORDER BY p.r_br DESC`
     );
     res.json(r.rows);
   } catch (err) {
@@ -264,23 +264,42 @@ router.patch('/:r_br', async (req, res) => {
   }
 });
 
-// DELETE /api/proizvodnja/:r_br - brisanje naloga (samo admin)
+// DELETE /api/proizvodnja/:r_br - STORNIRA nalog (samo admin) — NE BRIŠE red, poništava
+// (ne briše) vezane gotovinske zapise (avans/naplata) kroz reverzne stavke. Isti URL/dugme
+// na frontu nastavlja da radi bez izmjene — samo je logika iza njega sad bezbjednija.
 router.delete('/:r_br', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Nema pristupa.' });
+  const client = await pool.connect();
   try {
-    const r = await pool.query(
-      'DELETE FROM proizvodnja_jopex WHERE r_br=$1 RETURNING r_br',
-      [req.params.r_br]
+    await client.query('BEGIN');
+    const r = await client.query('SELECT * FROM proizvodnja_jopex WHERE r_br=$1 FOR UPDATE', [req.params.r_br]);
+    if (!r.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Nije pronađen.' }); }
+    const nalog = r.rows[0];
+    if (nalog.stornirano) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Nalog je već storniran.' }); }
+
+    // Poništi (ne briši) sve gotovinske zapise vezane za ovaj nalog — reverzni red za
+    // svaki postojeći (avans, naplata, i eventualne kasnije korekcije).
+    const gotRes = await client.query(
+      `SELECT * FROM gotovina WHERE nalog_r_br = $1::text AND izvor = 'Proizvodnja'`,
+      [String(nalog.r_br)]
     );
-    if (!r.rows.length) return res.status(404).json({ error: 'Nije pronađen.' });
-    // Reset sequence na MAX r_br
-    await pool.query(
-      `SELECT setval('proizvodnja_jopex_r_br_seq', COALESCE((SELECT MAX(r_br) FROM proizvodnja_jopex), 0), true)`
-    );
-    res.json({ ok: true });
+    for (const g of gotRes.rows) {
+      await client.query(
+        `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, nalog_r_br)
+         VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4)`,
+        [-g.iznos, req.session.user.ime_prezime, `STORNO — ${g.opis}`, String(nalog.r_br)]
+      );
+    }
+
+    await client.query('UPDATE proizvodnja_jopex SET stornirano = true WHERE r_br=$1', [nalog.r_br]);
+    await client.query('COMMIT');
+    res.json({ ok: true, stornirano: true });
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: 'Greška: ' + err.message });
+  } finally {
+    client.release();
   }
 });
 

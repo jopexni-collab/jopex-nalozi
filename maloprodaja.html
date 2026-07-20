@@ -2422,6 +2422,7 @@ async function loadOtpremnice(brojOverride){
         <div class="otp-actions">
           <button class="btn-otp-posalji" onclick="event.stopPropagation();togglePosaljiKartica(${o.id})">📤 Pošalji kupcu</button>
           ${!o.poslato_knjigovodstvu?`<button class="btn-otp-posalji" onclick="event.stopPropagation();posaljiKnjigovodstvu(${o.id})">📧 Pošalji knjigovodstvu</button>`:''}
+          ${isAdmin && o.status==='potvrdjena'?`<button class="btn-otp-posalji" style="color:var(--red);border-color:var(--red);" onclick="event.stopPropagation();storniranjeOtpremnice(${o.id},'${esc(o.broj)}')">⛔ Storniraj</button>`:''}
         </div>
         <div class="mini-posalji" id="mini-posalji-${o.id}" onclick="event.stopPropagation()"></div>
         <div class="otp-detalji" id="otp-detalji-${o.id}"></div>
@@ -2436,6 +2437,26 @@ async function loadOtpremnice(brojOverride){
     window.__otpDataById=Object.fromEntries(rows.map(o=>[o.id,o]));
   }catch(e){
     cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>';
+  }
+}
+
+async function storniranjeOtpremnice(id, broj){
+  const potvrda1=confirm(`Da li ste SIGURNI da želite da STORNIRATE otpremnicu ${broj}?\n\nOvo će:\n- vratiti stanje robe\n- poništiti (ne obrisati) sve gotovinske i kartica-kupca zapise\n- poslati obavještenje knjigovodstvu\n\nOtpremnica ostaje vidljiva u istoriji, samo označena kao stornirana.`);
+  if(!potvrda1) return;
+  const napomena=prompt('Razlog storniranja (opciono, upisuje se uz otpremnicu):')||'';
+  const potvrda2=confirm(`Poslednja potvrda — zaista storniraj otpremnicu ${broj}?`);
+  if(!potvrda2) return;
+  try{
+    const r=await fetch(`${API}/api/otpremnice/${id}/storniraj`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({napomena}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri storniranju.');
+    alert(`✓ Otpremnica ${data.broj} je stornirana.`);
+    loadOtpremnice();
+  }catch(e){
+    alert(e.message);
   }
 }
 

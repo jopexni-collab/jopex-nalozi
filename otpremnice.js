@@ -772,6 +772,105 @@ router.post('/:id/posalji-knjigovodstvu', async (req, res) => {
   }
 });
 
+// POST /api/otpremnice/:id/storniraj - SAMO admin. Poništava otpremnicu BEZ brisanja —
+// vraća stanje robe, poništava (ne briše) sve gotovinske i kartica-kupca zapise kroz
+// suprotne (reverzne) stavke, i šalje STORNO obavještenje knjigovodstvu. Ništa se ne
+// briše — cijela istorija ostaje vidljiva i pratljiva.
+router.post('/:id/storniraj', async (req, res) => {
+  const user = req.session?.user;
+  if (user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin može stornirati otpremnicu.' });
+  const napomenaStorno = (req.body?.napomena || '').trim() || null;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const otpRes = await client.query('SELECT * FROM otpremnice WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!otpRes.rows.length) throw Object.assign(new Error('Otpremnica nije pronađena.'), { status: 404 });
+    const otp = otpRes.rows[0];
+    if (otp.status === 'stornirana')
+      throw Object.assign(new Error('Otpremnica je već stornirana.'), { status: 400 });
+    if (otp.status !== 'potvrdjena')
+      throw Object.assign(new Error('Može se stornirati samo potvrđena otpremnica.'), { status: 400 });
+
+    // 1) Vrati stanje robe (+kolicina za svaku stavku, samo za ovaj PJ).
+    const stavkeRes = await client.query('SELECT * FROM otpremnica_stavke WHERE otpremnica_id=$1', [otp.id]);
+    for (const s of stavkeRes.rows) {
+      await client.query(
+        'UPDATE roba_pj SET stanje = stanje + $1, azurirano = now() WHERE roba_id=$2 AND objekt_id=$3',
+        [s.kolicina, s.roba_id, otp.objekt_id]
+      );
+    }
+
+    // 2) Poništi SVE gotovinske zapise vezane za ovu otpremnicu (i inicijalnu prodaju/dug,
+    // i sve naknadne naplate duga koje su se možda desile poslije) — po JEDNOM reverznom
+    // (suprotnog predznaka) redu za svaki postojeći, ništa se ne briše.
+    const gotRes = await client.query(
+      `SELECT * FROM gotovina WHERE nalog_r_br = $1 AND izvor = 'Maloprodaja'`,
+      [otp.broj]
+    );
+    for (const g of gotRes.rows) {
+      await client.query(
+        `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
+         VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5)`,
+        [-g.iznos, user.ime_prezime, `STORNO — ${g.opis}`, g.objekt_naziv, otp.broj]
+      );
+    }
+
+    // 3) Poništi SVE kartica-kupca zapise vezane za ovu otpremnicu (avans iskorišten, dug,
+    // naplate duga) — po jedan reverzni red za svaki, tako da saldo kupca ponovo bude tačan
+    // kao da otpremnica nikad nije ni postojala.
+    const ktRes = await client.query(
+      `SELECT * FROM kupac_transakcije WHERE otpremnica_id = $1`,
+      [otp.id]
+    );
+    for (const t of ktRes.rows) {
+      await client.query(
+        `INSERT INTO kupac_transakcije
+           (kupac_id, tip, iznos, opis, otpremnica_id, otpremnica_broj, objekt_id, objekt_naziv,
+            komercijalista_id, komercijalista_ime)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [t.kupac_id, t.tip, -t.iznos, `STORNO — ${t.opis || ''}`, otp.id, otp.broj,
+         otp.objekt_id, otp.objekt_naziv, user.id, user.ime_prezime]
+      );
+    }
+
+    // 4) Označi otpremnicu stornirano — NE BRIŠE se, ostaje vidljiva u istoriji.
+    await client.query(
+      `UPDATE otpremnice SET status='stornirana', napomena=COALESCE(napomena||' | ','')||$1
+       WHERE id=$2`,
+      [`STORNO (${user.ime_prezime}, ${new Date().toISOString().split('T')[0]})${napomenaStorno ? ': ' + napomenaStorno : ''}`, otp.id]
+    );
+
+    await client.query('COMMIT');
+
+    // 5) Obavijesti knjigovodstvo (van transakcije — ne smije zaustaviti storno ako padne).
+    try {
+      const objRes = await pool.query('SELECT email_knjigovodstvo FROM prodajni_objekti WHERE id=$1', [otp.objekt_id]);
+      const email = objRes.rows[0]?.email_knjigovodstvo;
+      if (email) {
+        await posaljiEmail(
+          email,
+          `STORNO otpremnice ${otp.broj} — ${otp.objekt_naziv}`,
+          `<div style="font-family:Arial,sans-serif;font-size:13px;color:#1a2733;">
+             <h2 style="color:#c00000;">⚠ STORNIRANO — Otpremnica ${otp.broj}</h2>
+             <p>Ova otpremnica je stornirana u JoPeX sistemu ${new Date().toLocaleString('sr-Latn-BA')} (izvršio: ${esc(user.ime_prezime)}).</p>
+             <p><b>Molimo izbrišite/korigujte odgovarajući unos u Bluesoft-u.</b></p>
+             <p>Kupac: ${esc(otp.kupac_naziv || '—')} · Ukupan iznos: ${parseFloat(otp.ukupan_iznos).toFixed(2)} KM</p>
+           </div>`
+        );
+      }
+    } catch (e) { console.error('Slanje storno obavještenja nije uspjelo:', e.message); }
+
+    res.json({ ok: true, broj: otp.broj });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // Dnevni zbirni pregled — jedan email po PJ (koji ima podešenu adresu) sa SVIM
 // otpremnicama potvrđenim TOG DANA. Poziva se sa rasporedom iz server.js (jednom uveče).
 // Bilježi se u knjigovodstvo_dnevni_log da se ne pošalje duplo isti dan ako se server
