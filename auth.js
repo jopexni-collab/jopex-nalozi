@@ -26,7 +26,7 @@ router.post('/login', async (req, res) => {
     if (!ok)
       return res.status(401).json({ error: 'Pogrešan email ili lozinka.' });
 
-    // Da li je osoba blagajnik za bar jedan PJ (many-to-many tabela — ne stari
+    // Da li je osoba blagajnik za bar jedan PJ (many-to-many tabela — ne stari ucitaj ovo molim te
     // blagajnik_objekat_id koji se više ne koristi za ovu provjeru).
     const bR = await pool.query('SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 LIMIT 1', [user.id]);
     const jeBlagajnik = bR.rows.length > 0;
