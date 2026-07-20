@@ -43,12 +43,13 @@ router.patch('/:id', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Samo admin može mijenjati prodajne objekte.' });
   try {
-    const { naziv, adresa, aktivan } = req.body;
+    const { naziv, adresa, aktivan, email_knjigovodstvo } = req.body;
     const r = await pool.query(
       `UPDATE prodajni_objekti SET
-         naziv=COALESCE($1,naziv), adresa=COALESCE($2,adresa), aktivan=COALESCE($3,aktivan)
-       WHERE id=$4 RETURNING *`,
-      [naziv, adresa, aktivan, req.params.id]
+         naziv=COALESCE($1,naziv), adresa=COALESCE($2,adresa), aktivan=COALESCE($3,aktivan),
+         email_knjigovodstvo=COALESCE($4,email_knjigovodstvo)
+       WHERE id=$5 RETURNING *`,
+      [naziv, adresa, aktivan, email_knjigovodstvo, req.params.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Nije pronađeno.' });
     res.json(r.rows[0]);

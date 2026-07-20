@@ -54,7 +54,8 @@ app.use('/api/zaposleni',   requireLoginOrApiKey, require('./zaposleni'));
 app.use('/api/proizvodnja', requireLoginOrApiKey, require('./proizvodnja'));
 app.use('/api/gotovina',    requireLoginOrApiKey, require('./gotovina'));
 app.use('/api/roba',        requireLoginOrApiKey, require('./roba'));
-app.use('/api/otpremnice',  requireLoginOrApiKey, require('./otpremnice'));
+const otpremniceRouter = require('./otpremnice');
+app.use('/api/otpremnice',  requireLoginOrApiKey, otpremniceRouter);
 app.use('/api/kupci',       requireLoginOrApiKey, require('./kupci'));
 app.use('/api/ponude',      requireLoginOrApiKey, require('./ponude'));
 app.use('/api/prodajni-objekti', requireLoginOrApiKey, require('./prodajni-objekti'));
@@ -79,3 +80,15 @@ app.listen(PORT, () => {
   console.log(`  Config:    http://localhost:${PORT}/api/config`);
   console.log(`  Web app:   http://localhost:${PORT}/login.html`);
 });
+
+// Dnevni zbirni pregled otpremnica za knjigovodstvo — provjerava se svakih 15 minuta;
+// funkcija sama interno provjerava (kroz knjigovodstvo_dnevni_log) da li je već poslato
+// danas za svaki PJ, tako da je bezbjedno da se ovo "okine" više puta zaredom (npr. posle
+// restarta servera) — neće poslati duplo.
+const SAT_DNEVNOG_PREGLEDA = 19; // 19:00 lokalno vrijeme servera
+setInterval(() => {
+  const sad = new Date();
+  if (sad.getHours() >= SAT_DNEVNOG_PREGLEDA) {
+    otpremniceRouter.posaljiDnevniPregled();
+  }
+}, 15 * 60 * 1000);

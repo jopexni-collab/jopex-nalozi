@@ -2374,11 +2374,15 @@ async function loadOtpremnice(brojOverride){
         </div>
         <div class="otp-meta">
           ${fd(o.datum)} &middot; ${esc(o.objekt_naziv||'—')} &middot; Komercijalista: ${esc(o.komercijalista_ime||'—')}<br>
-          Kupac: ${esc(o.kupac_naziv||'—')}${o.potvrdio_kupac_ime?' &middot; Potvrdio: '+esc(o.potvrdio_kupac_ime):''}
+          Kupac: ${esc(o.kupac_naziv||'—')}${o.potvrdio_kupac_ime?' &middot; Potvrdio: '+esc(o.potvrdio_kupac_ime):''}<br>
+          ${o.poslato_knjigovodstvu
+            ?`<span style="color:var(--green);">📤 Poslato knjigovodstvu ${fd(o.poslato_knjigovodstvu_vrijeme)}</span>`
+            :`<span style="color:var(--red);">⏳ Nije poslato knjigovodstvu</span>`}
         </div>
         <div class="otp-iznos">${fm(o.ukupan_iznos)} KM</div>
         <div class="otp-actions">
           <button class="btn-otp-posalji" onclick="event.stopPropagation();togglePosaljiKartica(${o.id})">📤 Pošalji kupcu</button>
+          ${!o.poslato_knjigovodstvu?`<button class="btn-otp-posalji" onclick="event.stopPropagation();posaljiKnjigovodstvu(${o.id})">📧 Pošalji knjigovodstvu</button>`:''}
         </div>
         <div class="mini-posalji" id="mini-posalji-${o.id}" onclick="event.stopPropagation()"></div>
         <div class="otp-detalji" id="otp-detalji-${o.id}"></div>
@@ -2393,6 +2397,18 @@ async function loadOtpremnice(brojOverride){
     window.__otpDataById=Object.fromEntries(rows.map(o=>[o.id,o]));
   }catch(e){
     cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>';
+  }
+}
+
+async function posaljiKnjigovodstvu(id){
+  try{
+    const r=await fetch(`${API}/api/otpremnice/${id}/posalji-knjigovodstvu`,{method:'POST'});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri slanju.');
+    alert('✓ Poslato knjigovodstvu.');
+    loadOtpremnice();
+  }catch(e){
+    alert(e.message);
   }
 }
 

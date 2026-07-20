@@ -721,6 +721,7 @@ function renderObjektiListu(){
         <div style="flex:1;min-width:0;">
           <div class="kupac-rez-naziv">🏢 ${esc(o.naziv)}</div>
           ${o.adresa?`<div class="kupac-rez-meta">${esc(o.adresa)}</div>`:''}
+          <div class="kupac-rez-meta">📧 ${o.email_knjigovodstvo?esc(o.email_knjigovodstvo):'<span style="color:var(--red);">nije podešeno</span>'}</div>
         </div>
         <button class="btn-cijena" onclick="otvoriUredjivanjeObjekta(${o.id})">✎ Izmijeni</button>
       </div>
@@ -730,6 +731,9 @@ function renderObjektiListu(){
         <input type="text" id="edit-objekat-naziv-${o.id}" value="${esc(o.naziv)}" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
         <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Adresa</label>
         <input type="text" id="edit-objekat-adresa-${o.id}" value="${esc(o.adresa||'')}" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
+        <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Email knjigovodstva (za ovaj PJ)</label>
+        <input type="email" id="edit-objekat-email-${o.id}" value="${esc(o.email_knjigovodstvo||'')}" placeholder="knjigovodja@primjer.ba" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
+        <div style="font-size:10.5px;color:#8b96a5;margin:-4px 0 7px;">Svaka potvrđena otpremnica sa ovog PJ automatski se šalje na ovu adresu, plus dnevni zbirni pregled uveče.</div>
         <div class="ce-btns">
           <button class="ce-primijeni" onclick="sacuvajIzmjenuObjekta(${o.id})">✓ Sačuvaj</button>
           <button class="ce-otkazi" onclick="otvoriUredjivanjeObjekta(${o.id})">Zatvori</button>
@@ -747,12 +751,13 @@ function otvoriUredjivanjeObjekta(id){
 async function sacuvajIzmjenuObjekta(id){
   const naziv=document.getElementById('edit-objekat-naziv-'+id).value.trim();
   const adresa=document.getElementById('edit-objekat-adresa-'+id).value.trim();
+  const email=document.getElementById('edit-objekat-email-'+id).value.trim();
   const msg=document.getElementById('objekti-msg');
   if(!naziv){msg.style.color='red';msg.textContent='Naziv ne može biti prazan.';return;}
   try{
     const r=await fetch(`${API}/api/prodajni-objekti/${id}`,{
       method:'PATCH',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({naziv, adresa: adresa||null}),
+      body:JSON.stringify({naziv, adresa: adresa||null, email_knjigovodstvo: email||null}),
     });
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška pri izmjeni.');

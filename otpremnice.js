@@ -2,8 +2,73 @@ const express = require('express');
 const router = express.Router();
 const pool = require('./db');
 const crypto = require('crypto');
+const { posaljiEmail } = require('./email');
 
 const RAZLOZI = ['kvalitet', 'kolicina', 'lom', 'jedinica', 'drugo'];
+
+// HTML sadržaj emaila za knjigovodstvo — sve što je potrebno da se otpremnica ručno
+// unese u Bluesoft: broj, kupac, stavke, iznosi, status plaćanja.
+function emailOtpremnicaHtml(otp, stavke) {
+  const redovi = stavke.map(s => `
+    <tr>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee;">${s.sifra}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee;">${s.naziv}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:right;">${s.kolicina} ${s.jed_mjera}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:right;">${parseFloat(s.cijena).toFixed(2)} KM</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee;text-align:right;">${parseFloat(s.iznos).toFixed(2)} KM</td>
+    </tr>
+  `).join('');
+  const statusLabel = { placeno: 'Plaćeno u potpunosti', djelimicno: 'Djelimično plaćeno', duguje: 'Na račun (nije plaćeno)' };
+  return `
+    <div style="font-family:Arial,sans-serif;font-size:13px;color:#1a2733;max-width:640px;">
+      <h2 style="color:#134a85;">Otpremnica ${otp.broj} — za unos u Bluesoft</h2>
+      <p><b>Datum:</b> ${new Date(otp.datum).toLocaleString('sr-Latn-BA')}<br>
+         <b>Prodajni objekat:</b> ${otp.objekt_naziv || '—'}<br>
+         <b>Komercijalista:</b> ${otp.komercijalista_ime || '—'}<br>
+         <b>Kupac:</b> ${otp.kupac_naziv || '—'}${otp.kupac_adresa ? ', ' + otp.kupac_adresa : ''}${otp.kupac_telefon ? ' · ' + otp.kupac_telefon : ''}<br>
+         <b>Status plaćanja:</b> ${statusLabel[otp.status_placanja] || otp.status_placanja} — plaćeno ${parseFloat(otp.iznos_placeno).toFixed(2)} KM od ${parseFloat(otp.ukupan_iznos).toFixed(2)} KM</p>
+      <table style="border-collapse:collapse;width:100%;font-size:12.5px;">
+        <thead><tr style="background:#f0f2f5;">
+          <th style="padding:4px 8px;text-align:left;">Šifra</th>
+          <th style="padding:4px 8px;text-align:left;">Naziv</th>
+          <th style="padding:4px 8px;text-align:right;">Količina</th>
+          <th style="padding:4px 8px;text-align:right;">Cijena</th>
+          <th style="padding:4px 8px;text-align:right;">Iznos</th>
+        </tr></thead>
+        <tbody>${redovi}</tbody>
+      </table>
+      <p style="text-align:right;font-size:14px;font-weight:bold;margin-top:8px;">UKUPNO: ${parseFloat(otp.ukupan_iznos).toFixed(2)} KM</p>
+      <p style="color:#8b96a5;font-size:11px;margin-top:16px;">Automatska poruka iz JoPeX sistema — otpremnica potvrđena ${new Date(otp.potvrdjeno_vrijeme).toLocaleString('sr-Latn-BA')}.</p>
+    </div>
+  `;
+}
+
+// Pošalje jednu otpremnicu knjigovodstvu (ako PJ ima podešenu email adresu) i upiše
+// status. Nikad ne baca grešku — poziva se posle potvrde, ne smije zaustaviti prodaju
+// ako email padne.
+async function posaljiOtpremnicuKnjigovodstvu(otpId) {
+  try {
+    const r = await pool.query('SELECT * FROM otpremnice WHERE id=$1', [otpId]);
+    if (!r.rows.length) return;
+    const otp = r.rows[0];
+    const objRes = await pool.query('SELECT email_knjigovodstvo FROM prodajni_objekti WHERE id=$1', [otp.objekt_id]);
+    const email = objRes.rows[0]?.email_knjigovodstvo;
+    if (!email) return; // PJ nema podešenu adresu — ništa se ne šalje, ništa se ne bilježi kao greška
+
+    const stavkeRes = await pool.query('SELECT * FROM otpremnica_stavke WHERE otpremnica_id=$1', [otpId]);
+    const rezultat = await posaljiEmail(email, `Otpremnica ${otp.broj} — ${otp.objekt_naziv}`, emailOtpremnicaHtml(otp, stavkeRes.rows));
+    if (rezultat.ok) {
+      await pool.query(
+        'UPDATE otpremnice SET poslato_knjigovodstvu=true, poslato_knjigovodstvu_vrijeme=now() WHERE id=$1',
+        [otpId]
+      );
+    } else {
+      console.error(`Slanje otpremnice ${otp.broj} knjigovodstvu nije uspjelo:`, rezultat.error);
+    }
+  } catch (err) {
+    console.error('Greška u posaljiOtpremnicuKnjigovodstvu:', err.message);
+  }
+}
 
 // Admin uvijek prolazi; ostali moraju imati moze_prodavati=true (dozvola iz korisnici.html).
 router.use((req, res, next) => {
@@ -403,6 +468,9 @@ router.post('/potvrdi', async (req, res) => {
     }
 
     await client.query('COMMIT');
+    // Slanje knjigovodstvu se dešava u pozadini — NE čekamo ga (await bez blokiranja
+    // odgovora) da eventualni spor/pao email server ne uspori potvrdu prodaje kupcu.
+    posaljiOtpremnicuKnjigovodstvu(otpId);
     res.status(201).json({
       ...h.rows[0], gotovina_id: gotovinaId, stavke: sastavljene, iznos_placeno: iznosPlaceno,
       status_placanja: statusPlacanja, duguje: +(ukupanIznos - iznosPlaceno).toFixed(2),
@@ -648,5 +716,94 @@ router.post('/rucni-dug', async (req, res) => {
     client.release();
   }
 });
+
+// POST /api/otpremnice/:id/posalji-knjigovodstvu - ručno (ponovo) slanje, npr. ako
+// automatski email nije prošao, ili PJ nije imao podešenu adresu u trenutku prodaje.
+router.post('/:id/posalji-knjigovodstvu', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT id, objekt_id FROM otpremnice WHERE id=$1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Otpremnica nije pronađena.' });
+    const objRes = await pool.query('SELECT email_knjigovodstvo, naziv FROM prodajni_objekti WHERE id=$1', [r.rows[0].objekt_id]);
+    if (!objRes.rows[0]?.email_knjigovodstvo)
+      return res.status(400).json({ error: `Prodajni objekat "${objRes.rows[0]?.naziv || ''}" nema podešenu email adresu knjigovodstva.` });
+    await posaljiOtpremnicuKnjigovodstvu(r.rows[0].id);
+    const provjera = await pool.query('SELECT poslato_knjigovodstvu, poslato_knjigovodstvu_vrijeme FROM otpremnice WHERE id=$1', [r.rows[0].id]);
+    if (!provjera.rows[0].poslato_knjigovodstvu)
+      return res.status(500).json({ error: 'Slanje nije uspjelo — provjeri email podešavanja (SMTP) na serveru.' });
+    res.json({ ok: true, poslato_vrijeme: provjera.rows[0].poslato_knjigovodstvu_vrijeme });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Dnevni zbirni pregled — jedan email po PJ (koji ima podešenu adresu) sa SVIM
+// otpremnicama potvrđenim TOG DANA. Poziva se sa rasporedom iz server.js (jednom uveče).
+// Bilježi se u knjigovodstvo_dnevni_log da se ne pošalje duplo isti dan ako se server
+// restartuje.
+async function posaljiDnevniPregledSvimaPJ() {
+  try {
+    const danas = new Date().toISOString().split('T')[0];
+    const objekti = await pool.query(
+      `SELECT id, naziv, email_knjigovodstvo FROM prodajni_objekti
+       WHERE email_knjigovodstvo IS NOT NULL AND aktivan = true`
+    );
+    for (const obj of objekti.rows) {
+      const vecPoslato = await pool.query(
+        'SELECT 1 FROM knjigovodstvo_dnevni_log WHERE objekt_id=$1 AND datum=$2',
+        [obj.id, danas]
+      );
+      if (vecPoslato.rows.length) continue; // već poslato danas za ovaj PJ
+
+      const otpR = await pool.query(
+        `SELECT * FROM otpremnice WHERE objekt_id=$1 AND status='potvrdjena'
+         AND datum::date = $2::date ORDER BY datum ASC`,
+        [obj.id, danas]
+      );
+      if (!otpR.rows.length) continue; // nema otpremnica danas za ovaj PJ — ne šalji prazan email
+
+      const redovi = otpR.rows.map(o => `
+        <tr>
+          <td style="padding:5px 8px;border-bottom:1px solid #eee;">${o.broj}</td>
+          <td style="padding:5px 8px;border-bottom:1px solid #eee;">${o.kupac_naziv || '—'}</td>
+          <td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:right;">${parseFloat(o.ukupan_iznos).toFixed(2)} KM</td>
+          <td style="padding:5px 8px;border-bottom:1px solid #eee;">${o.status_placanja === 'placeno' ? 'Plaćeno' : o.status_placanja === 'djelimicno' ? 'Djelimično' : 'Na račun'}</td>
+          <td style="padding:5px 8px;border-bottom:1px solid #eee;">${o.poslato_knjigovodstvu ? '✓' : '⏳'}</td>
+        </tr>
+      `).join('');
+      const ukupno = otpR.rows.reduce((s, o) => s + parseFloat(o.ukupan_iznos), 0);
+      const html = `
+        <div style="font-family:Arial,sans-serif;font-size:13px;color:#1a2733;max-width:640px;">
+          <h2 style="color:#134a85;">Dnevni pregled otpremnica — ${obj.naziv} — ${danas}</h2>
+          <table style="border-collapse:collapse;width:100%;font-size:12.5px;">
+            <thead><tr style="background:#f0f2f5;">
+              <th style="padding:5px 8px;text-align:left;">Broj</th>
+              <th style="padding:5px 8px;text-align:left;">Kupac</th>
+              <th style="padding:5px 8px;text-align:right;">Iznos</th>
+              <th style="padding:5px 8px;text-align:left;">Plaćanje</th>
+              <th style="padding:5px 8px;text-align:left;">Poslato pojedinačno</th>
+            </tr></thead>
+            <tbody>${redovi}</tbody>
+          </table>
+          <p style="text-align:right;font-size:14px;font-weight:bold;margin-top:8px;">UKUPNO DANAS: ${ukupno.toFixed(2)} KM (${otpR.rows.length} otpremnica)</p>
+          <p style="color:#8b96a5;font-size:11px;margin-top:16px;">Automatski dnevni pregled iz JoPeX sistema.</p>
+        </div>
+      `;
+      const rezultat = await posaljiEmail(obj.email_knjigovodstvo, `Dnevni pregled otpremnica — ${obj.naziv} — ${danas}`, html);
+      if (rezultat.ok) {
+        await pool.query(
+          `INSERT INTO knjigovodstvo_dnevni_log (objekt_id, datum, broj_otpremnica) VALUES ($1,$2,$3)
+           ON CONFLICT (objekt_id, datum) DO NOTHING`,
+          [obj.id, danas, otpR.rows.length]
+        );
+      } else {
+        console.error(`Dnevni pregled za PJ ${obj.naziv} nije poslat:`, rezultat.error);
+      }
+    }
+  } catch (err) {
+    console.error('Greška u posaljiDnevniPregledSvimaPJ:', err.message);
+  }
+}
+
+router.posaljiDnevniPregled = posaljiDnevniPregledSvimaPJ;
 
 module.exports = router;
