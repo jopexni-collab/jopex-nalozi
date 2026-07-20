@@ -322,7 +322,95 @@ router.get('/:id', zahtijevaProdaju, async (req, res) => {
   }
 });
 
-// POST /api/roba - ručno dodavanje artikla ZA ODREĐENI PJ (cijena/stanje idu u roba_pj)
+// GET /api/roba/:id/kartica?objekt_id=X - robna kartica artikla za taj PJ: spaja uvoz i
+// nivelaciju (roba_kretanja), prodaju (otpremnica_stavke), i prenose (prenosi_robe) u
+// jedan hronološki prikaz.
+router.get('/:id/kartica', zahtijevaProdaju, async (req, res) => {
+  try {
+    const objektId = trebaObjekat(req.query.objekt_id);
+    if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat.' });
+    const robaId = req.params.id;
+
+    const kretanja = await pool.query(
+      `SELECT id, tip, kolicina, cijena_stara, cijena_nova, napomena, korisnik_ime, datum
+       FROM roba_kretanja WHERE roba_id=$1 AND objekt_id=$2`,
+      [robaId, objektId]
+    );
+    const prodaja = await pool.query(
+      `SELECT s.id, s.kolicina, s.cijena, s.iznos, o.broj, o.datum, o.kupac_naziv, o.status
+       FROM otpremnica_stavke s JOIN otpremnice o ON o.id = s.otpremnica_id
+       WHERE s.roba_id=$1 AND o.objekt_id=$2`,
+      [robaId, objektId]
+    );
+    const prenosiUlaz = await pool.query(
+      `SELECT id, kolicina, iz_objekta_naziv, kreiran, korisnik_ime
+       FROM prenosi_robe WHERE roba_id=$1 AND u_objekat_id=$2`,
+      [robaId, objektId]
+    );
+    const prenosiIzlaz = await pool.query(
+      `SELECT id, kolicina, u_objekat_naziv, kreiran, korisnik_ime
+       FROM prenosi_robe WHERE roba_id=$1 AND iz_objekta_id=$2`,
+      [robaId, objektId]
+    );
+
+    const stavke = [
+      ...kretanja.rows.map(k => ({
+        tip: k.tip, datum: k.datum,
+        opis: k.tip === 'uvoz'
+          ? `Uvoz — ${k.kolicina} kom po ${parseFloat(k.cijena_nova).toFixed(2)} KM${k.napomena ? ' (' + k.napomena + ')' : ''}`
+          : `Nivelacija cijene — ${parseFloat(k.cijena_stara ?? 0).toFixed(2)} → ${parseFloat(k.cijena_nova).toFixed(2)} KM${k.napomena ? ' (' + k.napomena + ')' : ''}`,
+        kolicina: k.kolicina, znak: k.kolicina != null ? '+' : '',
+        korisnik: k.korisnik_ime,
+      })),
+      ...prodaja.rows.map(s => ({
+        tip: s.status === 'stornirana' ? 'prodaja_stornirana' : 'prodaja', datum: s.datum,
+        opis: `${s.status === 'stornirana' ? '⛔ STORNIRANO — ' : ''}Otpremnica ${s.broj} — ${s.kupac_naziv || 'kupac nepoznat'} — ${parseFloat(s.cijena).toFixed(2)} KM/kom`,
+        kolicina: s.status === 'stornirana' ? null : s.kolicina, znak: '−',
+        korisnik: null,
+      })),
+      ...prenosiUlaz.rows.map(p => ({
+        tip: 'prenos_ulaz', datum: p.kreiran,
+        opis: `Prenos iz "${p.iz_objekta_naziv}"`, kolicina: p.kolicina, znak: '+', korisnik: p.korisnik_ime,
+      })),
+      ...prenosiIzlaz.rows.map(p => ({
+        tip: 'prenos_izlaz', datum: p.kreiran,
+        opis: `Prenos u "${p.u_objekat_naziv}"`, kolicina: p.kolicina, znak: '−', korisnik: p.korisnik_ime,
+      })),
+    ].sort((a, b) => new Date(b.datum) - new Date(a.datum));
+
+    res.json(stavke);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/roba/:id/nivelacija - SAMO admin. Ručna izmjena cijene artikla za taj PJ,
+// bilježi se u roba_kretanja (istorija — vidi se u kartici) sa razlogom.
+router.post('/:id/nivelacija', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin može mijenjati cijenu (nivelacija).' });
+  try {
+    const objektId = trebaObjekat(req.body.objekt_id);
+    if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat.' });
+    const novaCijena = parseFloat(req.body.cijena);
+    if (isNaN(novaCijena) || novaCijena < 0) return res.status(400).json({ error: 'Unesite ispravnu cijenu.' });
+    const napomena = (req.body.napomena || '').trim() || null;
+
+    const staraRes = await pool.query('SELECT cijena FROM roba_pj WHERE roba_id=$1 AND objekt_id=$2', [req.params.id, objektId]);
+    if (!staraRes.rows.length) return res.status(404).json({ error: 'Artikal nije pronađen za ovaj PJ.' });
+    const staraCijena = parseFloat(staraRes.rows[0].cijena);
+
+    await pool.query('UPDATE roba_pj SET cijena=$1, azurirano=now() WHERE roba_id=$2 AND objekt_id=$3', [novaCijena, req.params.id, objektId]);
+    await pool.query(
+      `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, cijena_stara, cijena_nova, napomena, korisnik_id, korisnik_ime)
+       VALUES ($1,$2,'nivelacija',$3,$4,$5,$6,$7)`,
+      [req.params.id, objektId, staraCijena, novaCijena, napomena, req.session.user.id, req.session.user.ime_prezime]
+    );
+    res.json({ ok: true, cijena_stara: staraCijena, cijena_nova: novaCijena });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 router.post('/', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Samo admin može dodavati/mijenjati šifrarnik.' });
@@ -631,6 +719,14 @@ router.post('/import', upload.single('file'), async (req, res) => {
             [robaId, objektId, cijenaFajl, stanjeFajl]
           );
           if (robaRes.rows[0].inserted || pjRes.rows[0].inserted) uneseno++; else azurirano++;
+          if (stanjeFajl > 0) {
+            await pool.query(
+              `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_nova, napomena, korisnik_id, korisnik_ime)
+               VALUES ($1,$2,'uvoz',$3,$4,$5,$6,$7)`,
+              [robaId, objektId, stanjeFajl, cijenaFajl ?? 0, 'Uvoz (zamjena kompletnog lagera)',
+               req.session.user.id, req.session.user.ime_prezime]
+            );
+          }
         } else {
           // NABAVKA: pogledaj postojeći red da uporediš cijenu prije nego upišeš
           const postojeci = await pool.query(
@@ -644,6 +740,14 @@ router.post('/import', upload.single('file'), async (req, res) => {
               [robaId, objektId, cijenaFajl ?? 0, stanjeFajl]
             );
             uneseno++;
+            if (stanjeFajl > 0) {
+              await pool.query(
+                `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_nova, napomena, korisnik_id, korisnik_ime)
+                 VALUES ($1,$2,'uvoz',$3,$4,$5,$6,$7)`,
+                [robaId, objektId, stanjeFajl, cijenaFajl ?? 0, 'Uvoz (nabavka — novi artikal za ovaj PJ)',
+                 req.session.user.id, req.session.user.ime_prezime]
+              );
+            }
           } else {
             const staraCijena = parseFloat(postojeci.rows[0].cijena);
             // Za Bluesoft je cijenaFajl uvijek null, pa razlikaCijene ostaje false — cijena se
@@ -658,6 +762,14 @@ router.post('/import', upload.single('file'), async (req, res) => {
               [novaCijena, stanjeFajl, robaId, objektId]
             );
             azurirano++;
+            if (stanjeFajl > 0) {
+              await pool.query(
+                `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_nova, napomena, korisnik_id, korisnik_ime)
+                 VALUES ($1,$2,'uvoz',$3,$4,$5,$6,$7)`,
+                [robaId, objektId, stanjeFajl, novaCijena, 'Uvoz (nabavka — dodato na postojeće stanje)',
+                 req.session.user.id, req.session.user.ime_prezime]
+              );
+            }
           }
         }
       }

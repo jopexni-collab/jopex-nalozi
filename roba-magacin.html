@@ -124,6 +124,15 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 /* ── OVERLAY: POTVRDA KUPCA ──────────────────────────────────── */
 .overlay{position:fixed;inset:0;background:#fff;z-index:100;display:none;flex-direction:column;}
+.modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center;}
+.modal.on{display:flex;}
+.modal-box{background:#fff;border-radius:8px;padding:24px;min-width:320px;box-shadow:0 4px 20px rgba(0,0,0,.2);}
+.modal-box h3{margin-bottom:16px;font-size:15px;color:var(--dark);}
+.modal-box input{width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:5px;margin-bottom:12px;}
+.modal-btns{display:flex;gap:8px;}
+.modal-btns button{flex:1;font:inherit;font-size:12px;padding:7px;border-radius:5px;border:none;cursor:pointer;}
+.btn-primary{background:var(--blue);color:#fff;}
+.btn-sec{background:#eee;color:#333;}
 .overlay.on{display:flex;}
 .ov-header{background:var(--blue);color:#fff;padding:14px;text-align:center;font-weight:700;font-size:15px;}
 .ov-body{flex:1;overflow:auto;padding:20px;display:flex;flex-direction:column;align-items:center;}
@@ -425,6 +434,32 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <div id="prenos-msg" style="font-size:12px;margin-top:8px;"></div>
   </div>
 
+</div>
+
+<!-- ═══ MODAL: ROBNA KARTICA ═══ -->
+<div class="modal" id="kartica-modal">
+  <div class="modal-box" style="max-width:600px;">
+    <h3 id="kartica-naslov">Robna kartica</h3>
+    <div id="kartica-lista" style="max-height:420px;overflow-y:auto;"></div>
+    <div class="modal-btns" style="margin-top:8px">
+      <button class="btn-sec" onclick="document.getElementById('kartica-modal').classList.remove('on')">Zatvori</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: NIVELACIJA CIJENE ═══ -->
+<div class="modal" id="nivelacija-modal">
+  <div class="modal-box">
+    <h3 id="nivelacija-naslov">Nivelacija cijene</h3>
+    <div style="font-size:12px;color:#6b7a8d;margin-bottom:8px;">Trenutna cijena: <b id="nivelacija-trenutna"></b></div>
+    <input type="number" id="nivelacija-cijena" step="0.01" min="0" placeholder="Nova cijena">
+    <input type="text" id="nivelacija-napomena" placeholder="Razlog (opciono)">
+    <div id="nivelacija-msg"></div>
+    <div class="modal-btns" style="margin-top:8px">
+      <button class="btn-primary" onclick="potvrdiNivelaciju()">Sačuvaj</button>
+      <button class="btn-sec" onclick="document.getElementById('nivelacija-modal').classList.remove('on')">Otkaži</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1019,6 +1054,74 @@ async function popuniLagerObjekat(){
   }catch(e){}
 }
 
+const TIP_KRETANJA_STIL={
+  uvoz:{ikona:'📥',boja:'var(--green)'}, nivelacija:{ikona:'✎',boja:'var(--blue)'},
+  prodaja:{ikona:'📤',boja:'var(--red)'}, prodaja_stornirana:{ikona:'⛔',boja:'#8b96a5'},
+  prenos_ulaz:{ikona:'↘️',boja:'var(--green)'}, prenos_izlaz:{ikona:'↗️',boja:'var(--red)'},
+};
+
+async function otvoriRobnuKarticu(robaId, naziv){
+  const objektId=document.getElementById('lager-objekat').value;
+  if(!objektId){alert('Izaberite prvo prodajni objekat.');return;}
+  document.getElementById('kartica-naslov').textContent='📋 Robna kartica — '+naziv;
+  document.getElementById('kartica-lista').innerHTML='<div style="padding:20px;text-align:center;color:#8b96a5;">Učitavanje...</div>';
+  document.getElementById('kartica-modal').classList.add('on');
+  try{
+    const r=await fetch(`${API}/api/roba/${robaId}/kartica?objekt_id=${objektId}`);
+    const rows=await r.json();
+    if(!r.ok) throw new Error(rows.error||'Greška.');
+    if(!rows.length){
+      document.getElementById('kartica-lista').innerHTML='<div style="padding:20px;text-align:center;color:#8b96a5;">Nema evidentiranih kretanja za ovaj artikal na ovom PJ.</div>';
+      return;
+    }
+    document.getElementById('kartica-lista').innerHTML=rows.map(k=>{
+      const stil=TIP_KRETANJA_STIL[k.tip]||{ikona:'•',boja:'#8b96a5'};
+      return `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid #eee;font-size:12.5px;">
+          <div>
+            <div>${stil.ikona} ${esc(k.opis)}</div>
+            <div style="font-size:10.5px;color:#8b96a5;">${new Date(k.datum).toLocaleString('sr-Latn-BA')}${k.korisnik?' · '+esc(k.korisnik):''}</div>
+          </div>
+          ${k.kolicina!=null?`<div style="font-weight:700;color:${stil.boja};white-space:nowrap;">${k.znak}${k.kolicina}</div>`:''}
+        </div>
+      `;
+    }).join('');
+  }catch(e){
+    document.getElementById('kartica-lista').innerHTML=`<div style="padding:20px;text-align:center;color:var(--red);">${esc(e.message)}</div>`;
+  }
+}
+
+let nivelacijaRobaId=null;
+function otvoriNivelaciju(robaId, naziv, trenutnaCijena){
+  nivelacijaRobaId=robaId;
+  document.getElementById('nivelacija-naslov').textContent='✎ Nivelacija cijene — '+naziv;
+  document.getElementById('nivelacija-trenutna').textContent=lagerFmMoney(trenutnaCijena);
+  document.getElementById('nivelacija-cijena').value=trenutnaCijena;
+  document.getElementById('nivelacija-napomena').value='';
+  document.getElementById('nivelacija-msg').textContent='';
+  document.getElementById('nivelacija-modal').classList.add('on');
+}
+
+async function potvrdiNivelaciju(){
+  const objektId=document.getElementById('lager-objekat').value;
+  const cijena=parseFloat(document.getElementById('nivelacija-cijena').value);
+  const napomena=document.getElementById('nivelacija-napomena').value.trim();
+  const msg=document.getElementById('nivelacija-msg');
+  if(isNaN(cijena)||cijena<0){msg.style.color='red';msg.textContent='Unesite ispravnu cijenu.';return;}
+  try{
+    const r=await fetch(`${API}/api/roba/${nivelacijaRobaId}/nivelacija`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({objekt_id:objektId, cijena, napomena: napomena||null}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška.');
+    document.getElementById('nivelacija-modal').classList.remove('on');
+    ucitajLagerListu();
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
 function lagerValuta(){
   const objektId=document.getElementById('lager-objekat').value;
   return (window.__lagerObjektiValute||{})[objektId]||'KM';
@@ -1146,8 +1249,11 @@ function renderLagerRedovi(){
       <td style="padding:5px 8px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
       <td style="padding:5px 8px;text-align:center;color:#6b7a8d;">${s.debljina_cm??'—'}</td>
       <td style="padding:5px 8px;text-align:center;">${esc(s.jed_mjera)}</td>
-      <td style="padding:5px 8px;text-align:right;">${lagerFmMoney(s.cijena)}</td>
-      <td style="padding:5px 8px;text-align:right;">${s.stanje}</td>
+      <td style="padding:5px 8px;text-align:right;">
+        ${lagerFmMoney(s.cijena)}
+        <button onclick="otvoriNivelaciju(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.cijena})" title="Promijeni cijenu (nivelacija)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:11px;margin-left:2px;">✎</button>
+      </td>
+      <td style="padding:5px 8px;text-align:right;text-decoration:underline;color:var(--blue);cursor:pointer;" onclick="otvoriRobnuKarticu(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')">${s.stanje}</td>
       <td style="padding:5px 8px;text-align:right;font-weight:700;">${lagerFmMoney(s.ukupno)}</td>
     </tr>
   `).join('');
