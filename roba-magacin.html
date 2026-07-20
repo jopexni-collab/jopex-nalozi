@@ -1025,7 +1025,7 @@ function lagerValuta(){
 }
 function lagerFmMoney(n){
   const valuta=lagerValuta();
-  if(valuta==='EUR') return `${fm(n)} € (${fm(n*1.95)} KM)`;
+  if(valuta==='EUR') return `${fm(n)} € <span style="font-size:0.6em;color:#8b96a5;font-weight:600;">(${fm(n*1.95)} KM)</span>`;
   return `${fm(n)} KM`;
 }
 

@@ -26,6 +26,38 @@ async function jeBlagajnikZaObjekat(user, objektId) {
   return r.rows.length > 0;
 }
 
+// GET /api/blagajna-razduzenja/stanje-sve - SAMO admin - trenutno stanje SVIH PJ odjednom
+// (za nadzorni pregled, bez akcija razduženja — to ostaje posao blagajnika).
+router.get('/stanje-sve', async (req, res) => {
+  try {
+    const user = req.session?.user;
+    if (user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin.' });
+    const objekti = await pool.query('SELECT id, naziv, valuta FROM prodajni_objekti WHERE aktivan=true ORDER BY naziv');
+    const rezultat = [];
+    for (const obj of objekti.rows) {
+      const predanoRes = await pool.query(
+        `SELECT COALESCE(SUM(iznos),0) AS ukupno FROM gotovina WHERE objekt_naziv=$1 AND predao_blagajniku=true`,
+        [obj.naziv]
+      );
+      const razduzenoRes = await pool.query(
+        `SELECT COALESCE(SUM(iznos),0) AS ukupno FROM blagajna_razduzenja WHERE objekt_id=$1`,
+        [obj.id]
+      );
+      const predano = parseFloat(predanoRes.rows[0].ukupno);
+      const razduzeno = parseFloat(razduzenoRes.rows[0].ukupno);
+      const trenutno = +(predano - razduzeno).toFixed(2);
+      rezultat.push({
+        objekt_id: obj.id, objekt_naziv: obj.naziv, valuta: obj.valuta,
+        trenutno_u_blagajni: trenutno,
+        trenutno_km_ekvivalent: obj.valuta === 'EUR' ? +(trenutno * KURS_EUR_KM).toFixed(2) : null,
+      });
+    }
+    res.json(rezultat);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/blagajna-razduzenja/moji-pj - PJ za koje je prijavljeni korisnik blagajnik
 // (koristi frontend da nacrta dugme/karticu za SVAKI PJ koji ta osoba pokriva).
 router.get('/moji-pj', async (req, res) => {

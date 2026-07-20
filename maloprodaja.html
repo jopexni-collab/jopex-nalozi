@@ -767,6 +767,13 @@ function fmMoney(n){
   if(valuta==='EUR') return `${fm(n)} € (${fm(n*KURS_EUR_KM)} KM)`;
   return `${fm(n)} KM`;
 }
+// Ista logika kao fmMoney, ali sa HTML markupom (€ veći font, KM manji font u zagradi) —
+// koristiti SAMO sa .innerHTML (ne .textContent, jer bi se HTML oznake prikazale kao tekst).
+function fmMoneyHtml(n){
+  const valuta=(typeof trenutniObjekat!=='undefined' && trenutniObjekat?.valuta)||'KM';
+  if(valuta==='EUR') return `${fm(n)} € <span style="font-size:0.6em;color:#8b96a5;font-weight:600;">(${fm(n*KURS_EUR_KM)} KM)</span>`;
+  return `${fm(n)} KM`;
+}
 function valutaOznaka(){
   return ((typeof trenutniObjekat!=='undefined' && trenutniObjekat?.valuta)||'KM')==='EUR' ? '€' : 'KM';
 }
@@ -1142,7 +1149,7 @@ function pripremiIsplatu(){
   if(!iznos||iznos<=0){greskaDiv.textContent='⚠ Unesite ispravan iznos.';greskaDiv.style.display='block';return;}
 
   isplataZaPotvrdu={razlog, napomena: napomena||null, iznos, kupac_id: razlog==='povrat_komitentu'?isplataKomitent.id:null};
-  document.getElementById('isp-ov-iznos').textContent=fmMoney(iznos);
+  document.getElementById('isp-ov-iznos').innerHTML=fmMoneyHtml(iznos);
   document.getElementById('isp-ov-detalji').innerHTML=`
     <div class="ov-stavka"><span>Razlog</span><span>${esc(RAZLOG_ISPLATE_LABEL[razlog])}</span></div>
     ${razlog==='povrat_komitentu'?`<div class="ov-stavka"><span>Komitent</span><span>${esc(isplataKomitent.naziv)}</span></div>`:''}
@@ -1442,7 +1449,7 @@ function otvoriNaplatuDuga(otp){
   dugZaNaplatu=otp;
   document.getElementById('nd-broj').textContent=otp.broj;
   document.getElementById('nd-kupac').textContent=`${otp.kupac_naziv||'—'} · ${otp.objekt_naziv||''}`;
-  document.getElementById('nd-duguje').textContent=fmMoney(otp.duguje);
+  document.getElementById('nd-duguje').innerHTML=fmMoneyHtml(otp.duguje);
   document.getElementById('nd-iznos').value='';
   document.getElementById('nd-izvor-avans-box').style.display='none';
   document.getElementById('nd-izvor').value='gotovina';
@@ -1909,7 +1916,7 @@ function renderKosarica(){
   const cont=document.getElementById('kos-items');
   const total=kosarica.reduce((s,k)=>s+k.kolicina*efektivnaCijenaProcjena(k),0);
   document.getElementById('kb-count').textContent=kosarica.length;
-  document.getElementById('kb-total').textContent=fmMoney(total);
+  document.getElementById('kb-total').innerHTML=fmMoneyHtml(total);
   document.getElementById('btn-generisi').disabled=kosarica.length===0;
 
   if(!kosarica.length){
@@ -2022,7 +2029,7 @@ let potvrdaUkupanIznos=0;
 function prikaziPotvrduEkran(pregled){
   potvrdaUkupanIznos=parseFloat(pregled.ukupan_iznos);
   document.getElementById('ov-broj').textContent='Broj se dodjeljuje nakon potvrde';
-  document.getElementById('ov-iznos').textContent=fmMoney(pregled.ukupan_iznos);
+  document.getElementById('ov-iznos').innerHTML=fmMoneyHtml(pregled.ukupan_iznos);
   document.getElementById('ov-stavke').innerHTML=pregled.stavke.map(s=>`
     <div class="ov-stavka">
       <span>${esc(s.naziv)} × ${s.kolicina} × ${fmMoney(s.cijena)}${s.odstupa?' ⚠':''}</span>

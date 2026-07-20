@@ -107,6 +107,12 @@ td.num{text-align:right;font-weight:700;}
   </div>
 </div>
 
+<!-- ADMIN: pregled trenutnog stanja SVIH blagajni (bez akcija - to je posao blagajnika) -->
+<div class="forma" id="admin-blagajna-pregled-box" style="display:none;">
+  <h3>🏦 Blagajne — pregled po PJ</h3>
+  <div id="admin-blagajna-pregled-lista" style="display:flex;gap:10px;flex-wrap:wrap;"></div>
+</div>
+
 <!-- ADMIN: razduženja na čekanju potvrde (sve PJ) -->
 <div class="forma" id="admin-razduzenja-box" style="display:none;">
   <h3>⏳ Razduženja na čekanju potvrde</h3>
@@ -202,7 +208,7 @@ let mojiPJovi=[];
 // Prikazuje iznos u NATIVNOJ valuti tog PJ, sa KM-ekvivalentom u zagradi ako je EUR
 // (fiksni kurs 1€=1,95KM — samo za prikaz, ne mijenja stvarno sačuvanu vrijednost).
 function fmValuta(iznos, valuta, kmEkvivalent){
-  if(valuta==='EUR') return `${fm(iznos)} € (${fm(kmEkvivalent!=null?kmEkvivalent:iznos*1.95)} KM)`;
+  if(valuta==='EUR') return `${fm(iznos)} € <span style="font-size:0.6em;color:#8b96a5;font-weight:600;">(${fm(kmEkvivalent!=null?kmEkvivalent:iznos*1.95)} KM)</span>`;
   return `${fm(iznos)} KM`;
 }
 
@@ -243,7 +249,7 @@ async function ucitajBlagajnaStanje(){
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Greška.');
     document.getElementById('blagajna-pj-naziv').textContent=' — '+d.objekt_naziv;
-    document.getElementById('blagajna-stanje').textContent=fmValuta(d.trenutno_u_blagajni, d.valuta, d.trenutno_km_ekvivalent);
+    document.getElementById('blagajna-stanje').innerHTML=fmValuta(d.trenutno_u_blagajni, d.valuta, d.trenutno_km_ekvivalent);
   }catch(e){
     document.getElementById('blagajna-stanje').textContent='Greška';
   }
@@ -298,6 +304,23 @@ async function potvrdiRazduzenje(){
     ucitajBlagajnaStanje();
   }catch(e){
     msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+async function ucitajAdminBlagajnaPregled(){
+  const cont=document.getElementById('admin-blagajna-pregled-lista');
+  try{
+    const r=await fetch(`${API}/api/blagajna-razduzenja/stanje-sve`);
+    const rows=await r.json();
+    if(!rows.length){cont.innerHTML='<div style="color:#8b96a5;font-size:12px;">Nema definisanih PJ.</div>';return;}
+    cont.innerHTML=rows.map(p=>`
+      <div style="background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:12px 16px;min-width:160px;">
+        <div style="font-size:11px;color:#6b7a8d;">🏢 ${esc(p.objekt_naziv)}</div>
+        <div style="font-size:20px;font-weight:800;color:var(--dark);margin-top:2px;">${fmValuta(p.trenutno_u_blagajni, p.valuta, p.trenutno_km_ekvivalent)}</div>
+      </div>
+    `).join('');
+  }catch(e){
+    cont.innerHTML='<div style="color:var(--red);">Greška pri učitavanju.</div>';
   }
 }
 
@@ -482,6 +505,8 @@ fetch(`${API}/api/auth/me`).then(r=>{
     document.getElementById('blagajna-box').style.display='block';
     ucitajMojePJ();
   } else {
+    document.getElementById('admin-blagajna-pregled-box').style.display='block';
+    ucitajAdminBlagajnaPregled();
     document.getElementById('admin-razduzenja-box').style.display='block';
     ucitajAdminRazduzenja();
   }
@@ -496,7 +521,7 @@ fetch(`${API}/api/auth/me`).then(r=>{
     if(document.visibilityState==='visible'){
       load(); loadSume();
       if(blagajnaObjektId) ucitajBlagajnaStanje();
-      if(isAdmin) ucitajAdminRazduzenja();
+      if(isAdmin){ ucitajAdminRazduzenja(); ucitajAdminBlagajnaPregled(); }
     }
   }, 20000);
 }).catch(()=>location.href='login.html');
