@@ -55,6 +55,30 @@ input:checked+.slider:before{transform:translateX(16px);}
 </header>
 
 <main>
+  <div class="card" style="padding:16px 20px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="toggleNoviKorisnikForma()">
+      <h3 style="font-size:14px;color:var(--dark);margin:0;">+ Dodaj novog korisnika</h3>
+      <span id="nk-strelica">▼</span>
+    </div>
+    <div id="novi-korisnik-forma" style="display:none;margin-top:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <input type="text" id="nk-ime" placeholder="Ime i prezime *">
+        <input type="email" id="nk-email" placeholder="Email *">
+        <input type="text" id="nk-pozicija" placeholder="Pozicija (opciono)">
+        <select id="nk-rola">
+          <option value="proizvodnja">Obični korisnik</option>
+          <option value="admin">Admin</option>
+        </select>
+        <input type="password" id="nk-lozinka" placeholder="Lozinka (min. 6 karaktera) *">
+        <button class="btn-loz" onclick="dodajKorisnika()">+ Dodaj korisnika</button>
+      </div>
+      <div style="font-size:11px;color:#6b7a8d;margin-top:8px;">
+        Nakon dodavanja, uključi mu potrebna prava (Prodaja, Roba/Magacin, Blagajna, itd.) direktno u tabeli ispod.
+      </div>
+      <div id="nk-msg" style="font-size:12px;margin-top:8px;"></div>
+    </div>
+  </div>
+
   <div class="card">
     <div style="overflow-x:auto;">
     <table>
@@ -113,6 +137,43 @@ input:checked+.slider:before{transform:translateX(16px);}
 <script>
 const API='';
 let korisnici=[], currentLozId=null;
+
+function toggleNoviKorisnikForma(){
+  const el=document.getElementById('novi-korisnik-forma');
+  const otvara=el.style.display==='none';
+  el.style.display=otvara?'block':'none';
+  document.getElementById('nk-strelica').textContent=otvara?'▲':'▼';
+}
+
+async function dodajKorisnika(){
+  const ime=document.getElementById('nk-ime').value.trim();
+  const email=document.getElementById('nk-email').value.trim();
+  const pozicija=document.getElementById('nk-pozicija').value.trim();
+  const rola=document.getElementById('nk-rola').value;
+  const lozinka=document.getElementById('nk-lozinka').value;
+  const msg=document.getElementById('nk-msg');
+  if(!ime){msg.style.color='red';msg.textContent='Unesite ime i prezime.';return;}
+  if(!email){msg.style.color='red';msg.textContent='Unesite email.';return;}
+  if(!lozinka||lozinka.length<6){msg.style.color='red';msg.textContent='Lozinka mora imati bar 6 karaktera.';return;}
+  try{
+    const r=await fetch(API+'/api/zaposleni',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ime_prezime:ime, email, pozicija, rola, lozinka}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška pri dodavanju.');
+    msg.style.color='var(--green)';
+    msg.textContent=`✓ Dodano: ${data.ime_prezime}`;
+    document.getElementById('nk-ime').value='';
+    document.getElementById('nk-email').value='';
+    document.getElementById('nk-pozicija').value='';
+    document.getElementById('nk-lozinka').value='';
+    document.getElementById('nk-rola').value='proizvodnja';
+    load();
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
 
 async function load(){
   const r=await fetch(API+'/api/zaposleni');
@@ -192,7 +253,7 @@ async function openBlagajnikPopup(id,ime){
     if(!window.__prodajniObjekti) window.__prodajniObjekti = sviPJ;
     lista.innerHTML = sviPJ.map(o=>`
       <label style="display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:13px;">
-        <input type="checkbox" value="${o.id}" ${trenutni.includes(o.id)?'checked':''}>
+        <input type="checkbox" value="${o.id}" ${trenutni.includes(o.id)?'checked':''} style="width:16px;height:16px;flex-shrink:0;margin-bottom:0;">
         ${esc(o.naziv)}${o.valuta==='EUR'?' <span style="color:#8b96a5;font-size:11px;">(EUR)</span>':''}
       </label>
     `).join('') || '<div style="color:#8b96a5;">Nema definisanih prodajnih objekata.</div>';

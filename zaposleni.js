@@ -16,6 +16,37 @@ router.get('/ugovaraci', async (req, res) => {
   }
 });
 
+// POST /api/zaposleni - NOVI korisnik (samo admin). Lozinka se hash-uje ovdje (bcrypt) —
+// zato ne postoji način da se ovo bezbjedno uradi direktno u bazi/SQL-om. Sva prava
+// (moze_prodavati, izmjena_naloga, itd.) kreću isključena — admin ih uključuje POSLIJE
+// kroz postojeće toggle-e u tabeli, isto kao za sve ostale korisnike.
+router.post('/', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin može dodavati korisnike.' });
+  const { ime_prezime, email, lozinka, pozicija } = req.body;
+  const rola = req.body.rola === 'admin' ? 'admin' : 'proizvodnja';
+  if (!ime_prezime || !ime_prezime.trim())
+    return res.status(400).json({ error: 'Ime i prezime su obavezni.' });
+  if (!email || !email.trim())
+    return res.status(400).json({ error: 'Email je obavezan.' });
+  if (!lozinka || lozinka.length < 6)
+    return res.status(400).json({ error: 'Lozinka mora imati bar 6 karaktera.' });
+  try {
+    const postoji = await pool.query('SELECT id FROM zaposleni WHERE LOWER(email)=LOWER($1)', [email.trim()]);
+    if (postoji.rows.length) return res.status(400).json({ error: 'Korisnik sa tim email-om već postoji.' });
+    const hash = await bcrypt.hash(lozinka, 10);
+    const r = await pool.query(
+      `INSERT INTO zaposleni (ime_prezime, email, lozinka, pozicija, rola, aktivan)
+       VALUES ($1,$2,$3,$4,$5,true)
+       RETURNING id, ime_prezime, email, pozicija, rola, aktivan`,
+      [ime_prezime.trim(), email.trim(), hash, (pozicija || '').trim() || null, rola]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/zaposleni - lista svih (samo admin)
 router.get('/', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
