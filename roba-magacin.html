@@ -719,7 +719,7 @@ function renderObjektiListu(){
     <div class="kupac-rez-item" style="cursor:default;">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
         <div style="flex:1;min-width:0;">
-          <div class="kupac-rez-naziv">🏢 ${esc(o.naziv)}</div>
+          <div class="kupac-rez-naziv">🏢 ${esc(o.naziv)}${o.valuta==='EUR'?' <span style="font-size:10px;background:#e8f0fe;color:var(--blue);padding:1px 6px;border-radius:6px;">EUR €</span>':''}</div>
           ${o.adresa?`<div class="kupac-rez-meta">${esc(o.adresa)}</div>`:''}
           <div class="kupac-rez-meta">📧 ${o.email_knjigovodstvo?esc(o.email_knjigovodstvo):'<span style="color:var(--red);">nije podešeno</span>'}</div>
         </div>
@@ -734,6 +734,12 @@ function renderObjektiListu(){
         <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Email knjigovodstva (za ovaj PJ)</label>
         <input type="email" id="edit-objekat-email-${o.id}" value="${esc(o.email_knjigovodstvo||'')}" placeholder="knjigovodja@primjer.ba" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
         <div style="font-size:10.5px;color:#8b96a5;margin:-4px 0 7px;">Svaka potvrđena otpremnica sa ovog PJ automatski se šalje na ovu adresu, plus dnevni zbirni pregled uveče.</div>
+        <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Valuta</label>
+        <select id="edit-objekat-valuta-${o.id}" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
+          <option value="KM" ${o.valuta==='KM'?'selected':''}>KM</option>
+          <option value="EUR" ${o.valuta==='EUR'?'selected':''}>EUR (€)</option>
+        </select>
+        <div style="font-size:10.5px;color:#8b96a5;margin:-4px 0 7px;">Ako je EUR, iznosi za ovaj PJ se prikazuju u € (sa KM ekvivalentom po kursu 1€=1,95KM u zagradi).</div>
         <div class="ce-btns">
           <button class="ce-primijeni" onclick="sacuvajIzmjenuObjekta(${o.id})">✓ Sačuvaj</button>
           <button class="ce-otkazi" onclick="otvoriUredjivanjeObjekta(${o.id})">Zatvori</button>
@@ -752,12 +758,13 @@ async function sacuvajIzmjenuObjekta(id){
   const naziv=document.getElementById('edit-objekat-naziv-'+id).value.trim();
   const adresa=document.getElementById('edit-objekat-adresa-'+id).value.trim();
   const email=document.getElementById('edit-objekat-email-'+id).value.trim();
+  const valuta=document.getElementById('edit-objekat-valuta-'+id).value;
   const msg=document.getElementById('objekti-msg');
   if(!naziv){msg.style.color='red';msg.textContent='Naziv ne može biti prazan.';return;}
   try{
     const r=await fetch(`${API}/api/prodajni-objekti/${id}`,{
       method:'PATCH',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({naziv, adresa: adresa||null, email_knjigovodstvo: email||null}),
+      body:JSON.stringify({naziv, adresa: adresa||null, email_knjigovodstvo: email||null, valuta}),
     });
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška pri izmjeni.');
@@ -1008,9 +1015,20 @@ async function popuniLagerObjekat(){
   try{
     const r=await fetch(`${API}/api/prodajni-objekti`);
     const rows=await r.json();
-    sel.innerHTML='<option value="">— izaberi prodajni objekat —</option>'+rows.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');
+    window.__lagerObjektiValute=Object.fromEntries(rows.map(o=>[String(o.id),o.valuta||'KM']));
+    sel.innerHTML='<option value="">— izaberi prodajni objekat —</option>'+rows.map(o=>`<option value="${o.id}">${esc(o.naziv)}${o.valuta==='EUR'?' (€)':''}</option>`).join('');
     if(trenutniObjekat) sel.value=trenutniObjekat.id;
   }catch(e){}
+}
+
+function lagerValuta(){
+  const objektId=document.getElementById('lager-objekat').value;
+  return (window.__lagerObjektiValute||{})[objektId]||'KM';
+}
+function lagerFmMoney(n){
+  const valuta=lagerValuta();
+  if(valuta==='EUR') return `${fm(n)} € (${fm(n*1.95)} KM)`;
+  return `${fm(n)} KM`;
 }
 
 async function ucitajLagerListu(){
@@ -1130,9 +1148,9 @@ function renderLagerRedovi(){
       <td style="padding:5px 8px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
       <td style="padding:5px 8px;text-align:center;color:#6b7a8d;">${s.debljina_cm??'—'}</td>
       <td style="padding:5px 8px;text-align:center;">${esc(s.jed_mjera)}</td>
-      <td style="padding:5px 8px;text-align:right;">${fm(s.cijena)} KM</td>
+      <td style="padding:5px 8px;text-align:right;">${lagerFmMoney(s.cijena)}</td>
       <td style="padding:5px 8px;text-align:right;">${s.stanje}</td>
-      <td style="padding:5px 8px;text-align:right;font-weight:700;">${fm(s.ukupno)} KM</td>
+      <td style="padding:5px 8px;text-align:right;font-weight:700;">${lagerFmMoney(s.ukupno)}</td>
     </tr>
   `).join('');
 
@@ -1140,7 +1158,7 @@ function renderLagerRedovi(){
 
   const ukupnoPrikazano=prikaz.reduce((s,r)=>s+parseFloat(r.ukupno||0),0);
   totalDiv.style.display='block';
-  totalDiv.innerHTML=`${fm(ukupnoPrikazano)} KM<span class="cnt">${prikaz.length} od ${lagerPodaci.length} artikala${prikaz.length!==lagerPodaci.length?' (filtrirano)':''}</span>`;
+  totalDiv.innerHTML=`${lagerFmMoney(ukupnoPrikazano)}<span class="cnt">${prikaz.length} od ${lagerPodaci.length} artikala${prikaz.length!==lagerPodaci.length?' (filtrirano)':''}</span>`;
 }
 
 function lagerVrijednostZaKolonu(s, k){

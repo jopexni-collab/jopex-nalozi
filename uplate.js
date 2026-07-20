@@ -61,8 +61,11 @@ router.get('/ne-saldirano', async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT COALESCE(SUM(saldo),0) AS ukupno, COUNT(*) AS broj FROM (
-         SELECT kupac_id, SUM(iznos) AS saldo FROM kupac_transakcije
-         GROUP BY kupac_id HAVING SUM(iznos) > 0
+         SELECT t.kupac_id,
+           SUM(CASE WHEN p.valuta = 'EUR' THEN t.iznos * 1.95 ELSE t.iznos END) AS saldo
+         FROM kupac_transakcije t
+         LEFT JOIN prodajni_objekti p ON p.id = t.objekt_id
+         GROUP BY t.kupac_id HAVING SUM(CASE WHEN p.valuta = 'EUR' THEN t.iznos * 1.95 ELSE t.iznos END) > 0
        ) t`
     );
     res.json({ ukupno: +parseFloat(r.rows[0].ukupno).toFixed(2), broj: parseInt(r.rows[0].broj) });
@@ -91,6 +94,7 @@ router.post('/', async (req, res) => {
     const objRes = await client.query('SELECT naziv FROM prodajni_objekti WHERE id=$1', [objekt_id]);
     if (!objRes.rows.length) throw Object.assign(new Error('Prodajni objekat nije pronađen.'), { status: 404 });
     const objektNaziv = objRes.rows[0].naziv;
+    const objektValuta = objRes.rows[0].valuta || 'KM';
 
     const kupacRes = await client.query('SELECT naziv FROM kupci WHERE id=$1', [kupac_id]);
     if (!kupacRes.rows.length) throw Object.assign(new Error('Kupac nije pronađen.'), { status: 404 });
@@ -111,13 +115,18 @@ router.post('/', async (req, res) => {
     let preostalo = iznos;
     const pokriveneOtpremnice = [];
 
-    // Pronađi sve NEPLAĆENE otpremnice ovog kupca, najstarije prvo, i pokrivaj dug redom.
+    // Pronađi sve NEPLAĆENE otpremnice ovog kupca U ISTOJ VALUTI kao ovaj PJ, najstarije
+    // prvo, i pokrivaj dug redom. Dug u drugoj valuti (npr. EUR dug kad je ova uplata u KM)
+    // se NE dira — ne konvertujemo tiho preko duga, samo preko poznatog fiksnog kursa i to
+    // samo kad je to jasno namjeravano (avans-primjena na prodaji, ne ovdje automatski).
     const dugRes = await client.query(
-      `SELECT id, broj, ukupan_iznos, iznos_placeno, objekt_id, objekt_naziv
-       FROM otpremnice
-       WHERE kupac_id=$1 AND status='potvrdjena' AND status_placanja != 'placeno'
-       ORDER BY datum ASC FOR UPDATE`,
-      [kupac_id]
+      `SELECT o.id, o.broj, o.ukupan_iznos, o.iznos_placeno, o.objekt_id, o.objekt_naziv
+       FROM otpremnice o
+       LEFT JOIN prodajni_objekti p ON p.id = o.objekt_id
+       WHERE o.kupac_id=$1 AND o.status='potvrdjena' AND o.status_placanja != 'placeno'
+         AND COALESCE(p.valuta,'KM') = $2
+       ORDER BY o.datum ASC FOR UPDATE`,
+      [kupac_id, objektValuta]
     );
     for (const otp of dugRes.rows) {
       if (preostalo <= 0) break;

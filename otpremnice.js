@@ -271,12 +271,13 @@ router.get('/saldo-po-kupcima', async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT k.id AS kupac_id, k.naziv, k.telefon, k.grad,
-              COALESCE(SUM(t.iznos),0) AS saldo
+              COALESCE(SUM(CASE WHEN p.valuta='EUR' THEN t.iznos*1.95 ELSE t.iznos END),0) AS saldo
        FROM kupac_transakcije t
        JOIN kupci k ON k.id = t.kupac_id
+       LEFT JOIN prodajni_objekti p ON p.id = t.objekt_id
        GROUP BY k.id, k.naziv, k.telefon, k.grad
-       HAVING COALESCE(SUM(t.iznos),0) != 0
-       ORDER BY SUM(t.iznos) ASC`
+       HAVING COALESCE(SUM(CASE WHEN p.valuta='EUR' THEN t.iznos*1.95 ELSE t.iznos END),0) != 0
+       ORDER BY 5 ASC`
     );
     res.json(r.rows.map(row => ({ ...row, saldo: +parseFloat(row.saldo).toFixed(2) })));
   } catch (err) {
@@ -325,9 +326,10 @@ router.post('/potvrdi', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const objRes = await client.query('SELECT naziv FROM prodajni_objekti WHERE id=$1 AND aktivan=true', [objektId]);
+    const objRes = await client.query('SELECT naziv, valuta FROM prodajni_objekti WHERE id=$1 AND aktivan=true', [objektId]);
     if (!objRes.rows.length) throw Object.assign(new Error('Prodajni objekat nije pronađen ili nije aktivan.'), { status: 400 });
     const objektNaziv = objRes.rows[0].naziv;
+    const objektValuta = objRes.rows[0].valuta || 'KM';
 
     const idjevi = stavke.map(s => s.roba_id).filter(Boolean);
     if (idjevi.length) {
@@ -346,10 +348,15 @@ router.post('/potvrdi', async (req, res) => {
     // Avans se PRVO primjenjuje na cio iznos (ako je zatraženo) — nezavisno od načina
     // plaćanja, jer inače kod "kompletno" (plaća sve odmah) avans nikad ne bi imao šta
     // da pokrije (iznosPlaceno bi već bio pun ukupanIznos prije nego se avans provjeri).
+    // Uzima SAMO avans iz PJ-eva ISTE valute kao ovaj PJ — avans zarađen u EUR ne treba
+    // tiho da pokrije kupovinu u KM (i obrnuto) bez jasne, namjerne odluke.
     let iznosIzAvansa = 0;
     if (kupac_id && req.body.koristi_avans) {
       const saldoRes = await client.query(
-        `SELECT COALESCE(SUM(iznos),0) AS saldo FROM kupac_transakcije WHERE kupac_id=$1`, [kupac_id]
+        `SELECT COALESCE(SUM(t.iznos),0) AS saldo FROM kupac_transakcije t
+         LEFT JOIN prodajni_objekti p ON p.id = t.objekt_id
+         WHERE t.kupac_id=$1 AND COALESCE(p.valuta,'KM') = $2`,
+        [kupac_id, objektValuta]
       );
       const trenutniSaldo = parseFloat(saldoRes.rows[0].saldo);
       if (trenutniSaldo > 0) iznosIzAvansa = +Math.min(trenutniSaldo, ukupanIznos).toFixed(2);
@@ -550,14 +557,20 @@ router.post('/:id/naplati-dug', async (req, res) => {
 
     if (izvor === 'avans') {
       if (!otp.kupac_id) throw Object.assign(new Error('Otpremnica nema povezanog kupca — avans nije moguć.'), { status: 400 });
+      const objValRes = await client.query('SELECT valuta FROM prodajni_objekti WHERE id=$1', [otp.objekt_id]);
+      const duguValuta = objValRes.rows[0]?.valuta || 'KM';
+      // Avans se uzima SAMO iz PJ-eva ISTE valute kao dug koji se naplaćuje.
       const saldoRes = await client.query(
-        `SELECT COALESCE(SUM(iznos),0) AS saldo FROM kupac_transakcije WHERE kupac_id=$1`, [otp.kupac_id]
+        `SELECT COALESCE(SUM(t.iznos),0) AS saldo FROM kupac_transakcije t
+         LEFT JOIN prodajni_objekti p ON p.id = t.objekt_id
+         WHERE t.kupac_id=$1 AND COALESCE(p.valuta,'KM') = $2`,
+        [otp.kupac_id, duguValuta]
       );
       const saldo = parseFloat(saldoRes.rows[0].saldo);
       if (iznos > saldo)
-        throw Object.assign(new Error(`Kupac nema dovoljno avansa (raspoloživo: ${saldo.toFixed(2)} KM).`), { status: 400 });
+        throw Object.assign(new Error(`Kupac nema dovoljno avansa u ${duguValuta} (raspoloživo: ${saldo.toFixed(2)} ${duguValuta}).`), { status: 400 });
       if (iznos > trenutnoDuguje)
-        throw Object.assign(new Error(`Iznos ne može biti veći od trenutnog duga (${trenutnoDuguje} KM).`), { status: 400 });
+        throw Object.assign(new Error(`Iznos ne može biti veći od trenutnog duga (${trenutnoDuguje} ${duguValuta}).`), { status: 400 });
     }
     // Za gotovinu dozvoljavamo iznos > trenutnoDuguje (kupac daje više nego što duguje) —
     // višak automatski postaje novi avans (vidi ispod), ne odbija se zahtjev.
@@ -626,6 +639,22 @@ router.post('/:id/naplati-dug', async (req, res) => {
 // negativan = duguje) — koristi se za predlog "iskoristi avans" pri prodaji/naplati.
 router.get('/kupac/:kupac_id/saldo', async (req, res) => {
   try {
+    const { objekt_id } = req.query;
+    // Ako je poznat PJ za koji se provjerava avans, uzimaj SAMO transakcije iz PJ-eva
+    // ISTE valute — avans zarađen u EUR ne treba tiho da pokriva kupovinu u KM (i obrnuto)
+    // bez jasne, namjerne odluke/konverzije. Bez objekt_id (stariji pozivi) — staro
+    // ponašanje (sve zajedno), radi bezbjednosti unazad.
+    if (objekt_id) {
+      const objRes = await pool.query('SELECT valuta FROM prodajni_objekti WHERE id=$1', [objekt_id]);
+      const valuta = objRes.rows[0]?.valuta || 'KM';
+      const r = await pool.query(
+        `SELECT COALESCE(SUM(t.iznos),0) AS saldo FROM kupac_transakcije t
+         LEFT JOIN prodajni_objekti p ON p.id = t.objekt_id
+         WHERE t.kupac_id=$1 AND COALESCE(p.valuta,'KM') = $2`,
+        [req.params.kupac_id, valuta]
+      );
+      return res.json({ saldo: +parseFloat(r.rows[0].saldo).toFixed(2), valuta });
+    }
     const r = await pool.query(
       `SELECT COALESCE(SUM(iznos),0) AS saldo FROM kupac_transakcije WHERE kupac_id=$1`,
       [req.params.kupac_id]
@@ -641,10 +670,17 @@ router.get('/kupac/:kupac_id/saldo', async (req, res) => {
 router.get('/kupac/:kupac_id/kartica', async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT * FROM kupac_transakcije WHERE kupac_id=$1 ORDER BY datum DESC`,
+      `SELECT t.*, COALESCE(p.valuta,'KM') AS valuta
+       FROM kupac_transakcije t
+       LEFT JOIN prodajni_objekti p ON p.id = t.objekt_id
+       WHERE t.kupac_id=$1 ORDER BY t.datum DESC`,
       [req.params.kupac_id]
     );
-    const saldo = r.rows.reduce((s, t) => s + parseFloat(t.iznos), 0);
+    // Saldo (ukupno) je uvijek u KM-ekvivalentu — ako je kupac transakcije obavljao u
+    // više PJ (neki EUR, neki KM), ne bi imalo smisla prikazati "zbir" u samo jednoj
+    // od tih valuta bez konverzije. Pojedinačne stavke ISPOD ostaju u SVOJOJ nativnoj
+    // valuti (frontend to prikazuje po redu, ne po trenutno izabranom PJ).
+    const saldo = r.rows.reduce((s, t) => s + parseFloat(t.iznos) * (t.valuta === 'EUR' ? 1.95 : 1), 0);
     res.json({ transakcije: r.rows, saldo: +saldo.toFixed(2) });
   } catch (err) {
     res.status(500).json({ error: err.message });

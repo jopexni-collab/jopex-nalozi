@@ -388,7 +388,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <input type="text" id="isp-napomena" placeholder="Detalji...">
     </div>
     <div class="kupac-fld">
-      <label>Iznos (KM)</label>
+      <label id="isp-iznos-lbl">Iznos (KM)</label>
       <input type="number" id="isp-iznos" step="0.01" min="0.01" placeholder="0.00">
     </div>
     <button class="btn-generisi" onclick="pripremiIsplatu()">Dalje →</button>
@@ -415,7 +415,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <div class="import-box" id="rucni-dug-box" style="display:none;">
     <h3>📝 Ručni unos istorijskog duga</h3>
     <div class="uzorak-hint">Za dugove koji su nastali PRIJE ovog sistema (npr. iz Excel/papirne evidencije) — ne dira stanje robe, samo evidentira dug.</div>
-    <select id="rd-objekat"><option value="">— izaberi prodajni objekat —</option></select>
+    <select id="rd-objekat" onchange="azurirajRucniDugValutu()"><option value="">— izaberi prodajni objekat —</option></select>
     <input type="text" id="rd-kupac" placeholder="Ime i prezime / naziv kupca *">
     <input type="number" id="rd-ukupno" step="0.01" min="0.01" placeholder="Ukupan iznos duga (KM) *">
     <input type="number" id="rd-placeno" step="0.01" min="0" placeholder="Već plaćeno do sad (KM, 0 ako ništa)">
@@ -476,7 +476,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <div id="upl-kupac-izabran" style="display:none;background:#f7f8fa;border-radius:8px;padding:10px;margin-top:8px;font-size:13px;font-weight:700;"></div>
     </div>
     <div class="kupac-fld">
-      <label>Iznos uplate (KM)</label>
+      <label id="upl-iznos-lbl">Iznos uplate (KM)</label>
       <input type="number" id="upl-iznos" step="0.01" min="0.01" placeholder="0.00">
     </div>
     <input type="text" id="upl-napomena" placeholder="Napomena (opciono)">
@@ -717,7 +717,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         <button type="button" class="ce-tip-btn" data-nacin-pl="dug" onclick="postaviNacinPlacanja('dug')">Na račun (bez plaćanja)</button>
       </div>
       <div id="ov-djelimicno-fld" style="display:none;margin-top:8px;">
-        <label>Iznos koji kupac plaća SADA (KM)</label>
+        <label id="ov-djelimicno-lbl">Iznos koji kupac plaća SADA (KM)</label>
         <input type="number" id="ov-iznos-djelimicno" step="0.01" min="0.01" placeholder="0.00" oninput="azurirajPreostaliDug()">
         <div id="ov-preostali-dug" style="font-size:12px;color:var(--red);font-weight:700;margin-top:4px;"></div>
       </div>
@@ -758,6 +758,18 @@ let searchTimer=null;
 
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+// Prikaz iznosa u NATIVNOJ valuti trenutno izabranog PJ — KM za većinu, ali ako je PJ
+// podešen na EUR, prikazuje i KM-ekvivalent u zagradi (fiksni kurs 1€=1,95KM, samo za
+// prikaz — stvarno sačuvana vrijednost NIKAD se ne konvertuje/mijenja).
+const KURS_EUR_KM=1.95;
+function fmMoney(n){
+  const valuta=(typeof trenutniObjekat!=='undefined' && trenutniObjekat?.valuta)||'KM';
+  if(valuta==='EUR') return `${fm(n)} € (${fm(n*KURS_EUR_KM)} KM)`;
+  return `${fm(n)} KM`;
+}
+function valutaOznaka(){
+  return ((typeof trenutniObjekat!=='undefined' && trenutniObjekat?.valuta)||'KM')==='EUR' ? '€' : 'KM';
+}
 function fd(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('sr-Latn-BA')+' '+dt.toLocaleTimeString('sr-Latn-BA',{hour:'2-digit',minute:'2-digit'});}
 
 /* ── PRODAJNI OBJEKAT (PJ) — bira se prvi put i pamti se u localStorage ────
@@ -805,7 +817,7 @@ async function otvoriIzborObjekta(){
       return;
     }
     cont.innerHTML=rows.map(o=>`
-      <div class="objekat-item" onclick='zatraziLozinkuZaObjekat(${JSON.stringify({id:o.id,naziv:o.naziv}).replace(/'/g,"&apos;")})'>
+      <div class="objekat-item" onclick='zatraziLozinkuZaObjekat(${JSON.stringify({id:o.id,naziv:o.naziv,valuta:o.valuta}).replace(/'/g,"&apos;")})'>
         ${esc(o.naziv)}${upamceni&&upamceni.id===o.id?' <span style="font-size:10.5px;color:#8b96a5;font-weight:400;">(prošli put)</span>':''}
       </div>
     `).join('');
@@ -875,11 +887,21 @@ function izaberiObjekat(objekat){
   trenutniObjekat=objekat;
   try{ localStorage.setItem(OBJEKAT_KEY, JSON.stringify(objekat)); }catch(e){}
   azurirajObjekatBadge();
+  azurirajValutaLabele();
   document.getElementById('ov-objekat').classList.remove('on');
   kosarica=[];
   renderKosarica();
   if(typeof promijeniKupca==='function') promijeniKupca();
   otvoriDeepLinkOtpremnicuAkoPostoji();
+}
+
+// Ažurira labele input polja koje spominju "(KM)" da prate valutu izabranog PJ — inače bi
+// za EUR-PJ ostalo pisati "(KM)" pored polja gde se stvarno unosi iznos u €, što bi zbunilo.
+function azurirajValutaLabele(){
+  const oznaka=valutaOznaka();
+  const isp=document.getElementById('isp-iznos-lbl'); if(isp) isp.textContent=`Iznos (${oznaka})`;
+  const upl=document.getElementById('upl-iznos-lbl'); if(upl) upl.textContent=`Iznos uplate (${oznaka})`;
+  const ovd=document.getElementById('ov-djelimicno-lbl'); if(ovd) ovd.textContent=`Iznos koji kupac plaća SADA (${oznaka})`;
 }
 
 // Podržava direktan link ka konkretnoj otpremnici, npr. sa blagajne:
@@ -949,7 +971,7 @@ async function trazi(q){
           <div class="rez-sifra">Šifra: ${esc(a.sifra)}</div>
         </div>
         <div class="rez-right">
-          <div class="rez-cijena">${fm(a.cijena)} KM</div>
+          <div class="rez-cijena">${fmMoney(a.cijena)}</div>
           <div class="rez-stanje"><span class="chip ${chip}">${txt}</span></div>
         </div>
       </div>`;
@@ -972,7 +994,7 @@ async function ucitajNajprodavanije(){
     cont.innerHTML=rows.map(a=>`
       <div class="np-chip" onclick='dodajUKosaricu(${JSON.stringify(a).replace(/'/g,"&apos;")})'>
         <div class="np-naziv">${esc(a.naziv)}</div>
-        <div class="np-cijena">${fm(a.cijena)} KM/${esc(a.jed_mjera)}</div>
+        <div class="np-cijena">${fmMoney(a.cijena)}/${esc(a.jed_mjera)}</div>
       </div>
     `).join('');
     box.style.display='block';
@@ -1120,7 +1142,7 @@ function pripremiIsplatu(){
   if(!iznos||iznos<=0){greskaDiv.textContent='⚠ Unesite ispravan iznos.';greskaDiv.style.display='block';return;}
 
   isplataZaPotvrdu={razlog, napomena: napomena||null, iznos, kupac_id: razlog==='povrat_komitentu'?isplataKomitent.id:null};
-  document.getElementById('isp-ov-iznos').textContent=fm(iznos)+' KM';
+  document.getElementById('isp-ov-iznos').textContent=fmMoney(iznos);
   document.getElementById('isp-ov-detalji').innerHTML=`
     <div class="ov-stavka"><span>Razlog</span><span>${esc(RAZLOG_ISPLATE_LABEL[razlog])}</span></div>
     ${razlog==='povrat_komitentu'?`<div class="ov-stavka"><span>Komitent</span><span>${esc(isplataKomitent.naziv)}</span></div>`:''}
@@ -1164,7 +1186,7 @@ async function potvrdiIsplatu(){
     document.getElementById('isplata-forma-box').style.display='none';
     document.getElementById('isplata-uspjeh-box').style.display='block';
     document.getElementById('isplata-uspjeh-detalji').textContent=
-      `${fm(data.iznos)} KM — ${RAZLOG_ISPLATE_LABEL[data.razlog]} — primio: ${data.primalac_ime}`;
+      `${fmMoney(data.iznos)} — ${RAZLOG_ISPLATE_LABEL[data.razlog]} — primio: ${data.primalac_ime}`;
     document.getElementById('isplata-posalji-box').innerHTML=
       renderPosaljiDugmadIsplata(data.javni_token, `ISP-${data.id}`);
 
@@ -1192,8 +1214,8 @@ async function ucitajIsplateSume(){
       fetch(`${API}/api/isplate/suma?objekt_id=${trenutniObjekat.id}&od=${danas}&do=${danas}`).then(r=>r.json()),
       fetch(`${API}/api/isplate/suma?objekt_id=${trenutniObjekat.id}&od=${pocetakSedmice}&do=${danas}`).then(r=>r.json()),
     ]);
-    document.getElementById('isp-suma-danas').textContent=fm(rDanas.ukupno)+' KM';
-    document.getElementById('isp-suma-sedmica').textContent=fm(rSedmica.ukupno)+' KM';
+    document.getElementById('isp-suma-danas').textContent=fmMoney(rDanas.ukupno);
+    document.getElementById('isp-suma-sedmica').textContent=fmMoney(rSedmica.ukupno);
   }catch(e){}
 
   const od=document.getElementById('isp-period-od').value;
@@ -1204,7 +1226,7 @@ async function ucitajIsplateSume(){
       if(od) params.set('od',od);
       if(do_) params.set('do',do_);
       const r=await fetch(`${API}/api/isplate/suma?${params}`).then(r=>r.json());
-      document.getElementById('isp-suma-period').textContent=fm(r.ukupno)+' KM';
+      document.getElementById('isp-suma-period').textContent=fmMoney(r.ukupno);
     }catch(e){}
   }else{
     document.getElementById('isp-suma-period').textContent='—';
@@ -1221,9 +1243,9 @@ async function ucitajUplateSume(){
       fetch(`${API}/api/uplate/suma?objekt_id=${trenutniObjekat.id}&od=${pocetakSedmice}&do=${danas}`).then(r=>r.json()),
       fetch(`${API}/api/uplate/ne-saldirano`).then(r=>r.json()),
     ]);
-    document.getElementById('upl-suma-danas').textContent=fm(rDanas.ukupno)+' KM';
-    document.getElementById('upl-suma-sedmica').textContent=fm(rSedmica.ukupno)+' KM';
-    document.getElementById('upl-suma-nesaldirano').textContent=fm(rNesaldirano.ukupno)+' KM';
+    document.getElementById('upl-suma-danas').textContent=fmMoney(rDanas.ukupno);
+    document.getElementById('upl-suma-sedmica').textContent=fmMoney(rSedmica.ukupno);
+    document.getElementById('upl-suma-nesaldirano').textContent=fmMoney(rNesaldirano.ukupno);
   }catch(e){}
 }
 
@@ -1251,12 +1273,12 @@ async function ucitajIsplateListu(){
           ${fd(o.datum)} &middot; Primalac: ${esc(o.primalac_ime)}<br>
           ${o.napomena?esc(o.napomena)+'<br>':''}Izdao: ${esc(o.komercijalista_ime||'—')}
         </div>
-        <div class="otp-iznos" style="color:var(--red);">− ${fm(o.iznos)} KM</div>
+        <div class="otp-iznos" style="color:var(--red);">− ${fmMoney(o.iznos)}</div>
       </div>
     `).join('');
     const ukupno=rows.reduce((s,o)=>s+parseFloat(o.iznos||0),0);
     totalDiv.style.display='block';
-    totalDiv.innerHTML=`− ${fm(ukupno)} KM<span class="cnt">${rows.length} isplat${rows.length===1?'a':'e'} danas</span>`;
+    totalDiv.innerHTML=`− ${fmMoney(ukupno)}<span class="cnt">${rows.length} isplat${rows.length===1?'a':'e'} danas</span>`;
   }catch(e){
     cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>';
     totalDiv.style.display='none';
@@ -1328,15 +1350,15 @@ async function ucitajDugovanja(){
           Kupac: ${esc(o.kupac_naziv||'—')}${o.kupac_telefon?' · '+esc(o.kupac_telefon):''}
         </div>
         <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7a8d;margin-top:4px;">
-          <span>Ukupno: ${fm(o.ukupan_iznos)} KM</span>
-          <span>Plaćeno: ${fm(o.iznos_placeno)} KM</span>
+          <span>Ukupno: ${fmMoney(o.ukupan_iznos)}</span>
+          <span>Plaćeno: ${fmMoney(o.iznos_placeno)}</span>
         </div>
-        <div class="otp-iznos" style="color:var(--red);">Duguje: ${fm(o.duguje)} KM</div>
+        <div class="otp-iznos" style="color:var(--red);">Duguje: ${fmMoney(o.duguje)}</div>
       </div>
     `).join('');
     const ukupnoDuguje=rows.reduce((s,o)=>s+parseFloat(o.duguje||0),0);
     totalDiv.style.display='block';
-    totalDiv.innerHTML=`${fm(ukupnoDuguje)} KM<span class="cnt">${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'} sa dugom</span>`;
+    totalDiv.innerHTML=`${fmMoney(ukupnoDuguje)}<span class="cnt">${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'} sa dugom</span>`;
   }catch(e){
     cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>';
     totalDiv.style.display='none';
@@ -1399,15 +1421,17 @@ async function otvoriKarticuKupca(kupacId, kupacNaziv){
     saldoEl.style.color=data.saldo>0?'var(--green)':data.saldo<0?'var(--red)':'#6b7a8d';
     const cont=document.getElementById('kk-lista');
     if(!data.transakcije.length){cont.innerHTML='<div class="empty-msg">Nema transakcija.</div>';return;}
-    cont.innerHTML=data.transakcije.map(t=>`
+    cont.innerHTML=data.transakcije.map(t=>{
+      const oznaka=t.valuta==='EUR'?'€':'KM';
+      return `
       <div class="otp-stavka-red">
         <div class="osr-top">
           <span>${esc(TIP_TRANSAKCIJE_LABEL[t.tip]||t.tip)}${t.otpremnica_broj?' — '+esc(t.otpremnica_broj):''}</span>
-          <span style="color:${t.iznos>0?'var(--green)':'var(--red)'};font-weight:700;">${t.iznos>0?'+':''}${fm(t.iznos)} KM</span>
+          <span style="color:${t.iznos>0?'var(--green)':'var(--red)'};font-weight:700;">${t.iznos>0?'+':''}${fm(t.iznos)} ${oznaka}</span>
         </div>
-        <div style="font-size:10.5px;color:#8b96a5;">${fd(t.datum)}${t.opis?' · '+esc(t.opis):''}${t.komercijalista_ime?' · '+esc(t.komercijalista_ime):''}</div>
+        <div style="font-size:10.5px;color:#8b96a5;">${fd(t.datum)}${t.opis?' · '+esc(t.opis):''}${t.komercijalista_ime?' · '+esc(t.komercijalista_ime):''}${t.objekt_naziv?' · '+esc(t.objekt_naziv):''}</div>
       </div>
-    `).join('');
+    `;}).join('');
   }catch(e){
     document.getElementById('kk-lista').innerHTML=`<div class="empty-msg">${esc(e.message)}</div>`;
   }
@@ -1418,7 +1442,7 @@ function otvoriNaplatuDuga(otp){
   dugZaNaplatu=otp;
   document.getElementById('nd-broj').textContent=otp.broj;
   document.getElementById('nd-kupac').textContent=`${otp.kupac_naziv||'—'} · ${otp.objekt_naziv||''}`;
-  document.getElementById('nd-duguje').textContent=fm(otp.duguje)+' KM';
+  document.getElementById('nd-duguje').textContent=fmMoney(otp.duguje);
   document.getElementById('nd-iznos').value='';
   document.getElementById('nd-izvor-avans-box').style.display='none';
   document.getElementById('nd-izvor').value='gotovina';
@@ -1428,7 +1452,7 @@ function otvoriNaplatuDuga(otp){
     fetch(`${API}/api/otpremnice/kupac/${otp.kupac_id}/saldo`).then(r=>r.json()).then(d=>{
       if(d.saldo>0){
         document.getElementById('nd-izvor-avans-box').style.display='block';
-        document.getElementById('nd-avans-info').textContent=`Kupac ima avans: ${fm(d.saldo)} KM`;
+        document.getElementById('nd-avans-info').textContent=`Kupac ima avans: ${fmMoney(d.saldo)}`;
       }
     }).catch(()=>{});
   }
@@ -1439,7 +1463,7 @@ async function potvrdiNaplatuDuga(){
   const izvor=document.getElementById('nd-izvor').value;
   if(!iznos||iznos<=0){alert('Unesite ispravan iznos.');return;}
   if(izvor==='gotovina' && iznos>parseFloat(dugZaNaplatu.duguje)){
-    if(!confirm(`Iznos (${fm(iznos)} KM) je veći od trenutnog duga (${fm(dugZaNaplatu.duguje)} KM). Višak će postati avans kupca. Nastaviti?`)) return;
+    if(!confirm(`Iznos (${fmMoney(iznos)}) je veći od trenutnog duga (${fmMoney(dugZaNaplatu.duguje)}). Višak će postati avans kupca. Nastaviti?`)) return;
   }
   const btn=document.getElementById('nd-btn-potvrdi');
   btn.disabled=true; btn.textContent='Obrada...';
@@ -1451,9 +1475,9 @@ async function potvrdiNaplatuDuga(){
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška pri naplati.');
     document.getElementById('ov-naplata-duga').classList.remove('on');
-    let poruka=`✓ Naplaćeno ${fm(data.naplaceno_sada)} KM za ${data.broj}.`;
-    if(data.visak_u_avans>0) poruka+=` Višak od ${fm(data.visak_u_avans)} KM je postao avans.`;
-    poruka+=(data.preostalo_duguje>0?` Preostalo duguje: ${fm(data.preostalo_duguje)} KM.`:' Otpremnica je sad u potpunosti plaćena.');
+    let poruka=`✓ Naplaćeno ${fmMoney(data.naplaceno_sada)} za ${data.broj}.`;
+    if(data.visak_u_avans>0) poruka+=` Višak od ${fmMoney(data.visak_u_avans)} je postao avans.`;
+    poruka+=(data.preostalo_duguje>0?` Preostalo duguje: ${fmMoney(data.preostalo_duguje)}.`:' Otpremnica je sad u potpunosti plaćena.');
     alert(poruka);
     dugZaNaplatu=null;
     if(dugPrikaz==='kupci') ucitajSaldoPoKupcima(); else ucitajDugovanja();
@@ -1466,6 +1490,13 @@ async function potvrdiNaplatuDuga(){
 
 /* ── RUČNI UNOS ISTORIJSKOG DUGA (admin) ──────────────────────────────── */
 let rucniDugObjektiPopunjeni=false;
+function azurirajRucniDugValutu(){
+  const objId=document.getElementById('rd-objekat').value;
+  const valuta=(window.__rdObjektiValute||{})[objId]||'KM';
+  document.getElementById('rd-ukupno').placeholder=`Ukupan iznos duga (${valuta}) *`;
+  document.getElementById('rd-placeno').placeholder=`Već plaćeno do sad (${valuta}, 0 ako ništa)`;
+}
+
 async function toggleRucniDugBox(){
   const box=document.getElementById('rucni-dug-box');
   const otvara=box.style.display==='none';
@@ -1474,8 +1505,9 @@ async function toggleRucniDugBox(){
     try{
       const r=await fetch(`${API}/api/prodajni-objekti`);
       const rows=await r.json();
+      window.__rdObjektiValute=Object.fromEntries(rows.map(o=>[o.id,o.valuta||'KM']));
       document.getElementById('rd-objekat').innerHTML='<option value="">— izaberi prodajni objekat —</option>'+
-        rows.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');
+        rows.map(o=>`<option value="${o.id}">${esc(o.naziv)}${o.valuta==='EUR'?' (€)':''}</option>`).join('');
       rucniDugObjektiPopunjeni=true;
     }catch(e){}
   }
@@ -1507,7 +1539,7 @@ async function unesiRucniDug(){
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška pri unosu.');
     msg.style.color='var(--green)';
-    msg.textContent=`✓ Uneseno: ${data.broj} — duguje ${fm(data.duguje)} KM.`;
+    msg.textContent=`✓ Uneseno: ${data.broj} — duguje ${fmMoney(data.duguje)}.`;
     document.getElementById('rd-kupac').value='';
     document.getElementById('rd-ukupno').value='';
     document.getElementById('rd-placeno').value='';
@@ -1562,7 +1594,7 @@ function dodajUKosaricu(artikal){
   if(parseFloat(artikal.stanje)<=0){alert('Artikal "'+artikal.naziv+'" nema stanja.');return;}
   dasArtikal=artikal;
   document.getElementById('das-naziv').textContent=artikal.naziv;
-  document.getElementById('das-sifra').textContent='Šifra: '+artikal.sifra+' · Zadana cijena: '+fm(artikal.cijena)+' KM po '+esc(artikal.jed_mjera);
+  document.getElementById('das-sifra').textContent='Šifra: '+artikal.sifra+' · Zadana cijena: '+fmMoney(artikal.cijena)+' po '+esc(artikal.jed_mjera);
   document.getElementById('das-kom').value='';
   document.getElementById('das-m2-vr').value='';
   document.getElementById('das-m2-duzina').value='';
@@ -1870,14 +1902,14 @@ function azurirajPreview(idx){
   if(!prev) return;
   if(isNaN(vrijednost)){prev.textContent='';return;}
   const nova= tip==='posto' ? Math.max(0,k.cijena*(1-vrijednost/100)) : Math.max(0,vrijednost);
-  prev.textContent=`Nova cijena: ≈ ${fm(nova)} KM / ${esc(k.jed_mjera)} (umjesto ${fm(k.cijena)} KM)`;
+  prev.textContent=`Nova cijena: ≈ ${fmMoney(nova)} / ${esc(k.jed_mjera)} (umjesto ${fmMoney(k.cijena)})`;
 }
 
 function renderKosarica(){
   const cont=document.getElementById('kos-items');
   const total=kosarica.reduce((s,k)=>s+k.kolicina*efektivnaCijenaProcjena(k),0);
   document.getElementById('kb-count').textContent=kosarica.length;
-  document.getElementById('kb-total').textContent=fm(total)+' KM';
+  document.getElementById('kb-total').textContent=fmMoney(total);
   document.getElementById('btn-generisi').disabled=kosarica.length===0;
 
   if(!kosarica.length){
@@ -1897,7 +1929,7 @@ function renderKosarica(){
       <div class="kos-item-top">
         <div class="kos-info">
           <div class="kos-naziv">${esc(k.naziv)}${dimTxt}</div>
-          <div class="kos-cijena ${odstupa?'izmijenjena':''}">≈ ${fm(efCij)} KM / ${esc(k.jed_mjera)}${odstupa?' <s style="opacity:.6">'+fm(k.cijena)+'</s>':''}</div>
+          <div class="kos-cijena ${odstupa?'izmijenjena':''}">≈ ${fmMoney(efCij)} / ${esc(k.jed_mjera)}${odstupa?' <s style="opacity:.6">'+fm(k.cijena)+'</s>':''}</div>
         </div>
         <div class="kos-qty">
           <button class="qty-btn" onclick="promijeniKolicinu(${idx},-1)">−</button>
@@ -1905,7 +1937,7 @@ function renderKosarica(){
             onchange="postaviKolicinuDirektno(${idx},this.value)">
           <button class="qty-btn" onclick="promijeniKolicinu(${idx},1)">+</button>
         </div>
-        <div class="kos-iznos">≈ ${fm(k.kolicina*efCij)} KM</div>
+        <div class="kos-iznos">≈ ${fmMoney(k.kolicina*efCij)}</div>
         <button class="kos-del" onclick="ukloniStavku(${idx})">🗑</button>
       </div>
       ${jedinicaOdstupa?`<div style="font-size:10.5px;color:var(--red);margin-top:2px;">⚙ Prodaje se po "${esc(k.jed_mjera)}" umjesto zadane "${esc(k.jed_mjera_zadana)}" — biće automatski prijavljeno kao odstupanje.</div>`:''}
@@ -1990,11 +2022,11 @@ let potvrdaUkupanIznos=0;
 function prikaziPotvrduEkran(pregled){
   potvrdaUkupanIznos=parseFloat(pregled.ukupan_iznos);
   document.getElementById('ov-broj').textContent='Broj se dodjeljuje nakon potvrde';
-  document.getElementById('ov-iznos').textContent=fm(pregled.ukupan_iznos)+' KM';
+  document.getElementById('ov-iznos').textContent=fmMoney(pregled.ukupan_iznos);
   document.getElementById('ov-stavke').innerHTML=pregled.stavke.map(s=>`
     <div class="ov-stavka">
-      <span>${esc(s.naziv)} × ${s.kolicina} × ${fm(s.cijena)} KM${s.odstupa?' ⚠':''}</span>
-      <span>${s.odstupa?`<s style="opacity:.5">${fm(s.kolicina*s.cijena_zadana)}</s> `:''}${fm(s.iznos)} KM</span>
+      <span>${esc(s.naziv)} × ${s.kolicina} × ${fmMoney(s.cijena)}${s.odstupa?' ⚠':''}</span>
+      <span>${s.odstupa?`<s style="opacity:.5">${fm(s.kolicina*s.cijena_zadana)}</s> `:''}${fmMoney(s.iznos)}</span>
     </div>
     ${s.odstupa?`<div style="font-size:10.5px;color:var(--red);margin:-4px 0 6px;">
       Razlog: ${esc(RAZLOG_LABEL[s.razlog_odstupanja]||s.razlog_odstupanja)}${s.napomena_odstupanja?' — '+esc(s.napomena_odstupanja):''}
@@ -2003,7 +2035,7 @@ function prikaziPotvrduEkran(pregled){
   if(pregled.ima_odstupanje){
     document.getElementById('ov-stavke').innerHTML += `
       <div style="font-size:11.5px;color:var(--red);font-weight:700;text-align:center;padding-top:6px;border-top:1px solid #e8eaed;margin-top:4px;">
-        ⚠ Otpremnica ima odstupanje od zadanih cijena — razlika: ${fm(pregled.razlika)} KM (zadano: ${fm(pregled.ukupno_zadano)} KM)
+        ⚠ Otpremnica ima odstupanje od zadanih cijena — razlika: ${fmMoney(pregled.razlika)} (zadano: ${fmMoney(pregled.ukupno_zadano)})
       </div>`;
   }
   postaviNacinPlacanja('kompletno'); // svaki put počinje od podrazumijevanog (plaća sve)
@@ -2022,7 +2054,7 @@ function prikaziPotvrduEkran(pregled){
       if(d.saldo>0){
         kupacAvansSaldo=d.saldo;
         avansBox.style.display='block';
-        document.getElementById('ov-avans-tekst').textContent=`💰 Kupac ima avans: ${fm(d.saldo)} KM`;
+        document.getElementById('ov-avans-tekst').textContent=`💰 Kupac ima avans: ${fmMoney(d.saldo)}`;
       }
     }).catch(()=>{});
   }
@@ -2065,7 +2097,7 @@ function azurirajPreostaliDug(){
   if(koristiAvans && avansPrimjenjen>0){
     efEl.style.color='var(--green)';
     efEl.textContent = preostalo>0.004
-      ? `→ Nakon avansa: ${fm(preostalo)} KM ostaje za platiti/dug`
+      ? `→ Nakon avansa: ${fmMoney(preostalo)} ostaje za platiti/dug`
       : `→ Avans pokriva cio iznos — nema duga`;
   }else{
     efEl.textContent='';
@@ -2073,9 +2105,9 @@ function azurirajPreostaliDug(){
 
   const el=document.getElementById('ov-preostali-dug');
   let tekst;
-  if(preostalo>0.004) tekst=`Ostatak na dug: ${fm(preostalo)} KM`+(avansPrimjenjen>0?` (nakon ${fm(avansPrimjenjen)} KM iz avansa)`:'');
+  if(preostalo>0.004) tekst=`Ostatak na dug: ${fmMoney(preostalo)}`+(avansPrimjenjen>0?` (nakon ${fmMoney(avansPrimjenjen)} iz avansa)`:'');
   else if(preostalo<-0.004) tekst='⚠ Uneseno je više od ukupnog iznosa';
-  else tekst='✓ Plaća se sve — nema duga'+(avansPrimjenjen>0?` (${fm(avansPrimjenjen)} KM iz avansa)`:'');
+  else tekst='✓ Plaća se sve — nema duga'+(avansPrimjenjen>0?` (${fmMoney(avansPrimjenjen)} iz avansa)`:'');
   el.textContent=tekst;
 }
 
@@ -2112,10 +2144,10 @@ async function potvrdiOtpremnicu(){
     if(!r.ok) throw new Error(data.error||'Greška pri potvrdi.');
     document.getElementById('ov-potvrda').classList.remove('on');
     document.getElementById('uspjeh-detalji').textContent=
-      `${data.broj} — ${fm(data.ukupan_iznos)} KM — potvrdio: ${data.potvrdio_kupac_ime}`
+      `${data.broj} — ${fmMoney(data.ukupan_iznos)} — potvrdio: ${data.potvrdio_kupac_ime}`
       +(data.ima_odstupanje?' ⚠ (ima odstupanje od zadane cijene)':'')
-      +(data.iznos_iz_avansa>0?` · Iz avansa: ${fm(data.iznos_iz_avansa)} KM`:'')
-      +(data.duguje>0?` ⚠ DUGUJE: ${fm(data.duguje)} KM`:'');
+      +(data.iznos_iz_avansa>0?` · Iz avansa: ${fmMoney(data.iznos_iz_avansa)}`:'')
+      +(data.duguje>0?` ⚠ DUGUJE: ${fmMoney(data.duguje)}`:'');
     document.getElementById('posalji-box').innerHTML=
       renderPosaljiDugmad(data.javni_token, data.broj, data.kupac_telefon, data.kupac_email);
     document.getElementById('ov-uspjeh').classList.add('on');
@@ -2241,12 +2273,12 @@ async function pripremiUplatu(){
 
     document.getElementById('view-uplata').querySelector('.import-box').style.display='none';
     document.getElementById('uplata-uspjeh-box').style.display='block';
-    let detalji=`${fm(data.iznos)} KM primljeno od ${esc(data.kupac_naziv)}.`;
+    let detalji=`${fmMoney(data.iznos)} primljeno od ${esc(data.kupac_naziv)}.`;
     if(data.pokriveno_duga>0){
-      detalji+=` Pokriveno duga: ${fm(data.pokriveno_duga)} KM`+
+      detalji+=` Pokriveno duga: ${fmMoney(data.pokriveno_duga)}`+
         (data.pokrivene_otpremnice.length?` (${data.pokrivene_otpremnice.map(o=>o.broj).join(', ')})`:'')+'.';
     }
-    if(data.ostatak_kao_avans>0) detalji+=` Ostatak kao avans: ${fm(data.ostatak_kao_avans)} KM.`;
+    if(data.ostatak_kao_avans>0) detalji+=` Ostatak kao avans: ${fmMoney(data.ostatak_kao_avans)}.`;
     document.getElementById('uplata-uspjeh-detalji').textContent=detalji;
 
     const posaljiBox=document.getElementById('uplata-posalji-box');
@@ -2352,7 +2384,7 @@ async function loadOtpremnice(brojOverride){
       cont.innerHTML='<div class="empty-msg">Nema otpremnica.</div>';
       if(isplateSuma>0){
         totalDiv.style.display='block';
-        totalDiv.innerHTML=`0.00 KM<span class="cnt">Isplate u ovom periodu: − ${fm(isplateSuma)} KM &middot; Neto: ${fm(-isplateSuma)} KM</span>`;
+        totalDiv.innerHTML=`${fmMoney(0)}<span class="cnt">Isplate u ovom periodu: − ${fmMoney(isplateSuma)} &middot; Neto: ${fmMoney(-isplateSuma)}</span>`;
       }else{
         totalDiv.style.display='none';
       }
@@ -2361,7 +2393,7 @@ async function loadOtpremnice(brojOverride){
     const ukupno=rows.reduce((s,o)=>s+parseFloat(o.ukupan_iznos||0),0);
     const neto=ukupno-isplateSuma;
     totalDiv.style.display='block';
-    totalDiv.innerHTML=`${fm(ukupno)} KM<span class="cnt">${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'}${isplateSuma>0?` &middot; Isplate: − ${fm(isplateSuma)} KM &middot; Neto: ${fm(neto)} KM`:''}</span>`;
+    totalDiv.innerHTML=`${fmMoney(ukupno)}<span class="cnt">${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'}${isplateSuma>0?` &middot; Isplate: − ${fmMoney(isplateSuma)} &middot; Neto: ${fmMoney(neto)}`:''}</span>`;
     const stLabel={kreirana:'Kreirana',potvrdjena:'Potvrđena',stornirana:'Stornirana'};
     cont.innerHTML=rows.map(o=>`
       <div class="otp-card ${o.ima_odstupanje?'ima-odstupanje':''}" onclick="prikaziDetaljeOtpremnice(${o.id})">
@@ -2379,7 +2411,7 @@ async function loadOtpremnice(brojOverride){
             ?`<span style="color:var(--green);">📤 Poslato knjigovodstvu ${fd(o.poslato_knjigovodstvu_vrijeme)}</span>`
             :`<span style="color:var(--red);">⏳ Nije poslato knjigovodstvu</span>`}
         </div>
-        <div class="otp-iznos">${fm(o.ukupan_iznos)} KM</div>
+        <div class="otp-iznos">${fmMoney(o.ukupan_iznos)}</div>
         <div class="otp-actions">
           <button class="btn-otp-posalji" onclick="event.stopPropagation();togglePosaljiKartica(${o.id})">📤 Pošalji kupcu</button>
           ${!o.poslato_knjigovodstvu?`<button class="btn-otp-posalji" onclick="event.stopPropagation();posaljiKnjigovodstvu(${o.id})">📧 Pošalji knjigovodstvu</button>`:''}
@@ -2390,9 +2422,9 @@ async function loadOtpremnice(brojOverride){
     `).join('');
     cont.innerHTML += `
       <div style="text-align:right;padding:14px 6px;font-size:15px;font-weight:800;color:var(--dark);border-top:2px solid var(--border);margin-top:6px;">
-        Prodaja: ${fm(ukupno)} KM <span style="font-weight:400;font-size:11.5px;color:#8b96a5;">(${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'})</span>
-        ${isplateSuma>0?`<br><span style="color:var(--red);">Isplate: − ${fm(isplateSuma)} KM</span>
-        <br><span style="font-size:17px;">Neto: ${fm(neto)} KM</span>`:''}
+        Prodaja: ${fmMoney(ukupno)} <span style="font-weight:400;font-size:11.5px;color:#8b96a5;">(${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'})</span>
+        ${isplateSuma>0?`<br><span style="color:var(--red);">Isplate: − ${fmMoney(isplateSuma)}</span>
+        <br><span style="font-size:17px;">Neto: ${fmMoney(neto)}</span>`:''}
       </div>`;
     window.__otpDataById=Object.fromEntries(rows.map(o=>[o.id,o]));
   }catch(e){
@@ -2447,8 +2479,8 @@ async function prikaziDetaljeOtpremnice(id){
       const odstupa=!!s.razlog_odstupanja;
       return `
       <div class="otp-stavka-red">
-        <div class="osr-top"><span>${esc(s.naziv)} × ${s.kolicina}</span><span>${fm(s.iznos)} KM</span></div>
-        ${odstupa?`<div class="osr-odst">⚠ Zadana cijena: ${fm(s.cijena_zadana)} KM → Prodano: ${fm(s.cijena)} KM
+        <div class="osr-top"><span>${esc(s.naziv)} × ${s.kolicina}</span><span>${fmMoney(s.iznos)}</span></div>
+        ${odstupa?`<div class="osr-odst">⚠ Zadana cijena: ${fmMoney(s.cijena_zadana)} → Prodano: ${fmMoney(s.cijena)}
           &middot; ${esc(RAZLOG_LABEL[s.razlog_odstupanja]||s.razlog_odstupanja||'')}${s.napomena_odstupanja?' — '+esc(s.napomena_odstupanja):''}</div>`:''}
       </div>`;
     }).join('');
