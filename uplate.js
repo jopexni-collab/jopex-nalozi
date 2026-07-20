@@ -125,7 +125,7 @@ router.post('/', async (req, res) => {
        LEFT JOIN prodajni_objekti p ON p.id = o.objekt_id
        WHERE o.kupac_id=$1 AND o.status='potvrdjena' AND o.status_placanja != 'placeno'
          AND COALESCE(p.valuta,'KM') = $2
-       ORDER BY o.datum ASC FOR UPDATE`,
+       ORDER BY o.datum ASC FOR UPDATE OF o`,
       [kupac_id, objektValuta]
     );
     for (const otp of dugRes.rows) {
