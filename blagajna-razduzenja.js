@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const pool = require('./db');
 
-const KURS_EUR_KM = 1.95; // fiksni kurs, primjenjuje se samo za prikaz/sabiranje preko PJ
+const KURS_EUR_KM = 1.95;
+console.log('VERZIJA-PROVERA: blagajna-razduzenja.js sa stanje-sve rutom, ucitan', new Date().toISOString()); // fiksni kurs, primjenjuje se samo za prikaz/sabiranje preko PJ
 
 // Vraća listu PJ (id, naziv, valuta) za koje je korisnik blagajnik. Admin nema ovu listu uvedi ovo
 // (admin ide direktno preko objekt_id parametra, vidi sve).
