@@ -4,7 +4,7 @@ const pool = require('./db');
 
 const KURS_EUR_KM = 1.95; // fiksni kurs, primjenjuje se samo za prikaz/sabiranje preko PJ
 
-// Vraća listu PJ (id, naziv, valuta) za koje je korisnik blagajnik. Admin nema ovu listu
+// Vraća listu PJ (id, naziv, valuta) za koje je korisnik blagajnik. Admin nema ovu listu uvedi ovo
 // (admin ide direktno preko objekt_id parametra, vidi sve).
 async function dobaviBlagajnikPJ(userId) {
   const r = await pool.query(
