@@ -70,13 +70,14 @@ input:checked+.slider:before{transform:translateX(16px);}
           <th style="text-align:center">Mijenja nalog</th>
           <th style="text-align:center">Maloprodaja</th>
           <th style="text-align:center">Roba/Magacin</th>
+          <th style="text-align:center">Blagajna (PJ)</th>
           <th style="text-align:center">Aktivan</th>
           <th>Lozinka</th>
           <th></th>
         </tr>
       </thead>
       <tbody id="tbody">
-        <tr><td colspan="13" style="text-align:center;padding:30px;color:#999">Učitavanje...</td></tr>
+        <tr><td colspan="14" style="text-align:center;padding:30px;color:#999">Učitavanje...</td></tr>
       </tbody>
     </table>
     </div>
@@ -104,6 +105,10 @@ async function load(){
   const r=await fetch(API+'/api/zaposleni');
   if(!r.ok){alert('Greška pri učitavanju');return;}
   korisnici=await r.json();
+  try{
+    const rp=await fetch(API+'/api/prodajni-objekti');
+    window.__prodajniObjekti = rp.ok ? await rp.json() : [];
+  }catch(e){ window.__prodajniObjekti = []; }
   render();
 }
 
@@ -124,6 +129,13 @@ function render(){
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.izmjena_naloga?'checked':''} onchange="togglePravo(${k.id},'izmjena_naloga',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_prodavati?'checked':''} onchange="togglePravo(${k.id},'moze_prodavati',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_roba_magacin?'checked':''} onchange="togglePravo(${k.id},'moze_roba_magacin',this.checked)"><span class="slider"></span></label></td>
+      <td>
+        <select style="font:inherit;font-size:11px;padding:3px 4px;border:1px solid #ddd;border-radius:4px;width:100%;"
+          onchange="togglePravo(${k.id},'blagajnik_objekat_id',this.value||null)">
+          <option value="">— nije blagajnik —</option>
+          ${(window.__prodajniObjekti||[]).map(o=>`<option value="${o.id}" ${String(k.blagajnik_objekat_id)===String(o.id)?'selected':''}>${esc(o.naziv)}</option>`).join('')}
+        </select>
+      </td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.aktivan?'checked':''} onchange="togglePravo(${k.id},'aktivan',this.checked)"><span class="slider"></span></label></td>
       <td><button class="btn-loz" onclick="openLozinka(${k.id},'${esc(k.ime_prezime)}')">🔑 Postavi</button></td>
       <td><span class="saved" id="saved-${k.id}"></span></td>

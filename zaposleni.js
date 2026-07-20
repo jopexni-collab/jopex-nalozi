@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
     const r = await pool.query(
       `SELECT id, ime_prezime, pozicija, rola, aktivan,
               moze_ugovarati, unos_naloga, izmjena_statusa, izmjena_naloga,
-              moze_prodavati, moze_roba_magacin, email
+              moze_prodavati, moze_roba_magacin, email, blagajnik_objekat_id
        FROM zaposleni ORDER BY ime_prezime`
     );
     res.json(r.rows);
@@ -37,7 +37,7 @@ router.get('/', async (req, res) => {
 router.patch('/:id', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Nema pristupa.' });
- const ALLOWED = ['rola','aktivan','moze_ugovarati','unos_naloga','izmjena_statusa','izmjena_naloga','moze_prodavati','moze_roba_magacin','email'];
+ const ALLOWED = ['rola','aktivan','moze_ugovarati','unos_naloga','izmjena_statusa','izmjena_naloga','moze_prodavati','moze_roba_magacin','email','blagajnik_objekat_id'];
   const sets=[], vals=[];
   let i=1;
   for(const key of ALLOWED){

@@ -71,14 +71,43 @@ td.num{text-align:right;font-weight:700;}
 </header>
 
 <!-- SUME -->
-<div class="sume">
-  <div class="suma-box"><div class="val" id="s-danas">—</div><div class="lbl">Danas</div></div>
-  <div class="suma-box"><div class="val" id="s-sedmica">—</div><div class="lbl">Ova sedmica</div></div>
-  <div class="suma-box"><div class="val" id="s-mjesec">—</div><div class="lbl">Ovaj mjesec</div></div>
+<div class="sume" id="sume-box">
+  <div class="suma-box" id="card-danas"><div class="val" id="s-danas">—</div><div class="lbl">Danas</div></div>
+  <div class="suma-box" id="card-sedmica"><div class="val" id="s-sedmica">—</div><div class="lbl">Ova sedmica</div></div>
+  <div class="suma-box" id="card-mjesec"><div class="val" id="s-mjesec">—</div><div class="lbl">Ovaj mjesec</div></div>
   <div class="suma-box nepredano"><div class="val" id="s-nepredano">—</div><div class="lbl">Nije predano blagajniku</div></div>
-  <div class="suma-box"><div class="val" id="s-naplaceno-nalozi">—</div><div class="lbl">Naplaćeno (nalozi)</div></div>
-  <div class="suma-box ocekivano"><div class="val" id="s-ocekivano-nalozi">—</div><div class="lbl">Očekivano od naloga</div></div>
-  <div class="suma-box ocekivano"><div class="val" id="s-ocekivano-malo">—</div><div class="lbl">Očekivano od maloprodaje</div></div>
+  <div class="suma-box" id="card-naplaceno-nalozi"><div class="val" id="s-naplaceno-nalozi">—</div><div class="lbl">Naplaćeno (nalozi)</div></div>
+  <div class="suma-box ocekivano" id="card-ocekivano-nalozi"><div class="val" id="s-ocekivano-nalozi">—</div><div class="lbl">Očekivano od naloga</div></div>
+  <div class="suma-box ocekivano" id="card-ocekivano-malo"><div class="val" id="s-ocekivano-malo">—</div><div class="lbl">Očekivano od maloprodaje</div></div>
+</div>
+
+<!-- BLAGAJNA (blagajnik: svoj PJ; admin: pregled) -->
+<div class="forma" id="blagajna-box" style="display:none;">
+  <h3>🏦 Blagajna<span id="blagajna-pj-naziv" style="font-weight:400;color:#6b7a8d;"></span></h3>
+  <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+    <div>
+      <div style="font-size:11px;color:#6b7a8d;">Trenutno u blagajni</div>
+      <div id="blagajna-stanje" style="font-size:24px;font-weight:800;color:var(--dark);">—</div>
+    </div>
+    <button class="btn-add" onclick="otvoriRazduzenje('banka')">🏦 Razduži u Banku</button>
+    <button class="btn-add" onclick="otvoriRazduzenje('sef')" style="background:var(--orange);">🔒 Ostavi u Sef</button>
+  </div>
+  <div id="razduzenje-forma" style="display:none;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
+    <div style="font-weight:700;margin-bottom:8px;" id="razduzenje-naslov"></div>
+    <div class="forma-grid">
+      <div class="fg"><label>Iznos (KM)</label><input type="number" id="razd-iznos" step="0.01" min="0.01"></div>
+      <div class="fg"><label>Napomena (opciono)</label><input type="text" id="razd-napomena"></div>
+      <div class="fg"><label>&nbsp;</label><button class="btn-add" onclick="potvrdiRazduzenje()">✓ Zabilježi</button></div>
+    </div>
+    <div id="razduzenje-msg" style="font-size:12px;margin-top:6px;"></div>
+  </div>
+  <div id="razduzenja-lista"></div>
+</div>
+
+<!-- ADMIN: razduženja na čekanju potvrde (sve PJ) -->
+<div class="forma" id="admin-razduzenja-box" style="display:none;">
+  <h3>⏳ Razduženja na čekanju potvrde</h3>
+  <div id="admin-razduzenja-lista"></div>
 </div>
 
 <!-- FORMA ZA UNOS -->
@@ -154,7 +183,7 @@ td.num{text-align:right;font-weight:700;}
 
 <script>
 const API='';
-let all=[], isAdmin=false;
+let all=[], isAdmin=false, trenutniUser=null, blagajnaObjektId=null, razduzenjeTipTrenutni=null;
 
 function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fd(d){if(!d)return'';const s=d.split('T')[0];const[y,m,dd]=s.split('-');return`${dd}.${m}.${y.slice(2)}`;}
@@ -163,6 +192,92 @@ function gv(id){return(document.getElementById(id)||{}).value||'';}
 
 // Postavi defaultni datum = danas
 document.getElementById('f-datum').value=new Date().toISOString().split('T')[0];
+
+/* ── BLAGAJNA (razduženja banka/sef) ──────────────────────────────── */
+async function ucitajBlagajnaStanje(){
+  if(!blagajnaObjektId) return;
+  try{
+    const r=await fetch(`${API}/api/blagajna-razduzenja/stanje?objekt_id=${blagajnaObjektId}`);
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    document.getElementById('blagajna-pj-naziv').textContent=' — '+d.objekt_naziv;
+    document.getElementById('blagajna-stanje').textContent=fm(d.trenutno_u_blagajni)+' KM';
+  }catch(e){
+    document.getElementById('blagajna-stanje').textContent='Greška';
+  }
+  ucitajMojaRazduzenja();
+}
+
+async function ucitajMojaRazduzenja(){
+  const cont=document.getElementById('razduzenja-lista');
+  try{
+    const r=await fetch(`${API}/api/blagajna-razduzenja?objekt_id=${blagajnaObjektId}`);
+    const rows=await r.json();
+    if(!rows.length){cont.innerHTML='<div style="color:#8b96a5;font-size:12px;padding:8px;">Nema još razduženja.</div>';return;}
+    cont.innerHTML=rows.map(rz=>`
+      <div style="display:flex;justify-content:space-between;padding:6px 8px;border-bottom:1px solid #eee;font-size:12px;">
+        <span>${rz.tip==='banka'?'🏦 Banka':'🔒 Sef'} — ${fm(rz.iznos)} KM${rz.napomena?' · '+esc(rz.napomena):''}</span>
+        <span style="color:${rz.status==='potvrdjeno'?'var(--green)':'var(--orange)'};font-weight:700;">
+          ${rz.status==='potvrdjeno'?'✓ Potvrđeno':'⏳ Na čekanju'}
+        </span>
+      </div>
+    `).join('');
+  }catch(e){ cont.innerHTML='<div style="color:var(--red);">Greška pri učitavanju.</div>'; }
+}
+
+function otvoriRazduzenje(tip){
+  razduzenjeTipTrenutni=tip;
+  document.getElementById('razduzenje-naslov').textContent=tip==='banka'?'🏦 Razduženje u Banku':'🔒 Ostavljanje u Sef';
+  document.getElementById('razd-iznos').value='';
+  document.getElementById('razd-napomena').value='';
+  document.getElementById('razduzenje-msg').textContent='';
+  document.getElementById('razduzenje-forma').style.display='block';
+}
+
+async function potvrdiRazduzenje(){
+  const iznos=parseFloat(document.getElementById('razd-iznos').value);
+  const napomena=document.getElementById('razd-napomena').value.trim();
+  const msg=document.getElementById('razduzenje-msg');
+  if(!iznos||iznos<=0){msg.style.color='red';msg.textContent='Unesite ispravan iznos.';return;}
+  try{
+    const r=await fetch(`${API}/api/blagajna-razduzenja`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({objekt_id:blagajnaObjektId, tip:razduzenjeTipTrenutni, iznos, napomena:napomena||null}),
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    msg.style.color='var(--green)';
+    msg.textContent='✓ Zabilježeno — čeka potvrdu admina.';
+    document.getElementById('razduzenje-forma').style.display='none';
+    ucitajBlagajnaStanje();
+  }catch(e){
+    msg.style.color='red'; msg.textContent=e.message;
+  }
+}
+
+async function ucitajAdminRazduzenja(){
+  const cont=document.getElementById('admin-razduzenja-lista');
+  try{
+    const r=await fetch(`${API}/api/blagajna-razduzenja?status=na_cekanju`);
+    const rows=await r.json();
+    if(!rows.length){cont.innerHTML='<div style="color:#8b96a5;font-size:12px;padding:8px;">Nema razduženja na čekanju. 🎉</div>';return;}
+    cont.innerHTML=rows.map(rz=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid #eee;font-size:12px;">
+        <span>${rz.tip==='banka'?'🏦 Banka':'🔒 Sef'} — <b>${esc(rz.objekt_naziv)}</b> — ${fm(rz.iznos)} KM
+          ${rz.napomena?' · '+esc(rz.napomena):''} · blagajnik: ${esc(rz.blagajnik_ime||'—')} · ${fd(rz.kreirano)}</span>
+        <button class="btn-add" style="padding:4px 10px;font-size:11px;" onclick="potvrdiRazduzenjeAdmin(${rz.id})">✓ Potvrdi</button>
+      </div>
+    `).join('');
+  }catch(e){ cont.innerHTML='<div style="color:var(--red);">Greška pri učitavanju.</div>'; }
+}
+
+async function potvrdiRazduzenjeAdmin(id){
+  try{
+    const r=await fetch(`${API}/api/blagajna-razduzenja/${id}/potvrdi`,{method:'POST'});
+    if(!r.ok){ const d=await r.json(); throw new Error(d.error||'Greška.'); }
+    ucitajAdminRazduzenja();
+  }catch(e){ alert(e.message); }
+}
 
 async function loadSume(){
   try{
@@ -311,7 +426,21 @@ fetch(`${API}/api/auth/me`).then(r=>{
 }).then(u=>{
   if(!u) return;
   isAdmin=u.rola==='admin';
+  trenutniUser=u;
   document.getElementById('who').textContent='👤 '+u.ime_prezime;
+
+  if(!isAdmin && u.blagajnik_objekat_id){
+    // Blagajnik — sakrij širu finansijsku sliku, pokaži samo svoju blagajnu.
+    ['card-danas','card-sedmica','card-mjesec','card-naplaceno-nalozi','card-ocekivano-nalozi','card-ocekivano-malo']
+      .forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
+    document.getElementById('blagajna-box').style.display='block';
+    blagajnaObjektId=u.blagajnik_objekat_id;
+    ucitajBlagajnaStanje();
+  } else if(isAdmin){
+    document.getElementById('admin-razduzenja-box').style.display='block';
+    ucitajAdminRazduzenja();
+  }
+
   load();
   loadSume();
 
@@ -319,7 +448,11 @@ fetch(`${API}/api/auth/me`).then(r=>{
   // "naplaćeno" u radnim nalozima) ne bi se vidjele dok se ručno ne osvježi stranica.
   // Osvježava samo ako je tab/prozor vidljiv (ne troši nepotrebno kad je u pozadini).
   setInterval(()=>{
-    if(document.visibilityState==='visible'){ load(); loadSume(); }
+    if(document.visibilityState==='visible'){
+      load(); loadSume();
+      if(blagajnaObjektId) ucitajBlagajnaStanje();
+      if(isAdmin) ucitajAdminRazduzenja();
+    }
   }, 20000);
 }).catch(()=>location.href='login.html');
 </script>

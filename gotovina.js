@@ -2,6 +2,22 @@ const express = require('express');
 const router = express.Router();
 const pool = require('./db');
 
+// Pristup: admin (sve) ili blagajnik (samo svoj PJ — server ga FORSIRA na taj PJ bez
+// obzira šta klijent pošalje, da niko ne može da vidi tuđu blagajnu mijenjajući parametre).
+router.use(async (req, res, next) => {
+  const u = req.session?.user;
+  if (!u) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+  if (u.rola === 'admin') return next();
+  if (u.blagajnik_objekat_id) {
+    try {
+      const r = await pool.query('SELECT naziv FROM prodajni_objekti WHERE id=$1', [u.blagajnik_objekat_id]);
+      req.blagajnikObjektNaziv = r.rows[0]?.naziv || null;
+      return next();
+    } catch (e) { return res.status(500).json({ error: e.message }); }
+  }
+  return res.status(403).json({ error: 'Nemate pristup blagajni.' });
+});
+
 // GET /api/gotovina - lista svih uplata
 router.get('/', async (req, res) => {
   try {
@@ -14,6 +30,8 @@ router.get('/', async (req, res) => {
     if (primio) { where.push(`primio = $${i++}`); vals.push(primio); }
     if (izvor) { where.push(`izvor = $${i++}`); vals.push(izvor); }
     if (nepredano === 'true') { where.push(`predao_blagajniku = false`); }
+    // Blagajnik je FORSIRAN na svoj PJ, bez obzira šta klijent pošalje.
+    if (req.blagajnikObjektNaziv) { where.push(`g.objekt_naziv = $${i++}`); vals.push(req.blagajnikObjektNaziv); }
     // "Nalog/Otp" kolona (g.nalog_r_br) sad drži i broj radnog naloga i broj otpremnice iz
     // maloprodaje (tekst, npr. "OTP-2026-000123") — zato je tip kolone VARCHAR. Ovdje se
     // poredi kao tekst (p.r_br::text), inače bi Postgres bacio grešku tipa na ne-brojčane
