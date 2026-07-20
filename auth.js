@@ -24,6 +24,12 @@ router.post('/login', async (req, res) => {
     const ok = await bcrypt.compare(password, user.lozinka || '');
     if (!ok)
       return res.status(401).json({ error: 'Pogrešan email ili lozinka.' });
+
+    // Da li je osoba blagajnik za bar jedan PJ (many-to-many tabela — ne stari
+    // blagajnik_objekat_id koji se više ne koristi za ovu provjeru).
+    const bR = await pool.query('SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 LIMIT 1', [user.id]);
+    const jeBlagajnik = bR.rows.length > 0;
+
     req.session.user = {
       id: user.id,
       ime_prezime: user.ime_prezime,
@@ -36,6 +42,7 @@ router.post('/login', async (req, res) => {
       moze_prodavati: user.moze_prodavati,
       moze_roba_magacin: user.moze_roba_magacin,
       blagajnik_objekat_id: user.blagajnik_objekat_id,
+      je_blagajnik: jeBlagajnik,
     };
     res.json({ ok: true, user: req.session.user });
   } catch (err) {

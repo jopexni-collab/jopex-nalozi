@@ -126,8 +126,8 @@ async function checkAuth(){
     if(admin || u.unos_naloga || u.izmjena_statusa || u.izmjena_naloga || u.moze_ugovarati)
       show('card-nalozi');
 
-    // Blagajna — admin
-    if(admin) show('card-blagajna');
+    // Blagajna — admin ili blagajnik (dodijeljen za bar jedan PJ)
+    if(admin || u.je_blagajnik) show('card-blagajna');
 
     // Maloprodaja — moze_prodavati ili admin
     if(admin || u.moze_prodavati) show('card-maloprodaja');
