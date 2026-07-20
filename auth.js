@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const pool = require('./db');
+console.log('VERZIJA-PROVERA: auth.js sa je_blagajnik poljem, ucitan', new Date().toISOString());
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
