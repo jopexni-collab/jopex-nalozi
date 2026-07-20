@@ -72,6 +72,27 @@ router.get('/suma', async (req, res) => {
         LEFT JOIN prodajni_objekti p ON p.naziv = g.objekt_naziv
       ) sub
     `);
+
+    // "Nije predano" RAZDVOJENO po PJ — svaki PJ ima svoj zbir, u SVOJOJ nativnoj valuti
+    // (ne KM-normalizovano kao gornji ukupan zbir, jer je ovo prikaz po jednom PJ).
+    let nepredanoPoPJ = [];
+    try {
+      const npj = await pool.query(`
+        SELECT COALESCE(g.objekt_naziv,'(bez PJ)') AS objekt_naziv,
+               COALESCE(p.valuta,'KM') AS valuta,
+               SUM(g.iznos) AS iznos
+        FROM gotovina g
+        LEFT JOIN prodajni_objekti p ON p.naziv = g.objekt_naziv
+        WHERE g.predao_blagajniku = false
+        GROUP BY COALESCE(g.objekt_naziv,'(bez PJ)'), COALESCE(p.valuta,'KM')
+        HAVING SUM(g.iznos) != 0
+        ORDER BY 1
+      `);
+      nepredanoPoPJ = npj.rows.map(row => ({
+        objekt_naziv: row.objekt_naziv, valuta: row.valuta, iznos: +parseFloat(row.iznos).toFixed(2),
+      }));
+    } catch (e) { /* ne rušimo cijelu rutu zbog ovoga */ }
+
     // Naloga — koristi STVARNU kolonu "naplaceno" (checkbox/štiklirano u lista.html), ne
     // izračunato polje. "Naplaćeno" = zbir ugovorena_suma za sve naloge gdje JE štiklirano;
     // "Očekivano od naloga" = zbir za_naplatu (ugovorena_suma - avans) za one koji NISU.
@@ -105,6 +126,7 @@ router.get('/suma', async (req, res) => {
 
     res.json({
       ...r.rows[0],
+      nepredano_po_pj: nepredanoPoPJ,
       naplaceno_nalozi: naplacenoNalozi.toFixed(2),
       ocekivano_nalozi: ocekivanoNalozi.toFixed(2),
       ocekivano_malo: ocekivanoMalo.toFixed(2),
