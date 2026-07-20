@@ -772,7 +772,6 @@ async function sacuvajIzmjenuObjekta(id){
     msg.textContent=`✓ Izmijenjeno: ${data.naziv}`;
     uredjivanjeObjektaId=null;
     ucitajObjektiListu();
-    popuniFilterObjekata();
     popuniImportObjekat();
     popuniPrenosObjekte();
     popuniLagerObjekat();
@@ -798,7 +797,6 @@ async function dodajProdajniObjekat(){
     document.getElementById('novi-objekat-naziv').value='';
     document.getElementById('novi-objekat-adresa').value='';
     ucitajObjektiListu();
-    popuniFilterObjekata();
     popuniImportObjekat();
     popuniPrenosObjekte();
   }catch(e){
