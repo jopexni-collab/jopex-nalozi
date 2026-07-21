@@ -191,7 +191,11 @@ function render(){
   document.getElementById('tbody').innerHTML=korisnici.map(k=>`
     <tr id="row-${k.id}">
       <td class="ime">${esc(k.ime_prezime)}${k.rola==='admin'?'<span class="badge-admin">ADMIN</span>':''}</td>
-      <td class="poz">${esc(k.pozicija||'')}</td>
+      <td class="poz">
+        <input type="text" value="${esc(k.pozicija||'')}" placeholder="npr. Komercijalista"
+          style="font:inherit;font-size:11.5px;padding:3px 6px;border:1px solid #ddd;border-radius:4px;width:100%;"
+          onchange="togglePravo(${k.id},'pozicija',this.value)">
+      </td>
       <td>
         <input type="email" value="${esc(k.email||'')}" placeholder="email@firma.ba"
           style="font:inherit;font-size:11.5px;padding:3px 6px;border:1px solid #ddd;border-radius:4px;width:100%;"
