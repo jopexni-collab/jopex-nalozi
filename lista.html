@@ -128,6 +128,11 @@ a.lk{color:var(--blue);text-decoration:none;}
 </header>
 <div class="toolbar">
   <input type="text" id="search" placeholder="🔍 Pretraži...">
+  <div style="display:flex;gap:4px;border-left:1px solid var(--border);padding-left:8px;margin-left:2px;">
+    <button class="btn-sm" id="sf-sakrij" onclick="postaviStornoFilter('sakrij')">Sakrij stornirane</button>
+    <button class="btn-sm" id="sf-svi" onclick="postaviStornoFilter('svi')" style="background:#eee;color:#333;">Prikaži sve</button>
+    <button class="btn-sm" id="sf-samo" onclick="postaviStornoFilter('samo')" style="background:#eee;color:#333;">Samo stornirani</button>
+  </div>
   <span id="stat"></span>
 </div>
 
@@ -156,7 +161,7 @@ const PRIORITETI=['Normal','Hitno','Zakazano'];
 const ZADACI=['Kuhinjska ploča','Klupice, Step','Sto','Na Mjeru','Usluge WJ','Usluge Mašina'];
 const MATERIJALI=['Granit','Mermer','Tašto','Kvarc','Vještački','Keramika','Kombinovano','Obrada na mašini'];
 const REKLAMACIJE=['','NE','DA'];
-let all=[], isAdmin=false, trenutniUser=null;
+let all=[], isAdmin=false, trenutniUser=null, stornoFilter='sakrij';
 let undoStack=[]; // {r_br, field, oldVal}
 
 function pushUndo(rBr, field, oldVal){
@@ -371,12 +376,28 @@ function initResize(){
 }
 
 // ─── FILTER & RENDER ──────────────────────────────────────────────────────
+function postaviStornoFilter(v){
+  stornoFilter=v;
+  const stilAktivan={background:'var(--blue)',color:'#fff'};
+  const stilNeaktivan={background:'#eee',color:'#333'};
+  ['sakrij','svi','samo'].forEach(k=>{
+    const btn=document.getElementById('sf-'+k);
+    Object.assign(btn.style, k===v?stilAktivan:stilNeaktivan);
+  });
+  render();
+}
+
 function filterRows(){
   const q=gv('search').toLowerCase();
   const cols=getCols();
   const fPocetak=gv('f-pocetak');
   return all.filter(r=>{
     if(q&&![r.narucilac,r.napomena,r.materijal,r.ugovorio,r.zadatak].some(f=>f&&String(f).toLowerCase().includes(q))) return false;
+
+    // Storno filter: 'sakrij' (podrazumevano) = ne prikazuj stornirane; 'samo' = prikazi
+    // SAMO stornirane; 'svi' = prikazi sve pomiješano.
+    if(stornoFilter==='sakrij' && r.stornirano) return false;
+    if(stornoFilter==='samo' && !r.stornirano) return false;
 
     // Filter za Ugovoreno (pocetak) - period
     if(fPocetak){
