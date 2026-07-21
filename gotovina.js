@@ -13,11 +13,12 @@ router.use(async (req, res, next) => {
   if (u.rola === 'admin') return next();
   try {
     const r = await pool.query(
-      `SELECT p.naziv FROM blagajnici_pj b JOIN prodajni_objekti p ON p.id = b.objekat_id
+      `SELECT p.id, p.naziv FROM blagajnici_pj b JOIN prodajni_objekti p ON p.id = b.objekat_id
        WHERE b.zaposleni_id = $1`,
       [u.id]
     );
     if (!r.rows.length) return res.status(403).json({ error: 'Nemate pristup blagajni.' });
+    req.blagajnikObjektIds = r.rows.map(row => row.id);
     req.blagajnikObjektNazivi = r.rows.map(row => row.naziv);
     return next();
   } catch (e) { return res.status(500).json({ error: e.message }); }
@@ -60,6 +61,10 @@ router.get('/', async (req, res) => {
 // više PJ bio netačan (mešanje KM i EUR kao da su ista jedinica).
 router.get('/suma', async (req, res) => {
   try {
+    const filterGlavni = req.blagajnikObjektNazivi
+      ? `WHERE g.objekt_naziv = ANY($1::text[])`
+      : '';
+    const glavniVals = req.blagajnikObjektNazivi ? [req.blagajnikObjektNazivi] : [];
     const r = await pool.query(`
       SELECT
         SUM(iznos_km) FILTER (WHERE datum = CURRENT_DATE) AS danas,
@@ -71,24 +76,31 @@ router.get('/suma', async (req, res) => {
           CASE WHEN p.valuta = 'EUR' THEN g.iznos * ${KURS_EUR_KM} ELSE g.iznos END AS iznos_km
         FROM gotovina g
         LEFT JOIN prodajni_objekti p ON p.naziv = g.objekt_naziv
+        ${filterGlavni}
       ) sub
-    `);
+    `, glavniVals);
 
     // "Nije predano" RAZDVOJENO po PJ — svaki PJ ima svoj zbir, u SVOJOJ nativnoj valuti
     // (ne KM-normalizovano kao gornji ukupan zbir, jer je ovo prikaz po jednom PJ).
+    // BEZBJEDNOST: blagajnik smije vidjeti SAMO svoje PJ ovdje — req.blagajnikObjektNazivi
+    // (postavljen u middleware-u iznad) FORSIRA filter za ne-admina.
     let nepredanoPoPJ = [];
     try {
+      const filterPJ = req.blagajnikObjektNazivi
+        ? `AND g.objekt_naziv = ANY($1::text[])`
+        : '';
+      const npjVals = req.blagajnikObjektNazivi ? [req.blagajnikObjektNazivi] : [];
       const npj = await pool.query(`
         SELECT COALESCE(g.objekt_naziv,'(bez PJ)') AS objekt_naziv,
                COALESCE(p.valuta,'KM') AS valuta,
                SUM(g.iznos) AS iznos
         FROM gotovina g
         LEFT JOIN prodajni_objekti p ON p.naziv = g.objekt_naziv
-        WHERE g.predao_blagajniku = false
+        WHERE g.predao_blagajniku = false ${filterPJ}
         GROUP BY COALESCE(g.objekt_naziv,'(bez PJ)'), COALESCE(p.valuta,'KM')
         HAVING SUM(g.iznos) != 0
         ORDER BY 1
-      `);
+      `, npjVals);
       nepredanoPoPJ = npj.rows.map(row => ({
         objekt_naziv: row.objekt_naziv, valuta: row.valuta, iznos: +parseFloat(row.iznos).toFixed(2),
       }));
@@ -113,6 +125,10 @@ router.get('/suma', async (req, res) => {
     // Konvertuje EUR PJ u KM-ekvivalent prije sabiranja (isti razlog kao gore).
     let ocekivanoMalo = 0;
     try {
+      const filterMalo = req.blagajnikObjektIds
+        ? `AND o.objekt_id = ANY($1::int[])`
+        : '';
+      const maloVals = req.blagajnikObjektIds ? [req.blagajnikObjektIds] : [];
       const rm = await pool.query(`
         SELECT COALESCE(SUM(
           CASE WHEN p.valuta = 'EUR' THEN (o.ukupan_iznos - o.iznos_placeno) * ${KURS_EUR_KM}
@@ -120,8 +136,8 @@ router.get('/suma', async (req, res) => {
         ),0) AS ukupno
         FROM otpremnice o
         LEFT JOIN prodajni_objekti p ON p.id = o.objekt_id
-        WHERE o.status='potvrdjena' AND o.status_placanja != 'placeno'
-      `);
+        WHERE o.status='potvrdjena' AND o.status_placanja != 'placeno' ${filterMalo}
+      `, maloVals);
       ocekivanoMalo = parseFloat(rm.rows[0].ukupno) || 0;
     } catch (e) { /* isto — ne rušimo rutu ako tabela/kolona iz nekog razloga ne postoji */ }
 
@@ -137,8 +153,11 @@ router.get('/suma', async (req, res) => {
   }
 });
 
-// GET /api/gotovina/nalog/:r_br - uplate za konkretan nalog
+// GET /api/gotovina/nalog/:r_br - uplate za konkretan radni nalog (proizvodnja) — ovo
+// nije PJ-vezano (blagajnik nema posla ovdje), pa ostaje isključivo admin.
 router.get('/nalog/:r_br', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Nema pristupa.' });
   try {
     const r = await pool.query(
       'SELECT * FROM gotovina WHERE nalog_r_br=$1 ORDER BY datum DESC',

@@ -133,7 +133,7 @@ td.num{text-align:right;font-weight:700;}
   </div>
   <div class="forma-grid">
     <div class="fg"><label>Datum</label><input type="date" id="f-datum"></div>
-    <div class="fg"><label>Iznos (KM)</label><input type="number" id="f-iznos" step="0.01" min="0" placeholder="0.00"></div>
+    <div class="fg"><label id="f-iznos-lbl">Iznos (KM)</label><input type="number" id="f-iznos" step="0.01" min="0" placeholder="0.00"></div>
     <div class="fg"><label>Izvor</label>
       <select id="f-izvor">
         <option value="Proizvodnja">Proizvodnja</option>
@@ -162,7 +162,7 @@ td.num{text-align:right;font-weight:700;}
   </div>
   <div class="forma-grid">
     <div class="fg"><label>Datum</label><input type="date" id="i-datum"></div>
-    <div class="fg"><label>Iznos (KM)</label><input type="number" id="i-iznos" step="0.01" min="0" placeholder="0.00"></div>
+    <div class="fg"><label id="i-iznos-lbl">Iznos (KM)</label><input type="number" id="i-iznos" step="0.01" min="0" placeholder="0.00"></div>
     <div class="fg"><label>Izvor</label>
       <select id="i-izvor">
         <option value="Proizvodnja">Proizvodnja</option>
@@ -274,7 +274,17 @@ function izaberiBlagajnaPJ(objektId){
     b.style.color=aktivan?'#fff':'var(--dark)';
   });
   document.getElementById('blagajna-panel').style.display='block';
+  azurirajValutaLabeleBlagajna();
   ucitajBlagajnaStanje();
+}
+
+// Ažurira labele "Iznos (KM)" na "Iznos (€)" kad je izabrani PJ u EUR — inače bi ova
+// polja uvijek pisala "KM" čak i kad se unosi iznos u eurima (PJ Niš npr.).
+function azurirajValutaLabeleBlagajna(){
+  const pj=mojiPJovi.find(p=>String(p.id)===String(blagajnaObjektId));
+  const oznaka=(pj&&pj.valuta==='EUR')?'€':'KM';
+  const fLbl=document.getElementById('f-iznos-lbl'); if(fLbl) fLbl.textContent=`Iznos (${oznaka})`;
+  const iLbl=document.getElementById('i-iznos-lbl'); if(iLbl) iLbl.textContent=`Iznos (${oznaka})`;
 }
 
 async function ucitajBlagajnaStanje(){
@@ -430,7 +440,8 @@ async function load(){
 }
 
 function render(){
-  document.getElementById('stat').textContent=`${all.length} zapisa | Ukupno: ${fm(all.reduce((s,r)=>s+parseFloat(r.iznos||0),0))} KM`;
+  const ukupnoKM=all.reduce((s,r)=>s+parseFloat(r.iznos||0)*(r.valuta==='EUR'?1.95:1),0);
+  document.getElementById('stat').textContent=`${all.length} zapisa | Ukupno: ${fm(ukupnoKM)} KM`;
   if(!all.length){
     document.getElementById('tbody').innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:#999">Nema podataka.</td></tr>';
     return;
