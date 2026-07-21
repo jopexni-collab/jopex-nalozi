@@ -253,7 +253,7 @@ function gv(id){return(document.getElementById(id)||{}).value||'';}
 // ─── KOLONE ───────────────────────────────────────────────────────────────
 function getCols(){
   const base=[
-    {k:'r_br',l:'R.Br.',w:50,filter:'text',render:r=>`<td class="num">${r.r_br}</td>`,edit:null},
+    {k:'r_br',l:'R.Br.',w:50,filter:'text',render:r=>`<td class="num">${r.stornirano?'⛔ ':''}${r.r_br}</td>`,edit:null},
     {k:'zadatak',l:'Zadatak',w:130,filter:'sel',opts:ZADACI,render:r=>`<td>${esc(r.zadatak)}</td>`,edit:{type:'select',opts:ZADACI,field:'zadatak'}},
     {k:'materijal',l:'Materijal',w:100,filter:'sel',opts:MATERIJALI,render:r=>`<td>${esc(r.materijal)}</td>`,edit:{type:'select',opts:MATERIJALI,field:'materijal'}},
     {k:'prioritet',l:'Prioritet',w:90,filter:'sel',opts:PRIORITETI,render:r=>`<td>${chipP(r.prioritet)}</td>`,edit:{type:'select',opts:PRIORITETI,field:'prioritet'}},
@@ -473,7 +473,7 @@ function render(){
   const cols=getCols();
   document.getElementById('stat').textContent=`${rows.length} / ${all.length} naloga`;
   if(!rows.length){document.getElementById('tbody').innerHTML=`<tr><td colspan="${cols.length}" class="empty">Nema naloga.</td></tr>`;return;}
-  document.getElementById('tbody').innerHTML=rows.map(r=>`<tr data-rbr="${r.r_br}">${cols.map(c=>{
+  document.getElementById('tbody').innerHTML=rows.map(r=>`<tr data-rbr="${r.r_br}"${r.stornirano?' style="text-decoration:line-through;text-decoration-color:#000;text-decoration-thickness:2px;color:#888;"':''}>${cols.map(c=>{
     const cell=c.render(r);
     if(c.edit&&!mozeEditovati(c.edit.field)){
       return addTdClass(cell,'locked');

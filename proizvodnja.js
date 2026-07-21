@@ -31,7 +31,7 @@ const BASE_COLS = `
   (p.planirani_zavrsetak - CURRENT_DATE) AS broj_dana,
   p.gotovo, p.reklamacija_dodatni_rad, p.napomena,
   p.link_skica, p.link_ponuda, p.datum_kreiranja, p.nova_procjena,
-  p.naplaceno, p.naplaceno_opis
+  p.naplaceno, p.naplaceno_opis, COALESCE(p.stornirano,false) AS stornirano
 `;
 
 // GET /api/proizvodnja - lista (admin vidi finansije, ostali ne)
@@ -41,7 +41,7 @@ router.get('/', async (req, res) => {
   const joins = isAdmin ? GOTOVINA_JOINS : '';
   try {
     const r = await pool.query(
-      `SELECT ${cols} FROM proizvodnja_jopex p ${joins} WHERE COALESCE(p.stornirano,false)=false ORDER BY p.r_br DESC`
+      `SELECT ${cols} FROM proizvodnja_jopex p ${joins} ORDER BY p.r_br DESC`
     );
     res.json(r.rows);
   } catch (err) {

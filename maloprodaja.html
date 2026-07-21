@@ -2421,7 +2421,7 @@ async function loadOtpremnice(brojOverride){
     totalDiv.innerHTML=`${fmMoney(ukupno)}<span class="cnt">${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'}${isplateSuma>0?` &middot; Isplate: − ${fmMoney(isplateSuma)} &middot; Neto: ${fmMoney(neto)}`:''}</span>`;
     const stLabel={kreirana:'Kreirana',potvrdjena:'Potvrđena',stornirana:'Stornirana'};
     cont.innerHTML=rows.map(o=>`
-      <div class="otp-card ${o.ima_odstupanje?'ima-odstupanje':''}" onclick="prikaziDetaljeOtpremnice(${o.id})">
+      <div class="otp-card ${o.ima_odstupanje?'ima-odstupanje':''}" onclick="prikaziDetaljeOtpremnice(${o.id})" style="${o.status==='stornirana'?'opacity:.55;filter:grayscale(1);':''}">
         <div class="otp-top">
           <span class="otp-broj">${esc(o.broj)}</span>
           <div class="otp-badges">
@@ -2429,6 +2429,7 @@ async function loadOtpremnice(brojOverride){
             <span class="otp-status st-${o.status}">${stLabel[o.status]||o.status}</span>
           </div>
         </div>
+        ${o.status==='stornirana'&&o.napomena?`<div style="font-size:10.5px;color:#888;font-style:italic;margin-bottom:4px;">${esc(o.napomena)}</div>`:''}
         <div class="otp-meta">
           ${fd(o.datum)} &middot; ${esc(o.objekt_naziv||'—')} &middot; Komercijalista: ${esc(o.komercijalista_ime||'—')}<br>
           Kupac: ${esc(o.kupac_naziv||'—')}${o.potvrdio_kupac_ime?' &middot; Potvrdio: '+esc(o.potvrdio_kupac_ime):''}<br>
@@ -2621,6 +2622,19 @@ fetch(`${API}/api/auth/me`).then(r=>{
   // Izbor PJ se UVIJEK traži eksplicitno pri ulasku — nikad se tiho ne preskače na osnovu
   // ranije upamćenog izbora. Da se promijeni PJ, mora se odjaviti i ponovo prijaviti.
   otvoriIzborObjekta();
+
+  // Automatsko osvježavanje — bez ovoga, promjene iz drugih ekrana (npr. nova otpremnica
+  // koju je napravio drugi komercijalista, ili nešto iz radnih naloga/blagajne) ne bi se
+  // vidjele dok se ručno ne osvježi stranica. NE dira tab "Prodaja" (aktivna korpa) da se
+  // ne remeti nekome ko trenutno pravi prodaju.
+  setInterval(()=>{
+    if(document.visibilityState!=='visible') return;
+    const aktivniTab=document.querySelector('.tab-btn.active')?.dataset.tab;
+    if(aktivniTab==='admin') loadOtpremnice();
+    else if(aktivniTab==='isplate'){ ucitajIsplateListu(); ucitajIsplateSume(); }
+    else if(aktivniTab==='dugovanja'){ if(dugPrikaz==='kupci') ucitajSaldoPoKupcima(); else ucitajDugovanja(); }
+    else if(aktivniTab==='uplata') ucitajUplateSume();
+  }, 20000);
 }).catch(()=>location.href='login.html');
 
 /* ── ZAKLJUČI DAN ─────────────────────────────────────────── */
