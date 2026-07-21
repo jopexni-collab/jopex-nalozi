@@ -228,6 +228,9 @@ let all=[], isAdmin=false, trenutniUser=null, blagajnaObjektId=null, razduzenjeT
 
 function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fd(d){if(!d)return'';const s=d.split('T')[0];const[y,m,dd]=s.split('-');return`${dd}.${m}.${y.slice(2)}`;}
+// Izdvaja sat:minut iz timestamp-a (npr. iz "kreirano" kolone, koja uvijek ima pravo
+// vrijeme — za razliku od "datum", koje je samo datum i može biti ručno promijenjeno).
+function fvrijeme(d){if(!d)return'';const t=d.split('T')[1];if(!t)return'';return t.slice(0,5);}
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function gv(id){return(document.getElementById(id)||{}).value||'';}
 
@@ -438,7 +441,7 @@ function render(){
     const rijecNegativno = jeIsplata ? 'Nije odobreno' : 'Nije predano';
     return `
     <tr>
-      <td>${fd(r.datum)}</td>
+      <td>${fd(r.datum)}${r.kreirano?` <span style="color:#8b96a5;font-size:10.5px;">${fvrijeme(r.kreirano)}</span>`:''}</td>
       <td class="num ${jeIsplata?'iznos-isplata':''}">${fmValuta(r.iznos, r.valuta)}</td>
       <td><b>${esc(r.primio)}</b></td>
       <td>
@@ -457,7 +460,7 @@ function render(){
       ):''}</td>
       <td>${esc(r.opis||'')}</td>
       <td>${r.predao_blagajniku
-        ?`<span class="predano">✓ ${rijecPozitivno} ${r.datum_predaje?fd(r.datum_predaje):''}</span>`
+        ?`<span class="predano">✓ ${rijecPozitivno} ${r.datum_predaje?fd(r.datum_predaje)+' '+fvrijeme(r.datum_predaje):''}</span>`
         :`<span class="nepredano-txt">${rijecNegativno}</span>
           <button class="btn-predaj" onclick="predajBlagajniku(${r.id})">${rijecPozitivno}</button>`
       }</td>

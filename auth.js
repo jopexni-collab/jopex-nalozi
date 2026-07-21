@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const pool = require('./db');
-console.log('VERZIJA-PROVERA: auth.js sa je_blagajnik poljem, ucitan', new Date().toISOString());
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
@@ -26,7 +25,7 @@ router.post('/login', async (req, res) => {
     if (!ok)
       return res.status(401).json({ error: 'Pogrešan email ili lozinka.' });
 
-    // Da li je osoba blagajnik za bar jedan PJ (many-to-many tabela — ne stari ucitaj ovo molim te
+    // Da li je osoba blagajnik za bar jedan PJ (many-to-many tabela — ne stari
     // blagajnik_objekat_id koji se više ne koristi za ovu provjeru).
     const bR = await pool.query('SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 LIMIT 1', [user.id]);
     const jeBlagajnik = bR.rows.length > 0;
@@ -45,6 +44,14 @@ router.post('/login', async (req, res) => {
       blagajnik_objekat_id: user.blagajnik_objekat_id,
       je_blagajnik: jeBlagajnik,
     };
+
+    // Trajna istorija prijava (van glavne sesijske tabele, koja pamti samo trenutno
+    // aktivne) — ne blokira prijavu ako ovo iz nekog razloga padne.
+    pool.query(
+      `INSERT INTO prijave_log (zaposleni_id, ime_prezime, email, ip) VALUES ($1,$2,$3,$4)`,
+      [user.id, user.ime_prezime, user.email, req.headers['x-forwarded-for'] || req.socket?.remoteAddress || null]
+    ).catch(e => console.error('Greška pri upisu prijave_log:', e.message));
+
     res.json({ ok: true, user: req.session.user });
   } catch (err) {
     console.error(err);
@@ -64,7 +71,50 @@ router.get('/me', (req, res) => {
   res.json(req.session.user);
 });
 
-// POST /api/auth/verify-password - potvrda lozinke TRENUTNO prijavljenog korisnika, bez
+// GET /api/auth/prijave - SAMO admin - istorija prijava (poslednjih 200)
+router.get('/prijave', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin.' });
+  try {
+    const r = await pool.query(
+      `SELECT id, ime_prezime, email, ip, prijavljen FROM prijave_log ORDER BY prijavljen DESC LIMIT 200`
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/auth/aktivni - SAMO admin - trenutno aktivne sesije (neistekle). Izvedeno iz
+// "session" tabele (connect-pg-simple) — nije 100% "otvoren tab upravo sad", nego "ima
+// važeći login cookie", ali je dovoljno dobra aproksimacija za nadzor.
+router.get('/aktivni', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin.' });
+  try {
+    const r = await pool.query(
+      `SELECT sid, sess, expire FROM session WHERE expire > now() ORDER BY expire DESC`
+    );
+    const aktivni = r.rows
+      .map(row => {
+        const u = row.sess?.user;
+        if (!u) return null;
+        return { id: u.id, ime_prezime: u.ime_prezime, email: u.email, rola: u.rola, istice: row.expire };
+      })
+      .filter(Boolean);
+    // Jedan zaposleni može imati više aktivnih sesija (npr. telefon + računar) — spoji
+    // po id-u, zadrži samo najkasniji "ističe" datum za pregled.
+    const poKorisniku = {};
+    for (const a of aktivni) {
+      if (!poKorisniku[a.id] || a.istice > poKorisniku[a.id].istice) poKorisniku[a.id] = a;
+    }
+    res.json(Object.values(poKorisniku));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // mijenjanja sesije. Koristi se kao dodatna provjera na osjetljivim mjestima (npr. izbor
 // prodajnog objekta u maloprodaji) — da neko slučajno ili namjerno ne generiše prodaju na
 // pogrešnom PJ samo zato što je uređaj već ulogovan.
