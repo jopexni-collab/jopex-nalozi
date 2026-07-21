@@ -1274,11 +1274,11 @@ async function ucitajUplateSume(){
   }catch(e){}
 }
 
-async function ucitajIsplateListu(){
+async function ucitajIsplateListu(tiho){
   const cont=document.getElementById('isplate-lista');
   const totalDiv=document.getElementById('isplate-total');
   if(!trenutniObjekat){cont.innerHTML='<div class="empty-msg">Nedostaje izabrani prodajni objekat.</div>';totalDiv.style.display='none';return;}
-  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
+  if(!tiho) cont.innerHTML='<div class="spinner">Učitavanje...</div>';
   const danas=new Date().toISOString().split('T')[0];
   try{
     const r=await fetch(`${API}/api/isplate?objekt_id=${trenutniObjekat.id}&od=${danas}&do=${danas}`);
@@ -1331,7 +1331,7 @@ function debounceUcitajDugovanja(){
   dugDebounceTimer=setTimeout(ucitajDugovanja, 300);
 }
 
-async function ucitajDugovanja(){
+async function ucitajDugovanja(tiho){
   if(!dugFilterPopunjen){
     try{
       const r=await fetch(`${API}/api/prodajni-objekti`);
@@ -1343,7 +1343,7 @@ async function ucitajDugovanja(){
   }
   const cont=document.getElementById('dugovanja-lista');
   const totalDiv=document.getElementById('dug-total');
-  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
+  if(!tiho) cont.innerHTML='<div class="spinner">Učitavanje...</div>';
   const objekatId=document.getElementById('dug-fil-objekat').value;
   const brojFilter=document.getElementById('dug-fil-broj').value.trim().toLowerCase();
   const kupacFilter=document.getElementById('dug-fil-kupac').value.trim().toLowerCase();
@@ -1391,10 +1391,10 @@ async function ucitajDugovanja(){
 }
 
 /* ── SALDO PO KUPCIMA ──────────────────────────────────────────────── */
-async function ucitajSaldoPoKupcima(){
+async function ucitajSaldoPoKupcima(tiho){
   const cont=document.getElementById('saldo-kupci-lista');
   const totalDiv=document.getElementById('dug-total');
-  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
+  if(!tiho) cont.innerHTML='<div class="spinner">Učitavanje...</div>';
   try{
     const r=await fetch(`${API}/api/otpremnice/saldo-po-kupcima`);
     const rows=await r.json();
@@ -2367,9 +2367,9 @@ async function popuniFilterObjekata(){
   }catch(e){}
 }
 
-async function loadOtpremnice(brojOverride){
+async function loadOtpremnice(brojOverride, tiho){
   const cont=document.getElementById('otp-list');
-  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
+  if(!tiho) cont.innerHTML='<div class="spinner">Učitavanje...</div>';
   const params=new URLSearchParams();
   if(brojOverride){
     // Deep-link na konkretnu otpremnicu (npr. sa blagajne) — zaobilazi UI filtere i
@@ -2433,7 +2433,7 @@ async function loadOtpremnice(brojOverride){
         <div class="otp-meta">
           ${fd(o.datum)} &middot; ${esc(o.objekt_naziv||'—')} &middot; Komercijalista: ${esc(o.komercijalista_ime||'—')}<br>
           Kupac: ${esc(o.kupac_naziv||'—')}${o.potvrdio_kupac_ime?' &middot; Potvrdio: '+esc(o.potvrdio_kupac_ime):''}<br>
-          ${o.status!=='stornirana'&&o.novac_predat?`Novac predat<br>`:''}
+          ${o.status!=='stornirana'&&o.novac_predat?`<span style="color:var(--green);">Novac predat</span><br>`:''}
           ${o.poslato_knjigovodstvu
             ?`<span style="color:var(--green);">📤 Poslato knjigovodstvu ${fd(o.poslato_knjigovodstvu_vrijeme)}</span>`
             :`<span style="color:var(--red);">⏳ Nije poslato knjigovodstvu</span>`}
@@ -2627,13 +2627,14 @@ fetch(`${API}/api/auth/me`).then(r=>{
   // Automatsko osvježavanje — bez ovoga, promjene iz drugih ekrana (npr. nova otpremnica
   // koju je napravio drugi komercijalista, ili nešto iz radnih naloga/blagajne) ne bi se
   // vidjele dok se ručno ne osvježi stranica. NE dira tab "Prodaja" (aktivna korpa) da se
-  // ne remeti nekome ko trenutno pravi prodaju.
+  // ne remeti nekome ko trenutno pravi prodaju. "Tihi" poziv (bez spinnera) da se lista
+  // ne isprazni na trenutak — to je i izazivalo skok skrola nazad na vrh.
   setInterval(()=>{
     if(document.visibilityState!=='visible') return;
     const aktivniTab=document.querySelector('.tab-btn.active')?.dataset.tab;
-    if(aktivniTab==='admin') loadOtpremnice();
-    else if(aktivniTab==='isplate'){ ucitajIsplateListu(); ucitajIsplateSume(); }
-    else if(aktivniTab==='dugovanja'){ if(dugPrikaz==='kupci') ucitajSaldoPoKupcima(); else ucitajDugovanja(); }
+    if(aktivniTab==='admin') loadOtpremnice(undefined, true);
+    else if(aktivniTab==='isplate'){ ucitajIsplateListu(true); ucitajIsplateSume(); }
+    else if(aktivniTab==='dugovanja'){ if(dugPrikaz==='kupci') ucitajSaldoPoKupcima(true); else ucitajDugovanja(true); }
     else if(aktivniTab==='uplata') ucitajUplateSume();
   }, 20000);
 }).catch(()=>location.href='login.html');
@@ -2653,5 +2654,3 @@ document.getElementById('btn-zakljuci-dan').onclick=e=>{
 </script>
 </body>
 </html>
-
-
