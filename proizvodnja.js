@@ -34,16 +34,38 @@ const BASE_COLS = `
   p.naplaceno, p.naplaceno_opis, COALESCE(p.stornirano,false) AS stornirano
 `;
 
-// GET /api/proizvodnja - lista (admin vidi finansije, ostali ne)
+// Finansijska polja (iz ADMIN_COLS) — vidljiva adminu, ILI osobi koja je upisana kao
+// "ugovorio" za TAJ KONKRETAN nalog (npr. operater koji je na licu mjesta dogovorio
+// uslugu i treba transparentno da upiše cijenu — ne vidi cijene TUĐIH naloga).
+const FINANSIJSKA_POLJA = ['ugovorena_suma', 'avans', 'avans_opis', 'za_naplatu',
+  'naplata_detalji', 'naplaceno_fakturisano', 'dodatni_rad_napomena',
+  'avans_predano', 'naplata_predano'];
+
+// Finansijska polja (iz ADMIN_COLS) — vidljiva adminu, bilo kome ko ima dozvolu "Ponude"
+// (moze_ugovarati, vidi SVE naloge), ILI osobi koja je upisana kao "Ugovorio" za TAJ
+// KONKRETAN nalog — a ko kreira nalog automatski POSTAJE "Ugovorio" na njemu (osim ako
+// je Ponude/admin, koji smiju da izaberu nekog drugog). "Kreirao" i "Ugovorio" su
+// namjerno isto — nema odvojenog koncepta.
+function filtrirajFinansije(rows, user) {
+  if (user?.rola === 'admin' || user?.moze_ugovarati) return rows;
+  return rows.map(row => {
+    if (row.ugovorio_id === user?.id) return row; // svoj nalog — vidi sve
+    const kopija = { ...row };
+    for (const polje of FINANSIJSKA_POLJA) delete kopija[polje];
+    return kopija;
+  });
+}
+
+// GET /api/proizvodnja - lista (admin vidi finansije svih; ostali vide finansije SAMO
+// za naloge koje su sami ugovorili — vidi filtrirajFinansije iznad)
 router.get('/', async (req, res) => {
-  const isAdmin = req.session?.user?.rola === 'admin';
-  const cols = isAdmin ? BASE_COLS + ',' + ADMIN_COLS : BASE_COLS;
-  const joins = isAdmin ? GOTOVINA_JOINS : '';
+  const user = req.session?.user;
+  const cols = BASE_COLS + ',' + ADMIN_COLS;
   try {
     const r = await pool.query(
-      `SELECT ${cols} FROM proizvodnja_jopex p ${joins} ORDER BY p.r_br DESC`
+      `SELECT ${cols} FROM proizvodnja_jopex p ${GOTOVINA_JOINS} ORDER BY p.r_br DESC`
     );
-    res.json(r.rows);
+    res.json(filtrirajFinansije(r.rows, user));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Greška pri učitavanju naloga.' });
@@ -52,41 +74,58 @@ router.get('/', async (req, res) => {
 
 // GET /api/proizvodnja/:r_br - jedan nalog
 router.get('/:r_br', async (req, res) => {
-  const isAdmin = req.session?.user?.rola === 'admin';
-  const cols = isAdmin ? BASE_COLS + ',' + ADMIN_COLS : BASE_COLS;
-  const joins = isAdmin ? GOTOVINA_JOINS : '';
+  const user = req.session?.user;
+  const cols = BASE_COLS + ',' + ADMIN_COLS;
   try {
     const r = await pool.query(
-      `SELECT ${cols} FROM proizvodnja_jopex p ${joins} WHERE p.r_br = $1`,
+      `SELECT ${cols} FROM proizvodnja_jopex p ${GOTOVINA_JOINS} WHERE p.r_br = $1`,
       [req.params.r_br]
     );
     if (!r.rows.length)
       return res.status(404).json({ error: 'Nalog nije pronađen.' });
-    res.json(r.rows[0]);
+    res.json(filtrirajFinansije(r.rows, user)[0]);
   } catch (err) {
     res.status(500).json({ error: 'Greška.' });
   }
 });
 
+
 // POST /api/proizvodnja - novi nalog
 // Poziva se i iz web forme i iz JoPeX HTML (usvajanje ponude)
 router.post('/', async (req, res) => {
+  const user = req.session?.user;
   const {
-    zadatak, prioritet, ugovorio_id, ugovorio: ugovorioIzReq, narucilac, materijal, status,
+    zadatak, prioritet, ugovorio_id, narucilac, materijal, status,
     pocetak, planirani_zavrsetak, napomena, link_skica, link_ponuda,
-    ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad, r_br_import,
+    gotovo, reklamacija_dodatni_rad, r_br_import,
   } = req.body || {};
 
   if (!zadatak?.trim())
     return res.status(400).json({ error: '"zadatak" je obavezno polje.' });
 
+  // Cijenu (ugovorena_suma/avans) smije upisati bilo ko ko kreira nalog — pošto je BAŠ ON
+  // "Ugovorio" na ovom nalogu (vidi ispod), po istom principu kao vidljivost/uređivanje
+  // kasnije (vidi filtrirajFinansije).
+  const smijeCijenu = !!user;
+  const ugovorena_suma = smijeCijenu ? req.body.ugovorena_suma : undefined;
+  const avans = smijeCijenu ? req.body.avans : undefined;
+
+  // "Ugovorio" = "kreirao" (namjerno isti koncept, nema odvojenog polja). Admin i "Ponude"
+  // dozvola smiju izabrati BILO KOGA kao Ugovorio (dogovaraju poslove i za druge). Obični
+  // operater automatski POSTAJE Ugovorio na svom novom nalogu — ne bira se, ne može
+  // dodijeliti tuđe ime (spriječava da neko "otključa" vidljivost tuđeg naloga).
+  const smijeBiratiUgovorio = user?.rola === 'admin' || !!user?.moze_ugovarati;
+  const stvarniUgovorioId = smijeBiratiUgovorio ? (ugovorio_id || user?.id || null) : (user?.id || null);
+
   try {
-    let ugovorioIme = ugovorioIzReq || null;
-    if (ugovorio_id) {
+    let ugovorioIme = null;
+    if (stvarniUgovorioId === user?.id) {
+      ugovorioIme = user?.ime_prezime || null;
+    } else if (stvarniUgovorioId) {
       const emp = await pool.query(
         `SELECT ime_prezime FROM zaposleni
          WHERE id = $1 AND aktivan = true`,
-        [ugovorio_id]
+        [stvarniUgovorioId]
       );
       if (emp.rows.length) ugovorioIme = emp.rows[0].ime_prezime;
     }
@@ -104,7 +143,7 @@ router.post('/', async (req, res) => {
       insertVals = [
         r_br_import,
         zadatak, prioritet || 'Normal',
-        ugovorio_id || null, ugovorioIme,
+        stvarniUgovorioId, ugovorioIme,
         narucilac || null, materijal || null,
         status || 'Nije Započeto',
         pocetak || null, planirani_zavrsetak || null,
@@ -121,7 +160,7 @@ router.post('/', async (req, res) => {
        RETURNING r_br, zadatak, narucilac, ugovorena_suma, status`;
       insertVals = [
         zadatak, prioritet || 'Normal',
-        ugovorio_id || null, ugovorioIme,
+        stvarniUgovorioId, ugovorioIme,
         narucilac || null, materijal || null,
         status || 'Nije Započeto',
         pocetak || new Date().toISOString().split('T')[0], planirani_zavrsetak || null,
@@ -149,7 +188,15 @@ function izvuciPrimio(val) {
 
 // PATCH /api/proizvodnja/:r_br - djelimično ažuriranje
 router.patch('/:r_br', async (req, res) => {
-  const isAdmin = req.session?.user?.rola === 'admin';
+  const user = req.session?.user;
+  const isAdmin = user?.rola === 'admin';
+
+  const postojeciRes = await pool.query('SELECT ugovorio_id FROM proizvodnja_jopex WHERE r_br=$1', [req.params.r_br]);
+  if (!postojeciRes.rows.length) return res.status(404).json({ error: 'Nalog nije pronađen.' });
+
+  // "Ponude" dozvola (moze_ugovarati) — vidi/uređuje finansije SVIH naloga. Inače, samo
+  // ako je osoba upisana kao "Ugovorio" ZA TAJ nalog (kreirao=ugovorio, isti koncept).
+  const smijeFinansije = isAdmin || !!user?.moze_ugovarati || postojeciRes.rows[0].ugovorio_id === user?.id;
 
   const ALLOWED_BASE = [
     'zadatak','prioritet','narucilac','materijal','status','pocetak',
@@ -161,7 +208,7 @@ router.patch('/:r_br', async (req, res) => {
     'naplaceno_fakturisano','dodatni_rad_napomena','naplaceno','naplaceno_opis',
   ];
 
-  const allowed = isAdmin ? [...ALLOWED_BASE, ...ALLOWED_ADMIN] : ALLOWED_BASE;
+  const allowed = smijeFinansije ? [...ALLOWED_BASE, ...ALLOWED_ADMIN] : ALLOWED_BASE;
   const sets = [], vals = [];
   let i = 1;
 
@@ -169,8 +216,10 @@ router.patch('/:r_br', async (req, res) => {
     if (key in req.body) { sets.push(`${key} = $${i++}`); vals.push(req.body[key]); }
   }
 
-  // Poseban slučaj: ugovorio_id (treba validaciju + upisati i ugovorio tekst)
-  if (req.body.ugovorio_id !== undefined) {
+  // Poseban slučaj: ugovorio_id (treba validaciju + upisati i ugovorio tekst) — SAMO
+  // admin smije da postavi/promijeni ko je ugovorio (fiksira se jednom, operater ga sam
+  // sebi ne smije dodijeliti da bi "otključao" tuđ nalog).
+  if (isAdmin && req.body.ugovorio_id !== undefined) {
     let ugovorioIme = null;
     if (req.body.ugovorio_id) {
       const emp = await pool.query(
@@ -190,7 +239,7 @@ router.patch('/:r_br', async (req, res) => {
 
   // Ako mijenjamo avans_opis ili naplaceno_opis, treba nam stanje PRIJE izmjene
   // da bismo upis u blagajnu napravili samo jednom (kad se vrijednost stvarno promijeni)
-  const trebaProvjeruGotovine = isAdmin && ('avans_opis' in req.body || 'naplaceno_opis' in req.body);
+  const trebaProvjeruGotovine = smijeFinansije && ('avans_opis' in req.body || 'naplaceno_opis' in req.body);
   let staro = null;
   if (trebaProvjeruGotovine) {
     const s = await pool.query(

@@ -65,11 +65,12 @@ main{max-width:760px;margin:24px auto;padding:0 16px;}
       </div>
     </div>
     <div class="row">
-      <div class="fg">
+      <div class="fg" id="ugovorio-fg">
         <label class="req">Ugovorio</label>
         <select id="ugovorio" required>
           <option value="">— učitavanje... —</option>
         </select>
+        <div id="ugovorio-auto" style="display:none;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:#f8f9fc;color:var(--dark);"></div>
       </div>
       <div class="fg">
         <label>Status</label>
@@ -132,10 +133,22 @@ async function checkAuth(){
       return;
     }
 
-    // Finansijska polja — admin, ili bilo ko sa "Ponude" dozvolom (moze_ugovarati) —
-    // vide/uređuju finansije bez obzira koga izaberu kao "Ugovorio".
-    if(me.rola==='admin' || me.moze_ugovarati){
-      document.getElementById('fin-row').style.display='';
+    // Finansijska polja — prikazuju se svima koji mogu da kreiraju nalog (prošli su
+    // provjeru iznad), pošto će oni automatski postati "Ugovorio" za ovaj NOVI nalog —
+    // dali su klijentu cijenu na licu mjesta (npr. waterjet usluga) i treba transparentno
+    // da je upišu, bez obzira imaju li "Ponude" dozvolu.
+    document.getElementById('fin-row').style.display='';
+
+    // "Ugovorio" = "kreirao" (isti koncept). Admin i "Ponude" dozvola biraju slobodno iz
+    // liste (mogu dogovarati posao i u ime nekog drugog). Obični operater automatski
+    // POSTAJE "Ugovorio" na svom novom nalogu — ne bira se (dropdown bi ionako pokazivao
+    // samo Ponude-ljude, ne i njega samog), pa mu umjesto toga pokazujemo njegovo ime.
+    if(me.rola!=='admin' && !me.moze_ugovarati){
+      document.getElementById('ugovorio').style.display='none';
+      document.getElementById('ugovorio').required=false;
+      const auto=document.getElementById('ugovorio-auto');
+      auto.style.display='block';
+      auto.textContent=me.ime_prezime+' (ti — automatski)';
     }
   }catch{location.href='login.html';}
 }
@@ -169,7 +182,7 @@ document.getElementById('f').addEventListener('submit',async e=>{
   const btn=document.getElementById('btn');
   msg.className='';msg.style.display='none';
   btn.disabled=true;btn.textContent='Čuvanje...';
-  const smijeCijenu=me?.rola==='admin'||!!me?.moze_ugovarati;
+  const smijeCijenu=!!me;
   const body={
     zadatak:document.getElementById('zadatak').value,
     prioritet:document.getElementById('prioritet').value,

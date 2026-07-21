@@ -196,9 +196,10 @@ function mozeEditovati(field, row){
   if(isAdmin) return true;
   const finPolja=['ugovorena_suma','avans','avans_opis','za_naplatu','naplata_detalji','naplaceno','naplaceno_opis'];
   if(finPolja.includes(field)){
-    // "Ponude" dozvola (moze_ugovarati) vidi/uređuje finansije SVIH naloga (njih dvoje se
-    // međusobno zamjenjuje, treba puna slika), ne samo onih koje su sami ugovorili.
-    return !!trenutniUser.moze_ugovarati;
+    // "Ponude" dozvola (moze_ugovarati) vidi/uređuje finansije SVIH naloga. Inače, samo
+    // ako je osoba upisana kao "Ugovorio" ZA TAJ nalog (kreirao=ugovorio, isti koncept —
+    // ko kreira nalog automatski postaje "Ugovorio" na njemu, vidi proizvodnja.js).
+    return !!trenutniUser.moze_ugovarati || !!(row && row.ugovorio_id===trenutniUser.id);
   }
   const statusPolja=['status','gotovo','reklamacija_dodatni_rad','nova_procjena'];
   if(statusPolja.includes(field)) return trenutniUser.izmjena_statusa||false;
@@ -281,7 +282,7 @@ function getCols(){
     {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center">${lk(r.link_skica)}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
     {k:'link_ponuda',l:'R.Nalog',w:50,filter:null,render:r=>`<td class="center">${lk(r.link_ponuda)}</td>`,edit:{type:'text',field:'link_ponuda',label:'Link radni nalog'}},
   ];
-  const mozeVidjetiFin=r=>isAdmin||!!(trenutniUser&&trenutniUser.moze_ugovarati);
+  const mozeVidjetiFin=r=>isAdmin||!!(trenutniUser&&trenutniUser.moze_ugovarati)||!!(trenutniUser&&r.ugovorio_id===trenutniUser.id);
   const fin=[
     {k:'ugovorena_suma',l:'Ugovoreno',w:90,filter:null,render:r=>mozeVidjetiFin(r)?`<td class="num">${fm(r.ugovorena_suma)}</td>`:'<td class="num">—</td>',edit:{type:'number',field:'ugovorena_suma',label:'Ugovorena suma (KM)'}},
     {k:'avans',l:'Avans',w:80,filter:null,render:r=>{
