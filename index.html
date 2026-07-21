@@ -105,7 +105,7 @@ main{max-width:760px;margin:24px auto;padding:0 16px;}
       <div class="fg"><label>Link skica</label><input type="text" id="link_skica" placeholder="https://..."></div>
       <div class="fg"><label>Link ponuda</label><input type="text" id="link_ponuda" placeholder="https://..."></div>
     </div>
-    <div class="row" id="fin-row">
+    <div class="row" id="fin-row" style="display:none;">
       <div class="fg"><label>Ugovorena suma (KM)</label><input type="number" id="suma" step="0.01" min="0" value="0"></div>
       <div class="fg"><label>Avans (KM)</label><input type="number" id="avans" step="0.01" min="0" value="0"></div>
     </div>
@@ -131,8 +131,11 @@ async function checkAuth(){
       return;
     }
 
-    // Finansijska polja — samo admin
-    if(me.rola!=='admin') document.getElementById('fin-row').style.display='none';
+    // Finansijska polja — admin, ili bilo ko sa "Ponude" dozvolom (moze_ugovarati) —
+    // vide/uređuju finansije bez obzira koga izaberu kao "Ugovorio".
+    if(me.rola==='admin' || me.moze_ugovarati){
+      document.getElementById('fin-row').style.display='';
+    }
   }catch{location.href='login.html';}
 }
 
@@ -165,6 +168,7 @@ document.getElementById('f').addEventListener('submit',async e=>{
   const btn=document.getElementById('btn');
   msg.className='';msg.style.display='none';
   btn.disabled=true;btn.textContent='Čuvanje...';
+  const smijeCijenu=me?.rola==='admin'||!!me?.moze_ugovarati;
   const body={
     zadatak:document.getElementById('zadatak').value,
     prioritet:document.getElementById('prioritet').value,
@@ -177,8 +181,8 @@ document.getElementById('f').addEventListener('submit',async e=>{
     napomena:document.getElementById('napomena').value,
     link_skica:document.getElementById('link_skica').value,
     link_ponuda:document.getElementById('link_ponuda').value,
-    ugovorena_suma:me?.rola==='admin'?parseFloat(document.getElementById('suma').value)||0:undefined,
-    avans:me?.rola==='admin'?parseFloat(document.getElementById('avans').value)||0:undefined,
+    ugovorena_suma:smijeCijenu?parseFloat(document.getElementById('suma').value)||0:undefined,
+    avans:smijeCijenu?parseFloat(document.getElementById('avans').value)||0:undefined,
   };
   try{
     const r=await fetch(API+'/api/proizvodnja',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});

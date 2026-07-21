@@ -185,11 +185,15 @@ async function undoZadnje(e){
   }
 }
 
-function mozeEditovati(field){
+function mozeEditovati(field, row){
   if(!trenutniUser) return false;
   if(isAdmin) return true;
   const finPolja=['ugovorena_suma','avans','avans_opis','za_naplatu','naplata_detalji','naplaceno','naplaceno_opis'];
-  if(finPolja.includes(field)) return false;
+  if(finPolja.includes(field)){
+    // "Ponude" dozvola (moze_ugovarati) vidi/uređuje finansije SVIH naloga (njih dvoje se
+    // međusobno zamjenjuje, treba puna slika), ne samo onih koje su sami ugovorili.
+    return !!trenutniUser.moze_ugovarati;
+  }
   const statusPolja=['status','gotovo','reklamacija_dodatni_rad','nova_procjena'];
   if(statusPolja.includes(field)) return trenutniUser.izmjena_statusa||false;
   return trenutniUser.izmjena_naloga||false;
@@ -198,14 +202,15 @@ let popRow=null, popField=null, popTd=null, popEditType=null;
 
 // ─── CHIPS ───────────────────────────────────────────────────────────────
 function chipP(p){const m={Hitno:'p-hitno',Normal:'p-normal',Zakazano:'p-zakazano'};return`<span class="chip ${m[p]||'p-normal'}">${esc(p||'Normal')}</span>`;}
-function chipS(s){
+function chipS(s, stornirano){
   const m={
     'Nije Započeto':'s-nije','U radu':'s-radu','Kasni':'s-kasni',
     'Isporučeno':'s-zavrseno','Čeka isporuku':'s-ceka',
     'Otkazano':'s-otkazano','Zakazano':'s-zakazano','Završeno':'s-zavrseno'
   };
   const icon=s==='Čeka isporuku'?'🚚 ':s==='Isporučeno'?'✓ ':'';
-  return`<span class="chip ${m[s]||'s-nije'}">${icon}${esc(s||'')}</span>`;
+  const stil=stornirano?' style="text-decoration:line-through;text-decoration-color:#000;text-decoration-thickness:2px;"':'';
+  return`<span class="chip ${m[s]||'s-nije'}"${stil}>${icon}${esc(s||'')}</span>`;
 }
 function chipR(r){return r==='DA'?'<span class="chip r-da">DA</span>':r==='NE'?'<span class="chip r-ne">NE</span>':'';}
 function getDani(r){
@@ -259,7 +264,7 @@ function getCols(){
     {k:'prioritet',l:'Prioritet',w:90,filter:'sel',opts:PRIORITETI,render:r=>`<td>${chipP(r.prioritet)}</td>`,edit:{type:'select',opts:PRIORITETI,field:'prioritet'}},
     {k:'ugovorio',l:'Ugovorio',w:110,filter:'text',render:r=>`<td>${esc(r.ugovorio)}</td>`,edit:{type:'ugovorio',field:'ugovorio_id',label:'Ugovorio'}},
     {k:'narucilac',l:'Naručilac',w:130,filter:'text',render:r=>`<td>${esc(r.narucilac)}</td>`,edit:{type:'text',field:'narucilac',label:'Naručilac'}},
-    {k:'status',l:'Status',w:120,filter:'sel',opts:STATUSI,render:r=>`<td>${chipS(r.status)}</td>`,edit:{type:'select',opts:STATUSI,field:'status'}},
+    {k:'status',l:'Status',w:120,filter:'sel',opts:STATUSI,render:r=>`<td>${chipS(r.status,r.stornirano)}</td>`,edit:{type:'select',opts:STATUSI,field:'status'}},
     {k:'pocetak',l:'Ugovoreno',w:90,filter:null,render:r=>`<td>${fd(r.pocetak)}</td>`,edit:{type:'date',field:'pocetak',label:'Ugovoreno (datum)'}},
     {k:'planirani_zavrsetak',l:'Plan. završetak',w:110,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>`<td class="${zavrsClass(r)}">${fd(r.planirani_zavrsetak)}</td>`,edit:{type:'date',field:'planirani_zavrsetak',label:'Plan. završetak'}},
     {k:'broj_dana',l:'Dana',w:70,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>daniC(r),edit:null},
@@ -270,23 +275,28 @@ function getCols(){
     {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center">${lk(r.link_skica)}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
     {k:'link_ponuda',l:'R.Nalog',w:50,filter:null,render:r=>`<td class="center">${lk(r.link_ponuda)}</td>`,edit:{type:'text',field:'link_ponuda',label:'Link radni nalog'}},
   ];
-  const fin=isAdmin?[
-    {k:'ugovorena_suma',l:'Ugovoreno',w:90,filter:null,render:r=>`<td class="num">${fm(r.ugovorena_suma)}</td>`,edit:{type:'number',field:'ugovorena_suma',label:'Ugovorena suma (KM)'}},
+  const mozeVidjetiFin=r=>isAdmin||!!(trenutniUser&&trenutniUser.moze_ugovarati);
+  const fin=[
+    {k:'ugovorena_suma',l:'Ugovoreno',w:90,filter:null,render:r=>mozeVidjetiFin(r)?`<td class="num">${fm(r.ugovorena_suma)}</td>`:'<td class="num">—</td>',edit:{type:'number',field:'ugovorena_suma',label:'Ugovorena suma (KM)'}},
     {k:'avans',l:'Avans',w:80,filter:null,render:r=>{
+      if(!mozeVidjetiFin(r)) return '<td class="num">—</td>';
       const cash=jeGotovinaOpis(r.avans_opis);
       const cls=cash?(r.avans_predano?' predano-zeleno':' ceka-blagajnu'):'';
       return `<td class="num note-cell${r.avans_opis?' has-note':''}${cls}" data-note="${esc(r.avans_opis)}${r.avans_predano?' (predano blagajniku)':''}">${fm(r.avans)}</td>`;
     },edit:{type:'avans',field:'avans',label:'Avans (KM)'}},
     {k:'za_naplatu',l:'Za naplatu',w:90,filter:null,render:r=>{
+      if(!mozeVidjetiFin(r)) return '<td class="num">—</td>';
       const cash=jeGotovinaOpis(r.naplaceno_opis);
       const cls=cash?(r.naplata_predano?' predano-zeleno':' ceka-blagajnu'):'';
       return `<td class="num${cls}" title="${r.naplata_predano?'Predano blagajniku':''}">${fm(r.za_naplatu)}</td>`;
     },edit:null},
-    {k:'naplaceno',l:'✓ Napl.',w:55,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.naplaceno?'<span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span>':''}</td>`,edit:{type:'check',field:'naplaceno',label:'Naplaćeno'}},
-    {k:'naplaceno_opis',l:'Opis naplate',w:130,filter:'text',render:r=>`<td class="note-cell${r.naplaceno_opis?' has-note':''}" data-note="${esc(r.naplaceno_opis)}">${esc(r.naplaceno_opis)||''}</td>`,edit:{type:'naplata',field:'naplaceno_opis',label:'Opis naplate'}},
+    {k:'naplaceno',l:'✓ Napl.',w:55,filter:'sel',opts:['Da','Ne'],render:r=>mozeVidjetiFin(r)?`<td class="center">${r.naplaceno?'<span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span>':''}</td>`:'<td class="center">—</td>',edit:{type:'check',field:'naplaceno',label:'Naplaćeno'}},
+    {k:'naplaceno_opis',l:'Opis naplate',w:130,filter:'text',render:r=>mozeVidjetiFin(r)?`<td class="note-cell${r.naplaceno_opis?' has-note':''}" data-note="${esc(r.naplaceno_opis)}">${esc(r.naplaceno_opis)||''}</td>`:'<td>—</td>',edit:{type:'naplata',field:'naplaceno_opis',label:'Opis naplate'}},
+  ];
+  const admOnly=isAdmin?[
     {k:'_del',l:'',w:40,filter:null,render:r=>`<td class="center"><button onclick="obrisiNalog(${r.r_br},event)" style="background:none;border:none;cursor:pointer;font-size:14px;color:#c0392b;" title="Obriši nalog">🗑</button></td>`,edit:null},
   ]:[];
-  return [...base,...fin];
+  return [...base,...fin,...admOnly];
 }
 
 // ─── HEADER ───────────────────────────────────────────────────────────────
@@ -475,10 +485,10 @@ function render(){
   if(!rows.length){document.getElementById('tbody').innerHTML=`<tr><td colspan="${cols.length}" class="empty">Nema naloga.</td></tr>`;return;}
   document.getElementById('tbody').innerHTML=rows.map(r=>`<tr data-rbr="${r.r_br}"${r.stornirano?' style="text-decoration:line-through;text-decoration-color:#000;text-decoration-thickness:2px;color:#888;"':''}>${cols.map(c=>{
     const cell=c.render(r);
-    if(c.edit&&!mozeEditovati(c.edit.field)){
+    if(c.edit&&!mozeEditovati(c.edit.field,r)){
       return addTdClass(cell,'locked');
     }
-    if(c.edit&&mozeEditovati(c.edit.field)){
+    if(c.edit&&mozeEditovati(c.edit.field,r)){
       return addTdClass(cell,'editable');
     }
     return cell;
@@ -500,7 +510,7 @@ document.getElementById('tbody').addEventListener('click',function(e){
   const cols=getCols();
   const col=cols[thIdx];
   if(!col||!col.edit) return;
-  if(!mozeEditovati(col.edit.field)) return; // nema pravo
+  if(!mozeEditovati(col.edit.field,row)) return; // nema pravo
   openPop(td,row,col.edit);
 });
 
@@ -761,13 +771,14 @@ document.getElementById('tbody').addEventListener('mousemove',function(e){
 });
 async function obrisiNalog(rBr, e){
   e.stopPropagation();
-  if(!confirm(`Obrisati nalog #${rBr}? Ova akcija je nepovratna!`)) return;
+  if(!confirm(`Stornirati nalog #${rBr}?\n\nNalog se NEĆE obrisati — ostaje vidljiv u listi (precrtan), a sve vezane gotovinske stavke (avans/naplata) se poništavaju.`)) return;
   try{
     const r=await fetch(`${API}/api/proizvodnja/${rBr}`,{method:'DELETE'});
     if(!r.ok) throw new Error();
-    all=all.filter(n=>n.r_br!=rBr);
+    const n=all.find(n=>n.r_br==rBr);
+    if(n) n.stornirano=true;
     render();
-  }catch(err){alert('Greška pri brisanju.');}
+  }catch(err){alert('Greška pri storniranju.');}
 }
 
 async function checkAuth(){
