@@ -29,6 +29,7 @@ input:checked+.slider:before{transform:translateX(16px);}
 .toggle-cell{text-align:center;}
 .badge-admin{display:inline-block;background:#fce8e6;color:#c0392b;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;}
 .btn-loz{font:inherit;font-size:11px;padding:3px 8px;background:#eee;border:1px solid #ddd;border-radius:4px;cursor:pointer;}
+#novi-korisnik-forma input,#novi-korisnik-forma select{font:inherit;font-size:12.5px;padding:7px 9px;border:1px solid var(--border);border-radius:5px;}
 .btn-loz:hover{background:#e0e0e0;}
 .saved{color:var(--green);font-size:11px;margin-left:4px;}
 .modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.4);z-index:100;align-items:center;justify-content:center;}
@@ -316,5 +317,3 @@ fetch(API+'/api/auth/me').then(r=>{
 }).catch(()=>location.href='login.html');
 </script>
 </body></html>
-
-
