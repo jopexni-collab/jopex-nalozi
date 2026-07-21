@@ -107,29 +107,6 @@ td.num{text-align:right;font-weight:700;}
       <div id="razduzenje-msg" style="font-size:12px;margin-top:6px;"></div>
     </div>
     <div id="razduzenja-lista"></div>
-
-    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px;">
-      <h4 style="font-size:13px;color:var(--dark);margin-bottom:8px;">💳 Uplata / Povrat komitentu</h4>
-      <div style="font-size:11px;color:#6b7a8d;margin-bottom:8px;">Kupac može doći direktno u blagajnu (mimo komercijaliste) da uplati (avans/dug) ili traži povrat avansa.</div>
-      <div style="position:relative;">
-        <input type="text" id="kom-search" placeholder="🔍 Pretraga kupca po imenu/telefonu..." oninput="debounceTraziKomitentaBlagajna()" style="font:inherit;font-size:12px;padding:5px 7px;border:1px solid var(--border);border-radius:5px;width:100%;box-sizing:border-box;">
-        <div id="kom-rezultati" style="position:absolute;z-index:10;background:#fff;border:1px solid var(--border);border-radius:6px;width:100%;max-height:200px;overflow-y:auto;"></div>
-      </div>
-      <div id="kom-izabran" style="display:none;background:#f0f2f5;border-radius:6px;padding:8px 10px;margin-top:8px;font-size:12.5px;font-weight:700;"></div>
-      <div id="kom-forma" style="display:none;margin-top:10px;">
-        <div class="forma-grid">
-          <div class="fg"><label>Iznos</label><input type="number" id="kom-iznos" step="0.01" min="0.01"></div>
-          <div class="fg"><label>Napomena (opciono)</label><input type="text" id="kom-napomena"></div>
-          <div class="fg"><label>&nbsp;</label>
-            <button class="btn-add" onclick="komitentUplata()">+ Uplata (avans/dug)</button>
-          </div>
-          <div class="fg"><label>&nbsp;</label>
-            <button class="btn-add" style="background:var(--red);" onclick="komitentPovrat()">− Povrat avansa</button>
-          </div>
-        </div>
-        <div id="kom-msg" style="font-size:12px;margin-top:6px;"></div>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -148,16 +125,16 @@ td.num{text-align:right;font-weight:700;}
 <!-- FORMA ZA UNOS -->
 <div class="forma">
   <h3>+ Nova naplata</h3>
+  <div style="position:relative;margin-bottom:8px;">
+    <input type="text" id="f-kom-search" placeholder="🔍 Poveži sa komitentom (opciono) — pretraga po imenu/telefonu..." oninput="debounceTraziKomitenta('f')" style="font:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:5px;width:100%;box-sizing:border-box;">
+    <div id="f-kom-rezultati" style="position:absolute;z-index:10;background:#fff;border:1px solid var(--border);border-radius:6px;width:100%;max-height:200px;overflow-y:auto;"></div>
+  </div>
+  <div id="f-kom-izabran" style="display:none;background:#e6f4ea;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:12px;font-weight:700;">
+    <span id="f-kom-ime"></span> <span style="cursor:pointer;color:var(--red);font-weight:400;" onclick="ocistiKomitenta('f')">✕ ukloni</span>
+  </div>
   <div class="forma-grid">
     <div class="fg"><label>Datum</label><input type="date" id="f-datum"></div>
     <div class="fg"><label>Iznos (KM)</label><input type="number" id="f-iznos" step="0.01" min="0" placeholder="0.00"></div>
-    <div class="fg"><label>Primio</label>
-      <select id="f-primio">
-        <option value="">— izaberi —</option>
-        <option>Boban</option><option>Marija</option><option>Nenad</option>
-        <option>Rade</option><option>Edo</option>
-      </select>
-    </div>
     <div class="fg"><label>Izvor</label>
       <select id="f-izvor">
         <option value="Proizvodnja">Proizvodnja</option>
@@ -173,20 +150,20 @@ td.num{text-align:right;font-weight:700;}
 </div>
 
 <!-- FORMA ZA RUČNU ISPLATU (blagajnik bilježi izlazak novca iz kase - ne dolazi iz -->
-<!-- maloprodaje/otpremnica, npr. neki trošak koji nije evidentiran drugdje). Ostaje sa -->
-<!-- statusom "Nije odobreno" dok admin ne provjeri i klikne Odobreno u listi ispod. -->
+<!-- maloprodaje/otpremnica, npr. neki trošak koji nije evidentiran drugdje). Ide odmah -->
+<!-- u blagajnu (blagajnik sam generiše, fizički već ima taj novac). -->
 <div class="forma" style="border-left:4px solid var(--red);">
   <h3 style="color:var(--red);">− Nova isplata</h3>
+  <div style="position:relative;margin-bottom:8px;">
+    <input type="text" id="i-kom-search" placeholder="🔍 Poveži sa komitentom (opciono) — pretraga po imenu/telefonu..." oninput="debounceTraziKomitenta('i')" style="font:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--border);border-radius:5px;width:100%;box-sizing:border-box;">
+    <div id="i-kom-rezultati" style="position:absolute;z-index:10;background:#fff;border:1px solid var(--border);border-radius:6px;width:100%;max-height:200px;overflow-y:auto;"></div>
+  </div>
+  <div id="i-kom-izabran" style="display:none;background:#fce8e6;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:12px;font-weight:700;">
+    <span id="i-kom-ime"></span> — povrat avansa <span style="cursor:pointer;color:var(--red);font-weight:400;" onclick="ocistiKomitenta('i')">✕ ukloni</span>
+  </div>
   <div class="forma-grid">
     <div class="fg"><label>Datum</label><input type="date" id="i-datum"></div>
     <div class="fg"><label>Iznos (KM)</label><input type="number" id="i-iznos" step="0.01" min="0" placeholder="0.00"></div>
-    <div class="fg"><label>Primio (ko je isplatio)</label>
-      <select id="i-primio">
-        <option value="">— izaberi —</option>
-        <option>Boban</option><option>Marija</option><option>Nenad</option>
-        <option>Rade</option><option>Edo</option>
-      </select>
-    </div>
     <div class="fg"><label>Izvor</label>
       <select id="i-izvor">
         <option value="Proizvodnja">Proizvodnja</option>
@@ -195,8 +172,9 @@ td.num{text-align:right;font-weight:700;}
       </select>
     </div>
     <div class="fg"><label>Nalog R.Br. (opciono)</label><input type="number" id="i-nalog" placeholder="npr. 342"></div>
-    <div class="fg"><label>Opis (razlog isplate) *</label><input type="text" id="i-opis" placeholder="npr. gorivo, sitna popravka..."></div>
+    <div class="fg" id="i-opis-fg"><label>Opis (razlog isplate) *</label><input type="text" id="i-opis" placeholder="npr. gorivo, sitna popravka..."></div>
     <div class="fg"><label>&nbsp;</label><button class="btn-add" style="background:var(--red);" onclick="dodajIsplatuRucno()">− Dodaj isplatu</button></div>
+
   </div>
   <div id="i-msg" style="margin-top:8px;font-size:12px;"></div>
 </div>
@@ -362,94 +340,6 @@ async function potvrdiRazduzenje(){
   }
 }
 
-/* ── UPLATA/POVRAT KOMITENTU DIREKTNO U BLAGAJNI (kupac dolazi mimo komercijaliste) ── */
-let komitentBlagajnaIzabran=null;
-let komitentBlagajnaTimer=null;
-
-function debounceTraziKomitentaBlagajna(){
-  clearTimeout(komitentBlagajnaTimer);
-  const q=document.getElementById('kom-search').value;
-  komitentBlagajnaTimer=setTimeout(()=>traziKomitentaBlagajna(q), 250);
-}
-
-async function traziKomitentaBlagajna(q){
-  const cont=document.getElementById('kom-rezultati');
-  if(!q||!q.trim()){cont.innerHTML='';return;}
-  cont.innerHTML='<div style="padding:8px;color:#8b96a5;font-size:12px;">Pretraga...</div>';
-  try{
-    const r=await fetch(`${API}/api/kupci?q=${encodeURIComponent(q)}&limit=10`);
-    const rows=await r.json();
-    if(!rows.length){cont.innerHTML='<div style="padding:8px;color:#8b96a5;font-size:12px;">Nema rezultata.</div>';return;}
-    cont.innerHTML=rows.map(k=>`
-      <div style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #eee;font-size:12.5px;" onclick='izaberiKomitentaBlagajna(${JSON.stringify(k).replace(/'/g,"&apos;")})'>
-        <b>${esc(k.naziv)}</b>${k.telefon?' · '+esc(k.telefon):''}
-      </div>
-    `).join('');
-  }catch(e){ cont.innerHTML='<div style="padding:8px;color:var(--red);font-size:12px;">Greška.</div>'; }
-}
-
-function izaberiKomitentaBlagajna(kupac){
-  komitentBlagajnaIzabran=kupac;
-  document.getElementById('kom-izabran').style.display='block';
-  document.getElementById('kom-izabran').textContent=`${kupac.naziv}${kupac.telefon?' · '+kupac.telefon:''}`;
-  document.getElementById('kom-rezultati').innerHTML='';
-  document.getElementById('kom-search').value='';
-  document.getElementById('kom-forma').style.display='block';
-  document.getElementById('kom-iznos').value='';
-  document.getElementById('kom-napomena').value='';
-  document.getElementById('kom-msg').textContent='';
-}
-
-async function komitentUplata(){
-  const iznos=parseFloat(document.getElementById('kom-iznos').value);
-  const napomena=document.getElementById('kom-napomena').value.trim();
-  const msg=document.getElementById('kom-msg');
-  if(!komitentBlagajnaIzabran){msg.style.color='red';msg.textContent='Izaberite kupca.';return;}
-  if(!iznos||iznos<=0){msg.style.color='red';msg.textContent='Unesite ispravan iznos.';return;}
-  if(!blagajnaObjektId){msg.style.color='red';msg.textContent='Izaberite prvo PJ (tab iznad).';return;}
-  try{
-    const r=await fetch(`${API}/api/uplate`,{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({objekt_id:blagajnaObjektId, kupac_id:komitentBlagajnaIzabran.id, iznos, napomena:napomena||null}),
-    });
-    const d=await r.json();
-    if(!r.ok) throw new Error(d.error||'Greška.');
-    let poruka=`✓ Uplaćeno ${fm(d.iznos)}.`;
-    if(d.pokriveno_duga>0) poruka+=` Pokriveno duga: ${fm(d.pokriveno_duga)}.`;
-    if(d.ostatak_kao_avans>0) poruka+=` Ostatak kao avans: ${fm(d.ostatak_kao_avans)}.`;
-    msg.style.color='var(--green)'; msg.textContent=poruka;
-    document.getElementById('kom-iznos').value=''; document.getElementById('kom-napomena').value='';
-    ucitajBlagajnaStanje();
-  }catch(e){
-    msg.style.color='red'; msg.textContent=e.message;
-  }
-}
-
-async function komitentPovrat(){
-  const iznos=parseFloat(document.getElementById('kom-iznos').value);
-  const napomena=document.getElementById('kom-napomena').value.trim();
-  const msg=document.getElementById('kom-msg');
-  if(!komitentBlagajnaIzabran){msg.style.color='red';msg.textContent='Izaberite kupca.';return;}
-  if(!iznos||iznos<=0){msg.style.color='red';msg.textContent='Unesite ispravan iznos.';return;}
-  if(!blagajnaObjektId){msg.style.color='red';msg.textContent='Izaberite prvo PJ (tab iznad).';return;}
-  try{
-    const r=await fetch(`${API}/api/isplate`,{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        objekt_id:blagajnaObjektId, iznos, razlog:'povrat_komitentu', napomena:napomena||null,
-        primalac_ime:komitentBlagajnaIzabran.naziv, kupac_id:komitentBlagajnaIzabran.id,
-      }),
-    });
-    const d=await r.json();
-    if(!r.ok) throw new Error(d.error||'Greška.');
-    msg.style.color='var(--green)'; msg.textContent=`✓ Povrat ${fm(iznos)} izvršen.`;
-    document.getElementById('kom-iznos').value=''; document.getElementById('kom-napomena').value='';
-    ucitajBlagajnaStanje();
-  }catch(e){
-    msg.style.color='red'; msg.textContent=e.message;
-  }
-}
-
 async function ucitajAdminBlagajnaPregled(){
   const cont=document.getElementById('admin-blagajna-pregled-lista');
   try{
@@ -577,23 +467,97 @@ function render(){
   `;}).join('');
 }
 
+/* ── Pretraga komitenta (dijeljeno za obje forme, 'f'=naplata, 'i'=isplata) ── */
+let komitentIzabran={f:null, i:null};
+let komitentTimer={f:null, i:null};
+
+function debounceTraziKomitenta(prefix){
+  clearTimeout(komitentTimer[prefix]);
+  const q=document.getElementById(prefix+'-kom-search').value;
+  komitentTimer[prefix]=setTimeout(()=>traziKomitenta(prefix,q), 250);
+}
+
+async function traziKomitenta(prefix, q){
+  const cont=document.getElementById(prefix+'-kom-rezultati');
+  if(!q||!q.trim()){cont.innerHTML='';return;}
+  cont.innerHTML='<div style="padding:8px;color:#8b96a5;font-size:12px;">Pretraga...</div>';
+  try{
+    const r=await fetch(`${API}/api/kupci?q=${encodeURIComponent(q)}&limit=10`);
+    const rows=await r.json();
+    if(!rows.length){cont.innerHTML='<div style="padding:8px;color:#8b96a5;font-size:12px;">Nema rezultata.</div>';return;}
+    cont.innerHTML=rows.map(k=>`
+      <div style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #eee;font-size:12.5px;" onclick='izaberiKomitenta("${prefix}",${JSON.stringify(k).replace(/'/g,"&apos;")})'>
+        <b>${esc(k.naziv)}</b>${k.telefon?' · '+esc(k.telefon):''}
+      </div>
+    `).join('');
+  }catch(e){ cont.innerHTML='<div style="padding:8px;color:var(--red);font-size:12px;">Greška.</div>'; }
+}
+
+function izaberiKomitenta(prefix, kupac){
+  komitentIzabran[prefix]=kupac;
+  document.getElementById(prefix+'-kom-izabran').style.display='block';
+  document.getElementById(prefix+'-kom-ime').textContent=`${kupac.naziv}${kupac.telefon?' · '+kupac.telefon:''}`;
+  document.getElementById(prefix+'-kom-rezultati').innerHTML='';
+  document.getElementById(prefix+'-kom-search').value='';
+  // Kad je komitent izabran za isplatu, razlog je uvijek "povrat avansa" — opis više nije
+  // obavezan slobodan tekst (postaje opciona napomena).
+  if(prefix==='i'){
+    document.getElementById('i-opis-fg').querySelector('label').textContent='Napomena (opciono)';
+    document.getElementById('i-opis').placeholder='opciono...';
+  }
+}
+
+function ocistiKomitenta(prefix){
+  komitentIzabran[prefix]=null;
+  document.getElementById(prefix+'-kom-izabran').style.display='none';
+  if(prefix==='i'){
+    document.getElementById('i-opis-fg').querySelector('label').textContent='Opis (razlog isplate) *';
+    document.getElementById('i-opis').placeholder='npr. gorivo, sitna popravka...';
+  }
+}
+
 async function dodajNaplatu(){
   const iznos=parseFloat(document.getElementById('f-iznos').value);
-  const primio=gv('f-primio');
+  const napomena=gv('f-opis');
   const msg=document.getElementById('f-msg');
   if(!iznos||iznos<=0){msg.style.color='red';msg.textContent='Unesite iznos.';return;}
-  if(!primio){msg.style.color='red';msg.textContent='Izaberite ko je primio.';return;}
   const pj=mojiPJovi.find(p=>String(p.id)===String(blagajnaObjektId));
   if(!isAdmin && !pj){msg.style.color='red';msg.textContent='Izaberite prvo PJ (tab iznad) za koji unosite naplatu.';return;}
+  const primio=trenutniUser?.ime_prezime||'';
+
+  // Komitent izabran -> ovo je STVARNA uplata (pokriva dug, ostatak u avans) -> ide kroz
+  // isti mehanizam kao maloprodaja (/api/uplate), ne prost gotovina zapis.
+  if(komitentIzabran.f){
+    if(!blagajnaObjektId){msg.style.color='red';msg.textContent='Izaberite prvo PJ (tab iznad).';return;}
+    try{
+      const r=await fetch(`${API}/api/uplate`,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({objekt_id:blagajnaObjektId, kupac_id:komitentIzabran.f.id, iznos, napomena:napomena||null}),
+      });
+      const d=await r.json();
+      if(!r.ok) throw new Error(d.error||'Greška.');
+      let poruka=`✓ Uplaćeno ${fm(d.iznos)}.`;
+      if(d.pokriveno_duga>0) poruka+=` Pokriveno duga: ${fm(d.pokriveno_duga)}.`;
+      if(d.ostatak_kao_avans>0) poruka+=` Ostatak u avans: ${fm(d.ostatak_kao_avans)}.`;
+      msg.style.color='var(--green)'; msg.textContent=poruka;
+      document.getElementById('f-iznos').value=''; document.getElementById('f-opis').value='';
+      ocistiKomitenta('f');
+      await load(); await loadSume();
+      if(blagajnaObjektId) await ucitajBlagajnaStanje();
+    }catch(e){ msg.style.color='red'; msg.textContent=e.message; }
+    return;
+  }
+
+  // Bez komitenta -> obična, prosta naplata (kao do sad).
   try{
     const r=await fetch(`${API}/api/gotovina`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         datum:gv('f-datum')||new Date().toISOString().split('T')[0],
-        iznos,primio,
+        iznos, primio,
         izvor:gv('f-izvor')||'Proizvodnja',
         nalog_r_br:parseInt(gv('f-nalog'))||null,
-        opis:gv('f-opis')||null,
+        opis: napomena||null,
         objekt_naziv: pj?pj.naziv:null,
       }),
     });
@@ -610,14 +574,38 @@ async function dodajNaplatu(){
 
 async function dodajIsplatuRucno(){
   const iznos=parseFloat(document.getElementById('i-iznos').value);
-  const primio=gv('i-primio');
   const opis=gv('i-opis');
   const msg=document.getElementById('i-msg');
   if(!iznos||iznos<=0){msg.style.color='red';msg.textContent='Unesite iznos.';return;}
-  if(!primio){msg.style.color='red';msg.textContent='Izaberite ko je isplatio.';return;}
-  if(!opis){msg.style.color='red';msg.textContent='Unesite razlog isplate (opis).';return;}
   const pj=mojiPJovi.find(p=>String(p.id)===String(blagajnaObjektId));
   if(!isAdmin && !pj){msg.style.color='red';msg.textContent='Izaberite prvo PJ (tab iznad) za koji unosite isplatu.';return;}
+  const primio=trenutniUser?.ime_prezime||'';
+
+  // Komitent izabran -> ovo je POVRAT AVANSA -> ide kroz isti mehanizam kao maloprodaja
+  // (/api/isplate, razlog=povrat_komitentu), ne prost gotovina zapis.
+  if(komitentIzabran.i){
+    if(!blagajnaObjektId){msg.style.color='red';msg.textContent='Izaberite prvo PJ (tab iznad).';return;}
+    try{
+      const r=await fetch(`${API}/api/isplate`,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          objekt_id:blagajnaObjektId, iznos, razlog:'povrat_komitentu', napomena:opis||null,
+          primalac_ime:komitentIzabran.i.naziv, kupac_id:komitentIzabran.i.id,
+        }),
+      });
+      const d=await r.json();
+      if(!r.ok) throw new Error(d.error||'Greška.');
+      msg.style.color='var(--green)'; msg.textContent=`✓ Povrat avansa ${fm(iznos)} izvršen.`;
+      document.getElementById('i-iznos').value=''; document.getElementById('i-opis').value='';
+      ocistiKomitenta('i');
+      await load(); await loadSume();
+      if(blagajnaObjektId) await ucitajBlagajnaStanje();
+    }catch(e){ msg.style.color='red'; msg.textContent=e.message; }
+    return;
+  }
+
+  // Bez komitenta -> obična ručna isplata (kao do sad), razlog (opis) je obavezan.
+  if(!opis){msg.style.color='red';msg.textContent='Unesite razlog isplate (opis).';return;}
   try{
     const r=await fetch(`${API}/api/gotovina`,{
       method:'POST',headers:{'Content-Type':'application/json'},
