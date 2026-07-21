@@ -100,7 +100,8 @@ async function ucitaj(){
     dok.innerHTML=`
       <div class="memo">
         <div>
-          <div class="memo-naziv">${esc(FIRMA.naziv)}${isp.objekt_naziv?` <span style="font-size:13px;font-weight:600;color:#6b7a8d;">— ${esc(isp.objekt_naziv)}</span>`:''}</div>
+          <img src="logo.png" alt="JoPeX" style="height:36px;margin-bottom:4px;">
+          ${isp.objekt_naziv?`<div class="memo-naziv" style="font-size:15px;color:#6b7a8d;">${esc(isp.objekt_naziv)}</div>`:''}
           <div class="memo-info">
             ${FIRMA.adresa?esc(FIRMA.adresa)+'<br>':''}
             ${FIRMA.pib?esc(FIRMA.pib)+'<br>':''}
