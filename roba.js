@@ -13,6 +13,12 @@ function zahtijevaProdaju(req, res, next) {
   return res.status(403).json({ error: 'Nemate dozvolu za maloprodaju.' });
 }
 
+function zahtijevaRobaMagacin(req, res, next) {
+  const u = req.session?.user;
+  if (u?.rola === 'admin' || u?.moze_roba_magacin) return next();
+  return res.status(403).json({ error: 'Nemate dozvolu za modul Roba i magacini.' });
+}
+
 // Svaki prodajni objekat (PJ) ima svoju cijenu i stanje za isti artikal (tabela roba_pj).
 // Zato skoro sve rute ovdje zahtijevaju ?objekt_id= (ili objekt_id u body-ju) — bez toga
 // ne znamo koju cijenu/stanje da vratimo/mijenjamo.
@@ -74,9 +80,7 @@ router.get('/', zahtijevaProdaju, async (req, res) => {
 });
 
 // GET /api/roba/lager/filteri?objekt_id=X - distinct vrijednosti grupe i debljine za dropdown-e filtera
-router.get('/lager/filteri', async (req, res) => {
-  if (req.session?.user?.rola !== 'admin')
-    return res.status(403).json({ error: 'Samo admin može pregledati kompletan lager.' });
+router.get('/lager/filteri', zahtijevaRobaMagacin, async (req, res) => {
   const objektId = trebaObjekat(req.query.objekt_id);
   if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
   try {
@@ -98,9 +102,7 @@ router.get('/lager/filteri', async (req, res) => {
 // GET /api/roba/lager?objekt_id=X&grupa=Y&debljina=Z - kompletna lager lista za PJ, opciono filtrirana
 // po grupi i/ili debljini (kombinuju se — npr. samo "Bengal" + "2cm", ili samo "2cm" svih grupa).
 // MORA biti prije "/:id" rute ispod — inače Express tumači "lager" kao vrijednost za :id.
-router.get('/lager', async (req, res) => {
-  if (req.session?.user?.rola !== 'admin')
-    return res.status(403).json({ error: 'Samo admin može pregledati kompletan lager.' });
+router.get('/lager', zahtijevaRobaMagacin, async (req, res) => {
   const objektId = trebaObjekat(req.query.objekt_id);
   if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
   try {
@@ -126,9 +128,7 @@ router.get('/lager', async (req, res) => {
 });
 
 // GET /api/roba/lager/export?objekt_id=X&grupa=Y&debljina=Z - preuzimanje (filtrirane) lager liste kao XLSX
-router.get('/lager/export', async (req, res) => {
-  if (req.session?.user?.rola !== 'admin')
-    return res.status(403).json({ error: 'Samo admin može izvoziti lager.' });
+router.get('/lager/export', zahtijevaRobaMagacin, async (req, res) => {
   const objektId = trebaObjekat(req.query.objekt_id);
   if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
   try {
