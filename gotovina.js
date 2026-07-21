@@ -42,9 +42,10 @@ router.get('/', async (req, res) => {
     // poredi kao tekst (p.r_br::text), inače bi Postgres bacio grešku tipa na ne-brojčane
     // vrijednosti (otpremnica brojevi). Za redove sa OTP brojem JOIN jednostavno neće naći
     // poklapanje (narucilac/zadatak ostaju NULL), što je ispravno ponašanje.
-    const sql = `SELECT g.*, p.narucilac, p.zadatak
+    const sql = `SELECT g.*, p.narucilac, p.zadatak, COALESCE(po.valuta,'KM') AS valuta
       FROM gotovina g
       LEFT JOIN proizvodnja_jopex p ON g.nalog_r_br = p.r_br::text
+      LEFT JOIN prodajni_objekti po ON po.naziv = g.objekt_naziv
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY g.datum DESC, g.kreirano DESC`;
     const r = await pool.query(sql, vals);
@@ -154,9 +155,12 @@ router.post('/', async (req, res) => {
   try {
     const { datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv } = req.body;
     if (!iznos || !primio) return res.status(400).json({ error: 'iznos i primio su obavezni.' });
+    // Ovaj unos ide DIREKTNO od blagajnika (ili admina) koji fizički već ima taj novac —
+    // nema "predaje" od nekog drugog, pa se odmah računa u "Trenutno u blagajni" (bez
+    // čekanja da neko drugi to potvrdi). I dalje se vidi u listi za nadzor/reviziju.
     const r = await pool.query(
-      `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv, predao_blagajniku, datum_predaje)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, now()) RETURNING *`,
       [datum || new Date().toISOString().split('T')[0], iznos, primio,
        izvor || 'Proizvodnja', nalog_r_br || null, opis || null, objekt_naziv || null]
     );

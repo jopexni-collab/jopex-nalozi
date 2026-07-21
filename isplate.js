@@ -7,9 +7,17 @@ const RAZLOZI = ['povrat_komitentu', 'gorivo', 'sitne_popravke', 'dorucak', 'cis
 
 // Admin uvijek prolazi; ostali moraju imati moze_prodavati=true (ista dozvola kao za otpremnice,
 // jer su isplate dio istog dnevnog gotovinskog obračuna maloprodaje).
-router.use((req, res, next) => {
+router.use(async (req, res, next) => {
   const u = req.session?.user;
   if (u?.rola === 'admin' || u?.moze_prodavati) return next();
+  // Blagajnik takođe smije — kupac može doći direktno u blagajnu (mimo komercijaliste)
+  // da traži povrat avansa.
+  if (u) {
+    try {
+      const r = await pool.query('SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 LIMIT 1', [u.id]);
+      if (r.rows.length) return next();
+    } catch (e) {}
+  }
   return res.status(403).json({ error: 'Nemate dozvolu za maloprodaju.' });
 });
 
