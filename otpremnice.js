@@ -226,7 +226,13 @@ router.get('/', async (req, res) => {
     if (odstupanje === 'true') { where.push(`ima_odstupanje = true`); }
     if (objekt_id) { where.push(`objekt_id = $${i++}`); vals.push(objekt_id); }
 
-    const sql = `SELECT * FROM otpremnice
+    const sql = `SELECT o.*,
+      COALESCE(
+        (SELECT bool_and(g.predao_blagajniku) FROM gotovina g
+         WHERE g.nalog_r_br = o.broj AND g.izvor = 'Maloprodaja'),
+        false
+      ) AS novac_predat
+      FROM otpremnice o
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY datum DESC LIMIT 300`;
     const r = await pool.query(sql, vals);

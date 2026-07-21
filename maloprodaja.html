@@ -2421,7 +2421,7 @@ async function loadOtpremnice(brojOverride){
     totalDiv.innerHTML=`${fmMoney(ukupno)}<span class="cnt">${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'}${isplateSuma>0?` &middot; Isplate: − ${fmMoney(isplateSuma)} &middot; Neto: ${fmMoney(neto)}`:''}</span>`;
     const stLabel={kreirana:'Kreirana',potvrdjena:'Potvrđena',stornirana:'Stornirana'};
     cont.innerHTML=rows.map(o=>`
-      <div class="otp-card ${o.ima_odstupanje?'ima-odstupanje':''}" onclick="prikaziDetaljeOtpremnice(${o.id})" style="${o.status==='stornirana'?'opacity:.55;filter:grayscale(1);':''}">
+      <div class="otp-card ${o.ima_odstupanje?'ima-odstupanje':''}" onclick="prikaziDetaljeOtpremnice(${o.id})" style="${o.status==='stornirana'?'opacity:.55;filter:grayscale(1);':o.novac_predat?'background:#f0f9f3;':''}">
         <div class="otp-top">
           <span class="otp-broj">${esc(o.broj)}</span>
           <div class="otp-badges">
@@ -2433,6 +2433,7 @@ async function loadOtpremnice(brojOverride){
         <div class="otp-meta">
           ${fd(o.datum)} &middot; ${esc(o.objekt_naziv||'—')} &middot; Komercijalista: ${esc(o.komercijalista_ime||'—')}<br>
           Kupac: ${esc(o.kupac_naziv||'—')}${o.potvrdio_kupac_ime?' &middot; Potvrdio: '+esc(o.potvrdio_kupac_ime):''}<br>
+          ${o.status!=='stornirana'&&o.novac_predat?`Novac predat<br>`:''}
           ${o.poslato_knjigovodstvu
             ?`<span style="color:var(--green);">📤 Poslato knjigovodstvu ${fd(o.poslato_knjigovodstvu_vrijeme)}</span>`
             :`<span style="color:var(--red);">⏳ Nije poslato knjigovodstvu</span>`}
