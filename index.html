@@ -50,17 +50,19 @@ main{max-width:760px;margin:24px auto;padding:0 16px;}
     <div class="row">
       <div class="fg">
         <label class="req">Zadatak</label>
-        <select id="zadatak" required>
+        <select id="zadatak" required onchange="prikaziSlobodanZadatak()">
           <option value="">— izaberi —</option>
           <option>Kuhinjska ploča</option><option>Sto</option>
           <option>Klupice, Step</option><option>Na Mjeru</option>
           <option>Usluge Mašina</option><option>Usluge WJ</option>
+          <option value="__slobodno__">Slobodno (upiši sam)</option>
         </select>
+        <input type="text" id="zadatak-slobodno" placeholder="Upiši zadatak..." style="display:none;margin-top:6px;">
       </div>
       <div class="fg">
         <label>Prioritet</label>
         <select id="prioritet">
-          <option>Normal</option><option>Zakazano</option>
+          <option>Normal</option><option>Hitno</option><option>Zakazano</option>
         </select>
       </div>
     </div>
@@ -77,7 +79,7 @@ main{max-width:760px;margin:24px auto;padding:0 16px;}
         <select id="status">
           <option>Nije Započeto</option><option>Zakazano</option>
           <option>U radu</option><option>Čeka isporuku</option>
-          <option>Završeno</option><option>Otkazano</option>
+          <option>Isporučeno</option><option>Kasni</option><option>Otkazano</option>
         </select>
       </div>
     </div>
@@ -119,6 +121,13 @@ main{max-width:760px;margin:24px auto;padding:0 16px;}
 <script>
 const API='';
 let me=null;
+
+function prikaziSlobodanZadatak(){
+  const izabrano=document.getElementById('zadatak').value;
+  const polje=document.getElementById('zadatak-slobodno');
+  polje.style.display=izabrano==='__slobodno__'?'block':'none';
+  if(izabrano==='__slobodno__') polje.focus();
+}
 
 async function checkAuth(){
   try{
@@ -181,10 +190,21 @@ document.getElementById('f').addEventListener('submit',async e=>{
   const msg=document.getElementById('msg');
   const btn=document.getElementById('btn');
   msg.className='';msg.style.display='none';
+
+  const zadatakIzabran=document.getElementById('zadatak').value;
+  const zadatakFinalno=zadatakIzabran==='__slobodno__'
+    ? document.getElementById('zadatak-slobodno').value.trim()
+    : zadatakIzabran;
+  if(zadatakIzabran==='__slobodno__' && !zadatakFinalno){
+    msg.className='err';msg.style.display='block';
+    msg.textContent='✗ Upišite zadatak u polje "Slobodno".';
+    return;
+  }
+
   btn.disabled=true;btn.textContent='Čuvanje...';
   const smijeCijenu=!!me;
   const body={
-    zadatak:document.getElementById('zadatak').value,
+    zadatak:zadatakFinalno,
     prioritet:document.getElementById('prioritet').value,
     ugovorio_id:document.getElementById('ugovorio').value||null,
     status:document.getElementById('status').value,
@@ -204,7 +224,7 @@ document.getElementById('f').addEventListener('submit',async e=>{
     if(!r.ok) throw new Error(d.error);
     msg.className='ok';msg.style.display='block';
     msg.textContent=`✓ Sačuvano kao radni nalog #${d.r_br}.`;
-    document.getElementById('f').reset();loadConfig();
+    document.getElementById('f').reset();loadConfig();document.getElementById('zadatak-slobodno').style.display='none';
   }catch(err){
     msg.className='err';msg.style.display='block';
     msg.textContent='✗ '+err.message;
