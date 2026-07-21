@@ -176,7 +176,7 @@ router.patch('/:id', async (req, res) => {
     const { predao_blagajniku, datum_predaje, iznos, primio, datum, opis, izvor, nalog_r_br } = req.body;
     const sets = [], vals = [];
     let i = 1;
-    const ALLOWED = ['predao_blagajniku','datum_predaje','iznos','primio','datum','opis','izvor','nalog_r_br'];
+    const ALLOWED = ['predao_blagajniku','datum_predaje','iznos','primio','datum','opis','izvor','nalog_r_br','preuzeo_ime'];
     for (const k of ALLOWED) {
       if (k in req.body) { sets.push(`${k}=$${i++}`); vals.push(req.body[k]); }
     }

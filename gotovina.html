@@ -303,7 +303,7 @@ async function ucitajMojaRazduzenja(){
       <div style="display:flex;justify-content:space-between;padding:6px 8px;border-bottom:1px solid #eee;font-size:12px;">
         <span>${rz.tip==='banka'?'🏦 Banka':'🔒 Sef'} — ${fmValuta(rz.iznos, valuta)}${rz.napomena?' · '+esc(rz.napomena):''} · <span style="color:#8b96a5;">${fd(rz.kreirano)}</span></span>
         <span style="color:${rz.status==='potvrdjeno'?'var(--green)':'var(--orange)'};font-weight:700;">
-          ${rz.status==='potvrdjeno'?'✓ Potvrđeno '+fd(rz.datum_potvrde):'⏳ Na čekanju'}
+          ${rz.status==='potvrdjeno'?'✓ Potvrđeno '+fd(rz.datum_potvrde)+(rz.potvrdio_admin_ime?' — '+esc(rz.potvrdio_admin_ime):''):'⏳ Na čekanju'}
         </span>
       </div>
     `).join('');
@@ -460,7 +460,7 @@ function render(){
       ):''}</td>
       <td>${esc(r.opis||'')}</td>
       <td>${r.predao_blagajniku
-        ?`<span class="predano">✓ ${rijecPozitivno} ${r.datum_predaje?fd(r.datum_predaje)+' '+fvrijeme(r.datum_predaje):''}</span>`
+        ?`<span class="predano">✓ ${rijecPozitivno} ${r.datum_predaje?fd(r.datum_predaje)+' '+fvrijeme(r.datum_predaje):''}${r.preuzeo_ime?' — '+esc(r.preuzeo_ime):''}</span>`
         :`<span class="nepredano-txt">${rijecNegativno}</span>
           <button class="btn-predaj" onclick="predajBlagajniku(${r.id})">${rijecPozitivno}</button>`
       }</td>
@@ -637,7 +637,7 @@ async function predajBlagajniku(id){
   try{
     await fetch(`${API}/api/gotovina/${id}`,{
       method:'PATCH',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({predao_blagajniku:true,datum_predaje:danas}),
+      body:JSON.stringify({predao_blagajniku:true,datum_predaje:danas,preuzeo_ime:trenutniUser?.ime_prezime||null}),
     });
     await load();
     await loadSume();
