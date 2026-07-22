@@ -2551,7 +2551,7 @@ function toggleKnjigovodstvo(id){
   const emailKnjig=objekat?.email_knjigovodstvo||'';
   const telKnjig=(objekat?.telefon_knjigovodstvo||'').replace(/[^0-9+]/g,'');
   const link=linkDokumenta(o.javni_token);
-  const poruka=encodeURIComponent(`Otpremnica ${o.broj} — ${o.objekt_naziv||''} — JoPeX\\n${link}`);
+  const poruka=encodeURIComponent(`Otpremnica ${o.broj} — ${o.objekt_naziv||''} — JoPeX\n${link}`);
   const waHref = telKnjig ? `https://wa.me/${telKnjig.replace(/^\+/,'')}?text=${poruka}` : `https://wa.me/?text=${poruka}`;
   el.innerHTML=`
     <a href="viber://forward?text=${poruka}" onclick="markirajPoslatoKnjigovodstvu(${id})">📱 Viber</a>
