@@ -187,7 +187,6 @@ td.num{text-align:right;font-weight:700;}
   <label>Primio:</label>
   <select id="fil-primio" onchange="load()">
     <option value="">Svi</option>
-    <option>Boban</option><option>Marija</option><option>Nenad</option><option>Rade</option><option>Edo</option>
   </select>
   <label>Izvor:</label>
   <select id="fil-izvor" onchange="load()">
@@ -449,9 +448,22 @@ async function load(){
     const r=await fetch(`${API}/api/gotovina?${params}`);
     all=await r.json();
     render();
+    azurirajFilterPrimio();
   }catch(e){
     document.getElementById('tbody').innerHTML='<tr><td colspan="8" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>';
   }
+}
+
+// "Primio" filter se puni DINAMIČKI iz stvarno viđenih podataka (ne fiksna lista imena
+// koja se raspada čim se doda novi zaposleni). Spaja sa već poznatim opcijama (ne briše
+// imena koja trenutni filter/period možda ne pokazuje) — bez dodatnog mrežnog poziva.
+function azurirajFilterPrimio(){
+  const sel=document.getElementById('fil-primio');
+  const trenutno=sel.value;
+  const postojeca=[...sel.options].map(o=>o.value).filter(Boolean);
+  const nova=all.map(r=>r.primio).filter(Boolean);
+  const sva=[...new Set([...postojeca, ...nova])].sort();
+  sel.innerHTML='<option value="">Svi</option>'+sva.map(n=>`<option ${n===trenutno?'selected':''}>${esc(n)}</option>`).join('');
 }
 
 function render(){
@@ -596,6 +608,7 @@ async function dodajNaplatu(){
     document.getElementById('f-opis').value='';
     await load();
     await loadSume();
+    if(blagajnaObjektId) await ucitajBlagajnaStanje();
     setTimeout(()=>msg.textContent='',2000);
   }catch(e){msg.style.color='red';msg.textContent='Greška pri upisu.';}
 }
@@ -667,6 +680,7 @@ async function predajBlagajniku(id){
     });
     await load();
     await loadSume();
+    if(blagajnaObjektId) await ucitajBlagajnaStanje();
   }catch(e){alert('Greška.');}
 }
 
@@ -681,6 +695,7 @@ async function obrisi(id){
     }
     await load();
     await loadSume();
+    if(blagajnaObjektId) await ucitajBlagajnaStanje();
   }catch(e){alert('Greška: '+e.message);}
 }
 
