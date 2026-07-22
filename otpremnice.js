@@ -174,6 +174,11 @@ function sastaviStavke(inputStavke, zivaRoba) {
 
     const cijenaOdstupa = Math.abs(cijena - cijenaZadana) > 0.001;
     const odstupa = cijenaOdstupa || jedinicaOdstupa;
+    // Nezavisne oznake (ne gube se čak i ako komercijalista izabere DRUGI razlog uz njih)
+    // — koriste se za vizuelno razdvajanje: viša cijena = zeleno, JM promjena = plavo,
+    // niža cijena = crveno/narandžasto (ostaje kao upozorenje, to je pravi popust/gubitak).
+    const cijenaVisa = cijenaOdstupa && cijena > cijenaZadana;
+    const cijenaNiza = cijenaOdstupa && cijena < cijenaZadana;
 
     let finalRazlog = null, finalNapomena = null;
     if (odstupa) {
@@ -193,6 +198,7 @@ function sastaviStavke(inputStavke, zivaRoba) {
       kolicina, cijena_zadana: cijenaZadana, cijena, iznos,
       duzina_cm, visina_cm, debljina_cm, broj_komada,
       odstupa, razlog_odstupanja: finalRazlog, napomena_odstupanja: finalNapomena,
+      cijena_visa: cijenaVisa, cijena_niza: cijenaNiza, jm_promijenjena: jedinicaOdstupa,
     });
   }
   return stavke;
@@ -231,7 +237,10 @@ router.get('/', async (req, res) => {
         (SELECT bool_and(g.predao_blagajniku) FROM gotovina g
          WHERE g.nalog_r_br = o.broj AND g.izvor = 'Maloprodaja'),
         false
-      ) AS novac_predat
+      ) AS novac_predat,
+      EXISTS(SELECT 1 FROM otpremnica_stavke s WHERE s.otpremnica_id=o.id AND s.cijena_niza) AS ima_cijenu_nizu,
+      EXISTS(SELECT 1 FROM otpremnica_stavke s WHERE s.otpremnica_id=o.id AND s.jm_promijenjena AND NOT s.cijena_niza) AS ima_jm_promjenu,
+      EXISTS(SELECT 1 FROM otpremnica_stavke s WHERE s.otpremnica_id=o.id AND s.cijena_visa) AS ima_cijenu_visu
       FROM otpremnice o
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY datum DESC LIMIT 300`;
@@ -405,11 +414,13 @@ router.post('/potvrdi', async (req, res) => {
         `INSERT INTO otpremnica_stavke
            (otpremnica_id, roba_id, sifra, naziv, jed_mjera, kolicina,
             cijena_zadana, cijena, iznos, razlog_odstupanja, napomena_odstupanja,
-            duzina_cm, visina_cm, debljina_cm, broj_komada)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+            duzina_cm, visina_cm, debljina_cm, broj_komada,
+            cijena_visa, cijena_niza, jm_promijenjena)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
         [otpId, s.roba_id, s.sifra, s.naziv, s.jed_mjera, s.kolicina,
          s.cijena_zadana, s.cijena, s.iznos, s.razlog_odstupanja, s.napomena_odstupanja,
-         s.duzina_cm, s.visina_cm, s.debljina_cm, s.broj_komada]
+         s.duzina_cm, s.visina_cm, s.debljina_cm, s.broj_komada,
+         s.cijena_visa, s.cijena_niza, s.jm_promijenjena]
       );
       // Stanje se smanjuje SAMO za ovaj prodajni objekat (roba_pj), ne globalno.
       // Napomena: roba IZLAZI iz magacina bez obzira na način plaćanja (i kad je na dug) —

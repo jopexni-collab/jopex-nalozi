@@ -1930,6 +1930,15 @@ function azurirajPreview(idx){
   prev.textContent=`Nova cijena: ≈ ${fmMoney(nova)} / ${esc(k.jed_mjera)} (umjesto ${fmMoney(k.cijena)})`;
 }
 
+// Boja odstupanja: viša cijena od komercijaliste = zeleno (dobro za firmu), promjena
+// jedinice mjere = plavo (samo signal za provjeru, ne greška), niža cijena = crveno/
+// narandžasto (stvarno upozorenje — popust/gubitak koji treba obrazložiti).
+function bojaOdstupanja(efektivna, zadana){
+  if(efektivna>zadana) return 'var(--green)';
+  if(efektivna<zadana) return 'var(--red)';
+  return 'var(--red)';
+}
+
 function renderKosarica(){
   const cont=document.getElementById('kos-items');
   const total=kosarica.reduce((s,k)=>s+k.kolicina*efektivnaCijenaProcjena(k),0);
@@ -1944,6 +1953,7 @@ function renderKosarica(){
   cont.innerHTML=kosarica.map((k,idx)=>{
     const efCij=efektivnaCijenaProcjena(k);
     const odstupa=!!k.override;
+    const bojaCij=bojaOdstupanja(efCij,k.cijena);
     const jedinicaOdstupa=k.jed_mjera_zadana && k.jed_mjera!==k.jed_mjera_zadana;
     const editorOtvoren=uredjivanjeIdx===idx;
     const dimTxt=k.duzina_cm&&k.visina_cm
@@ -1954,7 +1964,7 @@ function renderKosarica(){
       <div class="kos-item-top">
         <div class="kos-info">
           <div class="kos-naziv">${esc(k.naziv)}${dimTxt}</div>
-          <div class="kos-cijena ${odstupa?'izmijenjena':''}">≈ ${fmMoney(efCij)} / ${esc(k.jed_mjera)}${odstupa?' <s style="opacity:.6">'+fm(k.cijena)+'</s>':''}</div>
+          <div class="kos-cijena" style="${odstupa?`color:${bojaCij};font-weight:700;`:''}">≈ ${fmMoney(efCij)} / ${esc(k.jed_mjera)}${odstupa?' <s style="opacity:.6">'+fm(k.cijena)+'</s>':''}</div>
         </div>
         <div class="kos-qty">
           <button class="qty-btn" onclick="promijeniKolicinu(${idx},-1)">−</button>
@@ -1965,10 +1975,10 @@ function renderKosarica(){
         <div class="kos-iznos">≈ ${fmMoney(k.kolicina*efCij)}</div>
         <button class="kos-del" onclick="ukloniStavku(${idx})">🗑</button>
       </div>
-      ${jedinicaOdstupa?`<div style="font-size:10.5px;color:var(--red);margin-top:2px;">⚙ Prodaje se po "${esc(k.jed_mjera)}" umjesto zadane "${esc(k.jed_mjera_zadana)}" — biće automatski prijavljeno kao odstupanje.</div>`:''}
+      ${jedinicaOdstupa?`<div style="font-size:10.5px;color:var(--blue);margin-top:2px;">⚙ Prodaje se po "${esc(k.jed_mjera)}" umjesto zadane "${esc(k.jed_mjera_zadana)}" — biće automatski prijavljeno kao odstupanje (plavo, samo signal za provjeru).</div>`:''}
       <div class="kos-item-bottom">
         ${odstupa
-          ? `<span class="chip-odstupanje">⚠ ${esc(RAZLOG_LABEL[k.override.razlog]||k.override.razlog)}<button onclick="ukloniOdstupanje(${idx})">✕</button></span>
+          ? `<span class="chip-odstupanje" style="background:${efCij>k.cijena?'#e6f4ea':'#fce8e6'};color:${bojaCij};">${efCij>k.cijena?'▲':'▼'} ${esc(RAZLOG_LABEL[k.override.razlog]||k.override.razlog)}<button onclick="ukloniOdstupanje(${idx})">✕</button></span>
              <button class="btn-cijena" onclick="otvoriUredjivanjeCijene(${idx})">✎ Izmijeni</button>`
           : `<button class="btn-cijena" onclick="otvoriUredjivanjeCijene(${idx})">✎ Odstupi od cijene</button>`
         }
@@ -2048,15 +2058,18 @@ function prikaziPotvrduEkran(pregled){
   potvrdaUkupanIznos=parseFloat(pregled.ukupan_iznos);
   document.getElementById('ov-broj').textContent='Broj se dodjeljuje nakon potvrde';
   document.getElementById('ov-iznos').innerHTML=fmMoneyHtml(pregled.ukupan_iznos);
-  document.getElementById('ov-stavke').innerHTML=pregled.stavke.map(s=>`
+  document.getElementById('ov-stavke').innerHTML=pregled.stavke.map(s=>{
+    const boja=s.cijena_visa?'var(--green)':s.jm_promijenjena&&!s.cijena_niza?'var(--blue)':'var(--red)';
+    const strelica=s.cijena_visa?'▲':s.cijena_niza?'▼':'⚙';
+    return `
     <div class="ov-stavka">
-      <span>${esc(s.naziv)} × ${s.kolicina} × ${fmMoney(s.cijena)}${s.odstupa?' ⚠':''}</span>
+      <span>${esc(s.naziv)} × ${s.kolicina} × ${fmMoney(s.cijena)}${s.odstupa?` <span style="color:${boja};">${strelica}</span>`:''}</span>
       <span>${s.odstupa?`<s style="opacity:.5">${fm(s.kolicina*s.cijena_zadana)}</s> `:''}${fmMoney(s.iznos)}</span>
     </div>
-    ${s.odstupa?`<div style="font-size:10.5px;color:var(--red);margin:-4px 0 6px;">
+    ${s.odstupa?`<div style="font-size:10.5px;color:${boja};margin:-4px 0 6px;">
       Razlog: ${esc(RAZLOG_LABEL[s.razlog_odstupanja]||s.razlog_odstupanja)}${s.napomena_odstupanja?' — '+esc(s.napomena_odstupanja):''}
     </div>`:''}
-  `).join('');
+  `;}).join('');
   if(pregled.ima_odstupanje){
     document.getElementById('ov-stavke').innerHTML += `
       <div style="font-size:11.5px;color:var(--red);font-weight:700;text-align:center;padding-top:6px;border-top:1px solid #e8eaed;margin-top:4px;">
@@ -2425,7 +2438,10 @@ async function loadOtpremnice(brojOverride, tiho){
         <div class="otp-top">
           <span class="otp-broj">${esc(o.broj)}</span>
           <div class="otp-badges">
-            ${o.ima_odstupanje?'<span class="badge-odstupanje">⚠ Odstupanje</span>':''}
+            ${(o.ima_cijenu_nizu?'<span class="badge-odstupanje" style="background:#fce8e6;color:var(--red);">▼ Niža cijena</span>'
+              :o.ima_jm_promjenu?'<span class="badge-odstupanje" style="background:#e6eef8;color:var(--blue);">⚙ Promjena JM</span>'
+              :o.ima_cijenu_visu?'<span class="badge-odstupanje" style="background:#e6f4ea;color:var(--green);">▲ Viša cijena</span>'
+              :'')}
             <span class="otp-status st-${o.status}">${stLabel[o.status]||o.status}</span>
           </div>
         </div>
@@ -2525,10 +2541,12 @@ async function prikaziDetaljeOtpremnice(id){
     if(!r.ok) throw new Error(otp.error||'Greška.');
     el.innerHTML=otp.stavke.map(s=>{
       const odstupa=!!s.razlog_odstupanja;
+      const boja=s.cijena_visa?'var(--green)':(s.jm_promijenjena&&!s.cijena_niza)?'var(--blue)':'var(--red)';
+      const strelica=s.cijena_visa?'▲':s.cijena_niza?'▼':'⚙';
       return `
       <div class="otp-stavka-red">
         <div class="osr-top"><span>${esc(s.naziv)} × ${s.kolicina}</span><span>${fmMoney(s.iznos)}</span></div>
-        ${odstupa?`<div class="osr-odst">⚠ Zadana cijena: ${fmMoney(s.cijena_zadana)} → Prodano: ${fmMoney(s.cijena)}
+        ${odstupa?`<div class="osr-odst" style="color:${boja};">${strelica} Zadana cijena: ${fmMoney(s.cijena_zadana)} → Prodano: ${fmMoney(s.cijena)}
           &middot; ${esc(RAZLOG_LABEL[s.razlog_odstupanja]||s.razlog_odstupanja||'')}${s.napomena_odstupanja?' — '+esc(s.napomena_odstupanja):''}</div>`:''}
       </div>`;
     }).join('');
