@@ -2480,7 +2480,7 @@ async function loadOtpremnice(brojOverride, tiho){
       }
       return;
     }
-    const filObjektId=gv('fil-objekat');
+    const filObjektId=document.getElementById('fil-objekat').value;
     const iznosUKM=o=>{
       const valuta=window.__objektiPoId?.[o.objekt_id]?.valuta||'KM';
       const iznos=parseFloat(o.ukupan_iznos||0);
