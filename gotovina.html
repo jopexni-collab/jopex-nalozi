@@ -196,6 +196,7 @@ td.num{text-align:right;font-weight:700;}
     <option value="Drugo">Drugo</option>
   </select>
   <label><input type="checkbox" id="fil-nepredano" onchange="load()"> Samo nepredano</label>
+  <label><input type="checkbox" id="fil-van-malo" onchange="render()"> ⚡ Samo van maloprodaje (za verifikaciju)</label>
   <button class="btn-sm" onclick="resetFilteri()">✕ Resetuj</button>
   <span id="stat" style="margin-left:auto;color:#6b7a8d;font-size:11px;"></span>
 </div>
@@ -467,13 +468,15 @@ function azurirajFilterPrimio(){
 }
 
 function render(){
-  const ukupnoKM=all.reduce((s,r)=>s+parseFloat(r.iznos||0)*(r.valuta==='EUR'?1.95:1),0);
-  document.getElementById('stat').textContent=`${all.length} zapisa | Ukupno: ${fm(ukupnoKM)} KM`;
-  if(!all.length){
+  const samoVanMalo=document.getElementById('fil-van-malo')?.checked;
+  const rows=samoVanMalo ? all.filter(r=>r.izvor==='Proizvodnja'&&!r.objekt_naziv) : all;
+  const ukupnoKM=rows.reduce((s,r)=>s+parseFloat(r.iznos||0)*(r.valuta==='EUR'?1.95:1),0);
+  document.getElementById('stat').textContent=`${rows.length} zapisa | Ukupno: ${fm(ukupnoKM)} KM`;
+  if(!rows.length){
     document.getElementById('tbody').innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:#999">Nema podataka.</td></tr>';
     return;
   }
-  document.getElementById('tbody').innerHTML=all.map(r=>{
+  document.getElementById('tbody').innerHTML=rows.map(r=>{
     const jeIsplata=parseFloat(r.iznos)<0;
     const rijecPozitivno = jeIsplata ? 'Odobreno' : 'Predano';
     const rijecNegativno = jeIsplata ? 'Nije odobreno' : 'Nije predano';
@@ -485,6 +488,7 @@ function render(){
       <td>
         <span class="chip-izvor ${r.izvor==='Proizvodnja'?'iz-pro':r.izvor==='Maloprodaja'?'iz-malo':'iz-drugo'}">${esc(r.izvor)}</span>
         ${r.izvor==='Maloprodaja'&&r.objekt_naziv?`<span class="izvor-pj">${esc(r.objekt_naziv)}</span>`:''}
+        ${r.izvor==='Proizvodnja'&&!r.objekt_naziv?`<span title="Blagajnik je ovo lično inicirao direktno u blagajni (nije stiglo iz maloprodaje/otpremnice) — provjeriti pri verifikaciji." style="display:inline-block;margin-left:4px;background:#fff3e0;color:#b8860b;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:6px;">⚡ Van maloprodaje</span>`:''}
       </td>
       <td>${r.nalog_r_br?(/^\d+$/.test(String(r.nalog_r_br))
         ?`<a class="nalog-link" href="lista.html">#${r.nalog_r_br}</a>${r.narucilac?' — '+esc(r.narucilac):''}`
@@ -705,6 +709,7 @@ function resetFilteri(){
     if(el) el.value='';
   });
   document.getElementById('fil-nepredano').checked=false;
+  document.getElementById('fil-van-malo').checked=false;
   load();
 }
 
