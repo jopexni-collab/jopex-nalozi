@@ -227,10 +227,25 @@ const API='';
 let all=[], isAdmin=false, trenutniUser=null, blagajnaObjektId=null, razduzenjeTipTrenutni=null;
 
 function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
-function fd(d){if(!d)return'';const s=d.split('T')[0];const[y,m,dd]=s.split('-');return`${dd}.${m}.${y.slice(2)}`;}
-// Izdvaja sat:minut iz timestamp-a (npr. iz "kreirano" kolone, koja uvijek ima pravo
-// vrijeme — za razliku od "datum", koje je samo datum i može biti ručno promijenjeno).
-function fvrijeme(d){if(!d)return'';const t=d.split('T')[1];if(!t)return'';return t.slice(0,5);}
+// VAŽNO: koristi Date objekat (lokalna vremenska zona browsera), NE sirovo rezanje
+// teksta iz ISO stringa — string bi pokazao SERVERSKO/UTC vrijeme, ne lokalno, i moglo
+// bi biti pomjereno za 1-2 sata (i pogrešan datum oko ponoći).
+function fd(d){
+  if(!d) return '';
+  const dt=new Date(d);
+  if(isNaN(dt.getTime())) return '';
+  const dd=String(dt.getDate()).padStart(2,'0');
+  const mm=String(dt.getMonth()+1).padStart(2,'0');
+  const yy=String(dt.getFullYear()).slice(2);
+  return `${dd}.${mm}.${yy}`;
+}
+// Izdvaja sat:minut u LOKALNOJ vremenskoj zoni (vidi napomenu iznad).
+function fvrijeme(d){
+  if(!d) return '';
+  const dt=new Date(d);
+  if(isNaN(dt.getTime())) return '';
+  return dt.toLocaleTimeString('sr-Latn-BA',{hour:'2-digit',minute:'2-digit'});
+}
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function gv(id){return(document.getElementById(id)||{}).value||'';}
 
