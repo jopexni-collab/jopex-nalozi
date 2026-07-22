@@ -806,6 +806,15 @@ function fmMoneyHtml(n){
 function valutaOznaka(){
   return ((typeof trenutniObjekat!=='undefined' && trenutniObjekat?.valuta)||'KM')==='EUR' ? '€' : 'KM';
 }
+// Formatira iznos u valuti KONKRETNOG prodajnog objekta (po objekt_id), NE u valuti PJ
+// trenutno prijavljenog korisnika — bitno kad admin/blagajnik gleda otpremnice/dugove
+// za DRUGI PJ nego onaj u kom je trenutno prijavljen (npr. Boban prijavljen u Nišu (€),
+// ali filtrira listu na Aleksandrovac (KM) — mora se prikazati KM, ne €).
+function fmMoneyZaObjekat(n, objektId){
+  const valuta=window.__objektiPoId?.[objektId]?.valuta||'KM';
+  if(valuta==='EUR') return `${fm(n)} € (${fm(n*KURS_EUR_KM)} KM)`;
+  return `${fm(n)} KM`;
+}
 function fd(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('sr-Latn-BA')+' '+dt.toLocaleTimeString('sr-Latn-BA',{hour:'2-digit',minute:'2-digit'});}
 
 /* ── PRODAJNI OBJEKAT (PJ) — bira se prvi put i pamti se u localStorage ────
@@ -1386,10 +1395,10 @@ async function ucitajDugovanja(tiho){
           Kupac: ${esc(o.kupac_naziv||'—')}${o.kupac_telefon?' · '+esc(o.kupac_telefon):''}
         </div>
         <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7a8d;margin-top:4px;">
-          <span>Ukupno: ${fmMoney(o.ukupan_iznos)}</span>
-          <span>Plaćeno: ${fmMoney(o.iznos_placeno)}</span>
+          <span>Ukupno: ${fmMoneyZaObjekat(o.ukupan_iznos, o.objekt_id)}</span>
+          <span>Plaćeno: ${fmMoneyZaObjekat(o.iznos_placeno, o.objekt_id)}</span>
         </div>
-        <div class="otp-iznos" style="color:var(--red);">Duguje: ${fmMoney(o.duguje)}</div>
+        <div class="otp-iznos" style="color:var(--red);">Duguje: ${fmMoneyZaObjekat(o.duguje, o.objekt_id)}</div>
       </div>
     `).join('');
     const ukupnoDuguje=rows.reduce((s,o)=>s+parseFloat(o.duguje||0),0);
@@ -2471,7 +2480,16 @@ async function loadOtpremnice(brojOverride, tiho){
       }
       return;
     }
-    const ukupno=rows.filter(o=>o.status!=='stornirana').reduce((s,o)=>s+parseFloat(o.ukupan_iznos||0),0);
+    const filObjektId=gv('fil-objekat');
+    const iznosUKM=o=>{
+      const valuta=window.__objektiPoId?.[o.objekt_id]?.valuta||'KM';
+      const iznos=parseFloat(o.ukupan_iznos||0);
+      return valuta==='EUR' ? iznos*KURS_EUR_KM : iznos;
+    };
+    const nekonvertovano=rows.filter(o=>o.status!=='stornirana').reduce((s,o)=>s+parseFloat(o.ukupan_iznos||0),0);
+    const ukupno = filObjektId
+      ? nekonvertovano // jedan PJ, ista valuta za sve redove — sirov zbir je tačan
+      : rows.filter(o=>o.status!=='stornirana').reduce((s,o)=>s+iznosUKM(o),0); // mešano — normalizuj u KM PRIJE sabiranja
     const neto=ukupno-isplateSuma;
     const brojStorno=rows.filter(o=>o.status==='stornirana').length;
     const brojKupaca=new Set(rows.map(o=>o.kupac_id||o.kupac_naziv||'—')).size;
@@ -2481,7 +2499,12 @@ async function loadOtpremnice(brojOverride, tiho){
       brojStorno>0?`${brojStorno} storno`:null,
       `${brojKupaca} kup${brojKupaca===1?'ac':brojKupaca<5?'ca':'aca'}`,
     ].filter(Boolean).join(' &middot; ');
-    totalDiv.innerHTML=`${fmMoney(ukupno)}<span class="cnt">${detalji}${isplateSuma>0?` &middot; Isplate: − ${fmMoney(isplateSuma)} &middot; Neto: ${fmMoney(neto)}`:''}</span>`;
+    // Ako je izabran KONKRETAN PJ, prikaži u NJEGOVOJ valuti (ne u valuti PJ trenutno
+    // prijavljenog korisnika). Ako su "Svi objekti" (mešane valute moguće), normalizuj u KM.
+    const formatiranUkupno = filObjektId ? fmMoneyZaObjekat(ukupno, filObjektId) : `${fm(ukupno)} KM`;
+    const formatiranIsplate = filObjektId ? fmMoneyZaObjekat(isplateSuma, filObjektId) : `${fm(isplateSuma)} KM`;
+    const formatiranNeto = filObjektId ? fmMoneyZaObjekat(neto, filObjektId) : `${fm(neto)} KM`;
+    totalDiv.innerHTML=`${formatiranUkupno}<span class="cnt">${detalji}${isplateSuma>0?` &middot; Isplate: − ${formatiranIsplate} &middot; Neto: ${formatiranNeto}`:''}</span>`;
     const stLabel={kreirana:'Kreirana',potvrdjena:'Potvrđena',stornirana:'Stornirana'};
     cont.innerHTML=rows.map(o=>`
       <div class="otp-card ${o.ima_odstupanje?'ima-odstupanje':''}" onclick="prikaziDetaljeOtpremnice(${o.id})" style="${o.status==='stornirana'?'opacity:.55;filter:grayscale(1);':o.novac_predat?'background:#f0f9f3;':''}">
@@ -2504,10 +2527,10 @@ async function loadOtpremnice(brojOverride, tiho){
             ?`<span style="color:var(--green);">📤 Poslato knjigovodstvu ${fd(o.poslato_knjigovodstvu_vrijeme)}</span>`
             :`<span style="color:var(--red);">⏳ Nije poslato knjigovodstvu</span>`}
         </div>
-        <div class="otp-iznos">${fmMoney(o.ukupan_iznos)}</div>
+        <div class="otp-iznos">${fmMoneyZaObjekat(o.ukupan_iznos, o.objekt_id)}</div>
         <div class="otp-actions">
           <button class="btn-otp-posalji" onclick="event.stopPropagation();togglePosaljiKartica(${o.id})">📤 Pošalji kupcu</button>
-          <button class="btn-otp-posalji" style="${o.poslato_knjigovodstvu?'background:#e6f4ea;color:var(--green);border-color:var(--green);':'background:#fce8e6;color:var(--red);border-color:var(--red);'}" onclick="event.stopPropagation();toggleKnjigovodstvo(${o.id})">${o.poslato_knjigovodstvu?`✓ Poslato ${fd(o.poslato_knjigovodstvu_vrijeme)}`:'📧 Pošalji knjigovodstvu'}</button>
+          <button class="btn-otp-posalji" style="${o.poslato_knjigovodstvu?'background:#e6f4ea;color:var(--green);border-color:var(--green);':'background:#fce8e6;color:var(--red);border-color:var(--red);'}" onclick="event.stopPropagation();toggleKnjigovodstvo(${o.id})">${o.poslato_knjigovodstvu?`✓ U Knjig. ${fd(o.poslato_knjigovodstvu_vrijeme)}`:'📧 Pošalji knjigovodstvu'}</button>
           ${isAdmin && o.status==='potvrdjena'?`<button class="btn-otp-posalji" style="color:var(--red);border-color:var(--red);" onclick="event.stopPropagation();storniranjeOtpremnice(${o.id},'${esc(o.broj)}')">⛔ Storniraj</button>`:''}
         </div>
         <div class="mini-posalji" id="mini-posalji-${o.id}" onclick="event.stopPropagation()"></div>
@@ -2617,10 +2640,10 @@ async function prikaziDetaljeOtpremnice(id){
         <div class="osr-top" style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;">
           <span style="color:#8b96a5;font-size:10.5px;flex-shrink:0;">${esc(s.sifra||'—')}</span>
           <span style="flex:1;min-width:80px;word-break:break-word;">${esc(s.naziv)}</span>
-          <span style="flex-shrink:0;white-space:nowrap;color:#6b7a8d;font-size:11px;">${s.kolicina} ${esc(s.jed_mjera||'')} × ${fmMoney(s.cijena)}</span>
-          <span style="flex-shrink:0;font-weight:700;">${fmMoney(s.iznos)}</span>
+          <span style="flex-shrink:0;white-space:nowrap;color:#6b7a8d;font-size:11px;">${s.kolicina} ${esc(s.jed_mjera||'')} × ${fmMoneyZaObjekat(s.cijena, otp.objekt_id)}</span>
+          <span style="flex-shrink:0;font-weight:700;">${fmMoneyZaObjekat(s.iznos, otp.objekt_id)}</span>
         </div>
-        ${odstupa?`<div class="osr-odst" style="color:${boja};">${strelica} Zadana cijena: ${fmMoney(s.cijena_zadana)} → Prodano: ${fmMoney(s.cijena)}
+        ${odstupa?`<div class="osr-odst" style="color:${boja};">${strelica} Zadana cijena: ${fmMoneyZaObjekat(s.cijena_zadana, otp.objekt_id)} → Prodano: ${fmMoneyZaObjekat(s.cijena, otp.objekt_id)}
           &middot; ${esc(RAZLOG_LABEL[s.razlog_odstupanja]||s.razlog_odstupanja||'')}${s.napomena_odstupanja?' — '+esc(s.napomena_odstupanja):''}</div>`:''}
         ${s.stanje_nedovoljno?`<div class="osr-odst" style="color:#b8860b;font-weight:700;">⚠ Prodato u minus — raspoloživo bilo ${s.raspolozivo_prije} ${s.jed_mjera}, nedostajalo ${s.manjak} ${s.jed_mjera}</div>`:''}
       </div>`;
