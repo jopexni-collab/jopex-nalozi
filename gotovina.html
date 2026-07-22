@@ -644,11 +644,11 @@ async function dodajIsplatuRucno(){
 }
 
 async function predajBlagajniku(id){
-  const danas=new Date().toISOString().split('T')[0];
+  const sada=new Date().toISOString();
   try{
     await fetch(`${API}/api/gotovina/${id}`,{
       method:'PATCH',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({predao_blagajniku:true,datum_predaje:danas,preuzeo_ime:trenutniUser?.ime_prezime||null}),
+      body:JSON.stringify({predao_blagajniku:true,datum_predaje:sada,preuzeo_ime:trenutniUser?.ime_prezime||null}),
     });
     await load();
     await loadSume();
