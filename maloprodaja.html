@@ -129,7 +129,8 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 /* ── OVERLAY: POTVRDA KUPCA ──────────────────────────────────── */
 .overlay{position:fixed;inset:0;background:#fff;z-index:100;display:none;flex-direction:column;}
 .overlay.on{display:flex;}
-.ov-header{background:var(--blue);color:#fff;padding:14px;text-align:center;font-weight:700;font-size:15px;}
+.ov-header{background:var(--blue);color:#fff;padding:14px;text-align:center;font-weight:700;font-size:15px;position:relative;}
+.ov-header .ov-who{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:400;opacity:.85;}
 .ov-body{flex:1;overflow:auto;padding:20px;display:flex;flex-direction:column;align-items:center;}
 .ov-broj{font-size:13px;color:#8b96a5;margin-bottom:6px;}
 .ov-iznos-lbl{font-size:13px;color:#6b7a8d;margin-top:10px;}
@@ -595,7 +596,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 <!-- ═══ OVERLAY: IZBOR PRODAJNOG OBJEKTA (PJ) — prvo od svega ═══ -->
 <div class="overlay" id="ov-objekat">
-  <div class="ov-header">Izaberi prodajni objekat</div>
+  <div class="ov-header">Izaberi prodajni objekat<span class="ov-who" id="ov-who"></span></div>
   <div class="ov-body">
     <div id="objekat-korak1">
       <div style="font-size:12.5px;color:#6b7a8d;text-align:center;margin-bottom:16px;max-width:340px;">
@@ -2585,7 +2586,12 @@ async function prikaziDetaljeOtpremnice(id){
       const strelica=s.cijena_visa?'▲':s.cijena_niza?'▼':'⚙';
       return `
       <div class="otp-stavka-red">
-        <div class="osr-top"><span>${esc(s.naziv)} × ${s.kolicina}</span><span>${fmMoney(s.iznos)}</span></div>
+        <div class="osr-top" style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;">
+          <span style="color:#8b96a5;font-size:10.5px;flex-shrink:0;">${esc(s.sifra||'—')}</span>
+          <span style="flex:1;min-width:80px;word-break:break-word;">${esc(s.naziv)}</span>
+          <span style="flex-shrink:0;white-space:nowrap;color:#6b7a8d;font-size:11px;">${s.kolicina} ${esc(s.jed_mjera||'')} × ${fmMoney(s.cijena)}</span>
+          <span style="flex-shrink:0;font-weight:700;">${fmMoney(s.iznos)}</span>
+        </div>
         ${odstupa?`<div class="osr-odst" style="color:${boja};">${strelica} Zadana cijena: ${fmMoney(s.cijena_zadana)} → Prodano: ${fmMoney(s.cijena)}
           &middot; ${esc(RAZLOG_LABEL[s.razlog_odstupanja]||s.razlog_odstupanja||'')}${s.napomena_odstupanja?' — '+esc(s.napomena_odstupanja):''}</div>`:''}
       </div>`;
@@ -2672,6 +2678,7 @@ fetch(`${API}/api/auth/me`).then(r=>{
     return;
   }
   document.getElementById('who').textContent='👤 '+u.ime_prezime;
+  document.getElementById('ov-who').textContent='👤 '+u.ime_prezime;
   document.getElementById('tab-admin-btn').textContent = isAdmin ? '📋 Sve otpremnice' : '🧾 Moje otpremnice';
   if(isAdmin || u.moze_roba_magacin) document.getElementById('link-roba-magacin').style.display='';
   if(isAdmin) document.getElementById('btn-toggle-rucni-dug').style.display='';

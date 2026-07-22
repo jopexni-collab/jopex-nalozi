@@ -213,15 +213,35 @@ router.get('/', async (req, res) => {
     let vals = [];
     let i = 1;
 
+    // Blagajnik vidi SVE otpremnice za PJ za koji je zadužen (treba mu za dalje
+    // knjiženje u Bluesoft) — ne samo one koje je on lično prodao kao komercijalista.
+    let blagajnikPJevi = [];
+    if (user?.rola !== 'admin') {
+      const bp = await pool.query('SELECT objekat_id FROM blagajnici_pj WHERE zaposleni_id=$1', [user.id]);
+      blagajnikPJevi = bp.rows.map(r => r.objekat_id);
+    }
+
     // "broj" (deep-link iz blagajne, npr. klik na OTP broj) — admin vidi BILO KOJU
-    // otpremnicu po broju, bez obzira ko ju je napravio; ostali i dalje samo svoje.
+    // otpremnicu po broju, bez obzira ko ju je napravio; ostali vide ako su komercijalista
+    // NA TOJ otpremnici ILI blagajnik za taj PJ; ostali ne vide ništa.
     if (broj) {
       where.push(`broj = $${i++}`);
       vals.push(broj);
-      if (user?.rola !== 'admin') { where.push(`komercijalista_id = $${i++}`); vals.push(user.id); }
+      if (user?.rola !== 'admin') {
+        if (blagajnikPJevi.length) {
+          where.push(`(komercijalista_id = $${i++} OR objekt_id = ANY($${i++}::int[]))`);
+          vals.push(user.id, blagajnikPJevi);
+        } else {
+          where.push(`komercijalista_id = $${i++}`); vals.push(user.id);
+        }
+      }
     } else if (user?.rola !== 'admin') {
-      where.push(`komercijalista_id = $${i++}`);
-      vals.push(user.id);
+      if (blagajnikPJevi.length) {
+        where.push(`(komercijalista_id = $${i++} OR objekt_id = ANY($${i++}::int[]))`);
+        vals.push(user.id, blagajnikPJevi);
+      } else {
+        where.push(`komercijalista_id = $${i++}`); vals.push(user.id);
+      }
     } else if (komercijalista_id) {
       where.push(`komercijalista_id = $${i++}`);
       vals.push(komercijalista_id);
@@ -306,8 +326,13 @@ router.get('/:id', async (req, res) => {
     const h = await pool.query('SELECT * FROM otpremnice WHERE id=$1', [req.params.id]);
     if (!h.rows.length) return res.status(404).json({ error: 'Nije pronađeno.' });
     const otp = h.rows[0];
-    if (user?.rola !== 'admin' && otp.komercijalista_id !== user.id)
-      return res.status(403).json({ error: 'Nema pristupa.' });
+    if (user?.rola !== 'admin' && otp.komercijalista_id !== user.id) {
+      const bp = await pool.query(
+        'SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 AND objekat_id=$2',
+        [user.id, otp.objekt_id]
+      );
+      if (!bp.rows.length) return res.status(403).json({ error: 'Nema pristupa.' });
+    }
     const s = await pool.query(
       'SELECT * FROM otpremnica_stavke WHERE otpremnica_id=$1 ORDER BY id', [req.params.id]
     );
