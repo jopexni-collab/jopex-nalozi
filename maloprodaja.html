@@ -938,6 +938,10 @@ function izaberiObjekat(objekat){
   renderKosarica();
   if(typeof promijeniKupca==='function') promijeniKupca();
   otvoriDeepLinkOtpremnicuAkoPostoji();
+  // "Moje otpremnice" — podrazumevano filtrira na PJ u koji je korisnik upravo ušao (umjesto
+  // praznog "Svi objekti"), pošto je to najčešće ono što odmah traži.
+  const filSel=document.getElementById('fil-objekat');
+  if(filSel && objekat?.id) filSel.value=String(objekat.id);
 }
 
 // Ažurira labele input polja koje spominju "(KM)" da prate valutu izabranog PJ — inače bi
@@ -2580,24 +2584,31 @@ function toggleKnjigovodstvo(id){
   if(!o||!o.javni_token){el.innerHTML='<div class="empty-msg">Nema dostupnog linka.</div>';el.classList.add('on');return;}
   const objekat=window.__objektiPoId?.[o.objekt_id];
   const emailKnjig=objekat?.email_knjigovodstvo||'';
+  const telKnjig=(objekat?.telefon_knjigovodstvo||'').replace(/[^0-9+]/g,'');
   const link=linkDokumenta(o.javni_token);
-  const poruka=encodeURIComponent(`Otpremnica ${o.broj} — ${o.objekt_naziv||''} — JoPeX\\n${link}`);
+  const poruka=encodeURIComponent(`Otpremnica ${o.broj} — ${o.objekt_naziv||''} — JoPeX\n${link}`);
+  const waHref = telKnjig ? `https://wa.me/${telKnjig.replace(/^\+/,'')}?text=${poruka}` : `https://wa.me/?text=${poruka}`;
+  const viberHref = `viber://forward?text=${poruka}`;
+  const mailHref = `mailto:${emailKnjig}?subject=${encodeURIComponent('Otpremnica '+o.broj+' — JoPeX')}&body=${poruka}`;
   el.innerHTML=`
-    <a href="viber://forward?text=${poruka}">📱 Viber</a>
-    <a href="https://wa.me/?text=${poruka}" target="_blank" rel="noopener">💬 WhatsApp</a>
-    <a href="mailto:${emailKnjig}?subject=${encodeURIComponent('Otpremnica '+o.broj+' — JoPeX')}&body=${poruka}">✉️ Email${emailKnjig?'':' (nema podešen email za ovaj PJ)'}</a>
-    <a href="#" onclick="event.preventDefault();markirajPoslatoKnjigovodstvu(${id})" style="color:var(--green);">✓ Markiraj kao poslato</a>
+    <a href="#" onclick="event.preventDefault();posaljiIMarkirajKnjigovodstvo(${id},'${viberHref}',false)">📱 Viber</a>
+    <a href="#" onclick="event.preventDefault();posaljiIMarkirajKnjigovodstvo(${id},'${waHref}',true)">💬 WhatsApp</a>
+    <a href="#" onclick="event.preventDefault();posaljiIMarkirajKnjigovodstvo(${id},'${mailHref}',false)">✉️ Email${emailKnjig?'':' (nema podešen email za ovaj PJ)'}</a>
   `;
   el.classList.add('on');
 }
 
-async function markirajPoslatoKnjigovodstvu(id){
+// Prvo ČEKA da se markiranje "poslato" upiše u bazu (i osvježi dugme), PA TEK ONDA otvara
+// Viber/WhatsApp/mail — obrnutim redoslijedom (klik odmah otvara app) je nepouzdano jer
+// browser tab "zamrzne"/pauzira JS dok se OS prebacuje na drugu aplikaciju, pa se poziv
+// serveru nikad ne završi.
+async function posaljiIMarkirajKnjigovodstvo(id, href, noviTab){
   try{
-    const r=await fetch(`${API}/api/otpremnice/${id}/oznaci-poslato-knjigovodstvu`,{method:'POST'});
-    if(!r.ok) throw new Error();
-    document.getElementById('mini-knjig-'+id).classList.remove('on');
-    loadOtpremnice();
-  }catch(e){ alert('Greška pri markiranju.'); }
+    await fetch(`${API}/api/otpremnice/${id}/oznaci-poslato-knjigovodstvu`,{method:'POST'});
+  }catch(e){ /* i ako markiranje padne, i dalje otvaramo app ispod — ne blokiramo korisnika */ }
+  await loadOtpremnice(undefined, true);
+  if(noviTab) window.open(href, '_blank');
+  else window.location.href = href;
 }
 
 function togglePosaljiKartica(id){
