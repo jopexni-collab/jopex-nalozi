@@ -202,8 +202,9 @@ function mozeEditovati(field, row){
     return !!trenutniUser.moze_ugovarati || !!(row && row.ugovorio_id===trenutniUser.id);
   }
   const statusPolja=['status','gotovo','reklamacija_dodatni_rad','nova_procjena'];
-  if(statusPolja.includes(field)) return trenutniUser.izmjena_statusa||false;
-  return trenutniUser.izmjena_naloga||false;
+  const jeSvoj=!!(row && row.ugovorio_id===trenutniUser.id);
+  if(statusPolja.includes(field)) return trenutniUser.izmjena_statusa||jeSvoj||false;
+  return trenutniUser.izmjena_naloga||jeSvoj||false;
 }
 let popRow=null, popField=null, popTd=null, popEditType=null;
 
@@ -259,7 +260,7 @@ function fd(d){
 function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function jeGotovinaOpis(v){return /^got\b/i.test(String(v||'').trim());}
-function lk(u){return u?`<a class="lk" href="${esc(u)}" target="_blank">↗</a>`:'';} 
+function lk(u){return u?`<a class="lk" href="${esc(u)}" target="_blank">🔗</a>`:'';} 
 function gv(id){return(document.getElementById(id)||{}).value||'';}
 
 // ─── KOLONE ───────────────────────────────────────────────────────────────
