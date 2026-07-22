@@ -106,20 +106,20 @@ main{max-width:760px;margin:24px auto;padding:0 16px;}
       </div>
     </div>
     <div class="row">
-      <div class="fg"><label>Link skica</label>
-        <div style="display:flex;gap:6px;">
-          <input type="text" id="link_skica" placeholder="https://..." style="flex:1;">
-          <button type="button" onclick="document.getElementById('foto-skica').click()" style="flex-shrink:0;background:#eef4fc;border:1px solid var(--blue);color:var(--blue);border-radius:6px;padding:0 12px;cursor:pointer;font-size:16px;" title="Uslikaj skicu">📷</button>
-          <input type="file" id="foto-skica" accept="image/*" capture="environment" style="display:none;" onchange="uploadSlikaZaPolje(this,'link_skica')">
-        </div>
+      <div class="fg">
+        <label style="display:flex;align-items:center;gap:6px;">Link skica
+          <button type="button" onclick="document.getElementById('foto-skica').click()" style="flex-shrink:0;background:#eef4fc;border:1px solid var(--blue);color:var(--blue);border-radius:6px;padding:1px 8px;cursor:pointer;font-size:13px;line-height:1.6;" title="Uslikaj skicu">📷</button>
+        </label>
+        <input type="text" id="link_skica" placeholder="https://...">
+        <input type="file" id="foto-skica" accept="image/*" capture="environment" style="display:none;" onchange="uploadSlikaZaPolje(this,'link_skica')">
         <div id="foto-skica-status" style="font-size:11px;color:#8b96a5;margin-top:2px;display:none;"></div>
       </div>
-      <div class="fg"><label>Link ponuda</label>
-        <div style="display:flex;gap:6px;">
-          <input type="text" id="link_ponuda" placeholder="https://..." style="flex:1;">
-          <button type="button" onclick="document.getElementById('foto-ponuda').click()" style="flex-shrink:0;background:#eef4fc;border:1px solid var(--blue);color:var(--blue);border-radius:6px;padding:0 12px;cursor:pointer;font-size:16px;" title="Uslikaj ponudu">📷</button>
-          <input type="file" id="foto-ponuda" accept="image/*" capture="environment" style="display:none;" onchange="uploadSlikaZaPolje(this,'link_ponuda')">
-        </div>
+      <div class="fg">
+        <label style="display:flex;align-items:center;gap:6px;">R. Nalog
+          <button type="button" onclick="document.getElementById('foto-ponuda').click()" style="flex-shrink:0;background:#eef4fc;border:1px solid var(--blue);color:var(--blue);border-radius:6px;padding:1px 8px;cursor:pointer;font-size:13px;line-height:1.6;" title="Uslikaj radni nalog">📷</button>
+        </label>
+        <input type="text" id="link_ponuda" placeholder="https://...">
+        <input type="file" id="foto-ponuda" accept="image/*" capture="environment" style="display:none;" onchange="uploadSlikaZaPolje(this,'link_ponuda')">
         <div id="foto-ponuda-status" style="font-size:11px;color:#8b96a5;margin-top:2px;display:none;"></div>
       </div>
     </div>
