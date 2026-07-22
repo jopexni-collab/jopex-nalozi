@@ -8,7 +8,7 @@ const pgSession  = require('connect-pg-simple')(session);
 const pool       = require('./db');
 const requireLogin = require('./requireLogin');
 const app = express();
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '15mb' })); // slike sa telefona (base64) lako prelaze 2mb
 app.use(express.urlencoded({ extended: false }));
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
