@@ -769,6 +769,9 @@ function renderObjektiListu(){
         <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Email knjigovodstva (za ovaj PJ)</label>
         <input type="email" id="edit-objekat-email-${o.id}" value="${esc(o.email_knjigovodstvo||'')}" placeholder="knjigovodja@primjer.ba" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
         <div style="font-size:10.5px;color:#8b96a5;margin:-4px 0 7px;">Svaka potvrđena otpremnica sa ovog PJ automatski se šalje na ovu adresu, plus dnevni zbirni pregled uveče.</div>
+        <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Telefon knjigovodstva (Viber/WhatsApp)</label>
+        <input type="text" id="edit-objekat-telefon-${o.id}" value="${esc(o.telefon_knjigovodstvo||'')}" placeholder="+387 6X XXX XXX" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
+        <div style="font-size:10.5px;color:#8b96a5;margin:-4px 0 7px;">Da klik na Viber/WhatsApp ide direktno na ovaj broj, kao za kupca.</div>
         <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Valuta</label>
         <select id="edit-objekat-valuta-${o.id}" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
           <option value="KM" ${o.valuta==='KM'?'selected':''}>KM</option>
@@ -793,13 +796,14 @@ async function sacuvajIzmjenuObjekta(id){
   const naziv=document.getElementById('edit-objekat-naziv-'+id).value.trim();
   const adresa=document.getElementById('edit-objekat-adresa-'+id).value.trim();
   const email=document.getElementById('edit-objekat-email-'+id).value.trim();
+  const telefon=document.getElementById('edit-objekat-telefon-'+id).value.trim();
   const valuta=document.getElementById('edit-objekat-valuta-'+id).value;
   const msg=document.getElementById('objekti-msg');
   if(!naziv){msg.style.color='red';msg.textContent='Naziv ne može biti prazan.';return;}
   try{
     const r=await fetch(`${API}/api/prodajni-objekti/${id}`,{
       method:'PATCH',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({naziv, adresa: adresa||null, email_knjigovodstvo: email||null, valuta}),
+      body:JSON.stringify({naziv, adresa: adresa||null, email_knjigovodstvo: email||null, telefon_knjigovodstvo: telefon||null, valuta}),
     });
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška pri izmjeni.');

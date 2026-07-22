@@ -2549,13 +2549,14 @@ function toggleKnjigovodstvo(id){
   if(!o||!o.javni_token){el.innerHTML='<div class="empty-msg">Nema dostupnog linka.</div>';el.classList.add('on');return;}
   const objekat=window.__objektiPoId?.[o.objekt_id];
   const emailKnjig=objekat?.email_knjigovodstvo||'';
+  const telKnjig=(objekat?.telefon_knjigovodstvo||'').replace(/[^0-9+]/g,'');
   const link=linkDokumenta(o.javni_token);
   const poruka=encodeURIComponent(`Otpremnica ${o.broj} — ${o.objekt_naziv||''} — JoPeX\\n${link}`);
+  const waHref = telKnjig ? `https://wa.me/${telKnjig.replace(/^\+/,'')}?text=${poruka}` : `https://wa.me/?text=${poruka}`;
   el.innerHTML=`
-    <a href="viber://forward?text=${poruka}">📱 Viber</a>
-    <a href="https://wa.me/?text=${poruka}" target="_blank" rel="noopener">💬 WhatsApp</a>
-    <a href="mailto:${emailKnjig}?subject=${encodeURIComponent('Otpremnica '+o.broj+' — JoPeX')}&body=${poruka}">✉️ Email${emailKnjig?'':' (nema podešen email za ovaj PJ)'}</a>
-    <a href="#" onclick="event.preventDefault();markirajPoslatoKnjigovodstvu(${id})" style="color:var(--green);">✓ Markiraj kao poslato</a>
+    <a href="viber://forward?text=${poruka}" onclick="markirajPoslatoKnjigovodstvu(${id})">📱 Viber</a>
+    <a href="${waHref}" target="_blank" rel="noopener" onclick="markirajPoslatoKnjigovodstvu(${id})">💬 WhatsApp</a>
+    <a href="mailto:${emailKnjig}?subject=${encodeURIComponent('Otpremnica '+o.broj+' — JoPeX')}&body=${poruka}" onclick="markirajPoslatoKnjigovodstvu(${id})">✉️ Email${emailKnjig?'':' (nema podešen email za ovaj PJ)'}</a>
   `;
   el.classList.add('on');
 }
