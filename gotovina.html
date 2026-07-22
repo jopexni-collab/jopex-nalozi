@@ -131,6 +131,8 @@ td.num{text-align:right;font-weight:700;}
   <div id="f-kom-izabran" style="display:none;background:#e6f4ea;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:12px;font-weight:700;">
     <span id="f-kom-ime"></span> <span style="cursor:pointer;color:var(--red);font-weight:400;" onclick="ocistiKomitenta('f')">✕ ukloni</span>
   </div>
+  <div id="f-malo-dug"></div>
+  <div id="f-nalozi-otvoreni" style="margin-bottom:10px;"></div>
   <div class="forma-grid">
     <div class="fg"><label>Datum</label><input type="date" id="f-datum"></div>
     <div class="fg"><label id="f-iznos-lbl">Iznos (KM)</label><input type="number" id="f-iznos" step="0.01" min="0" placeholder="0.00"></div>
@@ -549,11 +551,95 @@ function izaberiKomitenta(prefix, kupac){
     document.getElementById('i-opis-fg').querySelector('label').textContent='Napomena (opciono)';
     document.getElementById('i-opis').placeholder='opciono...';
   }
+  // Za naplatu — provjeri OTVORENE radne naloge I maloprodajni dug za ovog komitenta —
+  // blagajnik odmah vidi oboje, prije nego što upiše iznos.
+  if(prefix==='f'){
+    traziOtvoreneNalogeZaKomitenta(kupac.naziv);
+    prikaziMaloprodajniDug(kupac.id);
+  }
+}
+
+async function prikaziMaloprodajniDug(kupacId){
+  const cont=document.getElementById('f-malo-dug');
+  cont.innerHTML='';
+  try{
+    const r=await fetch(`${API}/api/otpremnice/saldo-kupca/${kupacId}`);
+    if(!r.ok) return;
+    const d=await r.json();
+    if(!d.saldo || d.saldo===0) return; // nema duga ni avansa — ništa se ne prikazuje
+    const duguje=d.saldo<0;
+    cont.innerHTML=`
+      <div style="background:${duguje?'#fce8e6':'#e6f4ea'};border:1px solid ${duguje?'#f3c7c2':'#b9e4c9'};border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px;">
+        <b style="color:${duguje?'var(--red)':'var(--green)'};">${duguje?'⚠ Duguje u maloprodaji: '+fm(Math.abs(d.saldo))+' KM':'✓ Ima avans u maloprodaji: '+fm(d.saldo)+' KM'}</b>
+        <div style="color:#6b7a8d;margin-top:2px;">Unesena naplata ispod će se automatski pokriti ${duguje?'ovaj dug':'... (ako se doda još avansa)'}.</div>
+      </div>`;
+  }catch(e){ /* tiho — pomoćna informacija, ne blokira unos */ }
+}
+
+async function traziOtvoreneNalogeZaKomitenta(naziv){
+  const cont=document.getElementById('f-nalozi-otvoreni');
+  cont.innerHTML='';
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/za-naplatu?q=${encodeURIComponent(naziv)}`);
+    if(!r.ok) return; // nema dozvolu ili greška — tiho preskoči, ne blokira normalan unos
+    const nalozi=await r.json();
+    if(!nalozi.length) return;
+    cont.innerHTML=`<div style="font-size:11px;font-weight:700;color:#6b7a8d;margin-bottom:6px;">📋 Otvoreni radni nalozi za ovog naručioca:</div>` +
+      nalozi.map(n=>`
+        <div style="background:#fff8e6;border:1px solid #f0d896;border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:12px;">
+          <div style="font-weight:700;">#${n.r_br} — ${esc(n.zadatak||'')}</div>
+          <div style="color:#6b7a8d;margin:2px 0 6px;">Ugovoreno: ${fm(n.ugovorena_suma)} KM &middot; Avans: ${fm(n.avans)} KM &middot; Za naplatu: ${fm(n.za_naplatu)} KM</div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn-sm" style="background:#e6f4ea;color:var(--green);" onclick="otvoriNaplataNaloga(${n.r_br},'avans',${n.za_naplatu})">+ Avans</button>
+            <button class="btn-sm" style="background:#eef4fc;color:var(--blue);" onclick="otvoriNaplataNaloga(${n.r_br},'sve',${n.za_naplatu})">✓ Naplata sve (${fm(n.za_naplatu)} KM)</button>
+          </div>
+          <div id="naplata-nalog-${n.r_br}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px dashed #f0d896;"></div>
+        </div>
+      `).join('');
+  }catch(e){ /* tiho — ovo je pomoćna funkcija, ne smije blokirati osnovni unos */ }
+}
+
+function otvoriNaplataNaloga(rBr, tip, zaNaplatu){
+  const el=document.getElementById('naplata-nalog-'+rBr);
+  const otvoren=el.style.display==='block';
+  document.querySelectorAll('[id^="naplata-nalog-"]').forEach(d=>d.style.display='none');
+  if(otvoren) return;
+  el.style.display='block';
+  const podrazumevano = tip==='sve' ? zaNaplatu : '';
+  el.innerHTML=`
+    <div style="font-size:11px;font-weight:600;margin-bottom:4px;">${tip==='avans'?'Iznos avansa':'Iznos (cijela naplata)'} (KM)</div>
+    <input type="number" id="naplata-iznos-${rBr}" step="0.01" min="0.01" value="${podrazumevano}" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:5px;margin-bottom:6px;">
+    <button class="btn-sm" style="width:100%;background:var(--green);color:#fff;" onclick="potvrdiNaplatuNaloga(${rBr},'${tip}')">✓ Potvrdi — naplaćeno i predano u blagajnu</button>
+    <div id="naplata-msg-${rBr}" style="font-size:11px;margin-top:4px;"></div>
+  `;
+}
+
+async function potvrdiNaplatuNaloga(rBr, tip){
+  const iznos=parseFloat(document.getElementById('naplata-iznos-'+rBr).value);
+  const msg=document.getElementById('naplata-msg-'+rBr);
+  if(!(iznos>0)){ msg.style.color='red'; msg.textContent='Unesite iznos veći od 0.'; return; }
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/${rBr}/naplata-blagajna`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({tip, iznos}),
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    msg.style.color='var(--green)';
+    msg.textContent='✓ Naplaćeno i odmah upisano u blagajnu (predano).';
+    await load(); await loadSume();
+    if(blagajnaObjektId) await ucitajBlagajnaStanje();
+    setTimeout(()=>{ ocistiKomitenta('f'); document.getElementById('f-nalozi-otvoreni').innerHTML=''; }, 1200);
+  }catch(e){ msg.style.color='red'; msg.textContent='✗ '+e.message; }
 }
 
 function ocistiKomitenta(prefix){
   komitentIzabran[prefix]=null;
   document.getElementById(prefix+'-kom-izabran').style.display='none';
+  if(prefix==='f'){
+    document.getElementById('f-nalozi-otvoreni').innerHTML='';
+    document.getElementById('f-malo-dug').innerHTML='';
+  }
   if(prefix==='i'){
     document.getElementById('i-opis-fg').querySelector('label').textContent='Opis (razlog isplate) *';
     document.getElementById('i-opis').placeholder='npr. gorivo, sitna popravka...';

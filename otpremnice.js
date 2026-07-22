@@ -317,6 +317,24 @@ router.get('/saldo-po-kupcima', async (req, res) => {
   }
 });
 
+// GET /api/otpremnice/saldo-kupca/:kupacId - saldo JEDNOG kupca (za blagajnu, kad
+// blagajnik naplaćuje — treba brzo da vidi da li kupac duguje, bez povlačenja cijele
+// liste svih kupaca). MORA biti prije "/:id" ispod — vidi napomenu gore.
+router.get('/saldo-kupca/:kupacId', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT COALESCE(SUM(CASE WHEN p.valuta='EUR' THEN t.iznos*1.95 ELSE t.iznos END),0) AS saldo
+       FROM kupac_transakcije t
+       LEFT JOIN prodajni_objekti p ON p.id = t.objekt_id
+       WHERE t.kupac_id = $1`,
+      [req.params.kupacId]
+    );
+    res.json({ saldo: +parseFloat(r.rows[0]?.saldo || 0).toFixed(2) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const user = req.session?.user;

@@ -77,6 +77,35 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/proizvodnja/za-naplatu?q=ime - pretraga naloga po naručiocu SA otvorenim
+// avansom/naplatom, za blagajnika koji direktno naplaćuje u blagajni (ne kroz lista.html).
+// Dostupno i blagajniku (ne samo Ponude/admin) — bez ovoga blagajnik ne bi mogao ni da
+// vidi koliko treba da naplati, iako mu je to posao.
+router.get('/za-naplatu', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+  const q = (req.query.q || '').trim();
+  if (q.length < 2) return res.json([]);
+  const smijeVidjeti = user.rola === 'admin' || user.moze_ugovarati || await jeBlagajnik(user.id);
+  if (!smijeVidjeti) return res.status(403).json({ error: 'Nema pristupa.' });
+  try {
+    const r = await pool.query(
+      `SELECT r_br, narucilac, zadatak, ugovorena_suma, avans, avans_opis,
+              (COALESCE(ugovorena_suma,0) - COALESCE(avans,0)) AS za_naplatu,
+              naplaceno, naplaceno_opis
+       FROM proizvodnja_jopex
+       WHERE narucilac ILIKE $1 AND COALESCE(stornirano,false)=false
+         AND COALESCE(ugovorena_suma,0) > 0
+         AND (naplaceno = false OR naplaceno IS NULL)
+       ORDER BY r_br DESC LIMIT 15`,
+      [`%${q}%`]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/proizvodnja/:r_br - jedan nalog
 router.get('/:r_br', async (req, res) => {
   const user = req.session?.user;
@@ -196,6 +225,65 @@ function izvuciPrimio(val) {
   const m = /^got\s+(\S+)/i.exec(String(val || '').trim());
   return m ? m[1] : 'Nepoznato';
 }
+async function jeBlagajnik(userId) {
+  const r = await pool.query('SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 LIMIT 1', [userId]);
+  return r.rows.length > 0;
+}
+
+// POST /api/proizvodnja/:r_br/naplata-blagajna - blagajnik DIREKTNO naplaćuje avans ili
+// cijeli iznos u blagajni. Za razliku od uređivanja preko lista.html (koje samo upisuje
+// opis-tekst i ČEKA da neko naknadno klikne "Predano"), OVO odmah upisuje gotovinski zapis
+// KAO PREDAT — blagajnik je u ISTOM trenutku i naplatio i primio, nema smisla da "preda
+// sam sebi" naknadno.
+router.post('/:r_br/naplata-blagajna', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+  const smijeNaplatiti = user.rola === 'admin' || user.moze_ugovarati || await jeBlagajnik(user.id);
+  if (!smijeNaplatiti) return res.status(403).json({ error: 'Nema pristupa.' });
+
+  const { tip, iznos } = req.body; // tip: 'avans' | 'sve'
+  const iznosNum = parseFloat(iznos);
+  if (!['avans', 'sve'].includes(tip) || !(iznosNum > 0))
+    return res.status(400).json({ error: 'Neispravni podaci (tip mora biti avans/sve, iznos > 0).' });
+
+  try {
+    const n = await pool.query(
+      'SELECT r_br, narucilac, ugovorena_suma, avans FROM proizvodnja_jopex WHERE r_br=$1',
+      [req.params.r_br]
+    );
+    if (!n.rows.length) return res.status(404).json({ error: 'Nalog nije pronađen.' });
+    const nalog = n.rows[0];
+    const opisMarker = `got ${user.ime_prezime}`;
+    const napomenaOpisa = tip === 'avans'
+      ? `Avans - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''} — naplaćeno direktno u blagajni`
+      : `Naplata - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''} — naplaćeno direktno u blagajni`;
+
+    if (tip === 'avans') {
+      await pool.query('DELETE FROM gotovina WHERE nalog_r_br=$1::text AND opis LIKE \'Avans%\'', [String(nalog.r_br)]);
+      await pool.query(
+        `UPDATE proizvodnja_jopex SET avans=$1, avans_opis=$2 WHERE r_br=$3`,
+        [iznosNum, opisMarker, nalog.r_br]
+      );
+    } else {
+      await pool.query('DELETE FROM gotovina WHERE nalog_r_br=$1::text AND opis LIKE \'Naplata%\'', [String(nalog.r_br)]);
+      await pool.query(
+        `UPDATE proizvodnja_jopex SET naplaceno=true, naplaceno_opis=$1 WHERE r_br=$2`,
+        [opisMarker, nalog.r_br]
+      );
+    }
+
+    const g = await pool.query(
+      `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, predao_blagajniku, datum_predaje, preuzeo_ime)
+       VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, true, now(), $2)
+       RETURNING id`,
+      [iznosNum, user.ime_prezime, String(nalog.r_br), napomenaOpisa]
+    );
+
+    res.json({ ok: true, gotovina_id: g.rows[0].id, nalog_r_br: nalog.r_br });
+  } catch (err) {
+    res.status(500).json({ error: 'Greška: ' + err.message });
+  }
+});
 
 // PATCH /api/proizvodnja/:r_br - djelimično ažuriranje
 router.patch('/:r_br', async (req, res) => {
@@ -204,22 +292,33 @@ router.patch('/:r_br', async (req, res) => {
 
   const postojeciRes = await pool.query('SELECT ugovorio_id FROM proizvodnja_jopex WHERE r_br=$1', [req.params.r_br]);
   if (!postojeciRes.rows.length) return res.status(404).json({ error: 'Nalog nije pronađen.' });
+  const jeSvoj = postojeciRes.rows[0].ugovorio_id === user?.id;
 
   // "Ponude" dozvola (moze_ugovarati) — vidi/uređuje finansije SVIH naloga. Inače, samo
   // ako je osoba upisana kao "Ugovorio" ZA TAJ nalog (kreirao=ugovorio, isti koncept).
-  const smijeFinansije = isAdmin || !!user?.moze_ugovarati || postojeciRes.rows[0].ugovorio_id === user?.id;
+  const smijeFinansije = isAdmin || !!user?.moze_ugovarati || jeSvoj;
 
-  const ALLOWED_BASE = [
-    'zadatak','prioritet','narucilac','materijal','status','pocetak',
-    'planirani_zavrsetak','gotovo','reklamacija_dodatni_rad','napomena',
-    'link_skica','link_ponuda','nova_procjena',
+  // Opšta polja (zadatak, naručilac, itd.) — traži "Mijenja nalog" dozvolu, OSIM na
+  // SOPSTVENOM nalogu, koji vlasnik smije uređivati bez obzira na tu dozvolu (izuzetak).
+  const smijeOpsta = isAdmin || !!user?.izmjena_naloga || jeSvoj;
+  // Status polja — traži "Mijenja status" dozvolu, isti izuzetak za sopstveni nalog.
+  const smijeStatus = isAdmin || !!user?.izmjena_statusa || jeSvoj;
+
+  const OPSTA_POLJA = [
+    'zadatak','prioritet','narucilac','materijal','pocetak',
+    'planirani_zavrsetak','napomena','link_skica','link_ponuda',
   ];
+  const STATUS_POLJA = ['status', 'gotovo', 'reklamacija_dodatni_rad', 'nova_procjena'];
   const ALLOWED_ADMIN = [
     'ugovorena_suma','avans','avans_opis','naplata_detalji',
     'naplaceno_fakturisano','dodatni_rad_napomena','naplaceno','naplaceno_opis',
   ];
 
-  const allowed = smijeFinansije ? [...ALLOWED_BASE, ...ALLOWED_ADMIN] : ALLOWED_BASE;
+  const allowed = [
+    ...(smijeOpsta ? OPSTA_POLJA : []),
+    ...(smijeStatus ? STATUS_POLJA : []),
+    ...(smijeFinansije ? ALLOWED_ADMIN : []),
+  ];
   const sets = [], vals = [];
   let i = 1;
 
