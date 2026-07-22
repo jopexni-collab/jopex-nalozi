@@ -184,6 +184,10 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 /* ── ADMIN: SVE OTPREMNICE ───────────────────────────────────── */
 .filt-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;}
+.btn-brzi-period{font:inherit;font-size:12px;font-weight:600;padding:6px 14px;border:1px solid var(--border);
+  border-radius:16px;background:#fff;color:var(--dark);cursor:pointer;}
+.btn-brzi-period:hover{background:#f0f4f9;}
+.btn-brzi-period.active{background:var(--blue);color:#fff;border-color:var(--blue);}
 .filt-row select,.filt-row input[type=date]{font:inherit;font-size:12.5px;padding:8px 10px;border:1px solid var(--border);
   border-radius:8px;min-height:40px;flex:1;min-width:110px;}
 .filt-row label.chk{font-size:11.5px;color:#6b7a8d;display:flex;align-items:center;gap:5px;white-space:nowrap;}
@@ -548,6 +552,12 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 <!-- ═══ TAB: ADMIN OTPREMNICE (čisto kontrola komercijalista) ═══ -->
 <div class="view" id="view-admin">
+  <div class="filt-row" style="gap:6px;">
+    <button class="btn-brzi-period" onclick="postaviBrziPeriod('danas',this)">Danas</button>
+    <button class="btn-brzi-period" onclick="postaviBrziPeriod('juce',this)">Juče</button>
+    <button class="btn-brzi-period" onclick="postaviBrziPeriod('7dana',this)">7 dana</button>
+    <button class="btn-brzi-period" onclick="postaviBrziPeriod('mjesec',this)">Ovaj mjesec</button>
+  </div>
   <div class="filt-row">
     <select id="fil-objekat" onchange="loadOtpremnice()"><option value="">Svi objekti</option></select>
     <input type="date" id="fil-od" onchange="loadOtpremnice()">
@@ -2380,6 +2390,29 @@ async function popuniFilterObjekata(){
   }catch(e){}
 }
 
+function postaviBrziPeriod(period, btn){
+  const danas=new Date();
+  const fmtDate=d=>d.toISOString().split('T')[0];
+  let od, do_;
+  if(period==='danas'){
+    od=do_=fmtDate(danas);
+  }else if(period==='juce'){
+    const j=new Date(danas); j.setDate(j.getDate()-1);
+    od=do_=fmtDate(j);
+  }else if(period==='7dana'){
+    const p=new Date(danas); p.setDate(p.getDate()-6);
+    od=fmtDate(p); do_=fmtDate(danas);
+  }else if(period==='mjesec'){
+    od=fmtDate(new Date(danas.getFullYear(),danas.getMonth(),1));
+    do_=fmtDate(danas);
+  }
+  document.getElementById('fil-od').value=od;
+  document.getElementById('fil-do').value=do_;
+  document.querySelectorAll('.btn-brzi-period').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  loadOtpremnice();
+}
+
 async function loadOtpremnice(brojOverride, tiho){
   const cont=document.getElementById('otp-list');
   if(!tiho) cont.innerHTML='<div class="spinner">Učitavanje...</div>';
@@ -2428,7 +2461,7 @@ async function loadOtpremnice(brojOverride, tiho){
       }
       return;
     }
-    const ukupno=rows.reduce((s,o)=>s+parseFloat(o.ukupan_iznos||0),0);
+    const ukupno=rows.filter(o=>o.status!=='stornirana').reduce((s,o)=>s+parseFloat(o.ukupan_iznos||0),0);
     const neto=ukupno-isplateSuma;
     totalDiv.style.display='block';
     totalDiv.innerHTML=`${fmMoney(ukupno)}<span class="cnt">${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'}${isplateSuma>0?` &middot; Isplate: − ${fmMoney(isplateSuma)} &middot; Neto: ${fmMoney(neto)}`:''}</span>`;
