@@ -36,8 +36,14 @@ router.get('/', async (req, res) => {
     if (primio) { where.push(`primio = $${i++}`); vals.push(primio); }
     if (izvor) { where.push(`izvor = $${i++}`); vals.push(izvor); }
     if (nepredano === 'true') { where.push(`predao_blagajniku = false`); }
-    // Blagajnik je FORSIRAN na SVOJE PJ (jedan ili više), bez obzira šta klijent pošalje.
-    if (req.blagajnikObjektNazivi) { where.push(`g.objekt_naziv = ANY($${i++}::text[])`); vals.push(req.blagajnikObjektNazivi); }
+    // Blagajnik je FORSIRAN da vidi SVOJE PJ (jedan ili više) — ALI i sve što je LIČNO
+    // primio/kreirao (npr. "Nova naplata" za radni nalog, koja nema objekt_naziv jer nije
+    // vezana za maloprodajni PJ) — inače bi mu takvi zapisi bili nevidljivi u sopstvenom
+    // pregledu iako ih je on sam upisao i treba da ih razduži.
+    if (req.blagajnikObjektNazivi) {
+      where.push(`(g.objekt_naziv = ANY($${i++}::text[]) OR g.primio = $${i++})`);
+      vals.push(req.blagajnikObjektNazivi, req.session.user.ime_prezime);
+    }
     // "Nalog/Otp" kolona (g.nalog_r_br) sad drži i broj radnog naloga i broj otpremnice iz
     // maloprodaje (tekst, npr. "OTP-2026-000123") — zato je tip kolone VARCHAR. Ovdje se
     // poredi kao tekst (p.r_br::text), inače bi Postgres bacio grešku tipa na ne-brojčane
@@ -178,8 +184,8 @@ router.post('/', async (req, res) => {
     // nema "predaje" od nekog drugog, pa se odmah računa u "Trenutno u blagajni" (bez
     // čekanja da neko drugi to potvrdi). I dalje se vidi u listi za nadzor/reviziju.
     const r = await pool.query(
-      `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv, predao_blagajniku, datum_predaje)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true, now()) RETURNING *`,
+      `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv, predao_blagajniku, datum_predaje, preuzeo_ime)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, now(), $3) RETURNING *`,
       [datum || new Date().toISOString().split('T')[0], iznos, primio,
        izvor || 'Proizvodnja', nalog_r_br || null, opis || null, objekt_naziv || null]
     );
