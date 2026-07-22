@@ -2463,8 +2463,15 @@ async function loadOtpremnice(brojOverride, tiho){
     }
     const ukupno=rows.filter(o=>o.status!=='stornirana').reduce((s,o)=>s+parseFloat(o.ukupan_iznos||0),0);
     const neto=ukupno-isplateSuma;
+    const brojStorno=rows.filter(o=>o.status==='stornirana').length;
+    const brojKupaca=new Set(rows.map(o=>o.kupac_id||o.kupac_naziv||'—')).size;
     totalDiv.style.display='block';
-    totalDiv.innerHTML=`${fmMoney(ukupno)}<span class="cnt">${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'}${isplateSuma>0?` &middot; Isplate: − ${fmMoney(isplateSuma)} &middot; Neto: ${fmMoney(neto)}`:''}</span>`;
+    const detalji=[
+      `${rows.length} otp${rows.length===1?'.':'.'}`,
+      brojStorno>0?`${brojStorno} storno`:null,
+      `${brojKupaca} kup${brojKupaca===1?'ac':brojKupaca<5?'ca':'aca'}`,
+    ].filter(Boolean).join(' &middot; ');
+    totalDiv.innerHTML=`${fmMoney(ukupno)}<span class="cnt">${detalji}${isplateSuma>0?` &middot; Isplate: − ${fmMoney(isplateSuma)} &middot; Neto: ${fmMoney(neto)}`:''}</span>`;
     const stLabel={kreirana:'Kreirana',potvrdjena:'Potvrđena',stornirana:'Stornirana'};
     cont.innerHTML=rows.map(o=>`
       <div class="otp-card ${o.ima_odstupanje?'ima-odstupanje':''}" onclick="prikaziDetaljeOtpremnice(${o.id})" style="${o.status==='stornirana'?'opacity:.55;filter:grayscale(1);':o.novac_predat?'background:#f0f9f3;':''}">
