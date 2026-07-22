@@ -795,6 +795,24 @@ router.post('/rucni-dug', async (req, res) => {
   }
 });
 
+// POST /api/otpremnice/:id/oznaci-poslato-knjigovodstvu - ručno markiranje "poslato" BEZ
+// slanja emaila — koristi se kad se otpremnica šalje knjigovodstvu preko Viber/WhatsApp/
+// lokalnog mail klijenta (ne preko server SMTP-a), pa server ne može sam da zna da je
+// stvarno poslato — korisnik to potvrđuje ručno nakon što stvarno pošalje.
+router.post('/:id/oznaci-poslato-knjigovodstvu', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `UPDATE otpremnice SET poslato_knjigovodstvu=true, poslato_knjigovodstvu_vrijeme=now()
+       WHERE id=$1 RETURNING poslato_knjigovodstvu_vrijeme`,
+      [req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Otpremnica nije pronađena.' });
+    res.json({ ok: true, poslato_vrijeme: r.rows[0].poslato_knjigovodstvu_vrijeme });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/otpremnice/:id/posalji-knjigovodstvu - ručno (ponovo) slanje, npr. ako
 // automatski email nije prošao, ili PJ nije imao podešenu adresu u trenutku prodaje.
 router.post('/:id/posalji-knjigovodstvu', async (req, res) => {
