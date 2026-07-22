@@ -132,4 +132,23 @@ router.post('/ponuda-json', async (req, res) => {
   }
 });
 
+// POST /api/upload/slika - brz upload jedne slike (npr. skica ili ponuda uslikana
+// telefonom direktno u brzoj formi index.html) — vraća link, bez potrebe za R.Br. ili
+// nazivom naloga (koji u tom trenutku možda još nije ni sačuvan).
+router.post('/slika', async (req, res) => {
+  try {
+    const { slika_b64, tip } = req.body;
+    if (!slika_b64) return res.status(400).json({ error: 'slika_b64 je obavezno.' });
+    const buf = Buffer.from(slika_b64, 'base64');
+    const ts = Date.now();
+    const rand = Math.random().toString(36).slice(2, 8);
+    const folder = tip === 'ponuda' ? 'ponude' : 'skice';
+    const key = `${folder}/${ts}-${rand}.jpg`;
+    const link = await uploadToR2(key, buf, 'image/jpeg');
+    res.json({ ok: true, link });
+  } catch (err) {
+    res.status(500).json({ error: 'Greška pri uploadu slike: ' + err.message });
+  }
+});
+
 module.exports = router;

@@ -106,8 +106,22 @@ main{max-width:760px;margin:24px auto;padding:0 16px;}
       </div>
     </div>
     <div class="row">
-      <div class="fg"><label>Link skica</label><input type="text" id="link_skica" placeholder="https://..."></div>
-      <div class="fg"><label>Link ponuda</label><input type="text" id="link_ponuda" placeholder="https://..."></div>
+      <div class="fg"><label>Link skica</label>
+        <div style="display:flex;gap:6px;">
+          <input type="text" id="link_skica" placeholder="https://..." style="flex:1;">
+          <button type="button" onclick="document.getElementById('foto-skica').click()" style="flex-shrink:0;background:#eef4fc;border:1px solid var(--blue);color:var(--blue);border-radius:6px;padding:0 12px;cursor:pointer;font-size:16px;" title="Uslikaj skicu">📷</button>
+          <input type="file" id="foto-skica" accept="image/*" capture="environment" style="display:none;" onchange="uploadSlikaZaPolje(this,'link_skica')">
+        </div>
+        <div id="foto-skica-status" style="font-size:11px;color:#8b96a5;margin-top:2px;display:none;"></div>
+      </div>
+      <div class="fg"><label>Link ponuda</label>
+        <div style="display:flex;gap:6px;">
+          <input type="text" id="link_ponuda" placeholder="https://..." style="flex:1;">
+          <button type="button" onclick="document.getElementById('foto-ponuda').click()" style="flex-shrink:0;background:#eef4fc;border:1px solid var(--blue);color:var(--blue);border-radius:6px;padding:0 12px;cursor:pointer;font-size:16px;" title="Uslikaj ponudu">📷</button>
+          <input type="file" id="foto-ponuda" accept="image/*" capture="environment" style="display:none;" onchange="uploadSlikaZaPolje(this,'link_ponuda')">
+        </div>
+        <div id="foto-ponuda-status" style="font-size:11px;color:#8b96a5;margin-top:2px;display:none;"></div>
+      </div>
     </div>
     <div class="row" id="fin-row" style="display:none;">
       <div class="fg"><label>Ugovorena suma (KM)</label><input type="number" id="suma" step="0.01" min="0" value="0"></div>
@@ -127,6 +141,38 @@ function prikaziSlobodanZadatak(){
   const polje=document.getElementById('zadatak-slobodno');
   polje.style.display=izabrano==='__slobodno__'?'block':'none';
   if(izabrano==='__slobodno__') polje.focus();
+}
+
+async function uploadSlikaZaPolje(inputEl, targetFieldId){
+  const file=inputEl.files?.[0];
+  if(!file) return;
+  const tip=targetFieldId==='link_ponuda'?'ponuda':'skica';
+  const statusEl=document.getElementById(inputEl.id+'-status');
+  statusEl.style.display='block';
+  statusEl.style.color='#8b96a5';
+  statusEl.textContent='📤 Otpremanje slike...';
+  try{
+    const b64=await new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(reader.result.split(',')[1]);
+      reader.onerror=reject;
+      reader.readAsDataURL(file);
+    });
+    const r=await fetch(API+'/api/upload/slika',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({slika_b64:b64, tip}),
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška pri otpremanju.');
+    document.getElementById(targetFieldId).value=d.link;
+    statusEl.style.color='var(--green)';
+    statusEl.textContent='✓ Slika otpremljena i link popunjen.';
+  }catch(err){
+    statusEl.style.color='var(--red)';
+    statusEl.textContent='✗ '+err.message;
+  }finally{
+    inputEl.value=''; // resetuj da se ista slika moze ponovo izabrati ako treba
+  }
 }
 
 async function checkAuth(){
