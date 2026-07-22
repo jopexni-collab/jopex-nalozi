@@ -37,7 +37,7 @@ function requireLoginOrApiKey(req, res, next) {
   const apiKey = req.headers['x-api-key'] || req.query.api_key;
   if (apiKey && apiKey === process.env.API_KEY) {
     req.session = req.session || {};
-    req.session.user = { rola: 'admin', ime_prezime: 'JoPeX' };
+    req.session.user = { rola: 'admin', ime_prezime: 'JoPeX', izAPIKljuca: true };
     return next();
   }
   return res.status(401).json({ error: 'Morate biti prijavljeni.' });

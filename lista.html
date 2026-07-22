@@ -282,7 +282,13 @@ function getCols(){
     {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center">${lk(r.link_skica)}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
     {k:'link_ponuda',l:'R.Nalog',w:50,filter:null,render:r=>`<td class="center">${lk(r.link_ponuda)}</td>`,edit:{type:'text',field:'link_ponuda',label:'Link radni nalog'}},
   ];
-  const mozeVidjetiFin=r=>isAdmin||!!(trenutniUser&&trenutniUser.moze_ugovarati)||!!(trenutniUser&&r.ugovorio_id===trenutniUser.id);
+  // "Velika ponuda" (Generator ponuda alat) — samo admin/Ponude vide finansije, usko.
+  // "Mala ponuda" (brza forma) — svako ko radi sa nalozima (unos/status/izmjena) vidi.
+  const mozeVidjetiFin=r=>{
+    if(isAdmin||!!(trenutniUser&&trenutniUser.moze_ugovarati)) return true;
+    if(r.izvor==='mala_ponuda') return !!(trenutniUser&&(trenutniUser.unos_naloga||trenutniUser.izmjena_statusa||trenutniUser.izmjena_naloga));
+    return false;
+  };
   const fin=[
     {k:'ugovorena_suma',l:'Ugovoreno',w:90,filter:null,render:r=>mozeVidjetiFin(r)?`<td class="num">${fm(r.ugovorena_suma)}</td>`:'<td class="num">—</td>',edit:{type:'number',field:'ugovorena_suma',label:'Ugovorena suma (KM)'}},
     {k:'avans',l:'Avans',w:80,filter:null,render:r=>{

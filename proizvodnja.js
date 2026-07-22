@@ -31,7 +31,8 @@ const BASE_COLS = `
   (p.planirani_zavrsetak - CURRENT_DATE) AS broj_dana,
   p.gotovo, p.reklamacija_dodatni_rad, p.napomena,
   p.link_skica, p.link_ponuda, p.datum_kreiranja, p.nova_procjena,
-  p.naplaceno, p.naplaceno_opis, COALESCE(p.stornirano,false) AS stornirano
+  p.naplaceno, p.naplaceno_opis, COALESCE(p.stornirano,false) AS stornirano,
+  COALESCE(p.izvor,'velika_ponuda') AS izvor
 `;
 
 // Finansijska polja (iz ADMIN_COLS) — vidljiva adminu, ILI osobi koja je upisana kao
@@ -41,15 +42,19 @@ const FINANSIJSKA_POLJA = ['ugovorena_suma', 'avans', 'avans_opis', 'za_naplatu'
   'naplata_detalji', 'naplaceno_fakturisano', 'dodatni_rad_napomena',
   'avans_predano', 'naplata_predano'];
 
-// Finansijska polja (iz ADMIN_COLS) — vidljiva adminu, bilo kome ko ima dozvolu "Ponude"
-// (moze_ugovarati, vidi SVE naloge), ILI osobi koja je upisana kao "Ugovorio" za TAJ
-// KONKRETAN nalog — a ko kreira nalog automatski POSTAJE "Ugovorio" na njemu (osim ako
-// je Ponude/admin, koji smiju da izaberu nekog drugog). "Kreirao" i "Ugovorio" su
-// namjerno isto — nema odvojenog koncepta.
+// Finansijska polja (iz ADMIN_COLS) — pravilo zavisi od TIPA naloga:
+//   "Velika ponuda" (kreirana preko Generator ponuda alata) — SAMO admin i "Ponude"
+//   dozvola (moze_ugovarati) vide finansije. Uska vidljivost, kao i do sad.
+//   "Mala ponuda" (kreirana preko brze forme) — SVAKO ko uopšte radi sa nalozima
+//   (Unos naloga / Mijenja status / Mijenja nalog) MOŽE VIDJETI finansije (treba da
+//   zna cijenu da bi mogao da isporuči umjesto odsutnog kolege) — ali NE MOŽE MIJENJATI
+//   (to ostaje admin/Ponude/kreator, vidi PATCH rutu ispod).
 function filtrirajFinansije(rows, user) {
-  if (user?.rola === 'admin' || user?.moze_ugovarati) return rows;
   return rows.map(row => {
-    if (row.ugovorio_id === user?.id) return row; // svoj nalog — vidi sve
+    if (user?.rola === 'admin' || user?.moze_ugovarati) return row; // vidi sve, uvijek
+    const jeMalaPonuda = row.izvor === 'mala_ponuda';
+    const smijeCitati = jeMalaPonuda && !!(user?.unos_naloga || user?.izmjena_statusa || user?.izmjena_naloga);
+    if (smijeCitati) return row;
     const kopija = { ...row };
     for (const polje of FINANSIJSKA_POLJA) delete kopija[polje];
     return kopija;
@@ -117,6 +122,10 @@ router.post('/', async (req, res) => {
   const smijeBiratiUgovorio = user?.rola === 'admin' || !!user?.moze_ugovarati;
   const stvarniUgovorioId = smijeBiratiUgovorio ? (ugovorio_id || user?.id || null) : (user?.id || null);
 
+  // "Velika ponuda" = stiglo preko Generator ponuda alata (API ključ, ne prava sesija).
+  // "Mala ponuda" = neko se stvarno prijavio i popunio brzu formu (index.html).
+  const izvorNaloga = user?.izAPIKljuca ? 'velika_ponuda' : 'mala_ponuda';
+
   try {
     let ugovorioIme = null;
     if (stvarniUgovorioId === user?.id) {
@@ -136,8 +145,8 @@ router.post('/', async (req, res) => {
       insertQuery = `INSERT INTO proizvodnja_jopex
         (r_br, zadatak, prioritet, ugovorio_id, ugovorio, narucilac, materijal,
          status, pocetak, planirani_zavrsetak, napomena, link_skica,
-         link_ponuda, ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+         link_ponuda, ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad, izvor)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
        ON CONFLICT (r_br) DO NOTHING
        RETURNING r_br, zadatak, narucilac, ugovorena_suma, status`;
       insertVals = [
@@ -150,13 +159,14 @@ router.post('/', async (req, res) => {
         napomena || null, link_skica || null, link_ponuda || null,
         ugovorena_suma ?? 0, avans ?? 0,
         gotovo || false, reklamacija_dodatni_rad || null,
+        izvorNaloga,
       ];
     } else {
       insertQuery = `INSERT INTO proizvodnja_jopex
         (zadatak, prioritet, ugovorio_id, ugovorio, narucilac, materijal,
          status, pocetak, planirani_zavrsetak, napomena, link_skica,
-         link_ponuda, ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+         link_ponuda, ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad, izvor)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        RETURNING r_br, zadatak, narucilac, ugovorena_suma, status`;
       insertVals = [
         zadatak, prioritet || 'Normal',
@@ -167,6 +177,7 @@ router.post('/', async (req, res) => {
         napomena || null, link_skica || null, link_ponuda || null,
         ugovorena_suma ?? 0, avans ?? 0,
         gotovo || false, reklamacija_dodatni_rad || null,
+        izvorNaloga,
       ];
     }
     const r = await pool.query(insertQuery, insertVals);
