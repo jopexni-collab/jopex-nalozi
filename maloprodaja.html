@@ -1753,13 +1753,13 @@ function izgradiIDodajStavku(){
 
   if(!kolicina||isNaN(kolicina)||kolicina<=0){alert('Unesite ispravnu količinu.');return false;}
 
-  // Stanje mora pokriti SVE što je do sad dodano za ovaj artikal u ovoj sesiji unosa +
-  // ono što se upravo dodaje (ne samo ovu jednu stavku), inače bi moglo da se doda više
-  // dimenzija nego što fizički ima na stanju.
+  // Stanje ne blokira prodaju (dozvoljeno je da ode u minus — npr. kamen, prirodan
+  // materijal, stvarna količina se često razlikuje od upisane u šifrarniku) — samo
+  // upozoravamo komercijalistu da nastavi svjesno.
   const vecUKosarici=kosarica.filter(k=>k.roba_id===dasArtikal.id).reduce((s,k)=>s+k.kolicina,0);
   if(vecUKosarici+kolicina>parseFloat(dasArtikal.stanje)){
-    alert(`Nema dovoljno na stanju (raspoloživo: ${dasArtikal.stanje} ${dasArtikal.jed_mjera}, već dodano u ovoj prodaji: ${vecUKosarici}). Napomena: stanje je vođeno u jedinici iz šifrarnika — provjerite da li se poklapa sa izabranom jedinicom.`);
-    return false;
+    const manjak=+(vecUKosarici+kolicina-parseFloat(dasArtikal.stanje)).toFixed(3);
+    if(!confirm(`⚠ Stanje nije dovoljno za "${dasArtikal.naziv}" (raspoloživo: ${dasArtikal.stanje} ${dasArtikal.jed_mjera}, već dodano u ovoj prodaji: ${vecUKosarici}, nedostaje ${manjak} ${dasArtikal.jed_mjera}).\n\nStanje će otići u MINUS. Nastaviti?`)) return false;
   }
 
   const postojeciIdx=kosarica.findIndex(k=>k.roba_id===dasArtikal.id && k.jed_mjera===dasJedinica && !duzina_cm && !k.duzina_cm);
@@ -1874,7 +1874,10 @@ function promijeniKolicinu(idx, delta){
   const it=kosarica[idx];
   const nova=it.kolicina+delta;
   if(nova<=0){kosarica.splice(idx,1);}
-  else if(nova>it.stanje_max){alert('Nema dovoljno na stanju (max '+it.stanje_max+').');return;}
+  else if(nova>it.stanje_max){
+    if(!confirm(`⚠ "${it.naziv}" — stanje nije dovoljno (max ${it.stanje_max} ${it.jed_mjera}). Stanje će otići u MINUS. Nastaviti?`)) return;
+    it.kolicina=nova;
+  }
   else{it.kolicina=nova;}
   renderKosarica();
 }
@@ -1886,7 +1889,9 @@ function postaviKolicinuDirektno(idx, vrijednost){
   const it=kosarica[idx];
   const nova=parseFloat(vrijednost);
   if(isNaN(nova)||nova<=0){ renderKosarica(); return; } // neispravno — vrati na staru vrijednost
-  if(nova>it.stanje_max){alert('Nema dovoljno na stanju (max '+it.stanje_max+' '+it.jed_mjera+').');renderKosarica();return;}
+  if(nova>it.stanje_max){
+    if(!confirm(`⚠ "${it.naziv}" — stanje nije dovoljno (max ${it.stanje_max} ${it.jed_mjera}). Stanje će otići u MINUS. Nastaviti?`)){ renderKosarica(); return; }
+  }
   it.kolicina=nova;
   renderKosarica();
 }
@@ -2079,6 +2084,9 @@ function prikaziPotvrduEkran(pregled){
     </div>
     ${s.odstupa?`<div style="font-size:10.5px;color:${boja};margin:-4px 0 6px;">
       Razlog: ${esc(RAZLOG_LABEL[s.razlog_odstupanja]||s.razlog_odstupanja)}${s.napomena_odstupanja?' — '+esc(s.napomena_odstupanja):''}
+    </div>`:''}
+    ${s.stanje_nedovoljno?`<div style="font-size:10.5px;color:#b8860b;font-weight:700;margin:-4px 0 6px;">
+      ⚠ Stanje ide u MINUS — raspoloživo bilo ${s.raspolozivo_prije} ${s.jed_mjera}, nedostaje ${s.manjak} ${s.jed_mjera}
     </div>`:''}
   `;}).join('');
   if(pregled.ima_odstupanje){
@@ -2549,14 +2557,13 @@ function toggleKnjigovodstvo(id){
   if(!o||!o.javni_token){el.innerHTML='<div class="empty-msg">Nema dostupnog linka.</div>';el.classList.add('on');return;}
   const objekat=window.__objektiPoId?.[o.objekt_id];
   const emailKnjig=objekat?.email_knjigovodstvo||'';
-  const telKnjig=(objekat?.telefon_knjigovodstvo||'').replace(/[^0-9+]/g,'');
   const link=linkDokumenta(o.javni_token);
-  const poruka=encodeURIComponent(`Otpremnica ${o.broj} — ${o.objekt_naziv||''} — JoPeX\n${link}`);
-  const waHref = telKnjig ? `https://wa.me/${telKnjig.replace(/^\+/,'')}?text=${poruka}` : `https://wa.me/?text=${poruka}`;
+  const poruka=encodeURIComponent(`Otpremnica ${o.broj} — ${o.objekt_naziv||''} — JoPeX\\n${link}`);
   el.innerHTML=`
-    <a href="viber://forward?text=${poruka}" onclick="markirajPoslatoKnjigovodstvu(${id})">📱 Viber</a>
-    <a href="${waHref}" target="_blank" rel="noopener" onclick="markirajPoslatoKnjigovodstvu(${id})">💬 WhatsApp</a>
-    <a href="mailto:${emailKnjig}?subject=${encodeURIComponent('Otpremnica '+o.broj+' — JoPeX')}&body=${poruka}" onclick="markirajPoslatoKnjigovodstvu(${id})">✉️ Email${emailKnjig?'':' (nema podešen email za ovaj PJ)'}</a>
+    <a href="viber://forward?text=${poruka}">📱 Viber</a>
+    <a href="https://wa.me/?text=${poruka}" target="_blank" rel="noopener">💬 WhatsApp</a>
+    <a href="mailto:${emailKnjig}?subject=${encodeURIComponent('Otpremnica '+o.broj+' — JoPeX')}&body=${poruka}">✉️ Email${emailKnjig?'':' (nema podešen email za ovaj PJ)'}</a>
+    <a href="#" onclick="event.preventDefault();markirajPoslatoKnjigovodstvu(${id})" style="color:var(--green);">✓ Markiraj kao poslato</a>
   `;
   el.classList.add('on');
 }
@@ -2615,6 +2622,7 @@ async function prikaziDetaljeOtpremnice(id){
         </div>
         ${odstupa?`<div class="osr-odst" style="color:${boja};">${strelica} Zadana cijena: ${fmMoney(s.cijena_zadana)} → Prodano: ${fmMoney(s.cijena)}
           &middot; ${esc(RAZLOG_LABEL[s.razlog_odstupanja]||s.razlog_odstupanja||'')}${s.napomena_odstupanja?' — '+esc(s.napomena_odstupanja):''}</div>`:''}
+        ${s.stanje_nedovoljno?`<div class="osr-odst" style="color:#b8860b;font-weight:700;">⚠ Prodato u minus — raspoloživo bilo ${s.raspolozivo_prije} ${s.jed_mjera}, nedostajalo ${s.manjak} ${s.jed_mjera}</div>`:''}
       </div>`;
     }).join('');
   }catch(e){

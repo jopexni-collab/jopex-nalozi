@@ -132,17 +132,13 @@ function sastaviStavke(inputStavke, zivaRoba) {
     const roba = zivaRoba[s.roba_id];
     if (!roba)
       throw Object.assign(new Error('Artikal nije dostupan (ili nema cijenu/stanje) u ovom prodajnom objektu.'), { status: 400 });
-    if (parseFloat(roba.stanje) < kolicina) {
-      const raspolozivo = parseFloat(roba.stanje);
-      const nedostaje = +(kolicina - raspolozivo).toFixed(3);
-      throw Object.assign(
-        new Error(
-          `Nedovoljno stanje za "${roba.naziv}": traženo ${kolicina} ${roba.jed_mjera}, ` +
-          `raspoloživo ${raspolozivo} ${roba.jed_mjera} — nedostaje ${nedostaje} ${roba.jed_mjera}.`
-        ),
-        { status: 400, artikal: roba.naziv, trazeno: kolicina, raspolozivo, nedostaje, jed_mjera: roba.jed_mjera }
-      );
-    }
+    // NAPOMENA: dozvoljeno je da stanje ode u minus (npr. kamen — prirodan materijal, stvarna
+    // količina se često razlikuje od upisane u šifrarniku). Ne blokiramo prodaju, samo
+    // BILJEŽIMO da je stanje bilo nedovoljno u tom trenutku — komercijalista i admin to
+    // vide kao jasno upozorenje (vidi stanje_nedovoljno/manjak na stavci).
+    const raspolozivoPrijeProdaje = parseFloat(roba.stanje);
+    const stanjeNedovoljno = raspolozivoPrijeProdaje < kolicina;
+    const manjak = stanjeNedovoljno ? +(kolicina - raspolozivoPrijeProdaje).toFixed(3) : 0;
 
     const jedMjeraProdaja = DOZVOLJENE_JEDINICE.includes(s.jed_mjera_prodaja) ? s.jed_mjera_prodaja : roba.jed_mjera;
     const jedinicaOdstupa = jedMjeraProdaja !== roba.jed_mjera;
@@ -199,6 +195,7 @@ function sastaviStavke(inputStavke, zivaRoba) {
       duzina_cm, visina_cm, debljina_cm, broj_komada,
       odstupa, razlog_odstupanja: finalRazlog, napomena_odstupanja: finalNapomena,
       cijena_visa: cijenaVisa, cijena_niza: cijenaNiza, jm_promijenjena: jedinicaOdstupa,
+      stanje_nedovoljno: stanjeNedovoljno, manjak, raspolozivo_prije: raspolozivoPrijeProdaje,
     });
   }
   return stavke;
@@ -440,12 +437,12 @@ router.post('/potvrdi', async (req, res) => {
            (otpremnica_id, roba_id, sifra, naziv, jed_mjera, kolicina,
             cijena_zadana, cijena, iznos, razlog_odstupanja, napomena_odstupanja,
             duzina_cm, visina_cm, debljina_cm, broj_komada,
-            cijena_visa, cijena_niza, jm_promijenjena)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+            cijena_visa, cijena_niza, jm_promijenjena, stanje_nedovoljno, manjak)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
         [otpId, s.roba_id, s.sifra, s.naziv, s.jed_mjera, s.kolicina,
          s.cijena_zadana, s.cijena, s.iznos, s.razlog_odstupanja, s.napomena_odstupanja,
          s.duzina_cm, s.visina_cm, s.debljina_cm, s.broj_komada,
-         s.cijena_visa, s.cijena_niza, s.jm_promijenjena]
+         s.cijena_visa, s.cijena_niza, s.jm_promijenjena, s.stanje_nedovoljno, s.manjak]
       );
       // Stanje se smanjuje SAMO za ovaj prodajni objekat (roba_pj), ne globalno.
       // Napomena: roba IZLAZI iz magacina bez obzira na način plaćanja (i kad je na dug) —
