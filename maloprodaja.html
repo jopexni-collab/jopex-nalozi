@@ -2388,6 +2388,7 @@ async function popuniFilterObjekata(){
     const r=await fetch(`${API}/api/prodajni-objekti`);
     const rows=await r.json();
     sel.innerHTML='<option value="">Svi objekti</option>'+rows.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');
+    window.__objektiPoId=Object.fromEntries(rows.map(o=>[o.id,o]));
   }catch(e){}
 }
 
@@ -2498,10 +2499,11 @@ async function loadOtpremnice(brojOverride, tiho){
         <div class="otp-iznos">${fmMoney(o.ukupan_iznos)}</div>
         <div class="otp-actions">
           <button class="btn-otp-posalji" onclick="event.stopPropagation();togglePosaljiKartica(${o.id})">📤 Pošalji kupcu</button>
-          ${!o.poslato_knjigovodstvu?`<button class="btn-otp-posalji" onclick="event.stopPropagation();posaljiKnjigovodstvu(${o.id})">📧 Pošalji knjigovodstvu</button>`:''}
+          <button class="btn-otp-posalji" style="${o.poslato_knjigovodstvu?'background:#e6f4ea;color:var(--green);border-color:var(--green);':'background:#fce8e6;color:var(--red);border-color:var(--red);'}" onclick="event.stopPropagation();toggleKnjigovodstvo(${o.id})">${o.poslato_knjigovodstvu?`✓ Poslato ${fd(o.poslato_knjigovodstvu_vrijeme)}`:'📧 Pošalji knjigovodstvu'}</button>
           ${isAdmin && o.status==='potvrdjena'?`<button class="btn-otp-posalji" style="color:var(--red);border-color:var(--red);" onclick="event.stopPropagation();storniranjeOtpremnice(${o.id},'${esc(o.broj)}')">⛔ Storniraj</button>`:''}
         </div>
         <div class="mini-posalji" id="mini-posalji-${o.id}" onclick="event.stopPropagation()"></div>
+        <div class="mini-posalji" id="mini-knjig-${o.id}" onclick="event.stopPropagation()"></div>
         <div class="otp-detalji" id="otp-detalji-${o.id}"></div>
       </div>
     `).join('');
@@ -2537,16 +2539,34 @@ async function storniranjeOtpremnice(id, broj){
   }
 }
 
-async function posaljiKnjigovodstvu(id){
+function toggleKnjigovodstvo(id){
+  const el=document.getElementById('mini-knjig-'+id);
+  if(!el) return;
+  const bio=el.classList.contains('on');
+  document.querySelectorAll('.mini-posalji.on').forEach(d=>{d.classList.remove('on');d.innerHTML='';});
+  if(bio) return;
+  const o=window.__otpDataById?.[id];
+  if(!o||!o.javni_token){el.innerHTML='<div class="empty-msg">Nema dostupnog linka.</div>';el.classList.add('on');return;}
+  const objekat=window.__objektiPoId?.[o.objekt_id];
+  const emailKnjig=objekat?.email_knjigovodstvo||'';
+  const link=linkDokumenta(o.javni_token);
+  const poruka=encodeURIComponent(`Otpremnica ${o.broj} — ${o.objekt_naziv||''} — JoPeX\\n${link}`);
+  el.innerHTML=`
+    <a href="viber://forward?text=${poruka}">📱 Viber</a>
+    <a href="https://wa.me/?text=${poruka}" target="_blank" rel="noopener">💬 WhatsApp</a>
+    <a href="mailto:${emailKnjig}?subject=${encodeURIComponent('Otpremnica '+o.broj+' — JoPeX')}&body=${poruka}">✉️ Email${emailKnjig?'':' (nema podešen email za ovaj PJ)'}</a>
+    <a href="#" onclick="event.preventDefault();markirajPoslatoKnjigovodstvu(${id})" style="color:var(--green);">✓ Markiraj kao poslato</a>
+  `;
+  el.classList.add('on');
+}
+
+async function markirajPoslatoKnjigovodstvu(id){
   try{
-    const r=await fetch(`${API}/api/otpremnice/${id}/posalji-knjigovodstvu`,{method:'POST'});
-    const data=await r.json();
-    if(!r.ok) throw new Error(data.error||'Greška pri slanju.');
-    alert('✓ Poslato knjigovodstvu.');
+    const r=await fetch(`${API}/api/otpremnice/${id}/oznaci-poslato-knjigovodstvu`,{method:'POST'});
+    if(!r.ok) throw new Error();
+    document.getElementById('mini-knjig-'+id).classList.remove('on');
     loadOtpremnice();
-  }catch(e){
-    alert(e.message);
-  }
+  }catch(e){ alert('Greška pri markiranju.'); }
 }
 
 function togglePosaljiKartica(id){
