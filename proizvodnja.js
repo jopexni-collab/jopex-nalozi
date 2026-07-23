@@ -77,10 +77,13 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/proizvodnja/za-naplatu?q=ime - pretraga naloga po naručiocu SA otvorenim
+// GET /api/proizvodnja/za-naplatu?q=ime ILI broj naloga - pretraga naloga SA otvorenim
 // avansom/naplatom, za blagajnika koji direktno naplaćuje u blagajni (ne kroz lista.html).
 // Dostupno i blagajniku (ne samo Ponude/admin) — bez ovoga blagajnik ne bi mogao ni da
 // vidi koliko treba da naplati, iako mu je to posao.
+// NAPOMENA: q se upoređuje i sa narucilac (ILIKE, djelimično poklapanje) I sa r_br
+// (tačno poklapanje, kao tekst) — inače kucanje broja naloga (npr. "385") ne pogađa
+// ništa, jer narucilac ILIKE '%385%' skoro nikad neće postojati u imenu kupca.
 router.get('/za-naplatu', async (req, res) => {
   const user = req.session?.user;
   if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
@@ -94,11 +97,12 @@ router.get('/za-naplatu', async (req, res) => {
               (COALESCE(ugovorena_suma,0) - COALESCE(avans,0)) AS za_naplatu,
               naplaceno, naplaceno_opis
        FROM proizvodnja_jopex
-       WHERE narucilac ILIKE $1 AND COALESCE(stornirano,false)=false
+       WHERE (narucilac ILIKE $1 OR r_br::text = $2)
+         AND COALESCE(stornirano,false)=false
          AND COALESCE(ugovorena_suma,0) > 0
          AND (naplaceno = false OR naplaceno IS NULL)
        ORDER BY r_br DESC LIMIT 15`,
-      [`%${q}%`]
+      [`%${q}%`, q]
     );
     res.json(r.rows);
   } catch (err) {
