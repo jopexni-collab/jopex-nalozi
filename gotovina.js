@@ -27,7 +27,7 @@ router.use(async (req, res, next) => {
 // GET /api/gotovina - lista svih uplata
 router.get('/', async (req, res) => {
   try {
-    const { od, do: do_, primio, izvor, nepredano } = req.query;
+    const { od, do: do_, primio, izvor, nepredano, objekt_naziv } = req.query;
     let where = [];
     let vals = [];
     let i = 1;
@@ -36,6 +36,7 @@ router.get('/', async (req, res) => {
     if (primio) { where.push(`primio = $${i++}`); vals.push(primio); }
     if (izvor) { where.push(`izvor = $${i++}`); vals.push(izvor); }
     if (nepredano === 'true') { where.push(`predao_blagajniku = false`); }
+    if (objekt_naziv) { where.push(`g.objekt_naziv = $${i++}`); vals.push(objekt_naziv); }
     // Blagajnik je FORSIRAN da vidi SVOJE PJ (jedan ili više) — ALI i SVE zapise koji NISU
     // vezani ni za jedan PJ (npr. naplata sa radnog naloga, koja nema objekt_naziv jer nije
     // maloprodajna) — takav novac je "zajednička" odgovornost svih blagajnika (ko god ga

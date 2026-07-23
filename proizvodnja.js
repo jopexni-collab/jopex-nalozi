@@ -274,12 +274,25 @@ router.post('/:r_br/naplata-blagajna', async (req, res) => {
       );
     }
 
-    const g = await pool.query(
-      `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv)
-       VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, $5)
-       RETURNING id`,
-      [iznosNum, user.ime_prezime, String(nalog.r_br), napomenaOpisa, objekt_naziv || null]
-    );
+    const jeSamOnBlagajnik = await jeBlagajnik(user.id);
+    // Ako je naplatu unio SAM blagajnik (Nenad, Marija...) — fizički drži novac u ruci,
+    // pa ide ODMAH u "Predano" (nema smisla da čeka da "preda sam sebi"). Ako je unio
+    // neko DRUGI (Ponude, admin — na daljinu, bez fizičke gotovine u ruci), ostaje "Nije
+    // predano" dok blagajnik ne potvrdi da je stvarno primio.
+    const g = jeSamOnBlagajnik
+      ? await pool.query(
+          `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
+                                  predao_blagajniku, datum_predaje, preuzeo_ime)
+           VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, $5, true, now(), $2)
+           RETURNING id`,
+          [iznosNum, user.ime_prezime, String(nalog.r_br), napomenaOpisa, objekt_naziv || null]
+        )
+      : await pool.query(
+          `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv)
+           VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, $5)
+           RETURNING id`,
+          [iznosNum, user.ime_prezime, String(nalog.r_br), napomenaOpisa, objekt_naziv || null]
+        );
 
     res.json({ ok: true, gotovina_id: g.rows[0].id, nalog_r_br: nalog.r_br });
   } catch (err) {

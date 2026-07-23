@@ -33,6 +33,10 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 .fg label{font-size:10.5px;font-weight:600;color:#6b7a8d;}
 .fg input,.fg select{font:inherit;font-size:12px;padding:5px 7px;border:1px solid var(--border);border-radius:5px;}
 .btn-add{font:inherit;font-size:12px;font-weight:700;padding:6px 16px;background:var(--green);color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap;}
+.btn-brzi-period{font:inherit;font-size:11.5px;font-weight:600;padding:5px 12px;border:1px solid var(--border);
+  border-radius:14px;background:#fff;color:var(--dark);cursor:pointer;}
+.btn-brzi-period:hover{background:#f0f4f9;}
+.btn-brzi-period.active{background:var(--blue);color:#fff;border-color:var(--blue);}
 .btn-add:hover{background:#176e3d;}
 
 /* FILTERI */
@@ -91,10 +95,22 @@ td.num{text-align:right;font-weight:700;}
     <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
       <div>
         <div style="font-size:11px;color:#6b7a8d;">Trenutno u blagajni<span id="blagajna-pj-naziv" style="font-weight:400;"></span></div>
-        <div id="blagajna-stanje" style="font-size:24px;font-weight:800;color:var(--dark);">—</div>
+        <div id="blagajna-stanje" onclick="toggleBlagajnaBreakdown()" style="font-size:24px;font-weight:800;color:var(--dark);cursor:pointer;" title="Klik da vidiš od čega se sastoji ovaj iznos">—</div>
       </div>
       <button class="btn-add" onclick="otvoriRazduzenje('banka')">🏦 Razduži u Banku</button>
       <button class="btn-add" onclick="otvoriRazduzenje('sef')" style="background:var(--orange);">🔒 Ostavi u Sef</button>
+    </div>
+    <div id="blagajna-breakdown" style="display:none;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
+        <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('danas',this)">Danas</button>
+        <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('juce',this)">Juče</button>
+        <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('7dana',this)">7 dana</button>
+        <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('mjesec',this)">Mjesec dana</button>
+        <input type="date" id="bd-od" onchange="ucitajBlagajnaBreakdown()" style="font:inherit;font-size:11.5px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;">
+        <span style="align-self:center;color:#8b96a5;font-size:11px;">—</span>
+        <input type="date" id="bd-do" onchange="ucitajBlagajnaBreakdown()" style="font:inherit;font-size:11.5px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;">
+      </div>
+      <div id="blagajna-breakdown-lista" style="font-size:12px;"></div>
     </div>
     <div id="razduzenje-forma" style="display:none;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
       <div style="font-weight:700;margin-bottom:8px;" id="razduzenje-naslov"></div>
@@ -291,6 +307,7 @@ function izaberiBlagajnaPJ(objektId){
     b.style.color=aktivan?'#fff':'var(--dark)';
   });
   document.getElementById('blagajna-panel').style.display='block';
+  document.getElementById('blagajna-breakdown').style.display='none';
   azurirajValutaLabeleBlagajna();
   ucitajBlagajnaStanje();
 }
@@ -302,6 +319,54 @@ function azurirajValutaLabeleBlagajna(){
   const oznaka=(pj&&pj.valuta==='EUR')?'€':'KM';
   const fLbl=document.getElementById('f-iznos-lbl'); if(fLbl) fLbl.textContent=`Iznos (${oznaka})`;
   const iLbl=document.getElementById('i-iznos-lbl'); if(iLbl) iLbl.textContent=`Iznos (${oznaka})`;
+}
+
+function toggleBlagajnaBreakdown(){
+  const el=document.getElementById('blagajna-breakdown');
+  const otvoren=el.style.display==='block';
+  el.style.display=otvoren?'none':'block';
+  if(!otvoren) ucitajBlagajnaBreakdown();
+}
+
+function postaviBrzuPeriodBreakdown(period, btn){
+  const danas=new Date();
+  const fmtDate=d=>d.toISOString().split('T')[0];
+  let od, do_;
+  if(period==='danas'){ od=do_=fmtDate(danas); }
+  else if(period==='juce'){ const j=new Date(danas); j.setDate(j.getDate()-1); od=do_=fmtDate(j); }
+  else if(period==='7dana'){ const p=new Date(danas); p.setDate(p.getDate()-6); od=fmtDate(p); do_=fmtDate(danas); }
+  else if(period==='mjesec'){ const p=new Date(danas); p.setDate(p.getDate()-30); od=fmtDate(p); do_=fmtDate(danas); }
+  document.getElementById('bd-od').value=od;
+  document.getElementById('bd-do').value=do_;
+  document.querySelectorAll('#blagajna-breakdown .btn-brzi-period').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  ucitajBlagajnaBreakdown();
+}
+
+async function ucitajBlagajnaBreakdown(){
+  const pj=mojiPJovi.find(p=>String(p.id)===String(blagajnaObjektId));
+  if(!pj) return;
+  const cont=document.getElementById('blagajna-breakdown-lista');
+  cont.innerHTML='<div style="color:#8b96a5;">Učitavanje...</div>';
+  const params=new URLSearchParams();
+  params.set('objekt_naziv', pj.naziv);
+  const od=document.getElementById('bd-od').value;
+  const do_=document.getElementById('bd-do').value;
+  if(od) params.set('od', od);
+  if(do_) params.set('do', do_);
+  try{
+    const r=await fetch(`${API}/api/gotovina?${params}`);
+    const rows=await r.json();
+    if(!rows.length){ cont.innerHTML='<div style="color:#8b96a5;">Nema zapisa za izabrani period.</div>'; return; }
+    const ukupno=rows.reduce((s,x)=>s+parseFloat(x.iznos||0),0);
+    cont.innerHTML=`<div style="font-weight:700;margin-bottom:6px;">${rows.length} zapisa &middot; Ukupno: ${fmValuta(ukupno, pj.valuta)}</div>` +
+      rows.map(x=>`
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e8eaed;">
+          <span>${fd(x.datum)} &middot; ${esc(x.primio)} &middot; ${esc(x.opis||x.izvor||'')}</span>
+          <span style="font-weight:700;">${fmValuta(x.iznos, x.valuta)}</span>
+        </div>
+      `).join('');
+  }catch(e){ cont.innerHTML='<div style="color:var(--red);">Greška pri učitavanju.</div>'; }
 }
 
 async function ucitajBlagajnaStanje(){
@@ -420,23 +485,41 @@ async function loadSume(){
 
     // "Nije predano" razdvojeno po PJ — jedna mini-kartica po PJ, isti stil kao "Blagajne
     // — pregled po PJ" ispod, samo malo manja da stane u red sa ostalim karticama.
+    // Klikabilne — klik filtrira glavnu listu ispod na tačno te zapise.
     const cont=document.getElementById('nepredano-po-pj-cont');
     const stavke=d.nepredano_po_pj||[];
     if(!stavke.length){
       cont.innerHTML='<div class="suma-box mini nepredano"><div class="val">0,00 KM</div><div class="lbl">Nije predano blagajniku</div></div>';
     }else{
-      cont.innerHTML=stavke.map(s=>`
-        <div class="suma-box mini nepredano">
+      cont.innerHTML=stavke.map(s=>{
+        const nazivPrikaz=s.objekt_naziv==='(bez PJ)'?'Proizvodnja':s.objekt_naziv;
+        return `
+        <div class="suma-box mini nepredano" style="cursor:pointer;" onclick="filtrirajNaNepredanoPJ('${esc(s.objekt_naziv)}')" title="Klik da vidiš tačno ove zapise dole u listi">
           <div class="val">${fmValuta(s.iznos, s.valuta)}</div>
-          <div class="lbl">Nije predano — ${esc(s.objekt_naziv)}</div>
-        </div>
-      `).join('');
+          <div class="lbl">Nije predano — ${esc(nazivPrikaz)}</div>
+        </div>`;
+      }).join('');
     }
 
     document.getElementById('s-naplaceno-nalozi').textContent=fm(d.naplaceno_nalozi||0)+' KM';
     document.getElementById('s-ocekivano-nalozi').textContent=fm(d.ocekivano_nalozi||0)+' KM';
     document.getElementById('s-ocekivano-malo').textContent=fm(d.ocekivano_malo||0)+' KM';
   }catch(e){}
+}
+
+// Klik na "Nije predano — PJ/Proizvodnja" mini-karticu — postavlja filtere ispod da
+// glavna lista pokaže TAČNO te zapise, i skroluje do liste.
+function filtrirajNaNepredanoPJ(objektNaziv){
+  document.getElementById('fil-nepredano').checked=true;
+  if(objektNaziv==='(bez PJ)'){
+    // Proizvodnja/bez PJ — nema poseban filter za "objekt_naziv je prazno" u glavnoj
+    // listi, ali izvor=Proizvodnja je pouzdan zamjenski filter za ovaj slučaj.
+    document.getElementById('fil-izvor').value='Proizvodnja';
+  }else{
+    document.getElementById('fil-izvor').value='';
+  }
+  load();
+  document.getElementById('tbody').scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 async function load(){
