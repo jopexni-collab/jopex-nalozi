@@ -131,7 +131,7 @@ router.post('/', async (req, res) => {
   const {
     zadatak, prioritet, ugovorio_id, narucilac, materijal, status,
     pocetak, planirani_zavrsetak, napomena, link_skica, link_ponuda,
-    gotovo, reklamacija_dodatni_rad, r_br_import,
+    gotovo, reklamacija_dodatni_rad, r_br_import, iz_generatora_ponuda,
   } = req.body || {};
 
   if (!zadatak?.trim())
@@ -151,9 +151,13 @@ router.post('/', async (req, res) => {
   const smijeBiratiUgovorio = user?.rola === 'admin' || !!user?.moze_ugovarati;
   const stvarniUgovorioId = smijeBiratiUgovorio ? (ugovorio_id || user?.id || null) : (user?.id || null);
 
-  // "Velika ponuda" = stiglo preko Generator ponuda alata (API ključ, ne prava sesija).
-  // "Mala ponuda" = neko se stvarno prijavio i popunio brzu formu (index.html).
-  const izvorNaloga = user?.izAPIKljuca ? 'velika_ponuda' : 'mala_ponuda';
+  // "Velika ponuda" = stiglo preko Generator ponuda alata. NE oslanjamo se na tip
+  // autentifikacije (API ključ vs sesija) — ako je osoba koja koristi Generator ponuda
+  // SLUČAJNO već ulogovana u istom browseru (obična sesija), middleware tiho koristi NJENU
+  // sesiju umjesto API ključa, pa bi ovo POGREŠNO postalo "mala_ponuda" (široko vidljivo).
+  // Umjesto toga, ponude.html EKSPLICITNO šalje `iz_generatora_ponuda: true` u svakom
+  // zahtjevu — to je pouzdan signal bez obzira ko/kako je autentifikovan.
+  const izvorNaloga = iz_generatora_ponuda ? 'velika_ponuda' : 'mala_ponuda';
 
   try {
     let ugovorioIme = null;

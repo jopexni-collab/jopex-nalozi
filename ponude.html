@@ -6714,6 +6714,7 @@ async function usvojiPonudu(){
     napomena: '',
     status: 'Nije Započeto',
     pocetak: new Date().toISOString().split('T')[0], // datum ugovaranja = danas
+    iz_generatora_ponuda: true, // pouzdan signal za "Velika ponuda" — vidi proizvodnja.js
   };
 
   btn.disabled=true;btn.textContent='Priprema...';
