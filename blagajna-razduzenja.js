@@ -99,6 +99,9 @@ router.get('/', async (req, res) => {
       where.push(`objekt_id = $${i++}`); vals.push(objekt_id);
     }
     if (status) { where.push(`status = $${i++}`); vals.push(status); }
+    const { od, do: do_ } = req.query;
+    if (od) { where.push(`kreirano >= $${i++}`); vals.push(od); }
+    if (do_) { where.push(`kreirano <= $${i++}::date + interval '1 day'`); vals.push(do_); }
 
     const sql = `SELECT * FROM blagajna_razduzenja
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
