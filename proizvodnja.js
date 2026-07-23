@@ -225,6 +225,10 @@ function izvuciPrimio(val) {
   const m = /^got\s+(\S+)/i.exec(String(val || '').trim());
   return m ? m[1] : 'Nepoznato';
 }
+// Sve naplate/avansi vezani za radne naloge (Proizvodnja) idu FIKSNO u blagajnu PJ
+// Aleksandrovac — bez obzira kroz koji ekran/mehanizam su unijete (Nova naplata forma,
+// ili direktno kucanje "got Ime" u lista.html) — po izričitom zahtjevu.
+const PROIZVODNJA_PJ = 'PJ Aleksandrovac';
 async function jeBlagajnik(userId) {
   const r = await pool.query('SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 LIMIT 1', [userId]);
   return r.rows.length > 0;
@@ -244,7 +248,6 @@ router.post('/:r_br/naplata-blagajna', async (req, res) => {
   const { tip, iznos } = req.body; // tip: 'avans' | 'sve'
   // Proizvodnja naplate UVIJEK idu u blagajnu PJ Aleksandrovac — FIKSNO, bez obzira koji
   // PJ tab blagajnik trenutno ima otvoren (po izričitom zahtjevu — glavna kasa/kancelarija).
-  const PROIZVODNJA_PJ = 'PJ Aleksandrovac';
   const iznosNum = parseFloat(iznos);
   if (!['avans', 'sve'].includes(tip) || !(iznosNum > 0))
     return res.status(400).json({ error: 'Neispravni podaci (tip mora biti avans/sve, iznos > 0).' });
@@ -386,6 +389,11 @@ router.patch('/:r_br', async (req, res) => {
     const novo = r.rows[0];
 
     if (trebaProvjeruGotovine) {
+      // Da li je ulogovana osoba (ne osoba upisana u tekstu "got X") blagajnik — ako da,
+      // upis odmah ide u "Predano" (fizički drži novac), inače čeka potvrdu. Ime uz
+      // "Predano" prati KO JE ULOGOVAN, ne ko je napisan u opisu.
+      const jeUlogovaniBlagajnik = await jeBlagajnik(user?.id);
+
       // AVANS -> ako se avans_opis promijenio, prvo ukloni STARI gotovinski zapis (ako
       // postoji) — bez obzira da li se sad prebacuje NA gotovinu, SA gotovine na banku,
       // ili samo mijenja ko je primio. Bez ovoga, svaki povratak na "gotovina" pravi
@@ -397,16 +405,21 @@ router.patch('/:r_br', async (req, res) => {
           [String(novo.r_br)]
         );
         if (jeGotovina(novo.avans_opis) && avansIznos > 0) {
-          await pool.query(
-            `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis)
-             VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4)`,
-            [
-              avansIznos,
-              izvuciPrimio(novo.avans_opis),
-              String(novo.r_br),
-              `Avans - nalog #${novo.r_br}${novo.narucilac ? ' (' + novo.narucilac + ')' : ''}`,
-            ]
-          );
+          const opisTekst = `Avans - nalog #${novo.r_br}${novo.narucilac ? ' (' + novo.narucilac + ')' : ''}`;
+          if (jeUlogovaniBlagajnik) {
+            await pool.query(
+              `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
+                                      predao_blagajniku, datum_predaje, preuzeo_ime)
+               VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, $5, true, now(), $6)`,
+              [avansIznos, izvuciPrimio(novo.avans_opis), String(novo.r_br), opisTekst, PROIZVODNJA_PJ, user.ime_prezime]
+            );
+          } else {
+            await pool.query(
+              `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv)
+               VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, $5)`,
+              [avansIznos, izvuciPrimio(novo.avans_opis), String(novo.r_br), opisTekst, PROIZVODNJA_PJ]
+            );
+          }
         }
       }
 
@@ -418,16 +431,21 @@ router.patch('/:r_br', async (req, res) => {
           [String(novo.r_br)]
         );
         if (jeGotovina(novo.naplaceno_opis) && zaNaplatu > 0) {
-          await pool.query(
-            `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis)
-             VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4)`,
-            [
-              zaNaplatu,
-              izvuciPrimio(novo.naplaceno_opis),
-              String(novo.r_br),
-              `Naplata - nalog #${novo.r_br}${novo.narucilac ? ' (' + novo.narucilac + ')' : ''}`,
-            ]
-          );
+          const opisTekst = `Naplata - nalog #${novo.r_br}${novo.narucilac ? ' (' + novo.narucilac + ')' : ''}`;
+          if (jeUlogovaniBlagajnik) {
+            await pool.query(
+              `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
+                                      predao_blagajniku, datum_predaje, preuzeo_ime)
+               VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, $5, true, now(), $6)`,
+              [zaNaplatu, izvuciPrimio(novo.naplaceno_opis), String(novo.r_br), opisTekst, PROIZVODNJA_PJ, user.ime_prezime]
+            );
+          } else {
+            await pool.query(
+              `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv)
+               VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, $5)`,
+              [zaNaplatu, izvuciPrimio(novo.naplaceno_opis), String(novo.r_br), opisTekst, PROIZVODNJA_PJ]
+            );
+          }
         }
       }
     }
