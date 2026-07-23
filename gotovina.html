@@ -121,6 +121,16 @@ td.num{text-align:right;font-weight:700;}
       </div>
       <div id="razduzenje-msg" style="font-size:12px;margin-top:6px;"></div>
     </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 6px;">
+      <button class="btn-brzi-period" onclick="postaviPeriodRazduzenja('danas',this)">Danas</button>
+      <button class="btn-brzi-period" onclick="postaviPeriodRazduzenja('juce',this)">Juče</button>
+      <button class="btn-brzi-period" onclick="postaviPeriodRazduzenja('7dana',this)">7 dana</button>
+      <button class="btn-brzi-period" onclick="postaviPeriodRazduzenja('mjesec',this)">Mjesec dana</button>
+      <button class="btn-brzi-period active" onclick="postaviPeriodRazduzenja('sve',this)">Sve</button>
+      <input type="date" id="rz-od" onchange="ucitajMojaRazduzenja()" style="font:inherit;font-size:11.5px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;">
+      <span style="align-self:center;color:#8b96a5;font-size:11px;">—</span>
+      <input type="date" id="rz-do" onchange="ucitajMojaRazduzenja()" style="font:inherit;font-size:11.5px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;">
+    </div>
     <div id="razduzenja-lista"></div>
   </div>
 </div>
@@ -383,12 +393,34 @@ async function ucitajBlagajnaStanje(){
   ucitajMojaRazduzenja();
 }
 
+function postaviPeriodRazduzenja(period, btn){
+  const danas=new Date();
+  const fmtDate=d=>d.toISOString().split('T')[0];
+  let od='', do_='';
+  if(period==='danas'){ od=do_=fmtDate(danas); }
+  else if(period==='juce'){ const j=new Date(danas); j.setDate(j.getDate()-1); od=do_=fmtDate(j); }
+  else if(period==='7dana'){ const p=new Date(danas); p.setDate(p.getDate()-6); od=fmtDate(p); do_=fmtDate(danas); }
+  else if(period==='mjesec'){ const p=new Date(danas); p.setDate(p.getDate()-30); od=fmtDate(p); do_=fmtDate(danas); }
+  // 'sve' ostavlja od/do prazno
+  document.getElementById('rz-od').value=od;
+  document.getElementById('rz-do').value=do_;
+  if(btn) btn.parentElement.querySelectorAll('.btn-brzi-period').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  ucitajMojaRazduzenja();
+}
+
 async function ucitajMojaRazduzenja(){
   const cont=document.getElementById('razduzenja-lista');
   const pj=mojiPJovi.find(p=>String(p.id)===String(blagajnaObjektId));
   const valuta=pj?pj.valuta:'KM';
+  const params=new URLSearchParams();
+  params.set('objekt_id', blagajnaObjektId);
+  const od=document.getElementById('rz-od')?.value;
+  const do_=document.getElementById('rz-do')?.value;
+  if(od) params.set('od', od);
+  if(do_) params.set('do', do_);
   try{
-    const r=await fetch(`${API}/api/blagajna-razduzenja?objekt_id=${blagajnaObjektId}`);
+    const r=await fetch(`${API}/api/blagajna-razduzenja?${params}`);
     const rows=await r.json();
     if(!rows.length){cont.innerHTML='<div style="color:#8b96a5;font-size:12px;padding:8px;">Nema još razduženja.</div>';return;}
     cont.innerHTML=rows.map(rz=>`
