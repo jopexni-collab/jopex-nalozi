@@ -36,13 +36,13 @@ router.get('/', async (req, res) => {
     if (primio) { where.push(`primio = $${i++}`); vals.push(primio); }
     if (izvor) { where.push(`izvor = $${i++}`); vals.push(izvor); }
     if (nepredano === 'true') { where.push(`predao_blagajniku = false`); }
-    // Blagajnik je FORSIRAN da vidi SVOJE PJ (jedan ili više) — ALI i sve što je LIČNO
-    // primio/kreirao (npr. "Nova naplata" za radni nalog, koja nema objekt_naziv jer nije
-    // vezana za maloprodajni PJ) — inače bi mu takvi zapisi bili nevidljivi u sopstvenom
-    // pregledu iako ih je on sam upisao i treba da ih razduži.
+    // Blagajnik je FORSIRAN da vidi SVOJE PJ (jedan ili više) — ALI i SVE zapise koji NISU
+    // vezani ni za jedan PJ (npr. naplata sa radnog naloga, koja nema objekt_naziv jer nije
+    // maloprodajna) — takav novac je "zajednička" odgovornost svih blagajnika (ko god ga
+    // trenutno drži/obrađuje), ne samo onoga ko ga je lično upisao.
     if (req.blagajnikObjektNazivi) {
-      where.push(`(g.objekt_naziv = ANY($${i++}::text[]) OR g.primio = $${i++})`);
-      vals.push(req.blagajnikObjektNazivi, req.session.user.ime_prezime);
+      where.push(`(g.objekt_naziv = ANY($${i++}::text[]) OR g.objekt_naziv IS NULL)`);
+      vals.push(req.blagajnikObjektNazivi);
     }
     // "Nalog/Otp" kolona (g.nalog_r_br) sad drži i broj radnog naloga i broj otpremnice iz
     // maloprodaje (tekst, npr. "OTP-2026-000123") — zato je tip kolone VARCHAR. Ovdje se

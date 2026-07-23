@@ -618,15 +618,16 @@ async function potvrdiNaplatuNaloga(rBr, tip){
   const iznos=parseFloat(document.getElementById('naplata-iznos-'+rBr).value);
   const msg=document.getElementById('naplata-msg-'+rBr);
   if(!(iznos>0)){ msg.style.color='red'; msg.textContent='Unesite iznos veći od 0.'; return; }
+  const trenutniPJ=mojiPJovi.find(p=>String(p.id)===String(blagajnaObjektId));
   try{
     const r=await fetch(`${API}/api/proizvodnja/${rBr}/naplata-blagajna`,{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({tip, iznos}),
+      body:JSON.stringify({tip, iznos, objekt_naziv: trenutniPJ?.naziv||null}),
     });
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Greška.');
     msg.style.color='var(--green)';
-    msg.textContent='✓ Naplaćeno i odmah upisano u blagajnu (predano).';
+    msg.textContent='✓ Naplaćeno — zapis je u blagajni, čeka potvrdu "Predano" (dole na listi).';
     await load(); await loadSume();
     if(blagajnaObjektId) await ucitajBlagajnaStanje();
     setTimeout(()=>{ ocistiKomitenta('f'); document.getElementById('f-nalozi-otvoreni').innerHTML=''; }, 1200);
