@@ -95,23 +95,30 @@ td.num{text-align:right;font-weight:700;}
     <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
       <div>
         <div style="font-size:11px;color:#6b7a8d;">Trenutno u blagajni<span id="blagajna-pj-naziv" style="font-weight:400;"></span></div>
-        <div id="blagajna-stanje" onclick="toggleBlagajnaBreakdown()" style="font-size:24px;font-weight:800;color:var(--dark);cursor:pointer;" title="Klik da vidiš od čega se sastoji ovaj iznos">—</div>
+        <div id="blagajna-stanje" style="font-size:24px;font-weight:800;color:var(--dark);">—</div>
       </div>
       <button class="btn-add" onclick="otvoriRazduzenje('banka')">🏦 Razduži u Banku</button>
       <button class="btn-add" onclick="otvoriRazduzenje('sef')" style="background:var(--orange);">🔒 Ostavi u Sef</button>
     </div>
-    <div id="blagajna-breakdown" style="display:none;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">
-        <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('danas',this)">Danas</button>
-        <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('juce',this)">Juče</button>
-        <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('7dana',this)">7 dana</button>
-        <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('mjesec',this)">Mjesec dana</button>
-        <input type="date" id="bd-od" onchange="ucitajBlagajnaBreakdown()" style="font:inherit;font-size:11.5px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;">
-        <span style="align-self:center;color:#8b96a5;font-size:11px;">—</span>
-        <input type="date" id="bd-do" onchange="ucitajBlagajnaBreakdown()" style="font:inherit;font-size:11.5px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;">
-      </div>
+
+    <!-- JEDAN zajednički period-birač — kontroliše OBIJE liste ispod (šta je u blagajni
+         ZA taj period, i kako je razdužena ZA taj period). Uvijek vidljiv, "Danas" difoltno. -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
+      <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('danas',this)">Danas</button>
+      <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('juce',this)">Juče</button>
+      <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('7dana',this)">7 dana</button>
+      <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('mjesec',this)">Mjesec dana</button>
+      <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('sve',this)">Sve</button>
+      <input type="date" id="bd-od" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();" style="font:inherit;font-size:11.5px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;">
+      <span style="align-self:center;color:#8b96a5;font-size:11px;">—</span>
+      <input type="date" id="bd-do" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();" style="font:inherit;font-size:11.5px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;">
+    </div>
+
+    <div style="background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;color:#6b7a8d;margin-bottom:6px;">💰 Šta čini stanje u blagajni (za izabrani period)</div>
       <div id="blagajna-breakdown-lista" style="font-size:12px;"></div>
     </div>
+
     <div id="razduzenje-forma" style="display:none;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
       <div style="font-weight:700;margin-bottom:8px;" id="razduzenje-naslov"></div>
       <div class="forma-grid">
@@ -121,16 +128,8 @@ td.num{text-align:right;font-weight:700;}
       </div>
       <div id="razduzenje-msg" style="font-size:12px;margin-top:6px;"></div>
     </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 6px;">
-      <button class="btn-brzi-period" onclick="postaviPeriodRazduzenja('danas',this)">Danas</button>
-      <button class="btn-brzi-period" onclick="postaviPeriodRazduzenja('juce',this)">Juče</button>
-      <button class="btn-brzi-period" onclick="postaviPeriodRazduzenja('7dana',this)">7 dana</button>
-      <button class="btn-brzi-period" onclick="postaviPeriodRazduzenja('mjesec',this)">Mjesec dana</button>
-      <button class="btn-brzi-period active" onclick="postaviPeriodRazduzenja('sve',this)">Sve</button>
-      <input type="date" id="rz-od" onchange="ucitajMojaRazduzenja()" style="font:inherit;font-size:11.5px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;">
-      <span style="align-self:center;color:#8b96a5;font-size:11px;">—</span>
-      <input type="date" id="rz-do" onchange="ucitajMojaRazduzenja()" style="font:inherit;font-size:11.5px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;">
-    </div>
+
+    <div style="font-size:11px;font-weight:700;color:#6b7a8d;margin:6px 0;">📤 Kako je razdužena blagajna (za izabrani period)</div>
     <div id="razduzenja-lista"></div>
   </div>
 </div>
@@ -317,9 +316,12 @@ function izaberiBlagajnaPJ(objektId){
     b.style.color=aktivan?'#fff':'var(--dark)';
   });
   document.getElementById('blagajna-panel').style.display='block';
-  document.getElementById('blagajna-breakdown').style.display='none';
   azurirajValutaLabeleBlagajna();
   ucitajBlagajnaStanje();
+  // Difoltni period je "Danas" — postavlja i pokreće OBE liste (šta je u blagajni +
+  // kako je razdužena) odjednom, isti zajednički period-birač za oba.
+  const danasBtn=[...document.querySelectorAll('.btn-brzi-period')].find(b=>b.textContent.trim()==='Danas');
+  postaviBrzuPeriodBreakdown('danas', danasBtn);
 }
 
 // Ažurira labele "Iznos (KM)" na "Iznos (€)" kad je izabrani PJ u EUR — inače bi ova
@@ -331,26 +333,23 @@ function azurirajValutaLabeleBlagajna(){
   const iLbl=document.getElementById('i-iznos-lbl'); if(iLbl) iLbl.textContent=`Iznos (${oznaka})`;
 }
 
-function toggleBlagajnaBreakdown(){
-  const el=document.getElementById('blagajna-breakdown');
-  const otvoren=el.style.display==='block';
-  el.style.display=otvoren?'none':'block';
-  if(!otvoren) ucitajBlagajnaBreakdown();
-}
-
+// JEDAN zajednički period-birač — kontroliše OBIJE liste ispod (šta čini stanje u
+// blagajni ZA taj period, i kako je razdužena ZA taj isti period). Uvijek vidljiv.
 function postaviBrzuPeriodBreakdown(period, btn){
   const danas=new Date();
   const fmtDate=d=>d.toISOString().split('T')[0];
-  let od, do_;
+  let od='', do_='';
   if(period==='danas'){ od=do_=fmtDate(danas); }
   else if(period==='juce'){ const j=new Date(danas); j.setDate(j.getDate()-1); od=do_=fmtDate(j); }
   else if(period==='7dana'){ const p=new Date(danas); p.setDate(p.getDate()-6); od=fmtDate(p); do_=fmtDate(danas); }
   else if(period==='mjesec'){ const p=new Date(danas); p.setDate(p.getDate()-30); od=fmtDate(p); do_=fmtDate(danas); }
+  // 'sve' ostavlja od/do prazno
   document.getElementById('bd-od').value=od;
   document.getElementById('bd-do').value=do_;
-  document.querySelectorAll('#blagajna-breakdown .btn-brzi-period').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.parentElement.querySelectorAll('.btn-brzi-period').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   ucitajBlagajnaBreakdown();
+  ucitajMojaRazduzenja();
 }
 
 async function ucitajBlagajnaBreakdown(){
@@ -390,22 +389,10 @@ async function ucitajBlagajnaStanje(){
   }catch(e){
     document.getElementById('blagajna-stanje').textContent='Greška';
   }
-  ucitajMojaRazduzenja();
-}
-
-function postaviPeriodRazduzenja(period, btn){
-  const danas=new Date();
-  const fmtDate=d=>d.toISOString().split('T')[0];
-  let od='', do_='';
-  if(period==='danas'){ od=do_=fmtDate(danas); }
-  else if(period==='juce'){ const j=new Date(danas); j.setDate(j.getDate()-1); od=do_=fmtDate(j); }
-  else if(period==='7dana'){ const p=new Date(danas); p.setDate(p.getDate()-6); od=fmtDate(p); do_=fmtDate(danas); }
-  else if(period==='mjesec'){ const p=new Date(danas); p.setDate(p.getDate()-30); od=fmtDate(p); do_=fmtDate(danas); }
-  // 'sve' ostavlja od/do prazno
-  document.getElementById('rz-od').value=od;
-  document.getElementById('rz-do').value=do_;
-  if(btn) btn.parentElement.querySelectorAll('.btn-brzi-period').forEach(b=>b.classList.remove('active'));
-  if(btn) btn.classList.add('active');
+  // Breakdown i razduženja su SADA STALNO VIDLJIVI (ne skriveni iza klika), pa se moraju
+  // osvježiti svaki put kad se osvježi i sam broj — inače bi ostali "zaglavljeni" na
+  // starim podacima nakon npr. nove naplate ili klika na "Predano".
+  ucitajBlagajnaBreakdown();
   ucitajMojaRazduzenja();
 }
 
@@ -415,8 +402,8 @@ async function ucitajMojaRazduzenja(){
   const valuta=pj?pj.valuta:'KM';
   const params=new URLSearchParams();
   params.set('objekt_id', blagajnaObjektId);
-  const od=document.getElementById('rz-od')?.value;
-  const do_=document.getElementById('rz-do')?.value;
+  const od=document.getElementById('bd-od')?.value;
+  const do_=document.getElementById('bd-do')?.value;
   if(od) params.set('od', od);
   if(do_) params.set('do', do_);
   try{
