@@ -173,10 +173,11 @@ td.num{text-align:right;font-weight:700;}
         <option value="Drugo">Drugo</option>
       </select>
     </div>
-    <div class="fg" id="f-nalog-fg"><label>Nalog R.Br. (opciono)</label><input type="number" id="f-nalog" placeholder="npr. 342"></div>
+    <div class="fg" id="f-nalog-fg"><label>Nalog R.Br. (opciono)</label><input type="number" id="f-nalog" placeholder="npr. 342" oninput="debounceTraziNalogBroj()"></div>
     <div class="fg"><label>Opis</label><input type="text" id="f-opis" placeholder="napomena..."></div>
     <div class="fg"><label>&nbsp;</label><button class="btn-add" onclick="dodajNaplatu()">+ Dodaj</button></div>
   </div>
+  <div id="f-nalog-otvoren" style="margin-top:8px;"></div>
   <div id="f-msg" style="margin-top:8px;font-size:12px;"></div>
 </div>
 
@@ -764,6 +765,46 @@ async function traziOtvoreneNalogeZaKomitenta(naziv){
   }catch(e){ /* tiho — ovo je pomoćna funkcija, ne smije blokirati osnovni unos */ }
 }
 
+/* ── Pretraga radnog naloga po BROJU (kad Izvor=Proizvodnja i otkuca se broj u
+   "Nalog R.Br." polje) — otvara isti žuti boks sa Avans/Naplata sve kao za kupca,
+   umjesto da broj samo "sjedi" u polju za generički unos koji ne ažurira nalog. ── */
+let nalogBrojTimer=null;
+
+function debounceTraziNalogBroj(){
+  clearTimeout(nalogBrojTimer);
+  const v=gv('f-nalog').trim();
+  const cont=document.getElementById('f-nalog-otvoren');
+  if(!v){ if(cont) cont.innerHTML=''; return; }
+  nalogBrojTimer=setTimeout(()=>traziNalogPoBroju(v), 400);
+}
+
+async function traziNalogPoBroju(rBr){
+  const cont=document.getElementById('f-nalog-otvoren');
+  if(!cont) return;
+  cont.innerHTML=`<div style="color:#8b96a5;font-size:11.5px;">Pretraga naloga #${esc(rBr)}...</div>`;
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/za-naplatu?q=${encodeURIComponent(rBr)}`);
+    if(!r.ok){ cont.innerHTML=''; return; }
+    const nalozi=await r.json();
+    // q pretraga može vratiti i pogodke po nazivu — filtriraj striktno na tačan broj naloga
+    const tacan=nalozi.find(n=>String(n.r_br)===String(rBr));
+    if(!tacan){
+      cont.innerHTML=`<div style="color:var(--red);font-size:11.5px;">Nalog #${esc(rBr)} nije pronađen ili nema otvoren dug za naplatu.</div>`;
+      return;
+    }
+    cont.innerHTML=`
+      <div style="background:#fff8e6;border:1px solid #f0d896;border-radius:8px;padding:8px 10px;font-size:12px;">
+        <div style="font-weight:700;">#${tacan.r_br} — ${esc(tacan.zadatak||'')}${tacan.narucilac?' — '+esc(tacan.narucilac):''}</div>
+        <div style="color:#6b7a8d;margin:2px 0 6px;">Ugovoreno: ${fm(tacan.ugovorena_suma)} KM &middot; Avans: ${fm(tacan.avans)} KM &middot; Za naplatu: ${fm(tacan.za_naplatu)} KM</div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn-sm" style="background:#e6f4ea;color:var(--green);" onclick="otvoriNaplataNaloga(${tacan.r_br},'avans',${tacan.za_naplatu})">+ Avans</button>
+          <button class="btn-sm" style="background:#eef4fc;color:var(--blue);" onclick="otvoriNaplataNaloga(${tacan.r_br},'sve',${tacan.za_naplatu})">✓ Naplata sve (${fm(tacan.za_naplatu)} KM)</button>
+        </div>
+        <div id="naplata-nalog-${tacan.r_br}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px dashed #f0d896;"></div>
+      </div>`;
+  }catch(e){ cont.innerHTML='<div style="color:var(--red);font-size:11.5px;">Greška pri pretrazi.</div>'; }
+}
+
 function otvoriNaplataNaloga(rBr, tip, zaNaplatu){
   const el=document.getElementById('naplata-nalog-'+rBr);
   const otvoren=el.style.display==='block';
@@ -794,7 +835,12 @@ async function potvrdiNaplatuNaloga(rBr, tip){
     msg.textContent='✓ Naplaćeno — zapis je u blagajni, čeka potvrdu "Predano" (dole na listi).';
     await load(); await loadSume();
     if(blagajnaObjektId) await ucitajBlagajnaStanje();
-    setTimeout(()=>{ ocistiKomitenta('f'); document.getElementById('f-nalozi-otvoreni').innerHTML=''; }, 1200);
+    setTimeout(()=>{
+      ocistiKomitenta('f');
+      document.getElementById('f-nalozi-otvoreni').innerHTML='';
+      document.getElementById('f-nalog-otvoren').innerHTML='';
+      document.getElementById('f-nalog').value='';
+    }, 1200);
   }catch(e){ msg.style.color='red'; msg.textContent='✗ '+e.message; }
 }
 
@@ -817,6 +863,14 @@ async function dodajNaplatu(){
   const napomena=gv('f-opis');
   const msg=document.getElementById('f-msg');
   if(!iznos||iznos<=0){msg.style.color='red';msg.textContent='Unesite iznos.';return;}
+  // Ako je upisan broj naloga dok je Izvor=Proizvodnja (bez komitenta), naplata MORA ići
+  // kroz boks "Avans"/"Naplata sve" iznad (koji stvarno ažurira dug na nalogu) — ne kroz
+  // ovo generičko dugme, koje bi samo upisalo zapis u gotovinu bez diranja naloga.
+  if(!komitentIzabran.f && gv('f-izvor')==='Proizvodnja' && gv('f-nalog').trim()){
+    msg.style.color='red';
+    msg.textContent='Za naplatu radnog naloga koristite dugme "+ Avans" ili "✓ Naplata sve" u okviru iznad (ne ovo dugme) — inače se dug na nalogu neće smanjiti.';
+    return;
+  }
   const pj=mojiPJovi.find(p=>String(p.id)===String(blagajnaObjektId));
   if(!isAdmin && !pj){msg.style.color='red';msg.textContent='Izaberite prvo PJ (tab iznad) za koji unosite naplatu.';return;}
   const primio=trenutniUser?.ime_prezime||'';
