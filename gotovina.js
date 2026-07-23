@@ -99,17 +99,23 @@ router.get('/suma', async (req, res) => {
       const npjVals = req.blagajnikObjektNazivi ? [req.blagajnikObjektNazivi] : [];
       const npj = await pool.query(`
         SELECT COALESCE(g.objekt_naziv,'(bez PJ)') AS objekt_naziv,
+               g.izvor,
                COALESCE(p.valuta,'KM') AS valuta,
                SUM(g.iznos) AS iznos
         FROM gotovina g
         LEFT JOIN prodajni_objekti p ON p.naziv = g.objekt_naziv
         WHERE g.predao_blagajniku = false ${filterPJ}
-        GROUP BY COALESCE(g.objekt_naziv,'(bez PJ)'), COALESCE(p.valuta,'KM')
+        GROUP BY COALESCE(g.objekt_naziv,'(bez PJ)'), g.izvor, COALESCE(p.valuta,'KM')
         HAVING SUM(g.iznos) != 0
         ORDER BY 1
       `, npjVals);
+      // "Proizvodnja" prikazuje SVOJU posebnu karticu (odvojeno od PJ maloprodaje), iako
+      // dijele isti objekt_naziv (novac se sliva u istu blagajnu — samo prikaz razdvojen).
       nepredanoPoPJ = npj.rows.map(row => ({
-        objekt_naziv: row.objekt_naziv, valuta: row.valuta, iznos: +parseFloat(row.iznos).toFixed(2),
+        objekt_naziv: row.objekt_naziv,
+        prikaz_naziv: row.izvor === 'Proizvodnja' ? 'Proizvodnja' : row.objekt_naziv,
+        izvor: row.izvor,
+        valuta: row.valuta, iznos: +parseFloat(row.iznos).toFixed(2),
       }));
     } catch (e) { /* ne rušimo cijelu rutu zbog ovoga */ }
 
@@ -199,10 +205,10 @@ router.post('/', async (req, res) => {
 // PATCH /api/gotovina/:id - ažuriranje (predao vlasniku)
 router.patch('/:id', async (req, res) => {
   try {
-    const { predao_blagajniku, datum_predaje, iznos, primio, datum, opis, izvor, nalog_r_br } = req.body;
+    const { predao_blagajniku, datum_predaje, iznos, primio, datum, opis, izvor, nalog_r_br, objekt_naziv } = req.body;
     const sets = [], vals = [];
     let i = 1;
-    const ALLOWED = ['predao_blagajniku','datum_predaje','iznos','primio','datum','opis','izvor','nalog_r_br','preuzeo_ime'];
+    const ALLOWED = ['predao_blagajniku','datum_predaje','iznos','primio','datum','opis','izvor','nalog_r_br','preuzeo_ime','objekt_naziv'];
     for (const k of ALLOWED) {
       if (k in req.body) { sets.push(`${k}=$${i++}`); vals.push(req.body[k]); }
     }

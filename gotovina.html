@@ -223,7 +223,6 @@ td.num{text-align:right;font-weight:700;}
     <option value="Drugo">Drugo</option>
   </select>
   <label><input type="checkbox" id="fil-nepredano" onchange="load()"> Samo nepredano</label>
-  <label><input type="checkbox" id="fil-van-malo" onchange="render()"> ⚡ Samo van maloprodaje (za verifikaciju)</label>
   <button class="btn-sm" onclick="resetFilteri()">✕ Resetuj</button>
   <span id="stat" style="margin-left:auto;color:#6b7a8d;font-size:11px;"></span>
 </div>
@@ -510,14 +509,11 @@ async function loadSume(){
     if(!stavke.length){
       cont.innerHTML='<div class="suma-box mini nepredano"><div class="val">0,00 KM</div><div class="lbl">Nije predano blagajniku</div></div>';
     }else{
-      cont.innerHTML=stavke.map(s=>{
-        const nazivPrikaz=s.objekt_naziv==='(bez PJ)'?'Proizvodnja':s.objekt_naziv;
-        return `
-        <div class="suma-box mini nepredano" style="cursor:pointer;" onclick="filtrirajNaNepredanoPJ('${esc(s.objekt_naziv)}')" title="Klik da vidiš tačno ove zapise dole u listi">
+      cont.innerHTML=stavke.map(s=>`
+        <div class="suma-box mini nepredano" style="cursor:pointer;" onclick="filtrirajNaNepredanoPJ('${esc(s.objekt_naziv)}','${esc(s.izvor||'')}')" title="Klik da vidiš tačno ove zapise dole u listi">
           <div class="val">${fmValuta(s.iznos, s.valuta)}</div>
-          <div class="lbl">Nije predano — ${esc(nazivPrikaz)}</div>
-        </div>`;
-      }).join('');
+          <div class="lbl">Nije predano — ${esc(s.prikaz_naziv)}</div>
+        </div>`).join('');
     }
 
     document.getElementById('s-naplaceno-nalozi').textContent=fm(d.naplaceno_nalozi||0)+' KM';
@@ -527,16 +523,11 @@ async function loadSume(){
 }
 
 // Klik na "Nije predano — PJ/Proizvodnja" mini-karticu — postavlja filtere ispod da
-// glavna lista pokaže TAČNO te zapise, i skroluje do liste.
-function filtrirajNaNepredanoPJ(objektNaziv){
+// glavna lista pokaže TAČNO te zapise (po PJ I po izvoru, jer Proizvodnja i maloprodaja
+// mogu dijeliti isti PJ ali se prikazuju kao odvojene kartice), i skroluje do liste.
+function filtrirajNaNepredanoPJ(objektNaziv, izvor){
   document.getElementById('fil-nepredano').checked=true;
-  if(objektNaziv==='(bez PJ)'){
-    // Proizvodnja/bez PJ — nema poseban filter za "objekt_naziv je prazno" u glavnoj
-    // listi, ali izvor=Proizvodnja je pouzdan zamjenski filter za ovaj slučaj.
-    document.getElementById('fil-izvor').value='Proizvodnja';
-  }else{
-    document.getElementById('fil-izvor').value='';
-  }
+  document.getElementById('fil-izvor').value=izvor||'';
   load();
   document.getElementById('tbody').scrollIntoView({behavior:'smooth', block:'start'});
 }
@@ -572,8 +563,7 @@ function azurirajFilterPrimio(){
 }
 
 function render(){
-  const samoVanMalo=document.getElementById('fil-van-malo')?.checked;
-  const rows=samoVanMalo ? all.filter(r=>r.izvor==='Proizvodnja'&&!r.objekt_naziv) : all;
+  const rows=all;
   const ukupnoKM=rows.reduce((s,r)=>s+parseFloat(r.iznos||0)*(r.valuta==='EUR'?1.95:1),0);
   document.getElementById('stat').textContent=`${rows.length} zapisa | Ukupno: ${fm(ukupnoKM)} KM`;
   if(!rows.length){
@@ -592,7 +582,7 @@ function render(){
       <td>
         <span class="chip-izvor ${r.izvor==='Proizvodnja'?'iz-pro':r.izvor==='Maloprodaja'?'iz-malo':'iz-drugo'}">${esc(r.izvor)}</span>
         ${r.izvor==='Maloprodaja'&&r.objekt_naziv?`<span class="izvor-pj">${esc(r.objekt_naziv)}</span>`:''}
-        ${r.izvor==='Proizvodnja'&&!r.objekt_naziv?`<span title="Blagajnik je ovo lično inicirao direktno u blagajni (nije stiglo iz maloprodaje/otpremnice) — provjeriti pri verifikaciji." style="display:inline-block;margin-left:4px;background:#fff3e0;color:#b8860b;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:6px;">⚡ Van maloprodaje</span>`:''}
+        ${r.izvor==='Proizvodnja'&&r.objekt_naziv?`<span class="izvor-pj">${esc(r.objekt_naziv)}</span>`:''}
       </td>
       <td>${r.nalog_r_br?(/^\d+$/.test(String(r.nalog_r_br))
         ?`<a class="nalog-link" href="lista.html">#${r.nalog_r_br}</a>${r.narucilac?' — '+esc(r.narucilac):''}`
@@ -711,7 +701,7 @@ function otvoriNaplataNaloga(rBr, tip, zaNaplatu){
   el.innerHTML=`
     <div style="font-size:11px;font-weight:600;margin-bottom:4px;">${tip==='avans'?'Iznos avansa':'Iznos (cijela naplata)'} (KM)</div>
     <input type="number" id="naplata-iznos-${rBr}" step="0.01" min="0.01" value="${podrazumevano}" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:5px;margin-bottom:6px;">
-    <button class="btn-sm" style="width:100%;background:var(--green);color:#fff;" onclick="potvrdiNaplatuNaloga(${rBr},'${tip}')">✓ Potvrdi — naplaćeno i predano u blagajnu</button>
+    <button class="btn-sm" style="width:100%;background:var(--green);color:#fff;" onclick="potvrdiNaplatuNaloga(${rBr},'${tip}')">✓ Potvrdi naplatu</button>
     <div id="naplata-msg-${rBr}" style="font-size:11px;margin-top:4px;"></div>
   `;
 }
@@ -720,11 +710,10 @@ async function potvrdiNaplatuNaloga(rBr, tip){
   const iznos=parseFloat(document.getElementById('naplata-iznos-'+rBr).value);
   const msg=document.getElementById('naplata-msg-'+rBr);
   if(!(iznos>0)){ msg.style.color='red'; msg.textContent='Unesite iznos veći od 0.'; return; }
-  const trenutniPJ=mojiPJovi.find(p=>String(p.id)===String(blagajnaObjektId));
   try{
     const r=await fetch(`${API}/api/proizvodnja/${rBr}/naplata-blagajna`,{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({tip, iznos, objekt_naziv: trenutniPJ?.naziv||null}),
+      body:JSON.stringify({tip, iznos}),
     });
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Greška.');
@@ -898,7 +887,6 @@ function resetFilteri(){
     if(el) el.value='';
   });
   document.getElementById('fil-nepredano').checked=false;
-  document.getElementById('fil-van-malo').checked=false;
   load();
 }
 

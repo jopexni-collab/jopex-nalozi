@@ -241,9 +241,10 @@ router.post('/:r_br/naplata-blagajna', async (req, res) => {
   const smijeNaplatiti = user.rola === 'admin' || user.moze_ugovarati || await jeBlagajnik(user.id);
   if (!smijeNaplatiti) return res.status(403).json({ error: 'Nema pristupa.' });
 
-  const { tip, iznos, objekt_naziv } = req.body; // tip: 'avans' | 'sve'; objekt_naziv: opciono
-  // — PJ koji blagajnik TRENUTNO ima otvoren (novac fizički ide u tu kasu, iako nalog
-  // sam po sebi nije vezan ni za jedan PJ).
+  const { tip, iznos } = req.body; // tip: 'avans' | 'sve'
+  // Proizvodnja naplate UVIJEK idu u blagajnu PJ Aleksandrovac — FIKSNO, bez obzira koji
+  // PJ tab blagajnik trenutno ima otvoren (po izričitom zahtjevu — glavna kasa/kancelarija).
+  const PROIZVODNJA_PJ = 'PJ Aleksandrovac';
   const iznosNum = parseFloat(iznos);
   if (!['avans', 'sve'].includes(tip) || !(iznosNum > 0))
     return res.status(400).json({ error: 'Neispravni podaci (tip mora biti avans/sve, iznos > 0).' });
@@ -285,13 +286,13 @@ router.post('/:r_br/naplata-blagajna', async (req, res) => {
                                   predao_blagajniku, datum_predaje, preuzeo_ime)
            VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, $5, true, now(), $2)
            RETURNING id`,
-          [iznosNum, user.ime_prezime, String(nalog.r_br), napomenaOpisa, objekt_naziv || null]
+          [iznosNum, user.ime_prezime, String(nalog.r_br), napomenaOpisa, PROIZVODNJA_PJ]
         )
       : await pool.query(
           `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv)
            VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, $5)
            RETURNING id`,
-          [iznosNum, user.ime_prezime, String(nalog.r_br), napomenaOpisa, objekt_naziv || null]
+          [iznosNum, user.ime_prezime, String(nalog.r_br), napomenaOpisa, PROIZVODNJA_PJ]
         );
 
     res.json({ ok: true, gotovina_id: g.rows[0].id, nalog_r_br: nalog.r_br });
