@@ -6743,7 +6743,7 @@ async function usvojiPonudu(){
     var uploadBody={naziv:naziv, dxf_b64:dxfB64};
     if(rnHtmlB64) uploadBody.radni_nalog_html_b64=rnHtmlB64;
 
-    var uploadR=await fetch(url+'/api/upload?api_key=jopex-api-kljuc-2024',{
+    var uploadR=await fetch(url+'/api/upload',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(uploadBody),
@@ -6759,7 +6759,7 @@ async function usvojiPonudu(){
 
     // 6. Upiši nalog u bazu
     showMsg('Upisivanje naloga...',true);
-    var r=await fetch(url+'/api/proizvodnja?api_key=jopex-api-kljuc-2024',{
+    var r=await fetch(url+'/api/proizvodnja',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(body),
