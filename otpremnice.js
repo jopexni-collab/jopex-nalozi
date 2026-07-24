@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('./db');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const { posaljiEmail } = require('./email');
 
 const RAZLOZI = ['kvalitet', 'kolicina', 'lom', 'jedinica', 'drugo'];
@@ -335,6 +336,127 @@ router.get('/saldo-kupca/:kupacId', async (req, res) => {
   }
 });
 
+// ── ZAKLJUČI DAN ────────────────────────────────────────────────────────────────
+// Po OSOBI (komercijalisti) — svako zaključuje svoj dan. Zaključan dan blokira nove
+// prodaje (vidi POST /potvrdi) dok se ne otključa (lozinkom).
+
+// GET /api/otpremnice/status-dana?datum=YYYY-MM-DD (opciono, difolt danas)
+router.get('/status-dana', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+  const datum = req.query.datum || new Date().toISOString().split('T')[0];
+  try {
+    const r = await pool.query(
+      'SELECT * FROM dnevno_zakljucanje WHERE zaposleni_id=$1 AND datum=$2',
+      [user.id, datum]
+    );
+    const red = r.rows[0];
+    const zakljucano = !!(red && !red.otkljucano_kada);
+    res.json({ datum, zakljucano, red: red || null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/otpremnice/presjek-dana?datum=YYYY-MM-DD — sažetak za ekran prije zaključenja
+// (broj otpremnica/promet, gotovina predano/nepredano, otpremnice poslato/nije poslato).
+router.get('/presjek-dana', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+  const datum = req.query.datum || new Date().toISOString().split('T')[0];
+  try {
+    const otpRes = await pool.query(
+      `SELECT id, broj, ukupan_iznos, objekt_id, poslato_knjigovodstvu
+       FROM otpremnice
+       WHERE komercijalista_id=$1 AND datum::date=$2 AND status='potvrdjena'`,
+      [user.id, datum]
+    );
+    const brojOtp = otpRes.rows.length;
+    const ukupanPromet = otpRes.rows.reduce((s, r) => s + parseFloat(r.ukupan_iznos || 0), 0);
+    const nijePoslatoKnjig = otpRes.rows.filter(r => !r.poslato_knjigovodstvu);
+
+    const gotRes = await pool.query(
+      `SELECT predao_blagajniku, iznos FROM gotovina
+       WHERE primio=$1 AND datum=$2 AND izvor='Maloprodaja'`,
+      [user.ime_prezime, datum]
+    );
+    const gotPredano = gotRes.rows.filter(r => r.predao_blagajniku).reduce((s, r) => s + parseFloat(r.iznos || 0), 0);
+    const gotNepredano = gotRes.rows.filter(r => !r.predao_blagajniku).reduce((s, r) => s + parseFloat(r.iznos || 0), 0);
+
+    res.json({
+      datum,
+      broj_otpremnica: brojOtp,
+      ukupan_promet: +ukupanPromet.toFixed(2),
+      gotovina_predano: +gotPredano.toFixed(2),
+      gotovina_nepredano: +gotNepredano.toFixed(2),
+      otpremnice_nije_poslato: nijePoslatoKnjig.map(r => ({ id: r.id, broj: r.broj })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/otpremnice/zakljuci-dan  body: { datum? }
+router.post('/zakljuci-dan', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+  const datum = req.body?.datum || new Date().toISOString().split('T')[0];
+  try {
+    await pool.query(
+      `INSERT INTO dnevno_zakljucanje (zaposleni_id, datum, zakljucao_ime, zakljucano_kada, otkljucano_kada, otkljucao_id, otkljucao_ime)
+       VALUES ($1,$2,$3,now(),NULL,NULL,NULL)
+       ON CONFLICT (zaposleni_id, datum) DO UPDATE SET
+         zakljucao_ime=$3, zakljucano_kada=now(), otkljucano_kada=NULL, otkljucao_id=NULL, otkljucao_ime=NULL`,
+      [user.id, datum, user.ime_prezime]
+    );
+    res.json({ ok: true, datum });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/otpremnice/otkljucaj-dan  body: { datum?, lozinka }
+router.post('/otkljucaj-dan', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+  const datum = req.body?.datum || new Date().toISOString().split('T')[0];
+  const { lozinka } = req.body || {};
+  if (!lozinka) return res.status(400).json({ error: 'Lozinka je obavezna.' });
+  try {
+    const uRes = await pool.query('SELECT lozinka FROM zaposleni WHERE id=$1', [user.id]);
+    if (!uRes.rows.length) return res.status(404).json({ error: 'Korisnik nije pronađen.' });
+    const ok = await bcrypt.compare(lozinka, uRes.rows[0].lozinka || '');
+    if (!ok) return res.status(401).json({ error: 'Pogrešna lozinka.' });
+
+    const r = await pool.query(
+      `UPDATE dnevno_zakljucanje SET otkljucano_kada=now(), otkljucao_id=$1, otkljucao_ime=$2
+       WHERE zaposleni_id=$1 AND datum=$3 AND otkljucano_kada IS NULL RETURNING id`,
+      [user.id, user.ime_prezime, datum]
+    );
+    if (!r.rows.length) return res.status(400).json({ error: 'Dan nije zaključan (ili je već otključan).' });
+    res.json({ ok: true, datum });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/otpremnice/istorija-zakljucavanja — SAMO admin, pregled ko je i kada
+// zaključavao/otključavao dane (za nadzor).
+router.get('/istorija-zakljucavanja', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin.' });
+  try {
+    const r = await pool.query(
+      `SELECT dz.*, z.ime_prezime AS zaposleni_ime
+       FROM dnevno_zakljucanje dz
+       JOIN zaposleni z ON z.id = dz.zaposleni_id
+       ORDER BY dz.zakljucano_kada DESC LIMIT 200`
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const user = req.session?.user;
@@ -367,6 +489,16 @@ router.post('/potvrdi', async (req, res) => {
   if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
   const objektId = trebaObjekat(req.body.objekt_id);
   if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat.' });
+
+  // Ako je korisnik zaključao SVOJ dan, ne smije praviti nove prodaje dok se ne otključa.
+  const danasDatum = new Date().toISOString().split('T')[0];
+  const zakljucanoRes = await pool.query(
+    'SELECT id FROM dnevno_zakljucanje WHERE zaposleni_id=$1 AND datum=$2 AND otkljucano_kada IS NULL',
+    [user.id, danasDatum]
+  );
+  if (zakljucanoRes.rows.length)
+    return res.status(423).json({ error: 'Zaključao/la si današnji dan. Otključaj (lozinkom) da nastaviš sa prodajom.' });
+
   const {
     stavke, kupac_naziv, kupac_adresa, kupac_telefon, kupac_email, kupac_grad, kupac_id,
     potvrdio_kupac_ime, nacin_placanja, iznos_placeno_sada,

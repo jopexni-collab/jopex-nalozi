@@ -777,6 +777,23 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   </div>
 </div>
 
+<!-- ═══ OVERLAY: ZAKLJUČI DAN ═══ -->
+<div class="overlay" id="ov-zakljuci-dan">
+  <div class="ov-header">🔒 Zaključi dan<span class="ov-who" id="zd-who"></span></div>
+  <div class="ov-body" style="align-items:stretch;">
+    <div id="zd-sadrzaj" style="width:100%;max-width:460px;margin:0 auto;"></div>
+  </div>
+  <div class="ov-footer">
+    <button class="btn-otkazi" onclick="document.getElementById('ov-zakljuci-dan').classList.remove('on')">Zatvori</button>
+  </div>
+</div>
+
+<!-- ═══ TRAKA: DAN JE ZAKLJUČAN (blokira Prodaju) ═══ -->
+<div id="zd-traka" style="display:none;background:var(--red);color:#fff;text-align:center;padding:10px 14px;font-size:13px;font-weight:700;position:sticky;top:0;z-index:90;">
+  🔒 Zaključao/la si današnji dan — nova prodaja je blokirana.
+  <button onclick="otvoriZakljuciDan()" style="margin-left:10px;background:#fff;color:var(--red);border:none;border-radius:6px;padding:4px 12px;font-weight:700;cursor:pointer;">Otključaj</button>
+</div>
+
 <script>
 const API='';
 let isAdmin=false, currentUser=null;
@@ -2770,15 +2787,130 @@ fetch(`${API}/api/auth/me`).then(r=>{
 /* ── ZAKLJUČI DAN ─────────────────────────────────────────── */
 document.getElementById('btn-zakljuci-dan').onclick=e=>{
   e.preventDefault();
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-  document.querySelector('.tab-btn[data-tab="admin"]').classList.add('active');
-  document.getElementById('view-admin').classList.add('active');
-  const danas=new Date().toISOString().split('T')[0];
-  document.getElementById('fil-od').value=danas;
-  document.getElementById('fil-do').value=danas;
-  loadOtpremnice();
+  otvoriZakljuciDan();
 };
+
+async function otvoriZakljuciDan(){
+  document.getElementById('zd-who').textContent=currentUser?.ime_prezime||'';
+  document.getElementById('ov-zakljuci-dan').classList.add('on');
+  const sadrzaj=document.getElementById('zd-sadrzaj');
+  sadrzaj.innerHTML='<div class="spinner">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/otpremnice/status-dana`);
+    const st=await r.json();
+    if(st.zakljucano){
+      prikaziOtkljucajForma(st.red);
+    }else{
+      await prikaziPresjekDana();
+    }
+  }catch(e){
+    sadrzaj.innerHTML='<div style="color:var(--red);">Greška pri učitavanju.</div>';
+  }
+}
+
+function prikaziOtkljucajForma(red){
+  const sadrzaj=document.getElementById('zd-sadrzaj');
+  sadrzaj.innerHTML=`
+    <div style="background:#fce8e6;border-radius:10px;padding:16px;text-align:center;margin-bottom:16px;">
+      <div style="font-size:15px;font-weight:800;color:var(--red);">🔒 Dan je zaključan</div>
+      <div style="font-size:12.5px;color:#6b7a8d;margin-top:6px;">Zaključao/la: ${esc(red.zakljucao_ime||'')} &middot; ${new Date(red.zakljucano_kada).toLocaleString('sr-Latn-BA')}</div>
+    </div>
+    <div class="kupac-fld">
+      <label>Unesi svoju lozinku da otključaš</label>
+      <input type="password" id="zd-lozinka" placeholder="Lozinka">
+    </div>
+    <button class="btn-generisi" onclick="otkljucajDan()">🔓 Otključaj dan</button>
+    <div id="zd-msg" style="font-size:12.5px;margin-top:8px;"></div>
+  `;
+}
+
+async function prikaziPresjekDana(){
+  const sadrzaj=document.getElementById('zd-sadrzaj');
+  const r=await fetch(`${API}/api/otpremnice/presjek-dana`);
+  const p=await r.json();
+  window.__presjekDana=p;
+  const nijePoslato=p.otpremnice_nije_poslato||[];
+  sadrzaj.innerHTML=`
+    <div style="background:#f7f8fa;border-radius:10px;padding:14px;margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;padding:5px 0;"><span>Otpremnica danas</span><b>${p.broj_otpremnica}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0;"><span>Ukupan promet</span><b>${fmMoney(p.ukupan_promet)}</b></div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0;border-top:1px solid #e8eaed;margin-top:4px;padding-top:9px;">
+        <span>Gotovina — predano</span><b style="color:var(--green);">${fmMoney(p.gotovina_predano)}</b>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0;">
+        <span>Gotovina — NIJE predano</span><b style="color:${p.gotovina_nepredano>0?'var(--red)':'var(--green)'};">${fmMoney(p.gotovina_nepredano)}</b>
+      </div>
+    </div>
+    ${p.gotovina_nepredano>0?`<div style="background:#fce8e6;color:var(--red);border-radius:8px;padding:10px 12px;font-size:12.5px;font-weight:600;margin-bottom:14px;">⚠ Imaš ${fmMoney(p.gotovina_nepredano)} koji nisi predao/la blagajniku. Predaj prije zaključenja (Blagajna → tvoja gotovina).</div>`:''}
+    ${nijePoslato.length?`
+      <div style="background:#fff3e0;border-radius:8px;padding:12px;margin-bottom:14px;">
+        <div style="font-weight:700;color:#b8860b;margin-bottom:6px;">📤 ${nijePoslato.length} otpremnic${nijePoslato.length===1?'a':'e'} nije poslato knjigovodstvu</div>
+        <div style="font-size:12px;color:#6b7a8d;margin-bottom:8px;">${nijePoslato.map(o=>esc(o.broj)).join(', ')}</div>
+        <button class="btn-generisi" style="background:#b8860b;" onclick="posaljiSveKnjigovodstvu()">📧 Pošalji sve odjednom</button>
+        <div id="zd-slanje-msg" style="font-size:12px;margin-top:6px;"></div>
+      </div>
+    `:`<div style="background:#e6f4ea;color:var(--green);border-radius:8px;padding:10px 12px;font-size:12.5px;font-weight:600;margin-bottom:14px;">✓ Sve otpremnice su poslate knjigovodstvu.</div>`}
+    <button class="btn-generisi" style="background:var(--red);" onclick="potvrdiZakljucenje()">🔒 Zaključi dan</button>
+    <div id="zd-msg" style="font-size:12.5px;margin-top:8px;"></div>
+  `;
+}
+
+async function posaljiSveKnjigovodstvu(){
+  const p=window.__presjekDana;
+  if(!p) return;
+  const msg=document.getElementById('zd-slanje-msg');
+  msg.style.color='#8b96a5'; msg.textContent='Otpremam...';
+  let uspjelo=0;
+  for(const o of p.otpremnice_nije_poslato){
+    try{
+      await fetch(`${API}/api/otpremnice/${o.id}/oznaci-poslato-knjigovodstvu`,{method:'POST'});
+      uspjelo++;
+    }catch(e){}
+  }
+  msg.style.color='var(--green)';
+  msg.textContent=`✓ Markirano ${uspjelo}/${p.otpremnice_nije_poslato.length} kao poslato.`;
+  await prikaziPresjekDana();
+}
+
+async function potvrdiZakljucenje(){
+  const msg=document.getElementById('zd-msg');
+  try{
+    const r=await fetch(`${API}/api/otpremnice/zakljuci-dan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    document.getElementById('ov-zakljuci-dan').classList.remove('on');
+    provjeriZakljucanDan();
+  }catch(e){
+    msg.style.color='var(--red)'; msg.textContent='✗ '+e.message;
+  }
+}
+
+async function otkljucajDan(){
+  const lozinka=document.getElementById('zd-lozinka').value;
+  const msg=document.getElementById('zd-msg');
+  if(!lozinka){ msg.style.color='var(--red)'; msg.textContent='Unesi lozinku.'; return; }
+  try{
+    const r=await fetch(`${API}/api/otpremnice/otkljucaj-dan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lozinka})});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    document.getElementById('ov-zakljuci-dan').classList.remove('on');
+    provjeriZakljucanDan();
+  }catch(e){
+    msg.style.color='var(--red)'; msg.textContent='✗ '+e.message;
+  }
+}
+
+// Provjerava pri učitavanju stranice da li je dan već zaključan — prikazuje crvenu
+// traku ako jeste (nova prodaja je onda blokirana i na serveru, ovo je samo vidljiv signal).
+async function provjeriZakljucanDan(){
+  try{
+    const r=await fetch(`${API}/api/otpremnice/status-dana`);
+    const st=await r.json();
+    document.getElementById('zd-traka').style.display=st.zakljucano?'block':'none';
+  }catch(e){}
+}
+provjeriZakljucanDan();
+
 </script>
 </body>
 </html>
