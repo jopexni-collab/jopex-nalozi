@@ -31,11 +31,11 @@ router.get('/', async (req, res) => {
     let where = [];
     let vals = [];
     let i = 1;
-    if (od) { where.push(`datum >= $${i++}`); vals.push(od); }
-    if (do_) { where.push(`datum <= $${i++}`); vals.push(do_); }
-    if (primio) { where.push(`primio = $${i++}`); vals.push(primio); }
-    if (izvor) { where.push(`izvor = $${i++}`); vals.push(izvor); }
-    if (nepredano === 'true') { where.push(`predao_blagajniku = false`); }
+    if (od) { where.push(`g.datum >= $${i++}`); vals.push(od); }
+    if (do_) { where.push(`g.datum <= $${i++}`); vals.push(do_); }
+    if (primio) { where.push(`g.primio = $${i++}`); vals.push(primio); }
+    if (izvor) { where.push(`g.izvor = $${i++}`); vals.push(izvor); }
+    if (nepredano === 'true') { where.push(`g.predao_blagajniku = false`); }
     if (objekt_naziv) { where.push(`g.objekt_naziv = $${i++}`); vals.push(objekt_naziv); }
     // Blagajnik je FORSIRAN da vidi SVOJE PJ (jedan ili više) — ALI i SVE zapise koji NISU
     // vezani ni za jedan PJ (npr. naplata sa radnog naloga, koja nema objekt_naziv jer nije
