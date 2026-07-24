@@ -2551,7 +2551,7 @@ async function loadOtpremnice(brojOverride, tiho){
             ?`<span style="color:var(--green);">📤 Poslato knjigovodstvu ${fd(o.poslato_knjigovodstvu_vrijeme)}</span>`
             :`<span style="color:var(--red);">⏳ Nije poslato knjigovodstvu</span>`}
         </div>
-        <div class="otp-iznos">${fmMoneyZaObjekat(o.ukupan_iznos, o.objekt_id)}</div>
+        <div class="otp-iznos">${o.ukupan_iznos!=null?fmMoneyZaObjekat(o.ukupan_iznos, o.objekt_id):'<span style="font-size:11px;color:#8b96a5;font-weight:400;">🔒 starije od juče</span>'}</div>
         <div class="otp-actions">
           <button class="btn-otp-posalji" onclick="event.stopPropagation();togglePosaljiKartica(${o.id})">📤 Pošalji kupcu</button>
           <button class="btn-otp-posalji" style="${o.poslato_knjigovodstvu?'background:#e6f4ea;color:var(--green);border-color:var(--green);':'background:#fce8e6;color:var(--red);border-color:var(--red);'}" onclick="event.stopPropagation();toggleKnjigovodstvo(${o.id})">${o.poslato_knjigovodstvu?`✓ U Knjig. ${fd(o.poslato_knjigovodstvu_vrijeme)}`:'📧 Pošalji knjigovodstvu'}</button>
@@ -2663,7 +2663,8 @@ async function prikaziDetaljeOtpremnice(id){
     const otp=await r.json();
     if(!r.ok) throw new Error(otp.error||'Greška.');
     el.innerHTML=otp.stavke.map(s=>{
-      const odstupa=!!s.razlog_odstupanja;
+      const financijeSakrivene = s.cijena===undefined;
+      const odstupa=!financijeSakrivene && !!s.razlog_odstupanja;
       const boja=s.cijena_visa?'var(--green)':(s.jm_promijenjena&&!s.cijena_niza)?'var(--blue)':'var(--red)';
       const strelica=s.cijena_visa?'▲':s.cijena_niza?'▼':'⚙';
       return `
@@ -2671,8 +2672,11 @@ async function prikaziDetaljeOtpremnice(id){
         <div class="osr-top" style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;">
           <span style="color:#8b96a5;font-size:10.5px;flex-shrink:0;">${esc(s.sifra||'—')}</span>
           <span style="flex:1;min-width:80px;word-break:break-word;">${esc(s.naziv)}</span>
-          <span style="flex-shrink:0;white-space:nowrap;color:#6b7a8d;font-size:11px;">${s.kolicina} ${esc(s.jed_mjera||'')} × ${fmMoneyZaObjekat(s.cijena, otp.objekt_id)}</span>
-          <span style="flex-shrink:0;font-weight:700;">${fmMoneyZaObjekat(s.iznos, otp.objekt_id)}</span>
+          ${financijeSakrivene
+            ?`<span style="flex-shrink:0;white-space:nowrap;color:#6b7a8d;font-size:11px;">${s.kolicina} ${esc(s.jed_mjera||'')}</span>
+               <span style="flex-shrink:0;font-size:10px;color:#8b96a5;">🔒</span>`
+            :`<span style="flex-shrink:0;white-space:nowrap;color:#6b7a8d;font-size:11px;">${s.kolicina} ${esc(s.jed_mjera||'')} × ${fmMoneyZaObjekat(s.cijena, otp.objekt_id)}</span>
+               <span style="flex-shrink:0;font-weight:700;">${fmMoneyZaObjekat(s.iznos, otp.objekt_id)}</span>`}
         </div>
         ${odstupa?`<div class="osr-odst" style="color:${boja};">${strelica} Zadana cijena: ${fmMoneyZaObjekat(s.cijena_zadana, otp.objekt_id)} → Prodano: ${fmMoneyZaObjekat(s.cijena, otp.objekt_id)}
           &middot; ${esc(RAZLOG_LABEL[s.razlog_odstupanja]||s.razlog_odstupanja||'')}${s.napomena_odstupanja?' — '+esc(s.napomena_odstupanja):''}</div>`:''}

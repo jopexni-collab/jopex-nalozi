@@ -263,7 +263,25 @@ router.get('/', async (req, res) => {
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY datum DESC LIMIT 300`;
     const r = await pool.query(sql, vals);
-    res.json(r.rows);
+    let rows = r.rows;
+
+    // Zaštita od "curenja cijena kroz sjećanje" — obični komercijalista (nije admin/Ponude/
+    // blagajnik — blagajniku trebaju puni iznosi za usklađivanje gotovine) vidi pune
+    // finansijske podatke SAMO za Danas i Juče. Za sve starije, prikazuje se samo
+    // količina/artikal (kao što kupac vidi na svom dokumentu) — bez iznosa. Sprečava da
+    // neko kasnije "izrecituje" tačnu staru cijenu nekome van firme.
+    const smijePuneFinansije = user?.rola === 'admin' || !!user?.moze_ugovarati || blagajnikPJevi.length > 0;
+    if (!smijePuneFinansije) {
+      const juce = new Date(); juce.setDate(juce.getDate() - 1); juce.setHours(0, 0, 0, 0);
+      rows = rows.map(row => {
+        const datumReda = new Date(row.datum);
+        if (datumReda >= juce) return row; // Danas/Juče — bez izmjena
+        const { ukupan_iznos, iznos_placeno, duguje, ...ostatak } = row;
+        return ostatak;
+      });
+    }
+
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -462,18 +480,34 @@ router.get('/:id', async (req, res) => {
     const user = req.session?.user;
     const h = await pool.query('SELECT * FROM otpremnice WHERE id=$1', [req.params.id]);
     if (!h.rows.length) return res.status(404).json({ error: 'Nije pronađeno.' });
-    const otp = h.rows[0];
+    let otp = h.rows[0];
+    let jeBlagajnikOvdje = false;
     if (user?.rola !== 'admin' && otp.komercijalista_id !== user.id) {
       const bp = await pool.query(
         'SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 AND objekat_id=$2',
         [user.id, otp.objekt_id]
       );
       if (!bp.rows.length) return res.status(403).json({ error: 'Nema pristupa.' });
+      jeBlagajnikOvdje = true;
     }
     const s = await pool.query(
       'SELECT * FROM otpremnica_stavke WHERE otpremnica_id=$1 ORDER BY id', [req.params.id]
     );
-    res.json({ ...otp, stavke: s.rows });
+    let stavke = s.rows;
+
+    // Ista zaštita kao u listi (vidi GET / gore) — starije od Danas/Juče, obični
+    // komercijalista vidi samo količine, ne cijene/iznose (ni na nalogu ni po stavci).
+    const smijePuneFinansije = user?.rola === 'admin' || !!user?.moze_ugovarati || jeBlagajnikOvdje;
+    if (!smijePuneFinansije) {
+      const juce = new Date(); juce.setDate(juce.getDate() - 1); juce.setHours(0, 0, 0, 0);
+      if (new Date(otp.datum) < juce) {
+        const { ukupan_iznos, iznos_placeno, duguje, ...otpOstatak } = otp;
+        otp = otpOstatak;
+        stavke = stavke.map(({ cijena, cijena_zadana, iznos, ...stavkaOstatak }) => stavkaOstatak);
+      }
+    }
+
+    res.json({ ...otp, stavke });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
