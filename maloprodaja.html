@@ -1106,6 +1106,7 @@ async function traziKupca(q){
 }
 
 function izaberiKupca(kupac){
+  if(danZakljucan){ alert('🔒 Zaključao/la si današnji dan. Otključaj (dugme gore) da nastaviš sa prodajom.'); return; }
   trenutniKupac=kupac;
   document.getElementById('kupac-picker').style.display='none';
   document.getElementById('novi-kupac-forma').style.display='none';
@@ -1618,6 +1619,7 @@ async function unesiRucniDug(){
 }
 
 function prikaziNovogKupca(){
+  if(danZakljucan){ alert('🔒 Zaključao/la si današnji dan. Otključaj (dugme gore) da nastaviš sa prodajom.'); return; }
   document.getElementById('novi-kupac-forma').style.display='block';
   document.getElementById('nk-naziv').focus();
 }
@@ -1657,6 +1659,7 @@ let uredjivanjeIdx=null; // koja stavka trenutno ima otvoren editor cijene
 let dasArtikal=null, dasJedinica='kom', dasM2mode='direktno', dasM3mode='direktno';
 
 function dodajUKosaricu(artikal){
+  if(danZakljucan){ alert('🔒 Zaključao/la si današnji dan. Otključaj (dugme gore) da nastaviš sa prodajom.'); return; }
   if(parseFloat(artikal.stanje)<=0){alert('Artikal "'+artikal.naziv+'" nema stanja.');return;}
   dasArtikal=artikal;
   document.getElementById('das-naziv').textContent=artikal.naziv;
@@ -2900,13 +2903,16 @@ async function otkljucajDan(){
   }
 }
 
+let danZakljucan=false;
+
 // Provjerava pri učitavanju stranice da li je dan već zaključan — prikazuje crvenu
 // traku ako jeste (nova prodaja je onda blokirana i na serveru, ovo je samo vidljiv signal).
 async function provjeriZakljucanDan(){
   try{
     const r=await fetch(`${API}/api/otpremnice/status-dana`);
     const st=await r.json();
-    document.getElementById('zd-traka').style.display=st.zakljucano?'block':'none';
+    danZakljucan=!!st.zakljucano;
+    document.getElementById('zd-traka').style.display=danZakljucan?'block':'none';
   }catch(e){}
 }
 provjeriZakljucanDan();
