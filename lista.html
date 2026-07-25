@@ -300,13 +300,12 @@ function getCols(){
     },edit:{type:'avans',field:'avans',label:'Avans (KM)'}},
     {k:'za_naplatu',l:'Za naplatu',w:90,filter:null,render:r=>{
       if(!mozeVidjetiFin(r)) return '<td class="num">—</td>';
-      // naplata_predano: true=sve predano, false=ima gotovine koja čeka blagajnika,
-      // null=nema gotovinske komponente uopšte (samo banka, ili još ništa uplaćeno).
-      let cls='', naslov='';
-      if(!r.naplaceno){ naslov='Klik da naplatiš (podjela banka/gotovina)'; }
-      else if(r.naplata_predano===false){ cls=' ceka-blagajnu'; naslov='Naplaćeno — čeka da blagajnik potvrdi prijem gotovine'; }
-      else{ cls=' predano-zeleno'; naslov='Naplaćeno'; }
-      return `<td class="num note-cell${cls}" data-note="${esc(r.avans_opis||'')}" title="${naslov}">${fm(r.za_naplatu)}</td>`;
+      // Boja prati ISKLJUČIVO da li je blagajnik preuzeo gotovinu (naplata_predano) —
+      // true=zeleno, false=crveno (čeka), null=nema gotovinske komponente (samo banka,
+      // ili još ništa uplaćeno) — bez posebne boje.
+      const cls=r.naplata_predano===true?' predano-zeleno':(r.naplata_predano===false?' ceka-blagajnu':'');
+      const naslov=r.naplata_predano===false?'Čeka da blagajnik potvrdi prijem gotovine':'Klik da naplatiš (podjela banka/gotovina)';
+      return `<td class="num note-cell${cls}" data-note="${esc(r.naplaceno_opis||'')}" title="${naslov}">${fm(r.za_naplatu)}</td>`;
     },edit:{type:'naplata-split',field:'avans',label:'Naplata ostatka'}},
     {k:'naplaceno',l:'✓ Napl.',w:55,filter:'sel',opts:['Da','Ne'],render:r=>mozeVidjetiFin(r)?`<td class="center">${r.naplaceno?'<span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span>':''}</td>`:'<td class="center">—</td>',edit:{type:'check',field:'naplaceno',label:'Naplaćeno'}},
   ];
@@ -651,7 +650,7 @@ function openPop(td,row,editCfg){
       <input type="hidden" id="pop-inp" value="${esc(val||0)}">`;
   } else if(editCfg.type==='naplata-split'){
     const zaNaplatu=parseFloat(row.za_naplatu||0);
-    const opisVal=row.avans_opis||'';
+    const opisVal=row.naplaceno_opis||'';
     const rate=opisVal.split('\n').map(r=>r.trim()).filter(Boolean);
     const imenaBlagajnika=['Boban','Marija','Nenad','Rade','Edo'];
     const banke=[['rfb','rfb (banka)'],['uni','uni (banka)'],['mf','mf (banka)'],['nlb','nlb (banka)'],['uni1','uni1 (banka)']];
@@ -748,8 +747,8 @@ async function sacuvajNaplataSplit(zaNaplatu){
     });
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Greška.');
-    popRow.avans=d.avans;
-    popRow.avans_opis=d.avans_opis;
+    popRow.naplaceno_iznos=d.naplaceno_iznos;
+    popRow.naplaceno_opis=d.naplaceno_opis;
     popRow.za_naplatu=d.za_naplatu;
     popRow.naplaceno=d.naplaceno;
     msg.style.color='green'; msg.textContent='✓ Naplata zabilježena — dug zatvoren.';

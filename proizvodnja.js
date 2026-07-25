@@ -5,8 +5,8 @@ const pool = require('./db');
 
 // Finansijske kolone - vide ih samo admini
 const ADMIN_COLS = `
-  p.ugovorena_suma, p.avans, p.avans_opis,
-  (COALESCE(p.ugovorena_suma,0) - COALESCE(p.avans,0)) AS za_naplatu,
+  p.ugovorena_suma, p.avans, p.avans_opis, p.naplaceno_iznos,
+  (COALESCE(p.ugovorena_suma,0) - COALESCE(p.avans,0) - COALESCE(p.naplaceno_iznos,0)) AS za_naplatu,
   p.naplata_detalji, p.naplaceno_fakturisano, p.dodatni_rad_napomena,
   ga.predano AS avans_predano, gn.predano AS naplata_predano
 `;
@@ -38,7 +38,7 @@ const BASE_COLS = `
 // Finansijska polja (iz ADMIN_COLS) — vidljiva adminu, ILI osobi koja je upisana kao
 // "ugovorio" za TAJ KONKRETAN nalog (npr. operater koji je na licu mjesta dogovorio
 // uslugu i treba transparentno da upiše cijenu — ne vidi cijene TUĐIH naloga).
-const FINANSIJSKA_POLJA = ['ugovorena_suma', 'avans', 'avans_opis', 'za_naplatu',
+const FINANSIJSKA_POLJA = ['ugovorena_suma', 'avans', 'avans_opis', 'naplaceno_iznos', 'za_naplatu',
   'naplata_detalji', 'naplaceno_fakturisano', 'dodatni_rad_napomena',
   'avans_predano', 'naplata_predano'];
 
@@ -94,7 +94,7 @@ router.get('/za-naplatu', async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT r_br, narucilac, zadatak, ugovorena_suma, avans, avans_opis,
-              (COALESCE(ugovorena_suma,0) - COALESCE(avans,0)) AS za_naplatu,
+              (COALESCE(ugovorena_suma,0) - COALESCE(avans,0) - COALESCE(naplaceno_iznos,0)) AS za_naplatu,
               naplaceno, naplaceno_opis
        FROM proizvodnja_jopex
        WHERE (narucilac ILIKE $1 OR r_br::text = $2)
@@ -280,9 +280,13 @@ router.post('/:r_br/naplata-blagajna', async (req, res) => {
       );
     } else {
       await pool.query('DELETE FROM gotovina WHERE nalog_r_br=$1::text AND opis LIKE \'Naplata%\'', [String(nalog.r_br)]);
+      // naplaceno_iznos se postavlja na TAČAN preostali iznos (ne na uneseni iznosNum
+      // direktno) — garantuje da za_naplatu ispravno padne na 0, bez obzira na sitna
+      // odstupanja u unosu.
+      const tacanPreostatak = parseFloat(nalog.ugovorena_suma || 0) - parseFloat(nalog.avans || 0);
       await pool.query(
-        `UPDATE proizvodnja_jopex SET naplaceno=true, naplaceno_opis=$1 WHERE r_br=$2`,
-        [opisMarker, nalog.r_br]
+        `UPDATE proizvodnja_jopex SET naplaceno=true, naplaceno_opis=$1, naplaceno_iznos=$2 WHERE r_br=$3`,
+        [opisMarker, tacanPreostatak, nalog.r_br]
       );
     }
 
@@ -408,7 +412,7 @@ router.post('/:r_br/naplati-ostatak', async (req, res) => {
 
   try {
     const nRes = await pool.query(
-      'SELECT r_br, narucilac, ugovorio_id, avans, avans_opis, ugovorena_suma FROM proizvodnja_jopex WHERE r_br=$1',
+      'SELECT r_br, narucilac, ugovorio_id, avans, ugovorena_suma, naplaceno_iznos, naplaceno_opis FROM proizvodnja_jopex WHERE r_br=$1',
       [req.params.r_br]
     );
     if (!nRes.rows.length) return res.status(404).json({ error: 'Nalog nije pronađen.' });
@@ -419,7 +423,7 @@ router.post('/:r_br/naplati-ostatak', async (req, res) => {
     const smijeFinansije = isAdmin || !!user.moze_ugovarati || jeSvoj;
     if (!smijeFinansije) return res.status(403).json({ error: 'Nemate pravo na finansije ovog naloga.' });
 
-    const zaNaplatuTrenutno = parseFloat(nalog.ugovorena_suma || 0) - parseFloat(nalog.avans || 0);
+    const zaNaplatuTrenutno = parseFloat(nalog.ugovorena_suma || 0) - parseFloat(nalog.avans || 0) - parseFloat(nalog.naplaceno_iznos || 0);
     const uneseno = bankaNum + gotovinaNum;
     // Tolerancija za zaokruživanje (par para), ne strogo == zbog decimalne aritmetike.
     if (Math.abs(uneseno - zaNaplatuTrenutno) > 0.02)
@@ -431,12 +435,14 @@ router.post('/:r_br/naplati-ostatak', async (req, res) => {
     const noviRedovi = [];
     if (bankaNum > 0) noviRedovi.push(`${nacin_banka} ${danasKratko} - ${bankaNum.toFixed(2)}`);
     if (gotovinaNum > 0) noviRedovi.push(`got ${ime_gotovina.trim()} ${danasKratko} - ${gotovinaNum.toFixed(2)}`);
-    const noviOpis = nalog.avans_opis ? `${nalog.avans_opis}\n${noviRedovi.join('\n')}` : noviRedovi.join('\n');
-    const noviAvans = parseFloat(nalog.avans || 0) + uneseno;
+    // Naplata ostatka ima SVOJ, ODVOJEN log — ne miješa se sa avans_opis (avans je nešto
+    // već davno uplaćeno, naplata ostatka je zaseban događaj poslije posla).
+    const noviOpis = nalog.naplaceno_opis ? `${nalog.naplaceno_opis}\n${noviRedovi.join('\n')}` : noviRedovi.join('\n');
+    const noviNaplacenoIznos = parseFloat(nalog.naplaceno_iznos || 0) + uneseno;
 
     await pool.query(
-      'UPDATE proizvodnja_jopex SET avans=$1, avans_opis=$2, naplaceno=true WHERE r_br=$3',
-      [noviAvans, noviOpis, nalog.r_br]
+      'UPDATE proizvodnja_jopex SET naplaceno_iznos=$1, naplaceno_opis=$2, naplaceno=true WHERE r_br=$3',
+      [noviNaplacenoIznos, noviOpis, nalog.r_br]
     );
 
     if (gotovinaNum > 0) {
@@ -460,7 +466,7 @@ router.post('/:r_br/naplati-ostatak', async (req, res) => {
       }
     }
 
-    res.json({ ok: true, avans: noviAvans, avans_opis: noviOpis, za_naplatu: 0, naplaceno: true });
+    res.json({ ok: true, naplaceno_iznos: noviNaplacenoIznos, naplaceno_opis: noviOpis, za_naplatu: 0, naplaceno: true });
   } catch (err) {
     res.status(500).json({ error: 'Greška: ' + err.message });
   }
