@@ -365,7 +365,7 @@ router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
       // riječ punog imena), ne po statusu "da li je uopšte blagajnik".
       const mojeIme = (user.ime_prezime || '').trim().split(/\s+/)[0].toLowerCase();
       const jeVlastitoIme = imeUneseno.toLowerCase() === mojeIme;
-      const opisGotovine = `Uplata (rata) - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''}`;
+      const opisGotovine = `Avans (rata) - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''}`;
       if (jeVlastitoIme) {
         await pool.query(
           `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
@@ -383,6 +383,84 @@ router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
     }
 
     res.json({ ok: true, avans: noviAvans, avans_opis: noviOpis, za_naplatu: +noviZaNaplatu.toFixed(2), naplaceno: autoNaplaceno });
+  } catch (err) {
+    res.status(500).json({ error: 'Greška: ' + err.message });
+  }
+});
+
+// POST /api/proizvodnja/:r_br/naplati-ostatak — ZA RAZLIKU OD avansa (koji je slobodan,
+// bilo koji iznos), ovo je STROGO OGRANIČENO na tačan preostali dug — cilj je da se dug
+// zatvori na nulu u jednom potezu, uz mogućnost podjele banka+gotovina. Ako je kupac
+// platio VIŠE od duga, taj višak se NE knjiži ovdje — ide kroz Avans (odvojeno), kao
+// avans za neki budući posao, ne miješa se sa zatvaranjem OVOG duga.
+router.post('/:r_br/naplati-ostatak', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+  const { iznos_banka, nacin_banka, iznos_gotovina, ime_gotovina } = req.body;
+  const bankaNum = parseFloat(iznos_banka) || 0;
+  const gotovinaNum = parseFloat(iznos_gotovina) || 0;
+  if (bankaNum <= 0 && gotovinaNum <= 0)
+    return res.status(400).json({ error: 'Unesite bar jedan iznos (banka i/ili gotovina).' });
+  if (bankaNum > 0 && !nacin_banka)
+    return res.status(400).json({ error: 'Izaberite banku za bankovni dio.' });
+  if (gotovinaNum > 0 && !(ime_gotovina || '').trim())
+    return res.status(400).json({ error: 'Ime je obavezno za gotovinski dio.' });
+
+  try {
+    const nRes = await pool.query(
+      'SELECT r_br, narucilac, ugovorio_id, avans, avans_opis, ugovorena_suma FROM proizvodnja_jopex WHERE r_br=$1',
+      [req.params.r_br]
+    );
+    if (!nRes.rows.length) return res.status(404).json({ error: 'Nalog nije pronađen.' });
+    const nalog = nRes.rows[0];
+
+    const isAdmin = user.rola === 'admin';
+    const jeSvoj = nalog.ugovorio_id === user.id;
+    const smijeFinansije = isAdmin || !!user.moze_ugovarati || jeSvoj;
+    if (!smijeFinansije) return res.status(403).json({ error: 'Nemate pravo na finansije ovog naloga.' });
+
+    const zaNaplatuTrenutno = parseFloat(nalog.ugovorena_suma || 0) - parseFloat(nalog.avans || 0);
+    const uneseno = bankaNum + gotovinaNum;
+    // Tolerancija za zaokruživanje (par para), ne strogo == zbog decimalne aritmetike.
+    if (Math.abs(uneseno - zaNaplatuTrenutno) > 0.02)
+      return res.status(400).json({
+        error: `Zbir (${uneseno.toFixed(2)}) mora tačno pokriti preostali dug (${zaNaplatuTrenutno.toFixed(2)}). Ako je kupac platio više, višak upišite kroz Avans.`,
+      });
+
+    const danasKratko = new Date().toLocaleDateString('sr-Latn-BA', { day: '2-digit', month: '2-digit' });
+    const noviRedovi = [];
+    if (bankaNum > 0) noviRedovi.push(`${nacin_banka} ${danasKratko} - ${bankaNum.toFixed(2)}`);
+    if (gotovinaNum > 0) noviRedovi.push(`got ${ime_gotovina.trim()} ${danasKratko} - ${gotovinaNum.toFixed(2)}`);
+    const noviOpis = nalog.avans_opis ? `${nalog.avans_opis}\n${noviRedovi.join('\n')}` : noviRedovi.join('\n');
+    const noviAvans = parseFloat(nalog.avans || 0) + uneseno;
+
+    await pool.query(
+      'UPDATE proizvodnja_jopex SET avans=$1, avans_opis=$2, naplaceno=true WHERE r_br=$3',
+      [noviAvans, noviOpis, nalog.r_br]
+    );
+
+    if (gotovinaNum > 0) {
+      const imeUneseno = ime_gotovina.trim();
+      const mojeIme = (user.ime_prezime || '').trim().split(/\s+/)[0].toLowerCase();
+      const jeVlastitoIme = imeUneseno.toLowerCase() === mojeIme;
+      const opisGotovine = `Naplata ostatka - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''}`;
+      if (jeVlastitoIme) {
+        await pool.query(
+          `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
+                                  predao_blagajniku, datum_predaje, preuzeo_ime)
+           VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, $5, true, now(), $2)`,
+          [gotovinaNum, imeUneseno, String(nalog.r_br), opisGotovine, PROIZVODNJA_PJ]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv)
+           VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, $5)`,
+          [gotovinaNum, imeUneseno, String(nalog.r_br), opisGotovine, PROIZVODNJA_PJ]
+        );
+      }
+    }
+
+    res.json({ ok: true, avans: noviAvans, avans_opis: noviOpis, za_naplatu: 0, naplaceno: true });
   } catch (err) {
     res.status(500).json({ error: 'Greška: ' + err.message });
   }

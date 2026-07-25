@@ -300,11 +300,15 @@ function getCols(){
     },edit:{type:'avans',field:'avans',label:'Avans (KM)'}},
     {k:'za_naplatu',l:'Za naplatu',w:90,filter:null,render:r=>{
       if(!mozeVidjetiFin(r)) return '<td class="num">—</td>';
-      if(r.naplaceno||parseFloat(r.za_naplatu)<=0.005) return '<td class="center"><span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span></td>';
-      return `<td class="num" title="Klik da dodaš uplatu">${fm(r.za_naplatu)}</td>`;
-    },edit:{type:'avans',field:'avans',label:'Naplata ostatka'}},
+      // naplata_predano: true=sve predano, false=ima gotovine koja čeka blagajnika,
+      // null=nema gotovinske komponente uopšte (samo banka, ili još ništa uplaćeno).
+      let cls='', naslov='';
+      if(!r.naplaceno){ naslov='Klik da naplatiš (podjela banka/gotovina)'; }
+      else if(r.naplata_predano===false){ cls=' ceka-blagajnu'; naslov='Naplaćeno — čeka da blagajnik potvrdi prijem gotovine'; }
+      else{ cls=' predano-zeleno'; naslov='Naplaćeno'; }
+      return `<td class="num note-cell${cls}" data-note="${esc(r.avans_opis||'')}" title="${naslov}">${fm(r.za_naplatu)}</td>`;
+    },edit:{type:'naplata-split',field:'avans',label:'Naplata ostatka'}},
     {k:'naplaceno',l:'✓ Napl.',w:55,filter:'sel',opts:['Da','Ne'],render:r=>mozeVidjetiFin(r)?`<td class="center">${r.naplaceno?'<span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span>':''}</td>`:'<td class="center">—</td>',edit:{type:'check',field:'naplaceno',label:'Naplaćeno'}},
-    {k:'naplaceno_opis',l:'Opis naplate',w:130,filter:'text',render:r=>mozeVidjetiFin(r)?`<td class="note-cell${r.naplaceno_opis?' has-note':''}" data-note="${esc(r.naplaceno_opis)}">${esc(r.naplaceno_opis)||''}</td>`:'<td>—</td>',edit:{type:'naplata',field:'naplaceno_opis',label:'Opis naplate'}},
   ];
   const admOnly=isAdmin?[
     {k:'_del',l:'',w:40,filter:null,render:r=>`<td class="center"><button onclick="obrisiNalog(${r.r_br},event)" style="background:none;border:none;cursor:pointer;font-size:14px;color:#c0392b;" title="Obriši nalog">🗑</button></td>`,edit:null},
@@ -548,7 +552,7 @@ function openPop(td,row,editCfg){
   document.getElementById('pop-label').textContent=editCfg.label||editCfg.field;
   // Avans ima svoje "+ Dodaj ratu" dugme unutar sadržaja — generičko "Sačuvaj" bi bilo
   // zbunjujuće (dva puta za istu akciju), pa ga sakrivamo samo za ovaj tip.
-  document.querySelector('#inline-pop .pop-btns .btn-save').style.display=editCfg.type==='avans'?'none':'';
+  document.querySelector('#inline-pop .pop-btns .btn-save').style.display=(editCfg.type==='avans'||editCfg.type==='naplata-split')?'none':'';
   const fEl=document.getElementById('pop-field');
   const val=row[editCfg.field];
   if(editCfg.type==='select'){
@@ -645,6 +649,37 @@ function openPop(td,row,editCfg){
       <button type="button" onclick="sacuvajRatuAvansa()" style="width:100%;margin-top:10px;padding:7px;background:var(--green,#1f8a4c);color:#fff;border:none;border-radius:5px;font-weight:700;cursor:pointer;">+ Dodaj ratu</button>
       <div id="rata-msg" style="font-size:11px;margin-top:6px;"></div>
       <input type="hidden" id="pop-inp" value="${esc(val||0)}">`;
+  } else if(editCfg.type==='naplata-split'){
+    const zaNaplatu=parseFloat(row.za_naplatu||0);
+    const opisVal=row.avans_opis||'';
+    const rate=opisVal.split('\n').map(r=>r.trim()).filter(Boolean);
+    const imenaBlagajnika=['Boban','Marija','Nenad','Rade','Edo'];
+    const banke=[['rfb','rfb (banka)'],['uni','uni (banka)'],['mf','mf (banka)'],['nlb','nlb (banka)'],['uni1','uni1 (banka)']];
+    fEl.innerHTML=`
+      <div style="font-size:12px;color:#555;margin-bottom:6px;">Preostalo za naplatu: <b>${fm(zaNaplatu)} KM</b></div>
+      ${rate.length?`<div style="background:#f7f8fa;border-radius:6px;padding:6px 8px;margin-bottom:10px;font-size:10.5px;color:#666;max-height:80px;overflow-y:auto;">
+        ${rate.map(r=>`<div>• ${esc(r)}</div>`).join('')}
+      </div>`:''}
+      <div style="font-size:10.5px;color:#888;font-weight:600;">Dio preko banke (KM) — opciono:</div>
+      <input type="number" id="ns-banka-iznos" step="0.01" placeholder="0.00" value="0" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:3px;" oninput="azurirajNaplataSplit(${zaNaplatu})">
+      <select id="ns-banka-nacin" style="width:100%;font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ccc;border-radius:4px;margin-top:4px;">
+        ${banke.map(([v,l])=>`<option value="${esc(v)}">${l}</option>`).join('')}
+      </select>
+      <div style="font-size:10.5px;color:#888;font-weight:600;margin-top:10px;">Ostatak gotovinom:</div>
+      <div id="ns-gotovina-iznos-prikaz" style="font-size:15px;font-weight:800;color:var(--dark,#222);padding:4px 0;">${fm(zaNaplatu)} KM</div>
+      <div id="ns-gotovina-polja">
+        <div style="font-size:10.5px;color:#888;font-weight:600;">Blagajnik:</div>
+        <select id="ns-blagajnik" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:3px;" onchange="document.getElementById('ns-ime').value=this.value">
+          <option value="">— izaberi ili upiši ispod —</option>
+          ${imenaBlagajnika.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}
+        </select>
+        <div style="font-size:10.5px;color:#888;font-weight:600;margin-top:6px;">ili slobodan unos imena:</div>
+        <input type="text" id="ns-ime" placeholder="npr. Petar" style="width:100%;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;margin-top:3px;">
+      </div>
+      <div style="font-size:10px;color:#999;margin-top:8px;">Ako je kupac platio više od preostalog duga, višak upiši kroz Avans (ne ovdje).</div>
+      <button type="button" onclick="sacuvajNaplataSplit(${zaNaplatu})" style="width:100%;margin-top:10px;padding:7px;background:var(--green,#1f8a4c);color:#fff;border:none;border-radius:5px;font-weight:700;cursor:pointer;">✓ Zabilježi naplatu</button>
+      <div id="ns-msg" style="font-size:11px;margin-top:6px;"></div>
+      <input type="hidden" id="pop-inp" value="${esc(val||0)}">`;
   } else if(editCfg.type==='number'){
     fEl.innerHTML=`<input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
     setTimeout(()=>{
@@ -686,6 +721,42 @@ function updateOpisCombo(prefix){
   if(inp) inp.value=val;
   const prev=document.getElementById(prefix+'-preview');
   if(prev) prev.textContent=val||'—';
+}
+
+function azurirajNaplataSplit(zaNaplatu){
+  const bankaIznos=parseFloat(document.getElementById('ns-banka-iznos').value)||0;
+  const ostatak=Math.max(0, zaNaplatu-bankaIznos);
+  document.getElementById('ns-gotovina-iznos-prikaz').textContent=fm(ostatak)+' KM';
+  document.getElementById('ns-gotovina-polja').style.display=ostatak>0.005?'block':'none';
+}
+
+async function sacuvajNaplataSplit(zaNaplatu){
+  const msg=document.getElementById('ns-msg');
+  const bankaIznos=parseFloat(document.getElementById('ns-banka-iznos').value)||0;
+  const nacinBanka=document.getElementById('ns-banka-nacin').value;
+  const gotovinaIznos=Math.max(0, +(zaNaplatu-bankaIznos).toFixed(2));
+  let imeGotovina='';
+  if(gotovinaIznos>0.005){
+    imeGotovina=(document.getElementById('ns-ime').value||'').trim();
+    if(!imeGotovina){ msg.style.color='red'; msg.textContent='Unesite ime (blagajnik ili slobodan unos) za gotovinski dio.'; return; }
+  }
+  if(bankaIznos<=0.005 && gotovinaIznos<=0.005){ msg.style.color='red'; msg.textContent='Unesite iznos.'; return; }
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/${popRow.r_br}/naplati-ostatak`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({iznos_banka:bankaIznos, nacin_banka:nacinBanka, iznos_gotovina:gotovinaIznos, ime_gotovina:imeGotovina}),
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    popRow.avans=d.avans;
+    popRow.avans_opis=d.avans_opis;
+    popRow.za_naplatu=d.za_naplatu;
+    popRow.naplaceno=d.naplaceno;
+    msg.style.color='green'; msg.textContent='✓ Naplata zabilježena — dug zatvoren.';
+    setTimeout(()=>{ popClose(); }, 900);
+  }catch(e){
+    msg.style.color='red'; msg.textContent='✗ '+e.message;
+  }
 }
 
 function prekaciNacinRate(){
@@ -816,7 +887,7 @@ async function popSave(){
 
 function popClose(){
   pop.style.display='none';
-  const trebaOsvjezavanje=popEditType==='avans'; // rate su mogle promijeniti podatke na serveru
+  const trebaOsvjezavanje=popEditType==='avans'||popEditType==='naplata-split';
   popRow=null;popField=null;popTd=null;popEditType=null;
   if(trebaOsvjezavanje) load();
 }
