@@ -324,7 +324,7 @@ router.post('/:r_br/naplata-blagajna', async (req, res) => {
 router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
   const user = req.session?.user;
   if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
-  const { iznos, nacin, ime_gotovina } = req.body; // nacin: bank kod ILI 'gotovina'
+  const { iznos, nacin, ime_gotovina, licno_preuzeo } = req.body; // nacin: bank kod ILI 'gotovina'
   const iznosNum = parseFloat(iznos);
   if (!(iznosNum > 0)) return res.status(400).json({ error: 'Iznos mora biti veći od 0.' });
   if (!nacin) return res.status(400).json({ error: 'Način uplate je obavezan.' });
@@ -362,15 +362,14 @@ router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
 
     if (nacin === 'gotovina') {
       const imeUneseno = ime_gotovina.trim();
-      // KLJUČNO: "Predano" ide automatski SAMO ako je ulogovana osoba upisala SVOJE
-      // vlastito ime (znači ona lično fizički drži novac). Ako upiše BILO KOJE drugo ime
-      // (drugi blagajnik, monter na isporuci, itd.) — ostaje "Nije predano" dok ta osoba
-      // (ili bilo ko) ne potvrdi ručno da je novac stvarno predat. Poredi se po IMENU (prva
-      // riječ punog imena), ne po statusu "da li je uopšte blagajnik".
-      const mojeIme = (user.ime_prezime || '').trim().split(/\s+/)[0].toLowerCase();
-      const jeVlastitoIme = imeUneseno.toLowerCase() === mojeIme;
+      // KLJUČNO: "Predano" ide automatski SAMO ako je osoba EKSPLICITNO potvrdila
+      // checkbox-om "Ja lično držim ovaj novac" na frontendu — ne oslanjamo se na
+      // poređenje upisanog imena sa ulogovanim (nepouzdano — razlike u pisanju,
+      // pravopis, itd.). Ako checkbox NIJE potvrđen, ostaje "Nije predano" dok se
+      // ručno ne potvrdi.
+      const jeLicnoPreuzeo = licno_preuzeo === true;
       const opisGotovine = `Avans (rata) - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''}`;
-      if (jeVlastitoIme) {
+      if (jeLicnoPreuzeo) {
         await pool.query(
           `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
                                   predao_blagajniku, datum_predaje, preuzeo_ime)
@@ -400,7 +399,7 @@ router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
 router.post('/:r_br/naplati-ostatak', async (req, res) => {
   const user = req.session?.user;
   if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
-  const { iznos_banka, nacin_banka, iznos_gotovina, ime_gotovina } = req.body;
+  const { iznos_banka, nacin_banka, iznos_gotovina, ime_gotovina, licno_preuzeo } = req.body;
   const bankaNum = parseFloat(iznos_banka) || 0;
   const gotovinaNum = parseFloat(iznos_gotovina) || 0;
   if (bankaNum <= 0 && gotovinaNum <= 0)
@@ -447,10 +446,9 @@ router.post('/:r_br/naplati-ostatak', async (req, res) => {
 
     if (gotovinaNum > 0) {
       const imeUneseno = ime_gotovina.trim();
-      const mojeIme = (user.ime_prezime || '').trim().split(/\s+/)[0].toLowerCase();
-      const jeVlastitoIme = imeUneseno.toLowerCase() === mojeIme;
+      const jeLicnoPreuzeo = licno_preuzeo === true;
       const opisGotovine = `Naplata ostatka - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''}`;
-      if (jeVlastitoIme) {
+      if (jeLicnoPreuzeo) {
         await pool.query(
           `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
                                   predao_blagajniku, datum_predaje, preuzeo_ime)
