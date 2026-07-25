@@ -418,6 +418,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <input type="text" id="isp-komitent-search" placeholder="Pretraga po imenu/telefonu..." oninput="debounceTraziKomitentaIsplata()">
       <div id="isp-komitent-rezultati"></div>
       <div id="isp-komitent-izabran" style="display:none;background:#f7f8fa;border-radius:8px;padding:10px;margin-top:8px;font-size:13px;font-weight:700;"></div>
+      <div id="isp-komitent-dug"></div>
     </div>
     <div class="kupac-fld" id="isp-napomena-fld">
       <label id="isp-napomena-lbl">Napomena (opciono)</label>
@@ -437,6 +438,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <p id="isplata-uspjeh-detalji" style="font-size:13px;color:#6b7a8d;margin-bottom:14px;"></p>
     <div class="posalji-box" id="isplata-posalji-box"></div>
     <button class="btn-generisi" style="margin-top:14px;" onclick="novaIsplata()">+ Nova isplata</button>
+    <button class="btn-generisi" style="margin-top:8px;background:none;border:1px solid var(--border);color:var(--dark);" onclick="vratiNaPocetakBlagajne()">🏠 Povratak na početak</button>
   </div>
 
   <div class="import-box">
@@ -510,6 +512,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <input type="text" id="upl-kupac-search" placeholder="Pretraga kupca po imenu/telefonu..." oninput="debounceTraziKupcaUplata()">
       <div id="upl-kupac-rezultati"></div>
       <div id="upl-kupac-izabran" style="display:none;background:#f7f8fa;border-radius:8px;padding:10px;margin-top:8px;font-size:13px;font-weight:700;"></div>
+      <div id="upl-kupac-dug"></div>
     </div>
     <div class="kupac-fld">
       <label id="upl-iznos-lbl">Iznos uplate (KM)</label>
@@ -526,6 +529,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <p id="uplata-uspjeh-detalji" style="font-size:13px;color:#6b7a8d;margin-bottom:14px;"></p>
     <div class="posalji-box" id="uplata-posalji-box"></div>
     <button class="btn-generisi" style="margin-top:14px;" onclick="novaUplata()">+ Nova uplata</button>
+    <button class="btn-generisi" style="margin-top:8px;background:none;border:1px solid var(--border);color:var(--dark);" onclick="vratiNaPocetakBlagajne()">🏠 Povratak na početak</button>
   </div>
 </div>
 
@@ -1391,6 +1395,7 @@ function promijeniRazlogIsplate(){
     isplataKomitent=null;
     document.getElementById('isp-komitent-izabran').style.display='none';
     document.getElementById('isp-komitent-search').value='';
+    document.getElementById('isp-komitent-dug').innerHTML='';
     if(razlog==='servis'){
       lbl.textContent='Koji servis *';
       polje.placeholder='Naziv servisa...';
@@ -1426,12 +1431,36 @@ async function traziKomitentaIsplata(q){
     cont.innerHTML='<div class="empty-msg">Greška pri pretrazi.</div>';
   }
 }
+// Zajednička za Isplatu i Uplatu — prikazuje koliko konkretan kupac duguje i po kojim
+// otpremnicama, čim se izabere iz pretrage (isto što blagajnik vidi u gotovina.html).
+async function prikaziDugKomitenta(kupacId, kontejnerId){
+  const cont=document.getElementById(kontejnerId);
+  cont.innerHTML='<div style="font-size:11.5px;color:#8b96a5;margin-top:6px;">Učitavanje duga...</div>';
+  try{
+    const r=await fetch(`${API}/api/otpremnice/dugovanja/kupac/${kupacId}`);
+    if(!r.ok){ cont.innerHTML=''; return; }
+    const d=await r.json();
+    if(!d.ukupno_duguje || d.ukupno_duguje<=0){
+      cont.innerHTML=`<div style="background:#e6f4ea;color:var(--green);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px;font-weight:600;">✓ Nema otvorenog duga.</div>`;
+      return;
+    }
+    cont.innerHTML=`
+      <div style="background:#fce8e6;border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12.5px;">
+        <b style="color:var(--red);">⚠ Duguje ukupno: ${fmMoney(d.ukupno_duguje)}</b>
+        <div style="margin-top:6px;font-size:11px;color:#6b7a8d;">
+          ${d.stavke.map(o=>`<div style="padding:3px 0;border-top:1px solid #f3c7c2;">#${esc(o.broj)} · ${esc(o.datum?.split('T')[0]||'')} · ${esc(o.objekt_naziv||'')} — <b>${fmMoney(o.duguje)}</b></div>`).join('')}
+        </div>
+      </div>`;
+  }catch(e){ cont.innerHTML=''; }
+}
+
 function izaberiKomitentaIsplata(kupac){
   isplataKomitent=kupac;
   document.getElementById('isp-komitent-izabran').style.display='block';
   document.getElementById('isp-komitent-izabran').textContent=`${kupac.naziv}${kupac.telefon?' · '+kupac.telefon:''}`;
   document.getElementById('isp-komitent-rezultati').innerHTML='';
   document.getElementById('isp-komitent-search').value='';
+  prikaziDugKomitenta(kupac.id, 'isp-komitent-dug');
 }
 
 function pripremiIsplatu(){
@@ -2547,6 +2576,15 @@ function renderPosaljiDugmadIsplata(token, broj){
   `;
 }
 
+// Vraća na početni ekran (Prodaja tab) — koristi se sa success ekrana Isplate/Uplate,
+// kao alternativa "Nova isplata/uplata" kad korisnik zapravo želi da završi rad u blagajni.
+function vratiNaPocetakBlagajne(){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelector('.tab-btn[data-tab="prodaja"]').classList.add('active');
+  document.getElementById('view-prodaja').classList.add('active');
+}
+
 function novaIsplata(){
   document.getElementById('isplata-forma-box').style.display='block';
   document.getElementById('isplata-uspjeh-box').style.display='none';
@@ -2591,6 +2629,7 @@ function izaberiKupcaUplata(kupac){
   document.getElementById('upl-kupac-izabran').textContent=`${kupac.naziv}${kupac.telefon?' · '+kupac.telefon:''}`;
   document.getElementById('upl-kupac-rezultati').innerHTML='';
   document.getElementById('upl-kupac-search').value='';
+  prikaziDugKomitenta(kupac.id, 'upl-kupac-dug');
 }
 
 async function pripremiUplatu(){
@@ -2659,6 +2698,7 @@ function novaUplata(){
   document.getElementById('upl-kupac-search').value='';
   document.getElementById('upl-iznos').value='';
   document.getElementById('upl-napomena').value='';
+  document.getElementById('upl-kupac-dug').innerHTML='';
 }
 
 function novaProdaja(){
