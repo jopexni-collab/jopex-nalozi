@@ -571,7 +571,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 <!-- ═══ TAB: ROBA I MAGACIN (admin) ═══ -->
 <!-- ═══ KOŠARICA (sticky bottom) ═══ -->
-<div id="korpa-tabovi" style="display:flex;gap:6px;padding:8px 14px 0;flex-wrap:wrap;position:fixed;left:0;right:0;bottom:64px;z-index:80;background:transparent;"></div>
+<div id="korpa-tabovi" style="display:flex;gap:6px;padding:8px 14px 0;flex-wrap:wrap;position:fixed;left:0;right:0;z-index:80;background:transparent;"></div>
 <div class="kosarica-bar" id="kosarica-bar">
   <div class="kb-summary" id="kb-summary">
     <div class="kb-summary-left">
@@ -886,13 +886,27 @@ function ispraznikorpu(){
 function azurirajKorpaTabove(){
   const cont=document.getElementById('korpa-tabovi');
   if(!cont) return;
-  if(korpe.length<=1 && !korpe[0]?.kupac){ cont.innerHTML=''; return; }
+  if(korpe.length<=1 && !korpe[0]?.kupac){ cont.innerHTML=''; pozicionirajKorpaTabove(); return; }
   cont.innerHTML = korpe.map(k=>{
     const aktivna=k.id===aktivnaKorpaId;
     const ime=k.kupac ? esc((k.kupac.naziv||'').split(' ')[0]) : 'prazna';
     return `<button onclick="prebaciNaKorpu('${k.id}')" style="padding:6px 12px;border-radius:16px;border:2px solid ${aktivna?'var(--blue)':'#ddd'};background:${aktivna?'var(--blue)':'#fff'};color:${aktivna?'#fff':'#333'};font-weight:700;font-size:12.5px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.1);">🛒 ${ime} (${k.stavke.length})</button>`;
   }).join('') + `<button onclick="otvoriNovuKorpuKlik()" style="padding:6px 12px;border-radius:16px;border:2px dashed #999;background:#fff;color:#333;font-weight:700;font-size:12.5px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.1);">+ Nova korpa</button>`;
+  pozicionirajKorpaTabove();
 }
+
+// Postavlja poziciju trake sa tabovima TAČNO iznad trake korpe (ne fiksno 64px — to je
+// pucalo na nekim telefonima jer se stvarna visina trake korpe razlikuje po uređaju,
+// veličini fonta, i da li je traka otvorena/zatvorena — sad se mjeri stvarna visina).
+function pozicionirajKorpaTabove(){
+  const tabovi=document.getElementById('korpa-tabovi');
+  const traka=document.getElementById('kosarica-bar');
+  if(!tabovi||!traka) return;
+  requestAnimationFrame(()=>{
+    tabovi.style.bottom = traka.offsetHeight + 'px';
+  });
+}
+window.addEventListener('resize', pozicionirajKorpaTabove);
 
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -2170,6 +2184,10 @@ document.getElementById('kb-summary').onclick=()=>{
   const bar=document.getElementById('kosarica-bar');
   bar.classList.toggle('open');
   document.getElementById('kb-chevron').textContent=bar.classList.contains('open')?'▼':'▲';
+  // Traka korpe mijenja visinu (CSS tranzicija) — sačekaj da se ta tranzicija završi pa
+  // tek onda ponovo izmjeri i pozicioniraj tabove iznad nje.
+  pozicionirajKorpaTabove();
+  setTimeout(pozicionirajKorpaTabove, 320);
 };
 
 /* ── GENERISANJE OTPREMNICE ──────────────────────────────────
