@@ -605,22 +605,21 @@ function openPop(td,row,editCfg){
     },50);
   } else if(editCfg.type==='ugovorio'){
     ugovorioIzabraniId=null; ugovorioSlobodniTekst=null;
-    // Učitaj SVE zaposlene iz config-a (svako kod nas može da ugovori) — pretraga dok
-    // kucaš (datalist), plus "Drugi" opcija za slobodan unos imena koje nije na listi.
+    // Učitaj SVE zaposlene iz config-a (svako kod nas može da ugovori) — JEDNO polje:
+    // kucanje sužava izbor (datalist), a ako upisano ime NIJE na listi, prihvata se
+    // tačno ono što je upisano (slobodan tekst, bez posebnog drugog polja).
     const cfg=JSON.parse(localStorage.getItem('jopex_config')||'{}');
     const ugovaraci=cfg.ugovaraci||[];
     const trenutnoIme=ugovaraci.find(u=>u.id==val)?.ime_prezime||'';
     fEl.innerHTML=`
-      <input type="text" id="ugovorio-search" list="ugovorio-datalist" placeholder="Počni da kucaš ime..." value="${esc(trenutnoIme)}"
+      <input type="text" id="ugovorio-search" list="ugovorio-datalist" placeholder="Kucaj ime — sužava izbor, ili upiši novo ime" value="${esc(trenutnoIme)}"
         style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" oninput="oznaciUgovorioId()">
       <datalist id="ugovorio-datalist">
         ${ugovaraci.map(u=>`<option value="${esc(u.ime_prezime)}" data-id="${u.id}">`).join('')}
       </datalist>
-      <div style="margin-top:8px;font-size:10.5px;color:#888;font-weight:600;">ili — nije na listi:</div>
-      <input type="text" id="ugovorio-drugi" placeholder="Slobodan unos imena" style="width:100%;font:inherit;font-size:12px;padding:5px 7px;border:1px solid #ccc;border-radius:4px;margin-top:3px;" oninput="oznaciUgovorioDrugi()">
-      <input type="hidden" id="pop-inp" value="${esc(val||'')}">
-      <input type="hidden" id="ugovorio-drugi-tekst" value="">`;
-    setTimeout(()=>{const el=document.getElementById('ugovorio-search');if(el)el.focus();},30);
+      <div id="ugovorio-info" style="margin-top:6px;font-size:10.5px;color:#888;"></div>
+      <input type="hidden" id="pop-inp" value="${esc(val||'')}">`;
+    setTimeout(()=>{const el=document.getElementById('ugovorio-search');if(el){el.focus();el.select();}},30);
   } else if(editCfg.type==='naplata'){
     const todayIso=new Date().toISOString().split('T')[0];
     const vrste=[
@@ -794,22 +793,24 @@ function oznaciUgovorioId(){
   const opcije=document.querySelectorAll('#ugovorio-datalist option');
   let nadjenId=null;
   opcije.forEach(o=>{ if(o.value===tekst) nadjenId=o.dataset.id; });
-  ugovorioIzabraniId=nadjenId;
-  document.getElementById('pop-inp').value=nadjenId||'';
+  const info=document.getElementById('ugovorio-info');
   if(nadjenId){
+    // Ime se TAČNO poklapa sa nekim na listi — koristi taj ID.
+    ugovorioIzabraniId=nadjenId;
     ugovorioSlobodniTekst=null;
-    document.getElementById('ugovorio-drugi').value='';
-  }
-}
-
-function oznaciUgovorioDrugi(){
-  const tekst=document.getElementById('ugovorio-drugi').value.trim();
-  if(tekst){
-    ugovorioSlobodniTekst=tekst;
+    document.getElementById('pop-inp').value=nadjenId;
+    if(info) info.textContent='✓ Prepoznato sa liste.';
+  }else if(tekst){
+    // Nije na listi, ali nešto je upisano — prihvata se kao slobodan unos imena.
     ugovorioIzabraniId=null;
-    document.getElementById('ugovorio-search').value='';
+    ugovorioSlobodniTekst=tekst;
+    document.getElementById('pop-inp').value='';
+    if(info) info.textContent='ℹ️ Nije na listi — biće upisano kao novo ime.';
   }else{
+    ugovorioIzabraniId=null;
     ugovorioSlobodniTekst=null;
+    document.getElementById('pop-inp').value='';
+    if(info) info.textContent='';
   }
 }
 
