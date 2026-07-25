@@ -362,14 +362,16 @@ router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
 
     if (nacin === 'gotovina') {
       const imeUneseno = ime_gotovina.trim();
-      // KLJUČNO: "Predano" ide automatski SAMO ako je ulogovani blagajnik izabrao/upisao
-      // SVOJE vlastito ime (nema smisla da neko "preda sam sebi" — pa se to markira
-      // odmah). Ako izabere BILO KOJE drugo ime (drugi blagajnik, monter, itd.) — ostaje
-      // "Nije predano" dok ta osoba (ili bilo ko) ne potvrdi ručno.
+      // KLJUČNO: "Predano" ide automatski SAMO ako je ulogovana osoba (a) STVARNO
+      // registrovan blagajnik (ne bilo ko — admin/Ponude koji slučajno ima isto ime se NE
+      // računa) I (b) upisala SVOJE vlastito ime (nema smisla da neko "preda sam sebi").
+      // Ako bilo koji od ova dva uslova ne važi — ostaje "Nije predano" dok se ručno ne potvrdi.
       const mojeIme = (user.ime_prezime || '').trim().split(/\s+/)[0].toLowerCase();
       const jeVlastitoIme = imeUneseno.toLowerCase() === mojeIme;
+      const jeIOnBlagajnik = await jeBlagajnik(user.id);
+      const smijeAutoPredano = jeVlastitoIme && jeIOnBlagajnik;
       const opisGotovine = `Avans (rata) - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''}`;
-      if (jeVlastitoIme) {
+      if (smijeAutoPredano) {
         await pool.query(
           `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
                                   predao_blagajniku, datum_predaje, preuzeo_ime)
@@ -448,8 +450,10 @@ router.post('/:r_br/naplati-ostatak', async (req, res) => {
       const imeUneseno = ime_gotovina.trim();
       const mojeIme = (user.ime_prezime || '').trim().split(/\s+/)[0].toLowerCase();
       const jeVlastitoIme = imeUneseno.toLowerCase() === mojeIme;
+      const jeIOnBlagajnik = await jeBlagajnik(user.id);
+      const smijeAutoPredano = jeVlastitoIme && jeIOnBlagajnik;
       const opisGotovine = `Naplata ostatka - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''}`;
-      if (jeVlastitoIme) {
+      if (smijeAutoPredano) {
         await pool.query(
           `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
                                   predao_blagajniku, datum_predaje, preuzeo_ime)
@@ -555,11 +559,12 @@ router.patch('/:r_br', async (req, res) => {
     const novo = r.rows[0];
 
     if (trebaProvjeruGotovine) {
-      // KLJUČNO: "Predano" ide automatski SAMO ako je ulogovana osoba upisala SVOJE
-      // vlastito ime u "got X" (znači ona lično fizički drži novac). Ako upiše bilo koje
-      // drugo ime — ostaje "Nije predano" dok se ručno ne potvrdi.
+      // KLJUČNO: "Predano" ide automatski SAMO ako je ulogovana osoba (a) STVARNO
+      // registrovan blagajnik I (b) upisala SVOJE vlastito ime u "got X". Ako bilo koji
+      // od ova dva uslova ne važi — ostaje "Nije predano" dok se ručno ne potvrdi.
       const mojeIme = (user?.ime_prezime || '').trim().split(/\s+/)[0].toLowerCase();
-      const jeVlastitoIme = (val) => izvuciPrimio(val).toLowerCase() === mojeIme;
+      const jeIOnBlagajnik = await jeBlagajnik(user?.id);
+      const smijeAutoPredano = (val) => jeIOnBlagajnik && izvuciPrimio(val).toLowerCase() === mojeIme;
 
       // AVANS -> ako se avans_opis promijenio, prvo ukloni STARI gotovinski zapis (ako
       // postoji) — bez obzira da li se sad prebacuje NA gotovinu, SA gotovine na banku,
@@ -573,7 +578,7 @@ router.patch('/:r_br', async (req, res) => {
         );
         if (jeGotovina(novo.avans_opis) && avansIznos > 0) {
           const opisTekst = `Avans - nalog #${novo.r_br}${novo.narucilac ? ' (' + novo.narucilac + ')' : ''}`;
-          if (jeVlastitoIme(novo.avans_opis)) {
+          if (smijeAutoPredano(novo.avans_opis)) {
             await pool.query(
               `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
                                       predao_blagajniku, datum_predaje, preuzeo_ime)
@@ -599,7 +604,7 @@ router.patch('/:r_br', async (req, res) => {
         );
         if (jeGotovina(novo.naplaceno_opis) && zaNaplatu > 0) {
           const opisTekst = `Naplata - nalog #${novo.r_br}${novo.narucilac ? ' (' + novo.narucilac + ')' : ''}`;
-          if (jeVlastitoIme(novo.naplaceno_opis)) {
+          if (smijeAutoPredano(novo.naplaceno_opis)) {
             await pool.query(
               `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
                                       predao_blagajniku, datum_predaje, preuzeo_ime)
