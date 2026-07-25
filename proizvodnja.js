@@ -362,14 +362,14 @@ router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
 
     if (nacin === 'gotovina') {
       const imeUneseno = ime_gotovina.trim();
-      // KLJUČNO: "Predano" ide automatski SAMO ako je osoba EKSPLICITNO potvrdila
-      // checkbox-om "Ja lično držim ovaj novac" na frontendu — ne oslanjamo se na
-      // poređenje upisanog imena sa ulogovanim (nepouzdano — razlike u pisanju,
-      // pravopis, itd.). Ako checkbox NIJE potvrđen, ostaje "Nije predano" dok se
-      // ručno ne potvrdi.
-      const jeLicnoPreuzeo = licno_preuzeo === true;
+      // KLJUČNO: "Predano" ide automatski SAMO ako je ulogovani blagajnik izabrao/upisao
+      // SVOJE vlastito ime (nema smisla da neko "preda sam sebi" — pa se to markira
+      // odmah). Ako izabere BILO KOJE drugo ime (drugi blagajnik, monter, itd.) — ostaje
+      // "Nije predano" dok ta osoba (ili bilo ko) ne potvrdi ručno.
+      const mojeIme = (user.ime_prezime || '').trim().split(/\s+/)[0].toLowerCase();
+      const jeVlastitoIme = imeUneseno.toLowerCase() === mojeIme;
       const opisGotovine = `Avans (rata) - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''}`;
-      if (jeLicnoPreuzeo) {
+      if (jeVlastitoIme) {
         await pool.query(
           `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
                                   predao_blagajniku, datum_predaje, preuzeo_ime)
@@ -446,9 +446,10 @@ router.post('/:r_br/naplati-ostatak', async (req, res) => {
 
     if (gotovinaNum > 0) {
       const imeUneseno = ime_gotovina.trim();
-      const jeLicnoPreuzeo = licno_preuzeo === true;
+      const mojeIme = (user.ime_prezime || '').trim().split(/\s+/)[0].toLowerCase();
+      const jeVlastitoIme = imeUneseno.toLowerCase() === mojeIme;
       const opisGotovine = `Naplata ostatka - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''}`;
-      if (jeLicnoPreuzeo) {
+      if (jeVlastitoIme) {
         await pool.query(
           `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
                                   predao_blagajniku, datum_predaje, preuzeo_ime)
@@ -556,9 +557,7 @@ router.patch('/:r_br', async (req, res) => {
     if (trebaProvjeruGotovine) {
       // KLJUČNO: "Predano" ide automatski SAMO ako je ulogovana osoba upisala SVOJE
       // vlastito ime u "got X" (znači ona lično fizički drži novac). Ako upiše bilo koje
-      // drugo ime (drugi blagajnik, monter na isporuci, itd.) — ostaje "Nije predano" dok
-      // se ručno ne potvrdi. NIJE dovoljno da je ulogovana osoba UOPŠTE blagajnik — mora
-      // se poklapati konkretno IME upisano u tekstu.
+      // drugo ime — ostaje "Nije predano" dok se ručno ne potvrdi.
       const mojeIme = (user?.ime_prezime || '').trim().split(/\s+/)[0].toLowerCase();
       const jeVlastitoIme = (val) => izvuciPrimio(val).toLowerCase() === mojeIme;
 
