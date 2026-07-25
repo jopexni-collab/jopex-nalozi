@@ -193,9 +193,14 @@ async function uploadSlikaZaPolje(inputEl, targetFieldId){
     });
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||'Greška pri otpremanju.');
-    document.getElementById(targetFieldId).value=d.link;
+    // DODAJE novi link (ne prepisuje) — više klikova na kameru = više fotografija,
+    // odvojenih zarezom. Prikaz (u lista.html) ih onda lista kao više 🔗 ikonica.
+    const polje=document.getElementById(targetFieldId);
+    const postojeci=(polje.value||'').split(',').map(s=>s.trim()).filter(Boolean);
+    postojeci.push(d.link);
+    polje.value=postojeci.join(',');
     statusEl.style.color='var(--green)';
-    statusEl.textContent='✓ Slika otpremljena i link popunjen.';
+    statusEl.textContent=`✓ Slika otpremljena (${postojeci.length} ukupno). Klikni kameru ponovo za još.`;
   }catch(err){
     statusEl.style.color='var(--red)';
     statusEl.textContent='✗ '+err.message;

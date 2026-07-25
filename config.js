@@ -21,7 +21,7 @@ router.get('/', async (req, res) => {
       pool.query(`SELECT id, naziv, kod, cijena_m FROM vrste_obrade
                   WHERE aktivan = true ORDER BY id`),
       pool.query(`SELECT id, ime_prezime FROM zaposleni
-                  WHERE moze_ugovarati = true AND aktivan = true
+                  WHERE aktivan = true
                   ORDER BY ime_prezime`),
     ]);
     res.json({

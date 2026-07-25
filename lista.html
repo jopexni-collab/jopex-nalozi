@@ -163,10 +163,16 @@ const ZADACI=['Kuhinjska ploča','Klupice, Step','Sto','Na Mjeru','Usluge WJ','U
 const MATERIJALI=['Granit','Mermer','Tašto','Kvarc','Vještački','Keramika','Kombinovano','Obrada na mašini'];
 const REKLAMACIJE=['','NE','DA'];
 let all=[], isAdmin=false, trenutniUser=null, stornoFilter='sakrij';
-let undoStack=[]; // {r_br, field, oldVal}
+let undoStack=[]; // {rBr, izmjene:[{field, oldVal}, ...]}
 
-function pushUndo(rBr, field, oldVal){
-  undoStack.push({rBr, field, oldVal});
+// Prima ili (rBr, field, oldVal) za jedno polje, ili (rBr, {polje1:staraVr, polje2:staraVr})
+// za grupu polja koje treba vratiti ZAJEDNO jednim klikom (npr. kaskadna izmjena statusa
+// i "gotovo" checkbox-a koji se međusobno postavljaju).
+function pushUndo(rBr, fieldOrMapa, oldVal){
+  const izmjene = typeof fieldOrMapa==='object'
+    ? Object.entries(fieldOrMapa).map(([field,ov])=>({field, oldVal:ov}))
+    : [{field:fieldOrMapa, oldVal}];
+  undoStack.push({rBr, izmjene});
   const btn=document.getElementById('btn-undo');
   if(btn){btn.style.opacity='1';btn.style.cursor='pointer';}
 }
@@ -175,14 +181,15 @@ async function undoZadnje(e){
   e.preventDefault();
   if(!undoStack.length) return;
   const u=undoStack.pop();
-  const body={[u.field]:u.oldVal};
+  const body={};
+  for(const iz of u.izmjene) body[iz.field]=iz.oldVal;
   try{
     await fetch(`${API}/api/proizvodnja/${u.rBr}`,{
       method:'PATCH',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(body),
     });
     const row=all.find(r=>r.r_br==u.rBr);
-    if(row) row[u.field]=u.oldVal;
+    if(row) for(const iz of u.izmjene) row[iz.field]=iz.oldVal;
     render();
   }catch(e){alert('Greška pri undo.');}
   if(!undoStack.length){
@@ -260,7 +267,13 @@ function fd(d){
 function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function jeGotovinaOpis(v){return /^got\b/i.test(String(v||'').trim());}
-function lk(u){return u?`<a class="lk" href="${esc(u)}" target="_blank">🔗</a>`:'';} 
+function lk(u){
+  if(!u) return '';
+  // Polje može sadržati više linkova odvojenih zarezom (dodano preko kamere, više puta
+  // klik = više fotografija) — svaki se prikazuje kao svoja 🔗 ikonica, redom.
+  const linkovi=u.split(',').map(s=>s.trim()).filter(Boolean);
+  return linkovi.map((link,i)=>`<a class="lk" href="${esc(link)}" target="_blank" title="${linkovi.length>1?`Slika ${i+1}/${linkovi.length}`:''}">🔗</a>`).join(' ');
+}
 function gv(id){return(document.getElementById(id)||{}).value||'';}
 
 // ─── KOLONE ───────────────────────────────────────────────────────────────
@@ -584,14 +597,23 @@ function openPop(td,row,editCfg){
       cal.focus();
     },50);
   } else if(editCfg.type==='ugovorio'){
-    // Učitaj ugovarače iz config-a
+    ugovorioIzabraniId=null; ugovorioSlobodniTekst=null;
+    // Učitaj SVE zaposlene iz config-a (svako kod nas može da ugovori) — pretraga dok
+    // kucaš (datalist), plus "Drugi" opcija za slobodan unos imena koje nije na listi.
     const cfg=JSON.parse(localStorage.getItem('jopex_config')||'{}');
     const ugovaraci=cfg.ugovaraci||[];
-    fEl.innerHTML=`<select id="pop-inp" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;">
-      <option value="">— izaberi —</option>
-      ${ugovaraci.map(u=>`<option value="${u.id}"${u.id==val?' selected':''}>${esc(u.ime_prezime)}</option>`).join('')}
-    </select>`;
-    setTimeout(()=>{const el=document.getElementById('pop-inp');if(el)el.focus();},30);
+    const trenutnoIme=ugovaraci.find(u=>u.id==val)?.ime_prezime||'';
+    fEl.innerHTML=`
+      <input type="text" id="ugovorio-search" list="ugovorio-datalist" placeholder="Počni da kucaš ime..." value="${esc(trenutnoIme)}"
+        style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;" oninput="oznaciUgovorioId()">
+      <datalist id="ugovorio-datalist">
+        ${ugovaraci.map(u=>`<option value="${esc(u.ime_prezime)}" data-id="${u.id}">`).join('')}
+      </datalist>
+      <div style="margin-top:8px;font-size:10.5px;color:#888;font-weight:600;">ili — nije na listi:</div>
+      <input type="text" id="ugovorio-drugi" placeholder="Slobodan unos imena" style="width:100%;font:inherit;font-size:12px;padding:5px 7px;border:1px solid #ccc;border-radius:4px;margin-top:3px;" oninput="oznaciUgovorioDrugi()">
+      <input type="hidden" id="pop-inp" value="${esc(val||'')}">
+      <input type="hidden" id="ugovorio-drugi-tekst" value="">`;
+    setTimeout(()=>{const el=document.getElementById('ugovorio-search');if(el)el.focus();},30);
   } else if(editCfg.type==='naplata'){
     const todayIso=new Date().toISOString().split('T')[0];
     const vrste=[
@@ -758,6 +780,32 @@ async function sacuvajNaplataSplit(zaNaplatu){
   }
 }
 
+let ugovorioIzabraniId=null, ugovorioSlobodniTekst=null;
+
+function oznaciUgovorioId(){
+  const tekst=document.getElementById('ugovorio-search').value.trim();
+  const opcije=document.querySelectorAll('#ugovorio-datalist option');
+  let nadjenId=null;
+  opcije.forEach(o=>{ if(o.value===tekst) nadjenId=o.dataset.id; });
+  ugovorioIzabraniId=nadjenId;
+  document.getElementById('pop-inp').value=nadjenId||'';
+  if(nadjenId){
+    ugovorioSlobodniTekst=null;
+    document.getElementById('ugovorio-drugi').value='';
+  }
+}
+
+function oznaciUgovorioDrugi(){
+  const tekst=document.getElementById('ugovorio-drugi').value.trim();
+  if(tekst){
+    ugovorioSlobodniTekst=tekst;
+    ugovorioIzabraniId=null;
+    document.getElementById('ugovorio-search').value='';
+  }else{
+    ugovorioSlobodniTekst=null;
+  }
+}
+
 function prekaciNacinRate(){
   const nacin=document.getElementById('rata-nacin').value;
   document.getElementById('rata-gotovina-polja').style.display=nacin==='gotovina'?'block':'none';
@@ -824,27 +872,56 @@ async function popSave(){
     }
     if(!val) val=null;
   }
+
+  // Ugovorio: ako je izabrano ime sa liste, val=ID (normalan slučaj). Ako je upisano
+  // slobodno ime (nije na listi), šalje se TEKST u polje "ugovorio", a "ugovorio_id" se
+  // ne postavlja (ostaje kako je bilo / null) — nema ID-a za nepostojećeg zaposlenog.
+  if(popEditType==='ugovorio'&&ugovorioSlobodniTekst){
+    const staroZaUndo={ugovorio:popRow.ugovorio, ugovorio_id:popRow.ugovorio_id};
+    pushUndo(popRow.r_br, staroZaUndo);
+    try{
+      const r=await fetch(`${API}/api/proizvodnja/${popRow.r_br}`,{
+        method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ugovorio:ugovorioSlobodniTekst, ugovorio_id:null}),
+      });
+      if(!r.ok) throw new Error();
+      popRow.ugovorio=ugovorioSlobodniTekst;
+      popRow.ugovorio_id=null;
+      render();
+      popClose();
+    }catch(e){ alert('Greška pri snimanju.'); }
+    return;
+  }
+
   const body={[popField]:val};
-  // Zapamti staru vrijednost za undo
-  pushUndo(popRow.r_br, popField, popRow[popField]);
+
+  // Skupi SVE stare vrijednosti (direktno izmijenjeno polje + sve što se kaskadno mijenja
+  // zajedno s njim) u JEDAN undo zapis — jedan klik na Undo vraća sve odjednom.
+  const staroZaUndo={[popField]: popRow[popField]};
 
   // Kad se stiklira Gotovo = true, automatski promijeni prioritet i status
   if(popField==='gotovo'&&(val===true||val==='true')){
+    staroZaUndo.prioritet=popRow.prioritet;
+    staroZaUndo.status=popRow.status;
     body.prioritet='Normal';
     body.status='Čeka isporuku';
   }
   // Kad se odstiklira Gotovo = false, vrati na U radu
   if(popField==='gotovo'&&(val===false||val==='false')){
+    staroZaUndo.status=popRow.status;
     body.status='U radu';
   }
   // Kad je status = Isporučeno, automatski čekira Gotovo
   if(popField==='status'&&val==='Isporučeno'){
+    staroZaUndo.gotovo=popRow.gotovo;
     body.gotovo=true;
   }
   // Kad je reklamacija = DA, vrati status na U radu
   if(popField==='reklamacija_dodatni_rad'&&val==='DA'){
+    staroZaUndo.status=popRow.status;
     body.status='U radu';
   }
+  pushUndo(popRow.r_br, staroZaUndo);
 
   try{
     const r=await fetch(`${API}/api/proizvodnja/${popRow.r_br}`,{
