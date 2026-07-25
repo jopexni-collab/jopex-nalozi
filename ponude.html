@@ -184,8 +184,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
     <button class="hdr-btn" onclick="window.print()" title="Štampaj / PDF">🖨 Print</button>
     <button class="hdr-btn" onclick="odjava()" title="Odjava" style="background:rgba(200,50,50,0.25);">🚪 Izlaz</button>
   </div>
-  <div class="logo">JoPeX <em>d.o.o.</em> <span style="font-size:10px;opacity:.55;font-weight:400">Generator Ponuda v276-1</span><span id="hdr-who" style="font-size:10px;opacity:.75;margin-left:10px;font-weight:400"></span></div>
-  <div class="hinfo">Auto-Put, Aleksandrovačka petlja bb · 78255 Aleksandrovac<br>+387 51/42 52 50 · +387 65 512 868</div>
+  <div style="font-size:13px;font-weight:700;white-space:nowrap;padding-left:12px;">JoPeX <span id="hdr-who" style="font-size:10px;opacity:.7;font-weight:400;margin-left:6px;"></span></div>
 </header>
 
 <div class="app">
@@ -222,9 +221,8 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <div class="fg"><label>Telefon</label><input type="text" id="kl-tel"></div>
       <div class="fg"><label>Adresa</label><input type="text" id="kl-adr"></div>
     </div>
-    <div class="fg" style="margin-top:2px;display:flex;gap:6px;">
+    <div class="fg" style="margin-top:2px;">
       <button onclick="noviKupacSacuvaj()" style="font:inherit;font-size:11px;padding:4px 10px;background:#eef4fb;border:1px solid #1a5fa8;border-radius:4px;color:#1a5fa8;cursor:pointer;">+ Sačuvaj u bazu</button>
-      <button onclick="ocistiKupca()" style="font:inherit;font-size:11px;padding:4px 10px;background:#fce8e6;border:1px solid #f3c6c0;border-radius:4px;color:#c0392b;cursor:pointer;">✕ Očisti</button>
     </div>
   </div>
 
@@ -2994,17 +2992,34 @@ function buildTableHoleUI(){
 
 // ═══ CALC ══════════════════════════════════════════
 function getArea(){
+  // Površina za obračun = bounding box (najduža strana × najduža širina)
+  // Ne oduzimaju se otvori (sudopera, ploča za kuvanje) niti prazan prostor
+  // između krakova (L, U, V oblici) — materijal se naručuje po bounding boxu.
   var sh=getShape(shape);
   applyComputedDims(sh);
-  var base=Math.max(0,sh.area(dims));
-  var notches=(customOtvori||[]).filter(function(c){return c.sides===2||c.sides===3;});
-  if(notches.length>0){
-    var baseOutline=getShapeOutline(shape,dims,vOrient);
-    var finalOutline=getFinalOutline(shape,dims,vOrient).outline;
-    var removed=Math.max(0,polyArea(baseOutline)-polyArea(finalOutline));
-    base=Math.max(0,base-removed);
+  var bbW=0, bbH=0;
+  if(shape==='I'){
+    bbW=dims.A||0; bbH=dims.B||0;
+  } else if(shape==='L'){
+    bbW=dims.A||0; bbH=dims.B||0;
+  } else if(shape==='U'){
+    bbW=(dims.E||0)+(dims.A||0)+(dims.F||0);
+    bbH=Math.max(dims.B||0, dims.C||0);
+  } else if(shape==='V'){
+    bbW=dims.A||0; bbH=dims.B||0;
+  } else if(shape==='N'){
+    bbW=dims.A||0; bbH=Math.max(dims.B||0, dims.C||0);
+  } else if(shape==='G'){
+    bbW=dims.A||0; bbH=dims.C||0;
+  } else {
+    // Fallback za ostale oblike
+    var outline=getShapeOutline(shape,dims,vOrient);
+    outline.forEach(function(p){
+      if(p[0]>bbW) bbW=p[0];
+      if(p[1]>bbH) bbH=p[1];
+    });
   }
-  return base/1e6;
+  return Math.max(0,bbW*bbH)/1e6;
 }
 
 function getIvData(){
@@ -6714,7 +6729,6 @@ async function usvojiPonudu(){
     napomena: '',
     status: 'Nije Započeto',
     pocetak: new Date().toISOString().split('T')[0], // datum ugovaranja = danas
-    iz_generatora_ponuda: true, // pouzdan signal za "Velika ponuda" — vidi proizvodnja.js
   };
 
   btn.disabled=true;btn.textContent='Priprema...';
@@ -6743,7 +6757,7 @@ async function usvojiPonudu(){
     var uploadBody={naziv:naziv, dxf_b64:dxfB64};
     if(rnHtmlB64) uploadBody.radni_nalog_html_b64=rnHtmlB64;
 
-    var uploadR=await fetch(url+'/api/upload',{
+    var uploadR=await fetch(url+'/api/upload?api_key=jopex-api-kljuc-2024',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(uploadBody),
@@ -6759,7 +6773,7 @@ async function usvojiPonudu(){
 
     // 6. Upiši nalog u bazu
     showMsg('Upisivanje naloga...',true);
-    var r=await fetch(url+'/api/proizvodnja',{
+    var r=await fetch(url+'/api/proizvodnja?api_key=jopex-api-kljuc-2024',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(body),
