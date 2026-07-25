@@ -367,7 +367,20 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
     <div class="search-box" style="display:flex;gap:8px;">
       <input type="text" id="search" placeholder="🔍 Pretraga po šifri ili nazivu..." autocomplete="off" style="flex:1;">
-      <button onclick="otvoriQrSkener()" style="flex-shrink:0;width:44px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:18px;cursor:pointer;" title="Skeniraj QR kod artikla">📷</button>
+      <button onclick="otvoriQrSkener()" style="flex-shrink:0;width:44px;display:flex;align-items:center;justify-content:center;background:var(--blue);color:#fff;border:none;border-radius:8px;cursor:pointer;" title="Skeniraj QR kod artikla">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="3" width="7" height="7" rx="1" stroke="white" stroke-width="2"/>
+          <rect x="14" y="3" width="7" height="7" rx="1" stroke="white" stroke-width="2"/>
+          <rect x="3" y="14" width="7" height="7" rx="1" stroke="white" stroke-width="2"/>
+          <rect x="5.5" y="5.5" width="2" height="2" fill="white"/>
+          <rect x="16.5" y="5.5" width="2" height="2" fill="white"/>
+          <rect x="5.5" y="16.5" width="2" height="2" fill="white"/>
+          <rect x="14" y="14" width="3" height="3" fill="white"/>
+          <rect x="18" y="14" width="3" height="3" fill="white"/>
+          <rect x="14" y="18" width="3" height="3" fill="white"/>
+          <rect x="18" y="18" width="3" height="3" fill="white"/>
+        </svg>
+      </button>
     </div>
     <div class="search-hint">Ukucaj šifru ili naziv artikla — dodirni rezultat da dodaš stavku.</div>
     <div class="rez-list" id="rez-list"></div>
