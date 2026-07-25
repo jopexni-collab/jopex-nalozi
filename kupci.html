@@ -157,7 +157,7 @@ function render(){
   }
   document.getElementById('tbody').innerHTML=rows.map(k=>`
     <tr id="row-${k.id}">
-      <td class="ime">${esc(k.naziv)}${k.aktivan===false?'<span class="badge-neaktivan">NEAKTIVAN</span>':''}</td>
+      <td class="ime"><input class="edit-inp" value="${esc(k.naziv)}" onchange="sacuvajImePolje(${k.id},this)">${k.aktivan===false?'<span class="badge-neaktivan">NEAKTIVAN</span>':''}</td>
       <td><input class="edit-inp" value="${esc(k.telefon||'')}" placeholder="—" onchange="sacuvajPolje(${k.id},'telefon',this.value)"></td>
       <td><input class="edit-inp" value="${esc(k.grad||'')}" placeholder="—" onchange="sacuvajPolje(${k.id},'grad',this.value)"></td>
       <td><input class="edit-inp" value="${esc(k.adresa||'')}" placeholder="—" onchange="sacuvajPolje(${k.id},'adresa',this.value)"></td>
@@ -172,6 +172,20 @@ function render(){
       <td><span class="saved" id="saved-${k.id}"></span></td>
     </tr>
   `).join('');
+}
+
+// Ime/naziv je jedino polje koje NE SMIJE biti prazno (za razliku od telefona, grada,
+// itd.) — ako neko slučajno obriše sadržaj i klikne van polja, vraća se na staru
+// vrijednost umjesto da se sačuva prazno ime.
+function sacuvajImePolje(id, inputEl){
+  const vrijednost=inputEl.value.trim();
+  if(!vrijednost){
+    const k=kupci.find(k=>k.id===id);
+    inputEl.value=k?.naziv||'';
+    alert('Ime kupca ne može biti prazno.');
+    return;
+  }
+  sacuvajPolje(id,'naziv',vrijednost);
 }
 
 async function sacuvajPolje(id, field, value){
