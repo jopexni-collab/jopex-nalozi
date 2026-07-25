@@ -62,6 +62,27 @@ input:checked+.slider:before{transform:translateX(16px);}
 .msg.ok{background:#e6f4ea;color:var(--green);}
 .msg.err{background:#fce8e6;color:var(--red);}
 .empty{text-align:center;padding:30px;color:#999;}
+
+/* MOBILNI — dodirni elementi moraju biti veći (min ~44px preporučeno za dodir),
+   inače su neupotrebljivi na telefonu. */
+@media (max-width: 768px){
+  body{font-size:14px;}
+  .toolbar{gap:10px;}
+  .toolbar input{min-width:0;flex:1 1 100%;font-size:14px;padding:10px 12px;}
+  .btn{font-size:14px;padding:10px 16px;}
+  #stat{margin-left:0;width:100%;}
+  thead th{font-size:11px;padding:8px 6px;}
+  td{padding:10px 8px;}
+  .edit-inp{font-size:14px;padding:9px 10px;min-height:40px;}
+  .toggle{width:52px;height:30px;}
+  .slider:before{height:22px;width:22px;left:4px;bottom:4px;}
+  input:checked+.slider:before{transform:translateX(22px);}
+  .badge-neaktivan{font-size:11px;padding:2px 8px;}
+  .modal-box{min-width:0;width:92vw;padding:18px;}
+  .fg input,.fg textarea{font-size:15px;padding:10px 12px;}
+  .r2{grid-template-columns:1fr;}
+  .modal-btns button{font-size:14px;padding:12px;}
+}
 </style>
 </head>
 <body>
