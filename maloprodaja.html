@@ -292,6 +292,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   min-height:48px;display:flex;align-items:center;justify-content:center;}
 .objekat-item:active{background:#eef4fc;border-color:var(--blue);}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 </head>
 <body>
 
@@ -315,6 +316,16 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <button class="tab-btn" data-tab="isplate">💸 Isplate</button>
   <button class="tab-btn" data-tab="uplata">💳 Uplata</button>
   <button class="tab-btn" data-tab="dugovanja">⚖️ Ne saldirano</button>
+</div>
+
+<!-- ═══ OVERLAY: QR SKENER ═══ -->
+<div id="ov-qr-skener" style="display:none;position:fixed;inset:0;background:#000;z-index:600;">
+  <video id="qr-video" style="width:100%;height:100%;object-fit:cover;" playsinline autoplay muted></video>
+  <canvas id="qr-canvas" style="display:none;"></canvas>
+  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:220px;height:220px;border:3px solid #fff;border-radius:12px;box-shadow:0 0 0 2000px rgba(0,0,0,.45);pointer-events:none;"></div>
+  <div style="position:absolute;top:16px;left:0;right:0;text-align:center;color:#fff;font-weight:700;font-size:14px;text-shadow:0 1px 3px rgba(0,0,0,.6);">📷 Uperi kameru u QR kod artikla</div>
+  <button onclick="zatvoriQrSkener()" style="position:absolute;top:14px;right:14px;background:rgba(255,255,255,.9);border:none;border-radius:50%;width:38px;height:38px;font-size:16px;font-weight:900;cursor:pointer;">✕</button>
+  <div id="qr-skener-status" style="position:absolute;bottom:24px;left:0;right:0;text-align:center;color:#fff;font-size:12px;"></div>
 </div>
 
 <!-- ═══ TAB: PRODAJA ═══ -->
@@ -354,8 +365,9 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <div style="font-size:11px;font-weight:700;color:#6b7a8d;margin-bottom:6px;">⭐ Najprodavaniji</div>
       <div id="najprodavaniji-lista" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;"></div>
     </div>
-    <div class="search-box">
-      <input type="text" id="search" placeholder="🔍 Pretraga po šifri ili nazivu..." autocomplete="off">
+    <div class="search-box" style="display:flex;gap:8px;">
+      <input type="text" id="search" placeholder="🔍 Pretraga po šifri ili nazivu..." autocomplete="off" style="flex:1;">
+      <button onclick="otvoriQrSkener()" style="flex-shrink:0;width:44px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:18px;cursor:pointer;" title="Skeniraj QR kod artikla">📷</button>
     </div>
     <div class="search-hint">Ukucaj šifru ili naziv artikla — dodirni rezultat da dodaš stavku.</div>
     <div class="rez-list" id="rez-list"></div>
@@ -890,9 +902,27 @@ function azurirajKorpaTabove(){
   cont.innerHTML = korpe.map(k=>{
     const aktivna=k.id===aktivnaKorpaId;
     const ime=k.kupac ? esc((k.kupac.naziv||'').split(' ')[0]) : 'prazna';
-    return `<button onclick="prebaciNaKorpu('${k.id}')" style="padding:6px 12px;border-radius:16px;border:2px solid ${aktivna?'var(--blue)':'#ddd'};background:${aktivna?'var(--blue)':'#fff'};color:${aktivna?'#fff':'#333'};font-weight:700;font-size:12.5px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.1);">🛒 ${ime} (${k.stavke.length})</button>`;
+    return `<span style="display:inline-flex;align-items:center;border-radius:16px;border:2px solid ${aktivna?'var(--blue)':'#ddd'};background:${aktivna?'var(--blue)':'#fff'};box-shadow:0 1px 4px rgba(0,0,0,.1);overflow:hidden;">
+      <button onclick="prebaciNaKorpu('${k.id}')" style="padding:6px 4px 6px 12px;border:none;background:none;color:${aktivna?'#fff':'#333'};font-weight:700;font-size:12.5px;cursor:pointer;">🛒 ${ime} (${k.stavke.length})</button>
+      <button onclick="event.stopPropagation();zatvoriKorpuTab('${k.id}')" title="Zatvori ovu korpu" style="padding:6px 10px 6px 4px;border:none;background:none;color:${aktivna?'#fff':'#999'};font-weight:900;font-size:13px;cursor:pointer;">✕</button>
+    </span>`;
   }).join('') + `<button onclick="otvoriNovuKorpuKlik()" style="padding:6px 12px;border-radius:16px;border:2px dashed #999;background:#fff;color:#333;font-weight:700;font-size:12.5px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.1);">+ Nova korpa</button>`;
   pozicionirajKorpaTabove();
+}
+
+// Zatvara SPECIFIČNU korpu (klik na ✕ na tabu) — ako je prazna (nema kupca ni stavki),
+// zatvara odmah bez pitanja. Ako ima nešto u njoj, traži potvrdu (isto upozorenje kao
+// "Kupac odustao", pošto je efekat isti — trajno gubi tu korpu).
+function zatvoriKorpuTab(id){
+  const k=korpe.find(x=>x.id===id);
+  if(!k) return;
+  const prazna=!k.kupac && !k.stavke.length;
+  if(!prazna && !confirm('Ova korpa ima kupca i/ili stavke — zatvaranjem se trajno gube (ne može se poništiti). Nastaviti?')) return;
+  korpe=korpe.filter(x=>x.id!==id);
+  sacuvajKorpeLokalno();
+  if(!korpe.length){ napraviNovuKorpu(); return; }
+  if(id===aktivnaKorpaId){ prebaciNaKorpu(korpe[0].id); }
+  else{ azurirajKorpaTabove(); }
 }
 
 // Postavlja poziciju trake sa tabovima TAČNO iznad trake korpe (ne fiksno 64px — to je
@@ -1130,6 +1160,86 @@ document.getElementById('search').addEventListener('input', e=>{
   const q=e.target.value;
   searchTimer=setTimeout(()=>trazi(q), 250);
 });
+
+/* ── QR SKENER ────────────────────────────────────────────────────────
+   Koristi native BarcodeDetector API (Chrome/Android, noviji Safari) ako
+   postoji — brže i tačnije. Za starije browsere, pada na jsQR biblioteku
+   (čita video frejmove preko canvas-a). QR sadrži TAČNO šifru artikla. */
+let qrStream=null, qrSkeniranjeAktivno=false, qrBarcodeDetector=null;
+
+async function otvoriQrSkener(){
+  const overlay=document.getElementById('ov-qr-skener');
+  const video=document.getElementById('qr-video');
+  const status=document.getElementById('qr-skener-status');
+  status.textContent='';
+  overlay.style.display='block';
+  try{
+    qrStream=await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } });
+    video.srcObject=qrStream;
+    await video.play();
+  }catch(e){
+    status.textContent='Nije moguće pristupiti kameri: '+e.message;
+    return;
+  }
+  qrSkeniranjeAktivno=true;
+  if('BarcodeDetector' in window){
+    try{ qrBarcodeDetector=new BarcodeDetector({formats:['qr_code']}); }catch(e){ qrBarcodeDetector=null; }
+  }
+  requestAnimationFrame(qrSkenirajFrame);
+}
+
+function zatvoriQrSkener(){
+  qrSkeniranjeAktivno=false;
+  if(qrStream){ qrStream.getTracks().forEach(t=>t.stop()); qrStream=null; }
+  document.getElementById('ov-qr-skener').style.display='none';
+}
+
+async function qrSkenirajFrame(){
+  if(!qrSkeniranjeAktivno) return;
+  const video=document.getElementById('qr-video');
+  if(video.readyState===video.HAVE_ENOUGH_DATA){
+    let tekst=null;
+    try{
+      if(qrBarcodeDetector){
+        const kodovi=await qrBarcodeDetector.detect(video);
+        if(kodovi.length) tekst=kodovi[0].rawValue;
+      }else if(window.jsQR){
+        const canvas=document.getElementById('qr-canvas');
+        canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+        const ctx=canvas.getContext('2d');
+        ctx.drawImage(video,0,0,canvas.width,canvas.height);
+        const slika=ctx.getImageData(0,0,canvas.width,canvas.height);
+        const rezultat=jsQR(slika.data, slika.width, slika.height);
+        if(rezultat) tekst=rezultat.data;
+      }
+    }catch(e){ /* pojedinačni frejm nije uspio - probaj sledeći */ }
+    if(tekst){
+      await qrKodPronadjen(tekst.trim());
+      return; // ne nastavlja skeniranje — obrada je pokrenuta
+    }
+  }
+  if(qrSkeniranjeAktivno) requestAnimationFrame(qrSkenirajFrame);
+}
+
+async function qrKodPronadjen(sifra){
+  document.getElementById('qr-skener-status').textContent='✓ Pronađeno: '+sifra;
+  zatvoriQrSkener();
+  if(danZakljucan){ alert('🔒 Zaključao/la si današnji dan. Otključaj (dugme gore) da nastaviš sa prodajom.'); return; }
+  try{
+    const r=await fetch(`${API}/api/roba?q=${encodeURIComponent(sifra)}&limit=30&objekt_id=${trenutniObjekat?.id||''}`);
+    const rows=await r.json();
+    const tacanPogodak=rows.find(a=>String(a.sifra).toLowerCase()===sifra.toLowerCase());
+    if(tacanPogodak){
+      dodajUKosaricu(tacanPogodak); // direktno otvara "Dodaj stavku" formu, kao klik na rezultat
+    }else{
+      // Nema tačnog poklapanja šifre — popuni pretragu da korisnik ručno izabere iz rezultata.
+      document.getElementById('search').value=sifra;
+      trazi(sifra);
+    }
+  }catch(e){
+    alert('Greška pri pretrazi šifre "'+sifra+'".');
+  }
+}
 
 async function trazi(q){
   const list=document.getElementById('rez-list');
