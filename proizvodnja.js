@@ -313,6 +313,70 @@ router.post('/:r_br/naplata-blagajna', async (req, res) => {
 });
 
 // PATCH /api/proizvodnja/:r_br - djelimično ažuriranje
+// POST /api/proizvodnja/:r_br/dodaj-ratu-avansa — DODAJE ratu avansa (ne prepisuje
+// prethodne). Rešava problem da avans često dolazi u više navrata, možda i različitim
+// blagajnicima — svaka rata ostaje svoj red u opisu I svoj zaseban zapis u blagajni,
+// umjesto da se sve "spljošti" u jedan zbirni tekst/iznos koji briše trag ko je šta primio.
+router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+  const { iznos, nacin, ime_gotovina } = req.body; // nacin: bank kod ILI 'gotovina'
+  const iznosNum = parseFloat(iznos);
+  if (!(iznosNum > 0)) return res.status(400).json({ error: 'Iznos mora biti veći od 0.' });
+  if (!nacin) return res.status(400).json({ error: 'Način uplate je obavezan.' });
+  if (nacin === 'gotovina' && !(ime_gotovina || '').trim())
+    return res.status(400).json({ error: 'Ime je obavezno za gotovinu.' });
+
+  try {
+    const nRes = await pool.query(
+      'SELECT r_br, narucilac, ugovorio_id, avans, avans_opis FROM proizvodnja_jopex WHERE r_br=$1',
+      [req.params.r_br]
+    );
+    if (!nRes.rows.length) return res.status(404).json({ error: 'Nalog nije pronađen.' });
+    const nalog = nRes.rows[0];
+
+    const isAdmin = user.rola === 'admin';
+    const jeSvoj = nalog.ugovorio_id === user.id;
+    const smijeFinansije = isAdmin || !!user.moze_ugovarati || jeSvoj;
+    if (!smijeFinansije) return res.status(403).json({ error: 'Nemate pravo na finansije ovog naloga.' });
+
+    const danasKratko = new Date().toLocaleDateString('sr-Latn-BA', { day: '2-digit', month: '2-digit' });
+    const noviRed = nacin === 'gotovina'
+      ? `got ${ime_gotovina.trim()} ${danasKratko} - ${iznosNum.toFixed(2)}`
+      : `${nacin} ${danasKratko} - ${iznosNum.toFixed(2)}`;
+    const noviOpis = nalog.avans_opis ? `${nalog.avans_opis}\n${noviRed}` : noviRed;
+    const noviAvans = parseFloat(nalog.avans || 0) + iznosNum;
+
+    await pool.query(
+      'UPDATE proizvodnja_jopex SET avans=$1, avans_opis=$2 WHERE r_br=$3',
+      [noviAvans, noviOpis, nalog.r_br]
+    );
+
+    if (nacin === 'gotovina') {
+      const jeUlogovaniBlagajnik = await jeBlagajnik(user.id);
+      const opisGotovine = `Avans (rata) - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''}`;
+      if (jeUlogovaniBlagajnik) {
+        await pool.query(
+          `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
+                                  predao_blagajniku, datum_predaje, preuzeo_ime)
+           VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, $5, true, now(), $2)`,
+          [iznosNum, ime_gotovina.trim(), String(nalog.r_br), opisGotovine, PROIZVODNJA_PJ]
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv)
+           VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, $5)`,
+          [iznosNum, ime_gotovina.trim(), String(nalog.r_br), opisGotovine, PROIZVODNJA_PJ]
+        );
+      }
+    }
+
+    res.json({ ok: true, avans: noviAvans, avans_opis: noviOpis });
+  } catch (err) {
+    res.status(500).json({ error: 'Greška: ' + err.message });
+  }
+});
+
 router.patch('/:r_br', async (req, res) => {
   const user = req.session?.user;
   const isAdmin = user?.rola === 'admin';

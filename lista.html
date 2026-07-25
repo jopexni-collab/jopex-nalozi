@@ -547,6 +547,9 @@ document.getElementById('tbody').addEventListener('click',function(e){
 function openPop(td,row,editCfg){
   popRow=row; popField=editCfg.field; popTd=td; popEditType=editCfg.type;
   document.getElementById('pop-label').textContent=editCfg.label||editCfg.field;
+  // Avans ima svoje "+ Dodaj ratu" dugme unutar sadržaja — generičko "Sačuvaj" bi bilo
+  // zbunjujuće (dva puta za istu akciju), pa ga sakrivamo samo za ovaj tip.
+  document.querySelector('#inline-pop .pop-btns .btn-save').style.display=editCfg.type==='avans'?'none':'';
   const fEl=document.getElementById('pop-field');
   const val=row[editCfg.field];
   if(editCfg.type==='select'){
@@ -613,35 +616,36 @@ function openPop(td,row,editCfg){
       </div>`;
     setTimeout(()=>{const el=document.getElementById('naplata-vrsta');if(el)el.focus();},100);
   } else if(editCfg.type==='avans'){
-    const todayIso=new Date().toISOString().split('T')[0];
     const opisVal=row.avans_opis||'';
-    const trenVrsta=(opisVal||'').replace(/\s+\d{1,2}\/\d{1,2}(\/\d{2,4})?$/,'').trim();
-    const vrste=[
-      ['','— izaberi —'],
-      ['rfb','rfb (banka)'],['uni','uni (banka)'],['mf','mf (banka)'],['nlb','nlb (banka)'],['uni1','uni1 (banka)'],
-      ['got Boban','got Boban (gotovina)'],['got Marija','got Marija (gotovina)'],['got Nenad','got Nenad (gotovina)'],
-      ['got Rade','got Rade (gotovina)'],['got Edo','got Edo (gotovina)'],
-    ];
+    const trenutniAvans=parseFloat(row.avans||0);
+    const rate=opisVal.split('\n').map(r=>r.trim()).filter(Boolean);
+    const imenaBlagajnika=['Boban','Marija','Nenad','Rade','Edo'];
+    const banke=[['rfb','rfb (banka)'],['uni','uni (banka)'],['mf','mf (banka)'],['nlb','nlb (banka)'],['uni1','uni1 (banka)']];
     fEl.innerHTML=`
-      <input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">
-      <div style="margin-top:8px;font-size:10.5px;color:#888;font-weight:600">Način uplate (opciono):</div>
-      <select id="avans-vrsta" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:4px;" onchange="updateOpisCombo('avans')">
-        ${vrste.map(([v,l])=>`<option value="${esc(v)}"${v===trenVrsta?' selected':''}>${l}</option>`).join('')}
+      <div style="font-size:12px;color:#555;margin-bottom:6px;">Trenutni avans: <b>${fm(trenutniAvans)} KM</b></div>
+      ${rate.length?`<div style="background:#f7f8fa;border-radius:6px;padding:6px 8px;margin-bottom:10px;font-size:10.5px;color:#666;max-height:90px;overflow-y:auto;">
+        ${rate.map(r=>`<div>• ${esc(r)}</div>`).join('')}
+      </div>`:''}
+      <div style="font-size:10.5px;color:#888;font-weight:600;">Nova rata — iznos (KM):</div>
+      <input type="number" id="rata-iznos" step="0.01" placeholder="0.00" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:3px;">
+      <div style="font-size:10.5px;color:#888;font-weight:600;margin-top:8px;">Način uplate:</div>
+      <select id="rata-nacin" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:3px;" onchange="prekaciNacinRate()">
+        <option value="">— izaberi —</option>
+        <option value="gotovina">💵 Gotovina</option>
+        ${banke.map(([v,l])=>`<option value="${esc(v)}">${l}</option>`).join('')}
       </select>
-      <div style="margin-top:8px;font-size:10.5px;color:#888;font-weight:600">Datum uplate:</div>
-      <input type="date" id="avans-datum-picker" value="${todayIso}" style="width:100%;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;margin-top:4px;" onchange="updateOpisCombo('avans')">
-      <div style="font-size:10.5px;color:#888;font-weight:600;margin-top:8px">ili slobodan unos imena (gotovina):</div>
-      <input type="text" id="avans-ime" placeholder="npr. Petar" value=""
-        style="width:100%;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;margin-top:4px;"
-        oninput="updateOpisCombo('avans')">
-      <input type="hidden" id="avans-opis-inp" value="${esc(opisVal)}">
-      <div style="margin-top:6px;font-size:11px;color:#555;">
-        Opis: <b id="avans-preview">${esc(opisVal||'—')}</b>
-      </div>`;
-    setTimeout(()=>{
-      const el=document.getElementById('pop-inp');
-      if(el){el.focus();el.select();}
-    },30);
+      <div id="rata-gotovina-polja" style="display:none;">
+        <div style="font-size:10.5px;color:#888;font-weight:600;margin-top:8px;">Blagajnik:</div>
+        <select id="rata-blagajnik" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:3px;" onchange="document.getElementById('rata-ime').value=this.value">
+          <option value="">— izaberi ili upiši ispod —</option>
+          ${imenaBlagajnika.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')}
+        </select>
+        <div style="font-size:10.5px;color:#888;font-weight:600;margin-top:6px;">ili slobodan unos imena:</div>
+        <input type="text" id="rata-ime" placeholder="npr. Petar" style="width:100%;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;margin-top:3px;">
+      </div>
+      <button type="button" onclick="sacuvajRatuAvansa()" style="width:100%;margin-top:10px;padding:7px;background:var(--green,#1f8a4c);color:#fff;border:none;border-radius:5px;font-weight:700;cursor:pointer;">+ Dodaj ratu</button>
+      <div id="rata-msg" style="font-size:11px;margin-top:6px;"></div>
+      <input type="hidden" id="pop-inp" value="${esc(val||0)}">`;
   } else if(editCfg.type==='number'){
     fEl.innerHTML=`<input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
     setTimeout(()=>{
@@ -685,6 +689,41 @@ function updateOpisCombo(prefix){
   if(prev) prev.textContent=val||'—';
 }
 
+function prekaciNacinRate(){
+  const nacin=document.getElementById('rata-nacin').value;
+  document.getElementById('rata-gotovina-polja').style.display=nacin==='gotovina'?'block':'none';
+}
+
+async function sacuvajRatuAvansa(){
+  const msg=document.getElementById('rata-msg');
+  const iznos=parseFloat(document.getElementById('rata-iznos').value);
+  const nacin=document.getElementById('rata-nacin').value;
+  if(!(iznos>0)){ msg.style.color='red'; msg.textContent='Unesite iznos veći od 0.'; return; }
+  if(!nacin){ msg.style.color='red'; msg.textContent='Izaberite način uplate.'; return; }
+  let imeGotovina='';
+  if(nacin==='gotovina'){
+    imeGotovina=(document.getElementById('rata-ime').value||'').trim();
+    if(!imeGotovina){ msg.style.color='red'; msg.textContent='Unesite ime (blagajnik ili slobodan unos).'; return; }
+  }
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/${popRow.r_br}/dodaj-ratu-avansa`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({iznos, nacin, ime_gotovina:imeGotovina}),
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    popRow.avans=d.avans;
+    popRow.avans_opis=d.avans_opis;
+    // Preračunaj za_naplatu lokalno (ugovorena_suma - novi avans) da se lista odmah osvježi.
+    if(popRow.ugovorena_suma!=null) popRow.za_naplatu=+(parseFloat(popRow.ugovorena_suma)-parseFloat(d.avans)).toFixed(2);
+    render();
+    msg.style.color='green'; msg.textContent='✓ Rata dodana.';
+    setTimeout(()=>{ popClose(); load(); }, 900);
+  }catch(e){
+    msg.style.color='red'; msg.textContent='✗ '+e.message;
+  }
+}
+
 async function popSave(){
   if(!popRow||!popField) return;
   const inp=document.getElementById('pop-inp');
@@ -711,11 +750,6 @@ async function popSave(){
     if(!val) val=null;
   }
   const body={[popField]:val};
-  // Avans tip: šalje i opis (način uplate) zajedno sa iznosom
-  if(popEditType==='avans'){
-    const opisEl=document.getElementById('avans-opis-inp');
-    if(opisEl) body.avans_opis=opisEl.value.trim();
-  }
   // Zapamti staru vrijednost za undo
   pushUndo(popRow.r_br, popField, popRow[popField]);
 
