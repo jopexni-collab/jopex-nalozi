@@ -63,17 +63,25 @@ input:checked+.slider:before{transform:translateX(16px);}
 .msg.err{background:#fce8e6;color:var(--red);}
 .empty{text-align:center;padding:30px;color:#999;}
 
-/* MOBILNI — dodirni elementi moraju biti veći (min ~44px preporučeno za dodir),
-   inače su neupotrebljivi na telefonu. */
+/* MOBILNI — dodirni elementi moraju biti veći (min ~44px preporučeno za dodir).
+   Tabela sa uskim kolonama je neupotrebljiva na dodir bez obzira na veličinu fonta
+   (polje ostaje uskо) — zato se na mobilnom PRELAZI na kartice, jedan kupac ispod
+   drugog, sa poljima preko cijele širine ekrana. */
+.kupac-kartica{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);padding:14px;margin-bottom:10px;}
+.kk-red{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.kk-ime .edit-inp{font-size:16px;font-weight:700;color:var(--dark);}
+.kk-fld{margin-bottom:8px;}
+.kk-fld label{display:block;font-size:11px;font-weight:600;color:#8b96a5;margin-bottom:3px;}
+
 @media (max-width: 768px){
   body{font-size:14px;}
+  #tabela-wrap{display:none;}
+  #kartice{display:block !important;}
   .toolbar{gap:10px;}
   .toolbar input{min-width:0;flex:1 1 100%;font-size:14px;padding:10px 12px;}
   .btn{font-size:14px;padding:10px 16px;}
   #stat{margin-left:0;width:100%;}
-  thead th{font-size:11px;padding:8px 6px;}
-  td{padding:10px 8px;}
-  .edit-inp{font-size:14px;padding:9px 10px;min-height:40px;}
+  .edit-inp{font-size:15px;padding:10px 12px;width:100%;min-height:42px;}
   .toggle{width:52px;height:30px;}
   .slider:before{height:22px;width:22px;left:4px;bottom:4px;}
   input:checked+.slider:before{transform:translateX(22px);}
@@ -103,7 +111,7 @@ input:checked+.slider:before{transform:translateX(16px);}
     <button class="btn btn-primary" onclick="openModal()">+ Novi kupac</button>
     <span id="stat"></span>
   </div>
-  <div class="card">
+  <div class="card" id="tabela-wrap">
     <div style="overflow-x:auto;">
     <table>
       <thead>
@@ -124,6 +132,7 @@ input:checked+.slider:before{transform:translateX(16px);}
     </table>
     </div>
   </div>
+  <div id="kartice" style="display:none;"></div>
 </main>
 
 <!-- Modal novi kupac -->
@@ -172,8 +181,36 @@ function render(){
     return true;
   });
   document.getElementById('stat').textContent=rows.length+' / '+kupci.length+' kupaca';
+  const jeMobilni=window.innerWidth<=768;
   if(!rows.length){
-    document.getElementById('tbody').innerHTML='<tr><td colspan="8" class="empty">Nema kupaca.</td></tr>';
+    if(jeMobilni){ document.getElementById('kartice').innerHTML='<div class="empty">Nema kupaca.</div>'; }
+    else{ document.getElementById('tbody').innerHTML='<tr><td colspan="8" class="empty">Nema kupaca.</td></tr>'; }
+    return;
+  }
+  if(jeMobilni){
+    // MOBILNI — kartice, jedan kupac ispod drugog, polja preko cijele širine (ne uska
+    // tabela kolona) — tabela sa uskim kolonama je neupotrebljiva na dodir bez obzira na
+    // veličinu fonta, jer sama širina polja ostaje ista.
+    document.getElementById('kartice').innerHTML=rows.map(k=>`
+      <div class="kupac-kartica" id="row-${k.id}">
+        <div class="kk-red kk-ime">
+          <input class="edit-inp" value="${esc(k.naziv)}" onchange="sacuvajImePolje(${k.id},this)">
+          ${k.aktivan===false?'<span class="badge-neaktivan">NEAKTIVAN</span>':''}
+        </div>
+        <div class="kk-fld"><label>Telefon</label><input class="edit-inp" value="${esc(k.telefon||'')}" placeholder="—" onchange="sacuvajPolje(${k.id},'telefon',this.value)"></div>
+        <div class="kk-fld"><label>Grad</label><input class="edit-inp" value="${esc(k.grad||'')}" placeholder="—" onchange="sacuvajPolje(${k.id},'grad',this.value)"></div>
+        <div class="kk-fld"><label>Adresa</label><input class="edit-inp" value="${esc(k.adresa||'')}" placeholder="—" onchange="sacuvajPolje(${k.id},'adresa',this.value)"></div>
+        <div class="kk-fld"><label>Email</label><input class="edit-inp" value="${esc(k.email||'')}" placeholder="—" onchange="sacuvajPolje(${k.id},'email',this.value)"></div>
+        <div class="kk-fld"><label>Napomena</label><input class="edit-inp" value="${esc(k.napomena||'')}" placeholder="—" onchange="sacuvajPolje(${k.id},'napomena',this.value)"></div>
+        <div class="kk-red" style="justify-content:space-between;">
+          <label class="toggle">
+            <input type="checkbox" ${k.aktivan!==false?'checked':''} onchange="sacuvajPolje(${k.id},'aktivan',this.checked)">
+            <span class="slider"></span>
+          </label>
+          <span class="saved" id="saved-${k.id}"></span>
+        </div>
+      </div>
+    `).join('');
     return;
   }
   document.getElementById('tbody').innerHTML=rows.map(k=>`
@@ -285,6 +322,14 @@ fetch(API+'/api/auth/me').then(r=>{
   }
   load();
 }).catch(()=>location.href='login.html');
+
+// Ponovo iscrtaj (tabela <-> kartice) ako se ekran promijeni preko granice (npr.
+// rotacija telefona, ili promjena veličine prozora na desktopu).
+let _jeMobilniPrije=window.innerWidth<=768;
+window.addEventListener('resize', ()=>{
+  const sada=window.innerWidth<=768;
+  if(sada!==_jeMobilniPrije){ _jeMobilniPrije=sada; render(); }
+});
 </script>
 </body>
 </html>
