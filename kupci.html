@@ -62,6 +62,18 @@ input:checked+.slider:before{transform:translateX(16px);}
 .msg.ok{background:#e6f4ea;color:var(--green);}
 .msg.err{background:#fce8e6;color:var(--red);}
 .empty{text-align:center;padding:30px;color:#999;}
+.editabilno{cursor:pointer;}
+.editabilno:hover{background:#eef4fc !important;}
+.prazno{color:#bbb;}
+
+/* Inline popup — isti obrazac kao u lista.html */
+#inline-pop{display:none;position:absolute;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);padding:10px;z-index:200;width:230px;}
+#inline-pop label{display:block;font-size:10.5px;font-weight:700;color:#6b7a8d;margin-bottom:4px;}
+#inline-pop input{width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:5px;}
+#inline-pop .pop-btns{display:flex;gap:6px;margin-top:8px;}
+#inline-pop .pop-btns button{flex:1;font:inherit;font-size:11px;padding:6px;border-radius:5px;border:none;cursor:pointer;font-weight:600;}
+#inline-pop .btn-save{background:var(--blue);color:#fff;}
+#inline-pop .btn-cancel{background:#eee;color:#333;}
 </style>
 </head>
 <body>
@@ -104,6 +116,16 @@ input:checked+.slider:before{transform:translateX(16px);}
     </div>
   </div>
 </main>
+
+<!-- Inline popup editor - klik na ćeliju otvara ovo, umjesto direktne izmjene -->
+<div id="inline-pop">
+  <label id="pop-label">Vrijednost</label>
+  <input type="text" id="pop-inp">
+  <div class="pop-btns">
+    <button class="btn-save" onclick="popSave()">✓ Sačuvaj</button>
+    <button class="btn-cancel" onclick="popClose()">✗ Otkaži</button>
+  </div>
+</div>
 
 <!-- Modal novi kupac -->
 <div class="modal" id="modal">
@@ -155,14 +177,17 @@ function render(){
     document.getElementById('tbody').innerHTML='<tr><td colspan="8" class="empty">Nema kupaca.</td></tr>';
     return;
   }
+  // Ćelije su SAMO tekst, klikabilne — otvaraju mali popup sa poljem i dugmetom "Sačuvaj"
+  // (ne mijenja se odmah pri gubljenju fokusa) — sprečava da se slučajno pokvari podatak
+  // jednim nepažljivim klikom/dodirom.
   document.getElementById('tbody').innerHTML=rows.map(k=>`
     <tr id="row-${k.id}">
-      <td class="ime"><input class="edit-inp" value="${esc(k.naziv)}" onchange="sacuvajImePolje(${k.id},this)">${k.aktivan===false?'<span class="badge-neaktivan">NEAKTIVAN</span>':''}</td>
-      <td><input class="edit-inp" value="${esc(k.telefon||'')}" placeholder="—" onchange="sacuvajPolje(${k.id},'telefon',this.value)"></td>
-      <td><input class="edit-inp" value="${esc(k.grad||'')}" placeholder="—" onchange="sacuvajPolje(${k.id},'grad',this.value)"></td>
-      <td><input class="edit-inp" value="${esc(k.adresa||'')}" placeholder="—" onchange="sacuvajPolje(${k.id},'adresa',this.value)"></td>
-      <td><input class="edit-inp" value="${esc(k.email||'')}" placeholder="—" onchange="sacuvajPolje(${k.id},'email',this.value)"></td>
-      <td><input class="edit-inp" value="${esc(k.napomena||'')}" placeholder="—" onchange="sacuvajPolje(${k.id},'napomena',this.value)"></td>
+      <td class="ime editabilno" onclick="otvoriPopup(${k.id},'naziv','Naziv / Ime',this)">${esc(k.naziv)}${k.aktivan===false?'<span class="badge-neaktivan">NEAKTIVAN</span>':''}</td>
+      <td class="editabilno" onclick="otvoriPopup(${k.id},'telefon','Telefon',this)">${esc(k.telefon)||'<span class="prazno">—</span>'}</td>
+      <td class="editabilno" onclick="otvoriPopup(${k.id},'grad','Grad',this)">${esc(k.grad)||'<span class="prazno">—</span>'}</td>
+      <td class="editabilno" onclick="otvoriPopup(${k.id},'adresa','Adresa',this)">${esc(k.adresa)||'<span class="prazno">—</span>'}</td>
+      <td class="editabilno" onclick="otvoriPopup(${k.id},'email','Email',this)">${esc(k.email)||'<span class="prazno">—</span>'}</td>
+      <td class="editabilno" onclick="otvoriPopup(${k.id},'napomena','Napomena',this)">${esc(k.napomena)||'<span class="prazno">—</span>'}</td>
       <td class="toggle-cell">
         <label class="toggle">
           <input type="checkbox" ${k.aktivan!==false?'checked':''} onchange="sacuvajPolje(${k.id},'aktivan',this.checked)">
@@ -177,15 +202,35 @@ function render(){
 // Ime/naziv je jedino polje koje NE SMIJE biti prazno (za razliku od telefona, grada,
 // itd.) — ako neko slučajno obriše sadržaj i klikne van polja, vraća se na staru
 // vrijednost umjesto da se sačuva prazno ime.
-function sacuvajImePolje(id, inputEl){
-  const vrijednost=inputEl.value.trim();
-  if(!vrijednost){
-    const k=kupci.find(k=>k.id===id);
-    inputEl.value=k?.naziv||'';
+let popKupacId=null, popPolje=null;
+
+function otvoriPopup(id, field, label, tdEl){
+  popKupacId=id; popPolje=field;
+  const k=kupci.find(k=>k.id===id);
+  document.getElementById('pop-label').textContent=label;
+  const inp=document.getElementById('pop-inp');
+  inp.value=k?.[field]||'';
+  const rect=tdEl.getBoundingClientRect();
+  const pop=document.getElementById('inline-pop');
+  pop.style.display='block';
+  pop.style.top=(window.scrollY+rect.bottom+4)+'px';
+  pop.style.left=Math.min(window.scrollX+rect.left, window.innerWidth-260)+'px';
+  inp.focus(); inp.select();
+}
+
+function popClose(){
+  document.getElementById('inline-pop').style.display='none';
+  popKupacId=null; popPolje=null;
+}
+
+function popSave(){
+  const vrijednost=document.getElementById('pop-inp').value.trim();
+  if(popPolje==='naziv' && !vrijednost){
     alert('Ime kupca ne može biti prazno.');
     return;
   }
-  sacuvajPolje(id,'naziv',vrijednost);
+  sacuvajPolje(popKupacId, popPolje, vrijednost);
+  popClose();
 }
 
 async function sacuvajPolje(id, field, value){
@@ -264,6 +309,16 @@ fetch(API+'/api/auth/me').then(r=>{
   }
   load();
 }).catch(()=>location.href='login.html');
+
+document.addEventListener('click', e=>{
+  const pop=document.getElementById('inline-pop');
+  if(pop.style.display==='block' && !pop.contains(e.target) && !e.target.classList.contains('editabilno')) popClose();
+});
+document.addEventListener('keydown', e=>{
+  if(document.getElementById('inline-pop').style.display!=='block') return;
+  if(e.key==='Escape') popClose();
+  if(e.key==='Enter') popSave();
+});
 </script>
 </body>
 </html>
