@@ -5943,15 +5943,15 @@ function genDXF(){
       }
       if(gc('cb-sud')){
         var _zSud=getOtvorZone(sh,d,vOrient);
-        var _sudX=_zSud.aX+gi('sud-x');
-        var _sudY=_zSud.aY+(_zSud.aH-gi('sud-y')-gi('sud-h'));
+        var _sudX=gi('sud-x');
+        var _sudY=_zSud.aH-gi('sud-y')-gi('sud-h');
         dxfRoundedRect(_sudX,_sudY,gi('sud-w'),gi('sud-h'),
           getSinkRadius('tl'),getSinkRadius('tr'),getSinkRadius('br'),getSinkRadius('bl'),'OTVORI',yOff);
       }
       if(gc('cb-plo')){
         var _zPlo=getOtvorZone(sh,d,vOrient);
-        var _ploX=_zPlo.aX+gi('plo-x');
-        var _ploY=_zPlo.aY+(_zPlo.aH-gi('plo-y')-gi('plo-h'));
+        var _ploX=gi('plo-x');
+        var _ploY=_zPlo.aH-gi('plo-y')-gi('plo-h');
         dxfRoundedRect(_ploX,_ploY,gi('plo-w'),gi('plo-h'),
           getPloRadius('tl'),getPloRadius('tr'),getPloRadius('br'),getPloRadius('bl'),'OTVORI',yOff);
       }
@@ -5969,8 +5969,7 @@ function genDXF(){
         );
       });
       (slavine||[]).forEach(function(s){
-        var _zSlav=getOtvorZone(sh,d,vOrient);
-        var sfx=_zSlav.aX+(s.x||400),sfy=_zSlav.aY+(s.yz||50)+yOff,sfr=(s.fi||35)/2;
+        var sfx=(s.x||400), sfy=(s.yz||50)+yOff, sfr=(s.fi||35)/2;
         for(var si=0;si<24;si++){
           var a1=si*Math.PI*2/24,a2=(si+1)*Math.PI*2/24;
           ln(sfx+sfr*Math.cos(a1),sfy+sfr*Math.sin(a1),sfx+sfr*Math.cos(a2),sfy+sfr*Math.sin(a2),'OTVORI');
