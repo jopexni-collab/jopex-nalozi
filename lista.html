@@ -300,10 +300,9 @@ function getCols(){
     },edit:{type:'avans',field:'avans',label:'Avans (KM)'}},
     {k:'za_naplatu',l:'Za naplatu',w:90,filter:null,render:r=>{
       if(!mozeVidjetiFin(r)) return '<td class="num">—</td>';
-      const cash=jeGotovinaOpis(r.naplaceno_opis);
-      const cls=cash?(r.naplata_predano?' predano-zeleno':' ceka-blagajnu'):'';
-      return `<td class="num${cls}" title="${r.naplata_predano?'Predano blagajniku':''}">${fm(r.za_naplatu)}</td>`;
-    },edit:null},
+      if(r.naplaceno||parseFloat(r.za_naplatu)<=0.005) return '<td class="center"><span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span></td>';
+      return `<td class="num" title="Klik da dodaš uplatu">${fm(r.za_naplatu)}</td>`;
+    },edit:{type:'avans',field:'avans',label:'Naplata ostatka'}},
     {k:'naplaceno',l:'✓ Napl.',w:55,filter:'sel',opts:['Da','Ne'],render:r=>mozeVidjetiFin(r)?`<td class="center">${r.naplaceno?'<span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span>':''}</td>`:'<td class="center">—</td>',edit:{type:'check',field:'naplaceno',label:'Naplaćeno'}},
     {k:'naplaceno_opis',l:'Opis naplate',w:130,filter:'text',render:r=>mozeVidjetiFin(r)?`<td class="note-cell${r.naplaceno_opis?' has-note':''}" data-note="${esc(r.naplaceno_opis)}">${esc(r.naplaceno_opis)||''}</td>`:'<td>—</td>',edit:{type:'naplata',field:'naplaceno_opis',label:'Opis naplate'}},
   ];
@@ -714,11 +713,17 @@ async function sacuvajRatuAvansa(){
     if(!r.ok) throw new Error(d.error||'Greška.');
     popRow.avans=d.avans;
     popRow.avans_opis=d.avans_opis;
-    // Preračunaj za_naplatu lokalno (ugovorena_suma - novi avans) da se lista odmah osvježi.
-    if(popRow.ugovorena_suma!=null) popRow.za_naplatu=+(parseFloat(popRow.ugovorena_suma)-parseFloat(d.avans)).toFixed(2);
-    render();
-    msg.style.color='green'; msg.textContent='✓ Rata dodana.';
-    setTimeout(()=>{ popClose(); load(); }, 900);
+    popRow.za_naplatu=d.za_naplatu;
+    popRow.naplaceno=d.naplaceno;
+    const porukaTekst=d.naplaceno?'✓ Rata dodana — dug je u potpunosti pokriven!':'✓ Rata dodana. Možeš dodati još jednu (npr. ostatak drugim načinom).';
+    // NE zatvara popup — omogućava da se odmah doda i druga rata (npr. dio banka, dio
+    // gotovina za isti unos) bez ponovnog otvaranja. Tabela ispod se NE osvježava odmah
+    // (render() bi uništio DOM referencu na ćeliju popup-a) — osvježiće se kad se popup
+    // zatvori (vidi popClose).
+    const trenutniLabel=document.getElementById('pop-label').textContent;
+    openPop(popTd, popRow, {type:'avans', field:'avans', label:trenutniLabel});
+    document.getElementById('rata-msg').style.color='green';
+    document.getElementById('rata-msg').textContent=porukaTekst;
   }catch(e){
     msg.style.color='red'; msg.textContent='✗ '+e.message;
   }
@@ -811,7 +816,9 @@ async function popSave(){
 
 function popClose(){
   pop.style.display='none';
+  const trebaOsvjezavanje=popEditType==='avans'; // rate su mogle promijeniti podatke na serveru
   popRow=null;popField=null;popTd=null;popEditType=null;
+  if(trebaOsvjezavanje) load();
 }
 document.addEventListener('click',e=>{if(!pop.contains(e.target)&&e.target.tagName!=='TD'&&e.target.tagName!=='SPAN')popClose();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')popClose();if(e.key==='Enter'&&pop.style.display!=='none'&&document.getElementById('pop-inp')&&document.getElementById('pop-inp').tagName!=='TEXTAREA')popSave();});
