@@ -292,7 +292,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   </nav>
 </header>
 
-<div style="padding:12px;padding-bottom:40px;">
+<div id="roba-magacin-glavni-sadrzaj" style="padding:12px;padding-bottom:40px;">
   <!-- ═══ OVERLAY: QR NALEPNICE (za štampu) ═══ -->
 <div id="ov-qr-nalepnice" style="display:none;position:fixed;inset:0;background:#fff;z-index:500;overflow-y:auto;">
   <div style="position:sticky;top:0;background:#fff;padding:12px 16px;border-bottom:1px solid #ddd;display:flex;justify-content:space-between;align-items:center;z-index:2;" class="no-print">
@@ -306,9 +306,9 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 </div>
 <style>
   @media print {
-    body > *:not(#ov-qr-nalepnice) { display:none !important; }
+    header, #kartica-modal, #nivelacija-modal, #roba-magacin-glavni-sadrzaj > *:not(#ov-qr-nalepnice) { display:none !important; }
     .no-print { display:none !important; }
-    #ov-qr-nalepnice { position:static !important; }
+    #ov-qr-nalepnice { position:static !important; display:block !important; }
   }
   .qr-nalepnica{border:1px dashed #ccc;border-radius:6px;padding:8px;text-align:center;break-inside:avoid;}
   .qr-nalepnica .sifra{font-weight:800;font-size:13px;margin-top:4px;}
