@@ -571,11 +571,12 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 <!-- ═══ TAB: ROBA I MAGACIN (admin) ═══ -->
 <!-- ═══ KOŠARICA (sticky bottom) ═══ -->
+<div id="korpa-tabovi" style="display:flex;gap:6px;padding:8px 14px 0;flex-wrap:wrap;position:fixed;left:0;right:0;bottom:64px;z-index:80;background:transparent;"></div>
 <div class="kosarica-bar" id="kosarica-bar">
   <div class="kb-summary" id="kb-summary">
     <div class="kb-summary-left">
       <div class="kb-badge" id="kb-count">0</div>
-      <div>Košarica</div>
+      <div style="font-size:16px;font-weight:800;">Korpa<span id="kb-kupac-ime" style="font-weight:700;"></span></div>
     </div>
     <div style="display:flex;align-items:center;gap:10px;">
       <div class="kb-total" id="kb-total">0.00 KM</div>
@@ -591,6 +592,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
     <button class="btn-generisi" id="btn-generisi" onclick="generisiOtpremnicu()" disabled>Generiši otpremnicu</button>
     <div id="generisi-greska" style="display:none;background:#fce8e6;color:var(--red);border-radius:8px;padding:10px 12px;margin-top:8px;font-size:12.5px;font-weight:600;line-height:1.5;"></div>
+    <button onclick="ispraznikorpu()" style="width:100%;margin-top:10px;padding:8px;background:none;border:1px solid var(--red);color:var(--red);border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">✕ Kupac odustao — isprazni korpu</button>
   </div>
 </div>
 
@@ -797,10 +799,100 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 <script>
 const API='';
 let isAdmin=false, currentUser=null;
-let kosarica=[];       // { roba_id, sifra, naziv, jed_mjera, cijena, kolicina, stanje_max }
+let korpe=[];           // [{id, kupac, stavke}] — vise istovremenih korpi (npr. dva kupca u isto vrijeme)
+let aktivnaKorpaId=null;
+let kosarica=[];        // UVIJEK pokazuje na trenutno aktivnu korpu.stavke (ista referenca u memoriji —
+                        // push/splice na kosarica automatski mijenja i korpu u nizu "korpe")
+                        // { roba_id, sifra, naziv, jed_mjera, cijena, kolicina, stanje_max }
                         // cijena/stanje_max su OKVIRNI (iz trenutka dodavanja) — konačna,
                         // obavezujuća cijena i količina se određuju tek u /pregled i /potvrdi pozivima.
+const KORPE_KEY='jopex_korpe_v1';
 let searchTimer=null;
+
+/* ── VIŠE KORPI ISTOVREMENO ─────────────────────────────────────────
+   Komercijalista ponekad opslužuje dva (ili više) kupca naizmjenično.
+   Svaka korpa pamti svog kupca i svoje stavke, i PERSISTIRA u localStorage
+   (preživi zatvaranje browsera, osvježavanje stranice, itd.) — briše se
+   ISKLJUČIVO kad se prodaja potvrdi (checkout) ili kad korisnik EKSPLICITNO
+   klikne "Kupac odustao". */
+
+function noviKorpaId(){ return 'k'+Date.now()+Math.random().toString(36).slice(2,7); }
+
+function sacuvajKorpeLokalno(){
+  try{ localStorage.setItem(KORPE_KEY, JSON.stringify(korpe)); }catch(e){}
+}
+
+function ucitajKorpeLokalno(){
+  try{
+    const raw=localStorage.getItem(KORPE_KEY);
+    if(raw) korpe=JSON.parse(raw)||[];
+  }catch(e){ korpe=[]; }
+  if(!korpe.length){ napraviNovuKorpu(false); }
+  prebaciNaKorpu(korpe[0].id, false);
+}
+
+function trenutnaKorpa(){ return korpe.find(k=>k.id===aktivnaKorpaId); }
+
+function napraviNovuKorpu(prebaci){
+  const nova={id:noviKorpaId(), kupac:null, stavke:[]};
+  korpe.push(nova);
+  sacuvajKorpeLokalno();
+  if(prebaci!==false) prebaciNaKorpu(nova.id);
+  return nova;
+}
+
+function prebaciNaKorpu(id, tihoBezRenderaKupca){
+  const k=korpe.find(x=>x.id===id);
+  if(!k) return;
+  aktivnaKorpaId=id;
+  kosarica=k.stavke;
+  trenutniKupac=k.kupac;
+  if(tihoBezRenderaKupca!==false) osvjeziUIPremaAktivnojKorpi();
+  renderKosarica();
+  azurirajKorpaTabove();
+}
+
+function osvjeziUIPremaAktivnojKorpi(){
+  if(trenutniKupac){
+    document.getElementById('kupac-picker').style.display='none';
+    document.getElementById('novi-kupac-forma').style.display='none';
+    document.getElementById('kupac-banner').style.display='flex';
+    document.getElementById('kb-naziv').textContent=trenutniKupac.naziv;
+    document.getElementById('kb-meta').textContent=[trenutniKupac.telefon,trenutniKupac.grad].filter(Boolean).join(' · ')||'Bez dodatnih podataka';
+    document.getElementById('prodaja-roba').style.display='block';
+  }else{
+    document.getElementById('kupac-banner').style.display='none';
+    document.getElementById('prodaja-roba').style.display='none';
+    document.getElementById('kupac-picker').style.display='block';
+  }
+}
+
+function otvoriNovuKorpuKlik(){
+  napraviNovuKorpu();
+  document.getElementById('kupac-search').value='';
+  traziKupca('');
+}
+
+function ispraznikorpu(){
+  if(!confirm('Da li je kupac odustao? Ovo će trajno isprazniti ovu korpu (ne može se poništiti).')) return;
+  korpe=korpe.filter(k=>k.id!==aktivnaKorpaId);
+  sacuvajKorpeLokalno();
+  if(!korpe.length){ napraviNovuKorpu(); }
+  else{ prebaciNaKorpu(korpe[0].id); }
+}
+
+// Prikazuje tabove SAMO ako ima više od jedne korpe, ili ako ta jedna već ima kupca
+// (da ne zatrpavamo ekran tabom za praznu, jedinu korpu na samom početku).
+function azurirajKorpaTabove(){
+  const cont=document.getElementById('korpa-tabovi');
+  if(!cont) return;
+  if(korpe.length<=1 && !korpe[0]?.kupac){ cont.innerHTML=''; return; }
+  cont.innerHTML = korpe.map(k=>{
+    const aktivna=k.id===aktivnaKorpaId;
+    const ime=k.kupac ? esc((k.kupac.naziv||'').split(' ')[0]) : 'prazna';
+    return `<button onclick="prebaciNaKorpu('${k.id}')" style="padding:6px 12px;border-radius:16px;border:2px solid ${aktivna?'var(--blue)':'#ddd'};background:${aktivna?'var(--blue)':'#fff'};color:${aktivna?'#fff':'#333'};font-weight:700;font-size:12.5px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.1);">🛒 ${ime} (${k.stavke.length})</button>`;
+  }).join('') + `<button onclick="otvoriNovuKorpuKlik()" style="padding:6px 12px;border-radius:16px;border:2px dashed #999;background:#fff;color:#333;font-weight:700;font-size:12.5px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.1);">+ Nova korpa</button>`;
+}
 
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -946,14 +1038,24 @@ function finalizujIzborObjekta(){
 }
 
 function izaberiObjekat(objekat){
+  let stariObjekatId=null;
+  try{ stariObjekatId=JSON.parse(localStorage.getItem(OBJEKAT_KEY)||'null')?.id; }catch(e){}
   trenutniObjekat=objekat;
   try{ localStorage.setItem(OBJEKAT_KEY, JSON.stringify(objekat)); }catch(e){}
   azurirajObjekatBadge();
   azurirajValutaLabele();
   document.getElementById('ov-objekat').classList.remove('on');
-  kosarica=[];
-  renderKosarica();
-  if(typeof promijeniKupca==='function') promijeniKupca();
+  // Korpe se brišu SAMO ako je PJ stvarno DRUGAČIJI od prethodnog (stanje robe/cijene se
+  // razlikuju po PJ) — pošto se PJ traži eksplicitno pri SVAKOM ulasku (vidi komentar u
+  // checkAuth), inače bi svaka ponovna prijava u ISTI PJ nepotrebno brisala aktivne korpe.
+  if(stariObjekatId!==objekat?.id){
+    korpe=[];
+    napraviNovuKorpu();
+  }else if(korpe.length){
+    prebaciNaKorpu(aktivnaKorpaId||korpe[0].id);
+  }else{
+    napraviNovuKorpu();
+  }
   otvoriDeepLinkOtpremnicuAkoPostoji();
   // "Moje otpremnice" — podrazumevano filtrira na PJ u koji je korisnik upravo ušao (umjesto
   // praznog "Svi objekti"), pošto je to najčešće ono što odmah traži.
@@ -1108,6 +1210,7 @@ async function traziKupca(q){
 function izaberiKupca(kupac){
   if(danZakljucan){ alert('🔒 Zaključao/la si današnji dan. Otključaj (dugme gore) da nastaviš sa prodajom.'); return; }
   trenutniKupac=kupac;
+  const k=trenutnaKorpa(); if(k){ k.kupac=kupac; sacuvajKorpeLokalno(); }
   document.getElementById('kupac-picker').style.display='none';
   document.getElementById('novi-kupac-forma').style.display='none';
   document.getElementById('kupac-banner').style.display='flex';
@@ -1116,15 +1219,18 @@ function izaberiKupca(kupac){
   document.getElementById('prodaja-roba').style.display='block';
   trazi_init();
   ucitajNajprodavanije();
+  azurirajKorpaTabove();
 }
 
 function promijeniKupca(){
   trenutniKupac=null;
+  const k=trenutnaKorpa(); if(k){ k.kupac=null; sacuvajKorpeLokalno(); }
   document.getElementById('kupac-banner').style.display='none';
   document.getElementById('prodaja-roba').style.display='none';
   document.getElementById('kupac-picker').style.display='block';
   document.getElementById('kupac-search').value='';
   traziKupca('');
+  azurirajKorpaTabove();
 }
 
 /* ── ISPLATE (gotovinske isplate iz kase) ─────────────────────────── */
@@ -1994,9 +2100,13 @@ function renderKosarica(){
   document.getElementById('kb-count').textContent=kosarica.length;
   document.getElementById('kb-total').innerHTML=fmMoneyHtml(total);
   document.getElementById('btn-generisi').disabled=kosarica.length===0;
+  const kupacImeEl=document.getElementById('kb-kupac-ime');
+  if(kupacImeEl) kupacImeEl.textContent=trenutniKupac?(' — '+(trenutniKupac.naziv||'').split(' ')[0]):'';
+  sacuvajKorpeLokalno();
+  azurirajKorpaTabove();
 
   if(!kosarica.length){
-    cont.innerHTML='<div class="empty-msg">Košarica je prazna.</div>';
+    cont.innerHTML='<div class="empty-msg">Korpa je prazna.</div>';
     return;
   }
   cont.innerHTML=kosarica.map((k,idx)=>{
@@ -2411,15 +2521,15 @@ function novaUplata(){
 }
 
 function novaProdaja(){
-  kosarica=[];
-  renderKosarica();
+  korpe=korpe.filter(k=>k.id!==aktivnaKorpaId);
+  sacuvajKorpeLokalno();
+  if(!korpe.length){ napraviNovuKorpu(); } else { prebaciNaKorpu(korpe[0].id); }
   document.getElementById('kosarica-bar').classList.remove('open');
   document.getElementById('kb-chevron').textContent='▲';
   document.getElementById('ov-uspjeh').classList.remove('on');
   document.getElementById('posalji-box').innerHTML='';
   document.getElementById('search').value='';
   document.getElementById('generisi-greska').style.display='none';
-  promijeniKupca();
 }
 
 /* ── ADMIN: SVE OTPREMNICE ─────────────────────────────────── */
@@ -2770,6 +2880,7 @@ fetch(`${API}/api/auth/me`).then(r=>{
   if(isAdmin || u.moze_roba_magacin) document.getElementById('link-roba-magacin').style.display='';
   if(isAdmin) document.getElementById('btn-toggle-rucni-dug').style.display='';
   popuniFilterObjekata();
+  ucitajKorpeLokalno();
   renderKosarica();
 
   // Izbor PJ se UVIJEK traži eksplicitno pri ulasku — nikad se tiho ne preskače na osnovu
