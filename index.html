@@ -97,6 +97,15 @@ main{max-width:760px;margin:24px auto;padding:0 16px;}
       </div>
     </div>
     <div class="row">
+      <div class="fg">
+        <label>Kategorija (za obračun bonusa)</label>
+        <select id="kategorija-bonus">
+          <option value="">— izaberi —</option>
+        </select>
+      </div>
+      <div></div>
+    </div>
+    <div class="row">
       <div class="fg"><label>Početak</label><input type="date" id="pocetak"></div>
       <div class="fg"><label>Planirani završetak</label><input type="date" id="zavrsetak"></div>
     </div>
@@ -258,6 +267,8 @@ async function loadConfig(){
   if(!cfg) return;
   const matSel=document.getElementById('materijal');
   cfg.materijali.forEach(m=>{matSel.append(new Option(m.naziv,m.naziv));});
+  const katSel=document.getElementById('kategorija-bonus');
+  (cfg.kategorije_bonus||[]).forEach(k=>katSel.append(new Option(k.naziv,k.id)));
   const ugSel=document.getElementById('ugovorio');
   ugSel.innerHTML='<option value="">— izaberi —</option>';
   cfg.ugovaraci.forEach(u=>ugSel.append(new Option(u.ime_prezime,u.id)));
@@ -290,6 +301,7 @@ document.getElementById('f').addEventListener('submit',async e=>{
     status:document.getElementById('status').value,
     narucilac:document.getElementById('narucilac').value,
     materijal:document.getElementById('materijal').value,
+    kategorija_bonus_id:document.getElementById('kategorija-bonus').value||null,
     pocetak:document.getElementById('pocetak').value||null,
     planirani_zavrsetak:document.getElementById('zavrsetak').value||null,
     napomena:document.getElementById('napomena').value,

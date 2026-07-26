@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Teren – JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f3f5f8;--border:#dde3ea;--red:#c0392b;--green:#1f8a4c;--orange:#b8860b;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);}
+header{background:var(--blue);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+header h1{margin:0;font-size:16px;}
+header nav{display:flex;gap:10px;align-items:center;}
+header nav a{color:#fff;text-decoration:none;font-size:12px;opacity:.9;border:1px solid rgba(255,255,255,.4);padding:5px 10px;border-radius:6px;}
+#who{font-size:12px;opacity:.85;}
+main{max-width:680px;margin:16px auto;padding:0 14px 60px;}
+.tabs{display:flex;gap:8px;margin-bottom:14px;}
+.tab-btn{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:#fff;font-weight:700;font-size:13px;cursor:pointer;color:var(--dark);}
+.tab-btn.active{background:var(--blue);color:#fff;border-color:var(--blue);}
+.view{display:none;}
+.view.active{display:block;}
+.card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin-bottom:14px;}
+.card h2{margin:0 0 14px;font-size:15px;color:var(--dark);}
+.fg{display:flex;flex-direction:column;gap:4px;margin-bottom:12px;}
+.fg label{font-size:12px;font-weight:600;color:#6b7a8d;}
+.fg label.req::after{content:' *';color:var(--red);}
+.fg input,.fg select,.fg textarea{font:inherit;font-size:16px;padding:11px 12px;border:1px solid var(--border);border-radius:8px;width:100%;}
+.fg textarea{resize:vertical;min-height:60px;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.btn{width:100%;padding:13px;background:var(--blue);color:#fff;border:none;border-radius:8px;font-size:14.5px;font-weight:700;cursor:pointer;margin-top:6px;}
+.btn:disabled{background:#9fb3c8;cursor:not-allowed;}
+.btn-outline{background:none;border:1px solid var(--blue);color:var(--blue);}
+.btn-red{background:var(--red);}
+.btn-green{background:var(--green);}
+#msg{margin-top:12px;padding:11px 13px;border-radius:8px;font-size:13.5px;display:none;}
+.ok{background:#e3f5ea;color:var(--green);border:1px solid #b9e4c9;}
+.err{background:#fbe9e7;color:var(--red);border:1px solid #f3c6c0;}
+.stavka-tip-izbor{display:flex;gap:8px;margin-bottom:12px;}
+.stavka-tip-izbor button{flex:1;padding:10px;border-radius:8px;border:2px solid var(--border);background:#fff;font-weight:700;font-size:12.5px;cursor:pointer;}
+.stavka-tip-izbor button.active.lager{border-color:var(--blue);background:#eef4fc;color:var(--blue);}
+.stavka-tip-izbor button.active.proizvodnja{border-color:var(--orange);background:#fff8e6;color:var(--orange);}
+.stavke-lista{margin-top:10px;}
+.stavka-red{display:flex;justify-content:space-between;align-items:center;padding:9px 10px;border-radius:8px;margin-bottom:6px;font-size:13px;}
+.stavka-red.lager{background:#eef4fc;}
+.stavka-red.proizvodnja{background:#fff8e6;}
+.stavka-red .ukloni{color:var(--red);font-weight:900;cursor:pointer;padding:2px 8px;}
+.rez-list{max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;margin-top:4px;}
+.rez-item{padding:9px 10px;border-bottom:1px solid #f0f2f5;cursor:pointer;font-size:13px;}
+.rez-item:hover{background:#f7f8fa;}
+.ponuda-kartica{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);padding:14px;margin-bottom:10px;}
+.ponuda-status{display:inline-block;font-size:10.5px;font-weight:800;padding:2px 9px;border-radius:12px;}
+.st-poslato{background:#fff3e0;color:var(--orange);}
+.st-potvrdjeno{background:#e6f4ea;color:var(--green);}
+.st-otkazano{background:#fce8e6;color:var(--red);}
+.empty-msg{text-align:center;color:#999;padding:24px;font-size:13px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>🚐 Teren — JoPeX</h1>
+  <nav>
+    <span id="who"></span>
+    <a href="home.html">← Početna</a>
+    <a href="#" id="logout">Odjava</a>
+  </nav>
+</header>
+<main>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="nova" onclick="prebaciTab('nova')">+ Nova ponuda</button>
+    <button class="tab-btn" data-tab="moje" onclick="prebaciTab('moje')">Moje ponude</button>
+    <button class="tab-btn" data-tab="admin" id="tab-admin-btn" style="display:none;" onclick="prebaciTab('admin')">Za potvrdu</button>
+  </div>
+
+  <!-- ═══ NOVA PONUDA ═══ -->
+  <div class="view active" id="view-nova">
+    <div class="card">
+      <h2>Podaci o kupcu</h2>
+      <div class="fg"><label class="req">Naziv / Ime</label><input type="text" id="kupac-naziv" placeholder="Ime kupca ili firme"></div>
+      <div class="row2">
+        <div class="fg"><label>Telefon</label><input type="text" id="kupac-telefon"></div>
+        <div class="fg"><label>Adresa</label><input type="text" id="kupac-adresa"></div>
+      </div>
+      <div class="fg">
+        <label>Prodajni objekat (za robu sa lagera)</label>
+        <select id="objekat-select"><option value="">— izaberi ako nudiš robu sa lagera —</option></select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Dodaj stavku</h2>
+      <div class="stavka-tip-izbor">
+        <button type="button" id="btn-tip-lager" class="lager" onclick="izaberiTipStavke('lager')">📦 Sa lagera</button>
+        <button type="button" id="btn-tip-proizvodnja" class="proizvodnja" onclick="izaberiTipStavke('proizvodnja')">🔨 Za proizvodnju</button>
+      </div>
+
+      <div id="forma-lager" style="display:none;">
+        <div class="fg">
+          <label>Pretraga artikla (šifra ili naziv)</label>
+          <input type="text" id="lager-search" placeholder="Počni da kucaš..." oninput="pretraziLager()">
+          <div class="rez-list" id="lager-rezultati" style="display:none;"></div>
+        </div>
+        <div id="lager-izabrano" style="display:none;background:#f7f8fa;border-radius:8px;padding:10px;margin-bottom:10px;font-size:13px;font-weight:700;"></div>
+        <div class="row2">
+          <div class="fg"><label>Količina</label><input type="number" id="lager-kolicina" step="0.01" min="0"></div>
+          <div class="fg"><label>Cijena (po jed.)</label><input type="number" id="lager-cijena" step="0.01" min="0"></div>
+        </div>
+        <button type="button" class="btn btn-outline" onclick="dodajLagerStavku()">+ Dodaj stavku sa lagera</button>
+      </div>
+
+      <div id="forma-proizvodnja" style="display:none;">
+        <div class="row2">
+          <div class="fg">
+            <label>Zadatak</label>
+            <select id="pr-zadatak">
+              <option value="">— izaberi —</option>
+              <option>Kuhinjska ploča</option><option>Sto</option>
+              <option>Klupice, Step</option><option>Na Mjeru</option>
+              <option>Usluge Mašina</option><option>Usluge WJ</option>
+              <option value="__slobodno__">Slobodno (upiši sam)</option>
+            </select>
+            <input type="text" id="pr-zadatak-slobodno" placeholder="Upiši zadatak..." style="display:none;margin-top:6px;">
+          </div>
+          <div class="fg"><label>Materijal</label><select id="pr-materijal"><option value="">— izaberi —</option></select></div>
+        </div>
+        <div class="fg">
+          <label>Kategorija (za obračun bonusa)</label>
+          <select id="pr-kategorija"><option value="">— izaberi —</option></select>
+        </div>
+        <div class="fg"><label>Napomena / dimenzije</label><textarea id="pr-napomena" placeholder="Detalji dogovora..."></textarea></div>
+        <div class="fg"><label>Ponuđena cijena (KM)</label><input type="number" id="pr-cijena" step="0.01" min="0"></div>
+        <button type="button" class="btn btn-outline" onclick="dodajProizvodnjaStavku()">+ Dodaj stavku za proizvodnju</button>
+      </div>
+
+      <div class="stavke-lista" id="stavke-lista"></div>
+    </div>
+
+    <button class="btn" id="btn-posalji" onclick="posaljiPonudu()">📤 Pošalji ponudu</button>
+    <div id="msg"></div>
+  </div>
+
+  <!-- ═══ MOJE PONUDE ═══ -->
+  <div class="view" id="view-moje">
+    <div id="moje-lista"><div class="empty-msg">Učitavanje...</div></div>
+  </div>
+
+  <!-- ═══ ADMIN: ZA POTVRDU ═══ -->
+  <div class="view" id="view-admin">
+    <div id="admin-lista"><div class="empty-msg">Učitavanje...</div></div>
+  </div>
+</main>
+<script>
+const API='';
+let me=null;
+let objekti=[];
+let trenutniTipStavke=null;
+let lagerIzabranaRoba=null;
+let stavke=[]; // {tip, ...}
+
+function prebaciTab(tab){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+tab).classList.add('active');
+  if(tab==='moje') ucitajMojePonude();
+  if(tab==='admin') ucitajAdminListu();
+}
+
+function izaberiTipStavke(tip){
+  trenutniTipStavke=tip;
+  document.getElementById('btn-tip-lager').classList.toggle('active', tip==='lager');
+  document.getElementById('btn-tip-proizvodnja').classList.toggle('active', tip==='proizvodnja');
+  document.getElementById('forma-lager').style.display=tip==='lager'?'block':'none';
+  document.getElementById('forma-proizvodnja').style.display=tip==='proizvodnja'?'block':'none';
+}
+
+let lagerTimer=null;
+function pretraziLager(){
+  clearTimeout(lagerTimer);
+  const objId=document.getElementById('objekat-select').value;
+  const q=document.getElementById('lager-search').value.trim();
+  const cont=document.getElementById('lager-rezultati');
+  if(!objId){ cont.style.display='block'; cont.innerHTML='<div class="rez-item" style="color:var(--red);">Prvo izaberi prodajni objekat gore.</div>'; return; }
+  if(q.length<2){ cont.style.display='none'; return; }
+  lagerTimer=setTimeout(async()=>{
+    try{
+      const r=await fetch(`${API}/api/roba?q=${encodeURIComponent(q)}&objekt_id=${objId}&limit=15`);
+      const rows=await r.json();
+      cont.style.display='block';
+      if(!rows.length){ cont.innerHTML='<div class="rez-item">Nema rezultata.</div>'; return; }
+      cont.innerHTML=rows.map(a=>`<div class="rez-item" onclick='izaberiLagerArtikal(${JSON.stringify(a).replace(/'/g,"&apos;")})'>
+        <b>${esc(a.sifra)}</b> — ${esc(a.naziv)} <span style="color:#8b96a5;">(stanje: ${a.stanje ?? '—'} ${esc(a.jed_mjera||'')}, ${fm(a.cijena)} KM)</span>
+      </div>`).join('');
+    }catch(e){ cont.innerHTML='<div class="rez-item">Greška pri pretrazi.</div>'; }
+  }, 250);
+}
+
+function izaberiLagerArtikal(a){
+  lagerIzabranaRoba=a;
+  document.getElementById('lager-rezultati').style.display='none';
+  document.getElementById('lager-search').value='';
+  document.getElementById('lager-izabrano').style.display='block';
+  document.getElementById('lager-izabrano').textContent=`${a.sifra} — ${a.naziv} (raspoloživo: ${a.stanje ?? '—'} ${a.jed_mjera||''})`;
+  document.getElementById('lager-cijena').value=a.cijena||0;
+  document.getElementById('lager-kolicina').value='';
+  document.getElementById('lager-kolicina').focus();
+}
+
+function dodajLagerStavku(){
+  if(!lagerIzabranaRoba){ alert('Prvo izaberi artikal iz pretrage.'); return; }
+  const kolicina=parseFloat(document.getElementById('lager-kolicina').value);
+  const cijena=parseFloat(document.getElementById('lager-cijena').value);
+  if(!(kolicina>0)){ alert('Unesite količinu veću od 0.'); return; }
+  if(!(cijena>=0)){ alert('Unesite ispravnu cijenu.'); return; }
+  stavke.push({
+    tip:'lager', roba_id:lagerIzabranaRoba.id, sifra:lagerIzabranaRoba.sifra,
+    naziv:lagerIzabranaRoba.naziv, jed_mjera:lagerIzabranaRoba.jed_mjera, kolicina, cijena,
+  });
+  lagerIzabranaRoba=null;
+  document.getElementById('lager-izabrano').style.display='none';
+  document.getElementById('lager-kolicina').value='';
+  document.getElementById('lager-cijena').value='';
+  renderStavke();
+}
+
+function dodajProizvodnjaStavku(){
+  const zadatakIzabran=document.getElementById('pr-zadatak').value;
+  const zadatak=zadatakIzabran==='__slobodno__'?document.getElementById('pr-zadatak-slobodno').value.trim():zadatakIzabran;
+  if(!zadatak){ alert('Izaberite ili upišite zadatak.'); return; }
+  const cijena=parseFloat(document.getElementById('pr-cijena').value)||0;
+  stavke.push({
+    tip:'proizvodnja', zadatak, materijal:document.getElementById('pr-materijal').value||null,
+    napomena_stavka:document.getElementById('pr-napomena').value||null, cijena_proizvodnja:cijena,
+    kategorija_bonus_id:document.getElementById('pr-kategorija').value||null,
+  });
+  document.getElementById('pr-zadatak').value='';
+  document.getElementById('pr-zadatak-slobodno').value='';
+  document.getElementById('pr-zadatak-slobodno').style.display='none';
+  document.getElementById('pr-materijal').value='';
+  document.getElementById('pr-kategorija').value='';
+  document.getElementById('pr-napomena').value='';
+  document.getElementById('pr-cijena').value='';
+  renderStavke();
+}
+
+document.getElementById('pr-zadatak').addEventListener('change', function(){
+  document.getElementById('pr-zadatak-slobodno').style.display=this.value==='__slobodno__'?'block':'none';
+});
+
+function ukloniStavku(idx){
+  stavke.splice(idx,1);
+  renderStavke();
+}
+
+function renderStavke(){
+  const cont=document.getElementById('stavke-lista');
+  if(!stavke.length){ cont.innerHTML=''; return; }
+  cont.innerHTML=stavke.map((s,i)=>{
+    if(s.tip==='lager'){
+      return `<div class="stavka-red lager">
+        <span>📦 ${esc(s.sifra)} — ${esc(s.naziv)} · ${s.kolicina} ${esc(s.jed_mjera||'')} × ${fm(s.cijena)} = <b>${fm(s.kolicina*s.cijena)} KM</b></span>
+        <span class="ukloni" onclick="ukloniStavku(${i})">✕</span>
+      </div>`;
+    }
+    return `<div class="stavka-red proizvodnja">
+      <span>🔨 ${esc(s.zadatak)}${s.materijal?' · '+esc(s.materijal):''} — <b>${fm(s.cijena_proizvodnja)} KM</b></span>
+      <span class="ukloni" onclick="ukloniStavku(${i})">✕</span>
+    </div>`;
+  }).join('');
+}
+
+async function posaljiPonudu(){
+  const msg=document.getElementById('msg');
+  const btn=document.getElementById('btn-posalji');
+  msg.style.display='none';
+  const kupacNaziv=document.getElementById('kupac-naziv').value.trim();
+  if(!kupacNaziv){ msg.className='err'; msg.style.display='block'; msg.textContent='✗ Unesite naziv kupca.'; return; }
+  if(!stavke.length){ msg.className='err'; msg.style.display='block'; msg.textContent='✗ Dodajte bar jednu stavku.'; return; }
+  const imaLager=stavke.some(s=>s.tip==='lager');
+  const objId=document.getElementById('objekat-select').value;
+  if(imaLager && !objId){ msg.className='err'; msg.style.display='block'; msg.textContent='✗ Izaberite prodajni objekat (ponuda ima stavke sa lagera).'; return; }
+
+  btn.disabled=true; btn.textContent='Slanje...';
+  try{
+    const r=await fetch(`${API}/api/terenske-ponude`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        kupac_naziv:kupacNaziv,
+        kupac_telefon:document.getElementById('kupac-telefon').value||null,
+        kupac_adresa:document.getElementById('kupac-adresa').value||null,
+        objekt_id:objId||null,
+        stavke,
+      }),
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error);
+    msg.className='ok'; msg.style.display='block';
+    msg.textContent=`✓ Ponuda #${d.id} poslata — čeka potvrdu.`;
+    stavke=[]; renderStavke();
+    document.getElementById('kupac-naziv').value='';
+    document.getElementById('kupac-telefon').value='';
+    document.getElementById('kupac-adresa').value='';
+  }catch(err){
+    msg.className='err'; msg.style.display='block'; msg.textContent='✗ '+err.message;
+  }finally{ btn.disabled=false; btn.textContent='📤 Pošalji ponudu'; }
+}
+
+function statusBadge(status){
+  const mapa={poslato:['Čeka potvrdu','st-poslato'], potvrdjeno:['Potvrđeno','st-potvrdjeno'], otkazano:['Otkazano','st-otkazano']};
+  const [tekst,klasa]=mapa[status]||[status,''];
+  return `<span class="ponuda-status ${klasa}">${tekst}</span>`;
+}
+
+async function ucitajMojePonude(){
+  const cont=document.getElementById('moje-lista');
+  cont.innerHTML='<div class="empty-msg">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/terenske-ponude`);
+    const rows=await r.json();
+    if(!rows.length){ cont.innerHTML='<div class="empty-msg">Nema poslatih ponuda.</div>'; return; }
+    cont.innerHTML=rows.map(p=>`
+      <div class="ponuda-kartica">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <b>#${p.id} — ${esc(p.kupac_naziv)}</b>
+          ${statusBadge(p.status)}
+        </div>
+        <div style="font-size:12px;color:#8b96a5;">${new Date(p.datum).toLocaleString('sr-Latn-BA')}</div>
+        ${p.status==='potvrdjeno'?`<div style="font-size:12px;color:var(--green);margin-top:6px;">
+          ${p.otpremnica_id?'✓ Otpremnica kreirana':''} ${p.radni_nalog_r_br?'✓ Radni nalog #'+p.radni_nalog_r_br:''}
+        </div>`:''}
+      </div>
+    `).join('');
+  }catch(e){ cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>'; }
+}
+
+async function ucitajAdminListu(){
+  const cont=document.getElementById('admin-lista');
+  cont.innerHTML='<div class="empty-msg">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/terenske-ponude?status=poslato`);
+    const rows=await r.json();
+    if(!rows.length){ cont.innerHTML='<div class="empty-msg">Nema ponuda koje čekaju potvrdu. 🎉</div>'; return; }
+    cont.innerHTML=await Promise.all(rows.map(async p=>{
+      const dr=await fetch(`${API}/api/terenske-ponude/${p.id}`);
+      const detalj=await dr.json();
+      const stavkeHtml=detalj.stavke.map(s=>s.tip==='lager'
+        ? `<div style="font-size:12px;padding:3px 0;">📦 ${esc(s.sifra)} — ${esc(s.naziv)} · ${s.kolicina} ${esc(s.jed_mjera||'')} × ${fm(s.cijena)} KM</div>`
+        : `<div style="font-size:12px;padding:3px 0;">🔨 ${esc(s.zadatak)} — ${fm(s.cijena_proizvodnja)} KM</div>`
+      ).join('');
+      return `<div class="ponuda-kartica">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <b>#${p.id} — ${esc(p.kupac_naziv)}</b>
+          <span style="font-size:11px;color:#8b96a5;">${esc(p.komercijalista_ime)}</span>
+        </div>
+        <div style="font-size:12px;color:#8b96a5;margin-bottom:6px;">${new Date(p.datum).toLocaleString('sr-Latn-BA')}</div>
+        <div style="background:#f7f8fa;border-radius:6px;padding:8px;margin-bottom:8px;">${stavkeHtml}</div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-green" style="margin:0;" onclick="potvrdiPonudu(${p.id})">✓ Potvrdi (generiši)</button>
+          <button class="btn btn-red" style="margin:0;" onclick="otkaziPonudu(${p.id})">✕ Otkaži</button>
+        </div>
+      </div>`;
+    })).then(arr=>arr.join(''));
+  }catch(e){ cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>'; }
+}
+
+async function potvrdiPonudu(id){
+  if(!confirm('Potvrditi ponudu? Ovo generiše otpremnicu i/ili radni nalog i skida robu sa lagera (ako ima lager stavki).')) return;
+  try{
+    const r=await fetch(`${API}/api/terenske-ponude/${id}/potvrdi`,{method:'POST'});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error);
+    alert('✓ Potvrđeno.'+(d.otpremnica_id?' Otpremnica kreirana.':'')+(d.radni_nalog_r_br?' Radni nalog #'+d.radni_nalog_r_br+' kreiran.':''));
+    ucitajAdminListu();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+async function otkaziPonudu(id){
+  if(!confirm('Otkazati ovu ponudu?')) return;
+  try{
+    const r=await fetch(`${API}/api/terenske-ponude/${id}/otkazi`,{method:'POST'});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error);
+    ucitajAdminListu();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+async function checkAuth(){
+  try{
+    const r=await fetch(API+'/api/auth/me');
+    if(!r.ok){location.href='login.html';return;}
+    me=await r.json();
+    document.getElementById('who').textContent='👤 '+me.ime_prezime;
+    if(me.rola!=='admin' && !me.komercijalista_teren){
+      location.href='home.html';
+      return;
+    }
+    if(me.rola==='admin') document.getElementById('tab-admin-btn').style.display='block';
+  }catch{location.href='login.html';}
+}
+
+document.getElementById('logout').onclick=async e=>{
+  e.preventDefault();
+  await fetch(API+'/api/auth/logout',{method:'POST'});
+  location.href='login.html';
+};
+
+async function ucitajObjekte(){
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`);
+    objekti=await r.json();
+    const sel=document.getElementById('objekat-select');
+    objekti.filter(o=>o.aktivan).forEach(o=>sel.append(new Option(o.naziv, o.id)));
+  }catch(e){}
+}
+
+async function ucitajMaterijale(){
+  try{
+    const r=await fetch(`${API}/api/config`,{signal:AbortSignal.timeout(4000)});
+    const cfg=await r.json();
+    const sel=document.getElementById('pr-materijal');
+    (cfg.materijali||[]).forEach(m=>sel.append(new Option(m.naziv,m.naziv)));
+    const selKat=document.getElementById('pr-kategorija');
+    (cfg.kategorije_bonus||[]).forEach(k=>selKat.append(new Option(k.naziv,k.id)));
+  }catch(e){}
+}
+
+checkAuth();
+ucitajObjekte();
+ucitajMaterijale();
+</script>
+</body>
+</html>

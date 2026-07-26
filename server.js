@@ -63,6 +63,7 @@ app.use('/api/ponude',      requireLoginOrApiKey, require('./ponude'));
 app.use('/api/prodajni-objekti', requireLoginOrApiKey, require('./prodajni-objekti'));
 app.use('/api/prenosi', requireLoginOrApiKey, require('./prenosi'));
 app.use('/api/isplate', requireLoginOrApiKey, require('./isplate'));
+app.use('/api/terenske-ponude', requireLoginOrApiKey, require('./terenske-ponude'));
 app.use('/api/uplate', requireLoginOrApiKey, require('./uplate'));
 app.use('/api/blagajna-razduzenja', requireLoginOrApiKey, require('./blagajna-razduzenja'));
 // ─── Statički fajlovi ─────────────────────────────────────────────────────

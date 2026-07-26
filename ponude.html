@@ -238,6 +238,9 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <div class="fg"><label>Telefon</label><input type="text" id="ref-tel" value="+387 65 512 868"></div>
       <div class="fg"><label>E-mail</label><input type="text" id="ref-email" value="jpx.doc@gmail.com"></div>
     </div>
+    <div class="fg"><label>Kategorija (za obračun bonusa)</label>
+      <select id="kategorija-bonus"><option value="">— izaberi —</option></select>
+    </div>
   </div>
 
   <div class="sec">
@@ -6376,6 +6379,13 @@ async function _loadConfig(){
       dl.innerHTML = cfg.materijali.map(m=>`<option value="${m.naziv}"></option>`).join('');
     }
 
+    // Kategorija (za obračun bonusa)
+    var katSel = document.getElementById('kategorija-bonus');
+    if(katSel && cfg.kategorije_bonus){
+      katSel.innerHTML = '<option value="">— izaberi —</option>'+
+        cfg.kategorije_bonus.map(k=>`<option value="${k.id}">${k.naziv}</option>`).join('');
+    }
+
     // Ugovorio select (u sekciji Narudžba)
     var kUgov = document.getElementById('k-ugovorio');
     if(kUgov){
@@ -6728,6 +6738,8 @@ async function usvojiPonudu(){
     napomena: '',
     status: 'Nije Započeto',
     pocetak: new Date().toISOString().split('T')[0], // datum ugovaranja = danas
+    kategorija_bonus_id: ge('kategorija-bonus') ? (ge('kategorija-bonus').value||null) : null,
+    iz_generatora_ponuda: true, // pouzdan signal za "Velika ponuda" — vidi proizvodnja.js
   };
 
   btn.disabled=true;btn.textContent='Priprema...';
@@ -6756,7 +6768,7 @@ async function usvojiPonudu(){
     var uploadBody={naziv:naziv, dxf_b64:dxfB64};
     if(rnHtmlB64) uploadBody.radni_nalog_html_b64=rnHtmlB64;
 
-    var uploadR=await fetch(url+'/api/upload?api_key=jopex-api-kljuc-2024',{
+    var uploadR=await fetch(url+'/api/upload',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(uploadBody),
@@ -6772,7 +6784,7 @@ async function usvojiPonudu(){
 
     // 6. Upiši nalog u bazu
     showMsg('Upisivanje naloga...',true);
-    var r=await fetch(url+'/api/proizvodnja?api_key=jopex-api-kljuc-2024',{
+    var r=await fetch(url+'/api/proizvodnja',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(body),

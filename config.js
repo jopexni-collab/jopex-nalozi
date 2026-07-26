@@ -24,12 +24,21 @@ router.get('/', async (req, res) => {
                   WHERE aktivan = true
                   ORDER BY ime_prezime`),
     ]);
+    // Odvojeno, sa svojim try/catch — ako migracija za kategorije_bonus JOŠ nije
+    // pokrenuta na ovom serveru, ne smije oboriti CIJELI config (koriste ga svi ekrani).
+    let kategorije = [];
+    try {
+      const k = await pool.query(`SELECT id, naziv FROM kategorije_bonus WHERE aktivna = true ORDER BY naziv`);
+      kategorije = k.rows;
+    } catch (e) { /* tabela možda još ne postoji — vrati praznu listu, ne ruši config */ }
+
     res.json({
       version: Date.now(), // JoPeX koristi ovo da zna je li config svjež
       materijali:    mat.rows,
       kupci:         kupci.rows,
       vrste_obrade:  obrade.rows,
       ugovaraci:     ugovaraci.rows,
+      kategorije_bonus: kategorije,
     });
   } catch (err) {
     console.error(err);
