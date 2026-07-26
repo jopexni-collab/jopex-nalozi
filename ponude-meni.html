@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ponude – JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f3f5f8;--border:#dde3ea;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);}
+header{background:var(--blue);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}
+header h1{margin:0;font-size:16px;}
+header nav a{color:#fff;text-decoration:none;font-size:12px;opacity:.9;border:1px solid rgba(255,255,255,.4);padding:5px 10px;border-radius:6px;}
+main{max-width:640px;margin:30px auto;padding:0 16px;}
+.card{display:block;background:#fff;border:1px solid var(--border);border-radius:12px;padding:22px;margin-bottom:14px;text-decoration:none;color:inherit;box-shadow:0 1px 3px rgba(0,0,0,.05);transition:box-shadow .15s;}
+.card:hover{box-shadow:0 4px 14px rgba(0,0,0,.1);}
+.card-icon{font-size:26px;margin-bottom:8px;}
+.card-title{font-size:16px;font-weight:800;color:var(--dark);margin-bottom:4px;}
+.card-desc{font-size:13px;color:#6b7a8d;line-height:1.5;}
+.hidden{display:none;}
+</style>
+</head>
+<body>
+<header>
+  <h1>📝 Ponude</h1>
+  <nav><a href="home.html">← Početna</a></nav>
+</header>
+<main>
+  <a href="ponude.html" class="card hidden" id="card-proizvodnja">
+    <div class="card-icon">📐</div>
+    <div class="card-title">Ponude za proizvodnju</div>
+    <div class="card-desc">Kalkulacija cijene, DXF, dimenzije — za posao koji se izrađuje (kuhinjske ploče, stolovi...).</div>
+  </a>
+  <a href="ponude-robe.html" class="card hidden" id="card-robe">
+    <div class="card-icon">📦</div>
+    <div class="card-title">Ponude robe</div>
+    <div class="card-desc">Ponuda gotove robe sa lagera — bira se prodajni objekat, artikal, količina i cijena.</div>
+  </a>
+  <a href="pregled-ponuda.html" class="card hidden" id="card-pregled">
+    <div class="card-icon">📋</div>
+    <div class="card-title">Pregled svih ponuda</div>
+    <div class="card-desc">Sve ponude na jednom mjestu — za proizvodnju i za robu, sa statusom.</div>
+  </a>
+</main>
+<script>
+const API='';
+fetch(API+'/api/auth/me').then(r=>{
+  if(!r.ok){location.href='login.html';return;}
+  return r.json();
+}).then(u=>{
+  if(!u) return;
+  const admin=u.rola==='admin';
+  if(admin||u.moze_ugovarati){
+    document.getElementById('card-proizvodnja').classList.remove('hidden');
+    document.getElementById('card-robe').classList.remove('hidden');
+    document.getElementById('card-pregled').classList.remove('hidden');
+  }
+}).catch(()=>location.href='login.html');
+</script>
+</body>
+</html>

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pregled svih ponuda – JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f3f5f8;--border:#dde3ea;--red:#c0392b;--green:#1f8a4c;--orange:#b8860b;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);}
+header{background:var(--blue);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}
+header h1{margin:0;font-size:16px;}
+header nav{display:flex;gap:10px;align-items:center;}
+header nav a{color:#fff;text-decoration:none;font-size:12px;opacity:.9;border:1px solid rgba(255,255,255,.4);padding:5px 10px;border-radius:6px;}
+#who{font-size:12px;opacity:.85;}
+main{max-width:1000px;margin:20px auto;padding:0 16px 60px;}
+h2.sekcija{font-size:15px;color:var(--dark);margin:22px 0 10px;}
+.filteri{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+.filteri button{padding:7px 14px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--dark);}
+.filteri button.active{background:var(--blue);color:#fff;border-color:var(--blue);}
+.ponuda-kartica{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);padding:14px;margin-bottom:10px;}
+.ponuda-status{display:inline-block;font-size:10.5px;font-weight:800;padding:2px 9px;border-radius:12px;}
+.st-poslato{background:#fff3e0;color:var(--orange);}
+.st-potvrdjeno{background:#e6f4ea;color:var(--green);}
+.st-otkazano{background:#fce8e6;color:var(--red);}
+.tip-bedz{display:inline-block;font-size:10px;font-weight:800;padding:1px 7px;border-radius:6px;margin-right:6px;}
+.tip-lager{background:#eef4fc;color:var(--blue);}
+.tip-proizvodnja{background:#fff8e6;color:var(--orange);}
+.tip-mesovito{background:#f3e6fc;color:#7a3fa0;}
+.btn{padding:8px 16px;border-radius:7px;border:none;font-size:12.5px;font-weight:700;cursor:pointer;margin-right:6px;}
+.btn-green{background:var(--green);color:#fff;}
+.btn-red{background:var(--red);color:#fff;}
+.empty-msg{text-align:center;color:#999;padding:24px;font-size:13px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>📋 Pregled svih ponuda</h1>
+  <nav>
+    <span id="who"></span>
+    <a href="ponude-meni.html">← Ponude</a>
+    <a href="home.html">Početna</a>
+    <a href="#" id="logout">Odjava</a>
+  </nav>
+</header>
+<main>
+  <h2 class="sekcija">📦 Ponude robe i terenske ponude</h2>
+  <div class="filteri" id="filteri-terenske">
+    <button class="active" data-status="poslato" onclick="filterTerenske('poslato')">Čeka potvrdu</button>
+    <button data-status="potvrdjeno" onclick="filterTerenske('potvrdjeno')">Potvrđene</button>
+    <button data-status="otkazano" onclick="filterTerenske('otkazano')">Otkazane</button>
+    <button data-status="" onclick="filterTerenske('')">Sve</button>
+  </div>
+  <div id="terenske-lista"><div class="empty-msg">Učitavanje...</div></div>
+
+  <h2 class="sekcija">📐 Ponude za proizvodnju (Generator)</h2>
+  <div id="proizvodnja-lista"><div class="empty-msg">Učitavanje...</div></div>
+</main>
+<script>
+const API='';
+let me=null;
+
+function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+function statusBadge(status){
+  const mapa={poslato:['Čeka potvrdu','st-poslato'], potvrdjeno:['Potvrđeno','st-potvrdjeno'], otkazano:['Otkazano','st-otkazano']};
+  const [tekst,klasa]=mapa[status]||[status,''];
+  return `<span class="ponuda-status ${klasa}">${tekst}</span>`;
+}
+
+async function filterTerenske(status){
+  document.querySelectorAll('#filteri-terenske button').forEach(b=>b.classList.toggle('active', b.dataset.status===status));
+  await ucitajTerenske(status);
+}
+
+async function ucitajTerenske(status){
+  const cont=document.getElementById('terenske-lista');
+  cont.innerHTML='<div class="empty-msg">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/terenske-ponude${status?'?status='+status:''}`);
+    const rows=await r.json();
+    if(!rows.length){ cont.innerHTML='<div class="empty-msg">Nema ponuda.</div>'; return; }
+    cont.innerHTML=await Promise.all(rows.map(async p=>{
+      let stavkeHtml='', tipBedz='';
+      if(p.status==='poslato'){
+        try{
+          const dr=await fetch(`${API}/api/terenske-ponude/${p.id}`);
+          const detalj=await dr.json();
+          const imaLager=detalj.stavke.some(s=>s.tip==='lager');
+          const imaProizvodnju=detalj.stavke.some(s=>s.tip==='proizvodnja');
+          tipBedz=imaLager&&imaProizvodnju?'<span class="tip-bedz tip-mesovito">MEŠOVITO</span>'
+                 :imaLager?'<span class="tip-bedz tip-lager">ROBA</span>'
+                 :'<span class="tip-bedz tip-proizvodnja">PROIZVODNJA</span>';
+          stavkeHtml=detalj.stavke.map(s=>s.tip==='lager'
+            ? `<div style="font-size:12px;padding:3px 0;">📦 ${esc(s.sifra)} — ${esc(s.naziv)} · ${s.kolicina} ${esc(s.jed_mjera||'')} × ${fm(s.cijena)} KM</div>`
+            : `<div style="font-size:12px;padding:3px 0;">🔨 ${esc(s.zadatak)} — ${fm(s.cijena_proizvodnja)} KM</div>`
+          ).join('');
+        }catch(e){}
+      }
+      return `<div class="ponuda-kartica">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div>${tipBedz}<b>#${p.id} — ${esc(p.kupac_naziv)}</b></div>
+          ${statusBadge(p.status)}
+        </div>
+        <div style="font-size:12px;color:#8b96a5;margin-bottom:6px;">${new Date(p.datum).toLocaleString('sr-Latn-BA')} · ${esc(p.komercijalista_ime||'')}</div>
+        ${stavkeHtml?`<div style="background:#f7f8fa;border-radius:6px;padding:8px;margin-bottom:8px;">${stavkeHtml}</div>`:''}
+        ${p.status==='potvrdjeno'?`<div style="font-size:12px;color:var(--green);">
+          ${p.otpremnica_id?'✓ Otpremnica kreirana':''} ${p.radni_nalog_r_br?'✓ Radni nalog #'+p.radni_nalog_r_br:''}
+        </div>`:''}
+        ${p.status==='poslato'?`<div>
+          <button class="btn btn-green" onclick="potvrdiPonudu(${p.id})">✓ Potvrdi (generiši)</button>
+          <button class="btn btn-red" onclick="otkaziPonudu(${p.id})">✕ Otkaži</button>
+        </div>`:''}
+      </div>`;
+    })).then(arr=>arr.join(''));
+  }catch(e){ cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>'; }
+}
+
+async function potvrdiPonudu(id){
+  if(!confirm('Potvrditi ponudu? Ovo generiše otpremnicu i/ili radni nalog i skida robu sa lagera (ako ima lager stavki).')) return;
+  try{
+    const r=await fetch(`${API}/api/terenske-ponude/${id}/potvrdi`,{method:'POST'});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error);
+    alert('✓ Potvrđeno.'+(d.otpremnica_id?' Otpremnica kreirana.':'')+(d.radni_nalog_r_br?' Radni nalog #'+d.radni_nalog_r_br+' kreiran.':''));
+    const trenutniFilter=document.querySelector('#filteri-terenske button.active').dataset.status;
+    ucitajTerenske(trenutniFilter);
+  }catch(e){ alert('✗ '+e.message); }
+}
+async function otkaziPonudu(id){
+  if(!confirm('Otkazati ovu ponudu?')) return;
+  try{
+    const r=await fetch(`${API}/api/terenske-ponude/${id}/otkazi`,{method:'POST'});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error);
+    const trenutniFilter=document.querySelector('#filteri-terenske button.active').dataset.status;
+    ucitajTerenske(trenutniFilter);
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+async function ucitajProizvodnju(){
+  const cont=document.getElementById('proizvodnja-lista');
+  cont.innerHTML='<div class="empty-msg">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/proizvodnja`);
+    const rows=(await r.json()).filter(n=>n.izvor==='velika_ponuda').slice(0,100);
+    if(!rows.length){ cont.innerHTML='<div class="empty-msg">Nema ponuda za proizvodnju.</div>'; return; }
+    cont.innerHTML=rows.map(n=>`
+      <div class="ponuda-kartica">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <b>#${n.r_br} — ${esc(n.narucilac||'—')}</b>
+          <span style="font-size:11.5px;color:#8b96a5;">${esc(n.status)}</span>
+        </div>
+        <div style="font-size:12.5px;color:#6b7a8d;">${esc(n.zadatak)}${n.materijal?' · '+esc(n.materijal):''}</div>
+        <div style="font-size:12px;color:#8b96a5;margin-top:4px;">Ugovorio: ${esc(n.ugovorio||'—')}${n.ugovorena_suma?' · '+fm(n.ugovorena_suma)+' KM':''}</div>
+      </div>
+    `).join('');
+  }catch(e){ cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>'; }
+}
+
+async function checkAuth(){
+  try{
+    const r=await fetch(API+'/api/auth/me');
+    if(!r.ok){location.href='login.html';return;}
+    me=await r.json();
+    document.getElementById('who').textContent='👤 '+me.ime_prezime;
+    if(me.rola!=='admin' && !me.moze_ugovarati){ location.href='home.html'; return; }
+  }catch{location.href='login.html';}
+}
+document.getElementById('logout').onclick=async e=>{
+  e.preventDefault();
+  await fetch(API+'/api/auth/logout',{method:'POST'});
+  location.href='login.html';
+};
+
+checkAuth();
+ucitajTerenske('poslato');
+ucitajProizvodnju();
+</script>
+</body>
+</html>
