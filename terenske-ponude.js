@@ -55,7 +55,10 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   const user = req.session?.user;
   if (!jeTerenacIliAdmin(user)) return res.status(403).json({ error: 'Nema pristupa.' });
-  const { kupac_naziv, kupac_telefon, kupac_adresa, objekt_id, napomena, stavke } = req.body || {};
+  const {
+    kupac_naziv, kupac_telefon, kupac_adresa, objekt_id, napomena, stavke,
+    nacin_placanja, valuta, paritet, paritet_adresa, vreme_isporuke, vazi_do,
+  } = req.body || {};
   if (!kupac_naziv?.trim()) return res.status(400).json({ error: 'Naziv kupca je obavezan.' });
   if (!Array.isArray(stavke) || !stavke.length)
     return res.status(400).json({ error: 'Ponuda mora imati bar jednu stavku.' });
@@ -66,22 +69,26 @@ router.post('/', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const javniToken = require('crypto').randomBytes(20).toString('hex');
     const h = await client.query(
       `INSERT INTO terenske_ponude
          (komercijalista_id, komercijalista_ime, kupac_naziv, kupac_telefon, kupac_adresa,
-          objekt_id, napomena, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'poslato') RETURNING *`,
+          objekt_id, napomena, status, nacin_placanja, valuta, paritet, paritet_adresa,
+          vreme_isporuke, vazi_do, javni_token)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'poslato',$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [user.id, user.ime_prezime, kupac_naziv.trim(), kupac_telefon || null,
-       kupac_adresa || null, objekt_id || null, napomena || null]
+       kupac_adresa || null, objekt_id || null, napomena || null,
+       nacin_placanja || null, valuta || 'KM', paritet || null, paritet_adresa || null,
+       vreme_isporuke || null, vazi_do || null, javniToken]
     );
     const ponuda = h.rows[0];
 
     for (const s of stavke) {
       if (s.tip === 'lager') {
         await client.query(
-          `INSERT INTO terenska_ponuda_stavke (ponuda_id, tip, roba_id, sifra, naziv, jed_mjera, kolicina, cijena)
-           VALUES ($1,'lager',$2,$3,$4,$5,$6,$7)`,
-          [ponuda.id, s.roba_id, s.sifra, s.naziv, s.jed_mjera, s.kolicina, s.cijena]
+          `INSERT INTO terenska_ponuda_stavke (ponuda_id, tip, roba_id, sifra, naziv, jed_mjera, kolicina, cijena, link_slika)
+           VALUES ($1,'lager',$2,$3,$4,$5,$6,$7,$8)`,
+          [ponuda.id, s.roba_id, s.sifra, s.naziv, s.jed_mjera, s.kolicina, s.cijena, s.link_slika || null]
         );
       } else if (s.tip === 'proizvodnja') {
         await client.query(
@@ -92,7 +99,7 @@ router.post('/', async (req, res) => {
       }
     }
     await client.query('COMMIT');
-    res.json({ ok: true, id: ponuda.id });
+    res.json({ ok: true, id: ponuda.id, javni_token: javniToken });
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });

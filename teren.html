@@ -53,6 +53,14 @@ main{max-width:680px;margin:16px auto;padding:0 14px 60px;}
 .st-potvrdjeno{background:#e6f4ea;color:var(--green);}
 .st-otkazano{background:#fce8e6;color:var(--red);}
 .empty-msg{text-align:center;color:#999;padding:24px;font-size:13px;}
+.posalji-lbl{font-size:11.5px;font-weight:700;color:#6b7a8d;text-align:center;margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px;}
+.posalji-btns{display:flex;gap:8px;}
+.btn-posalji{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;font:inherit;font-size:11px;font-weight:700;padding:10px 4px;border-radius:10px;border:1px solid var(--border);background:#fff;color:#1a2733;cursor:pointer;min-height:56px;text-decoration:none;}
+.btn-posalji .ic{font-size:20px;}
+.btn-posalji.viber{color:#7360f2;}
+.btn-posalji.whatsapp{color:#25d366;}
+.btn-posalji.email{color:var(--blue);}
+.posalji-link{font-size:10.5px;color:#8b96a5;text-align:center;margin-top:8px;word-break:break-all;}
 </style>
 </head>
 <body>
@@ -84,14 +92,37 @@ main{max-width:680px;margin:16px auto;padding:0 14px 60px;}
         <div class="fg"><label>Telefon</label><input type="text" id="kupac-telefon"></div>
         <div class="fg"><label>Adresa</label><input type="text" id="kupac-adresa"></div>
       </div>
-      <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;background:#eef4fc;padding:9px 11px;border-radius:8px;cursor:pointer;margin-bottom:2px;">
-        <input type="checkbox" id="kupac-registruj" checked>
-        <span>Ovo je NOVI kupac — registruj ga u bazu (da bude pretraživ ubuduće)</span>
-      </label>
+      <div id="kupac-status" style="display:none;font-size:12.5px;padding:9px 11px;border-radius:8px;margin-bottom:2px;"></div>
       <div class="fg">
         <label>Prodajni objekat (za robu sa lagera)</label>
         <select id="objekat-select"><option value="">— izaberi ako nudiš robu sa lagera —</option></select>
         <div style="font-size:10.5px;color:#8b96a5;margin-top:3px;">Napomena: PJ Niš i BiH PJ-ovi (Aleksandrovac/Vrbanja/Vojkovići) imaju odvojene liste kupaca — izaberi PJ PRIJE pretrage kupca, radi tačnih rezultata.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Uslovi ponude</h2>
+      <div class="row2">
+        <div class="fg"><label>Način plaćanja</label><input type="text" id="nacin-placanja" placeholder="npr. Avans 50% + ostatak po isporuci"></div>
+        <div class="fg"><label>Valuta</label>
+          <select id="valuta-select"><option value="KM">KM</option><option value="EUR">EUR (€)</option></select>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="fg">
+          <label>Paritet isporuke</label>
+          <select id="paritet-select" onchange="document.getElementById('paritet-adresa-fg').style.display=this.value==='fco_drugo'?'block':'none';">
+            <option value="">— nije određeno —</option>
+            <option value="fco_kupac">FCO Kupac</option>
+            <option value="fco_skladiste">FCO Skladište</option>
+            <option value="fco_drugo">FCO — druga adresa (npr. gradilište)</option>
+          </select>
+        </div>
+        <div class="fg"><label>Vrijeme isporuke</label><input type="text" id="vreme-isporuke" placeholder="npr. 3-5 radnih dana"></div>
+      </div>
+      <div class="row2">
+        <div class="fg" id="paritet-adresa-fg" style="display:none;"><label>Adresa isporuke (za FCO drugo)</label><input type="text" id="paritet-adresa"></div>
+        <div class="fg"><label>Ponuda važi do</label><input type="date" id="vazi-do"></div>
       </div>
     </div>
 
@@ -113,6 +144,7 @@ main{max-width:680px;margin:16px auto;padding:0 14px 60px;}
           <div class="fg"><label>Količina</label><input type="number" id="lager-kolicina" step="0.01" min="0"></div>
           <div class="fg"><label>Cijena (po jed.)</label><input type="number" id="lager-cijena" step="0.01" min="0"></div>
         </div>
+        <div class="fg"><label>Link slike (opciono)</label><input type="text" id="lager-slika" placeholder="https://..."></div>
         <button type="button" class="btn btn-outline" onclick="dodajLagerStavku()">+ Dodaj stavku sa lagera</button>
       </div>
 
@@ -145,6 +177,7 @@ main{max-width:680px;margin:16px auto;padding:0 14px 60px;}
 
     <button class="btn" id="btn-posalji" onclick="posaljiPonudu()">📤 Pošalji ponudu</button>
     <div id="msg"></div>
+    <div id="posalji-box" style="margin-top:14px;"></div>
   </div>
 
   <!-- ═══ MOJE PONUDE ═══ -->
@@ -222,11 +255,13 @@ function dodajLagerStavku(){
   stavke.push({
     tip:'lager', roba_id:lagerIzabranaRoba.id, sifra:lagerIzabranaRoba.sifra,
     naziv:lagerIzabranaRoba.naziv, jed_mjera:lagerIzabranaRoba.jed_mjera, kolicina, cijena,
+    link_slika:document.getElementById('lager-slika').value.trim()||null,
   });
   lagerIzabranaRoba=null;
   document.getElementById('lager-izabrano').style.display='none';
   document.getElementById('lager-kolicina').value='';
   document.getElementById('lager-cijena').value='';
+  document.getElementById('lager-slika').value='';
   renderStavke();
 }
 
@@ -280,19 +315,25 @@ async function posaljiPonudu(){
   const msg=document.getElementById('msg');
   const btn=document.getElementById('btn-posalji');
   msg.style.display='none';
+  document.getElementById('posalji-box').innerHTML='';
   const kupacNaziv=document.getElementById('kupac-naziv').value.trim();
   if(!kupacNaziv){ msg.className='err'; msg.style.display='block'; msg.textContent='✗ Unesite naziv kupca.'; return; }
   if(!stavke.length){ msg.className='err'; msg.style.display='block'; msg.textContent='✗ Dodajte bar jednu stavku.'; return; }
   const imaLager=stavke.some(s=>s.tip==='lager');
   const objId=document.getElementById('objekat-select').value;
   if(imaLager && !objId){ msg.className='err'; msg.style.display='block'; msg.textContent='✗ Izaberite prodajni objekat (ponuda ima stavke sa lagera).'; return; }
+  if(document.getElementById('kupac-status').style.display==='none'){
+    msg.className='err'; msg.style.display='block';
+    msg.textContent='✗ Izaberite kupca iz pretrage, ili klikni "+ Dodaj kao novog kupca" ispod polja za ime.';
+    return;
+  }
 
   btn.disabled=true; btn.textContent='Slanje...';
   try{
-    // Ako je čekirano "registruj kao novog", prvo ga upiši u bazu kupaca (da bude
-    // pretraživ ubuduće) — greška pri registraciji ne smije spriječiti slanje ponude,
-    // samo se prijavljuje kao upozorenje (novac/posao je bitniji od duplikata u šifrarniku).
-    if(document.getElementById('kupac-registruj').checked){
+    // Ako je označeno kao novi kupac, prvo ga upiši u bazu (da bude pretraživ ubuduće) —
+    // greška pri registraciji ne smije spriječiti slanje ponude, samo se prijavljuje kao
+    // upozorenje (novac/posao je bitniji od duplikata u šifrarniku).
+    if(kupacJeNovi){
       try{
         const rk=await fetch(`${API}/api/kupci`,{
           method:'POST', headers:{'Content-Type':'application/json'},
@@ -314,20 +355,55 @@ async function posaljiPonudu(){
         kupac_adresa:document.getElementById('kupac-adresa').value||null,
         objekt_id:objId||null,
         stavke,
+        nacin_placanja:document.getElementById('nacin-placanja').value||null,
+        valuta:document.getElementById('valuta-select').value,
+        paritet:document.getElementById('paritet-select').value||null,
+        paritet_adresa:document.getElementById('paritet-adresa').value||null,
+        vreme_isporuke:document.getElementById('vreme-isporuke').value||null,
+        vazi_do:document.getElementById('vazi-do').value||null,
       }),
     });
     const d=await r.json();
     if(!r.ok) throw new Error(d.error);
     msg.className='ok'; msg.style.display='block';
     msg.textContent=`✓ Ponuda #${d.id} poslata — čeka potvrdu.`;
+    if(d.javni_token) document.getElementById('posalji-box').innerHTML=renderPosaljiDugmad(d.javni_token, d.id, document.getElementById('kupac-telefon').value, '');
     stavke=[]; renderStavke();
     document.getElementById('kupac-naziv').value='';
     document.getElementById('kupac-telefon').value='';
     document.getElementById('kupac-adresa').value='';
-    document.getElementById('kupac-registruj').checked=true;
+    document.getElementById('kupac-status').style.display='none';
+    document.getElementById('nacin-placanja').value='';
+    document.getElementById('paritet-select').value='';
+    document.getElementById('paritet-adresa').value='';
+    document.getElementById('paritet-adresa-fg').style.display='none';
+    document.getElementById('vreme-isporuke').value='';
+    document.getElementById('vazi-do').value='';
+    kupacJeNovi=false;
   }catch(err){
     msg.className='err'; msg.style.display='block'; msg.textContent='✗ '+err.message;
   }finally{ btn.disabled=false; btn.textContent='📤 Pošalji ponudu'; }
+}
+
+function linkPonude(token){ return `${location.origin}/ponuda-dokument.html?token=${encodeURIComponent(token)}`; }
+function renderPosaljiDugmad(token, id, telefon, email){
+  const link=linkPonude(token);
+  const poruka=encodeURIComponent(`Ponuda #${id} — JoPeX\n${link}`);
+  const tel=(telefon||'').replace(/[^0-9+]/g,'');
+  const waHref = tel ? `https://wa.me/${tel.replace(/^\+/,'')}?text=${poruka}` : `https://wa.me/?text=${poruka}`;
+  const viberHref = `viber://forward?text=${poruka}`;
+  const mailHref = `mailto:${email||''}?subject=${encodeURIComponent('Ponuda #'+id+' — JoPeX')}&body=${poruka}`;
+  return `
+    <div class="card">
+      <div class="posalji-lbl">Pošalji ponudu kupcu</div>
+      <div class="posalji-btns">
+        <a class="btn-posalji viber" href="${viberHref}"><span class="ic">📱</span>Viber</a>
+        <a class="btn-posalji whatsapp" href="${waHref}" target="_blank" rel="noopener"><span class="ic">💬</span>WhatsApp</a>
+        <a class="btn-posalji email" href="${mailHref}"><span class="ic">✉️</span>Email</a>
+      </div>
+      <div class="posalji-link">${esc(link)}</div>
+    </div>
+  `;
 }
 
 function statusBadge(status){
@@ -350,6 +426,7 @@ async function ucitajMojePonude(){
           ${statusBadge(p.status)}
         </div>
         <div style="font-size:12px;color:#8b96a5;">${new Date(p.datum).toLocaleString('sr-Latn-BA')}</div>
+        ${p.javni_token?`<div style="margin-top:6px;"><a href="${linkPonude(p.javni_token)}" target="_blank" rel="noopener" style="font-size:11.5px;color:var(--blue);">📄 Otvori dokument ponude</a></div>`:''}
         ${p.status==='potvrdjeno'?`<div style="font-size:12px;color:var(--green);margin-top:6px;">
           ${p.otpremnica_id?'✓ Otpremnica kreirana':''} ${p.radni_nalog_r_br?'✓ Radni nalog #'+p.radni_nalog_r_br:''}
         </div>`:''}
@@ -452,14 +529,15 @@ async function ucitajMaterijale(){
   }catch(e){}
 }
 
-let kupacTimer=null, kupacIzabranId=null;
+let kupacTimer=null, kupacIzabranId=null, kupacJeNovi=false;
 
 function pretraziKupca(){
   clearTimeout(kupacTimer);
   kupacIzabranId=null;
+  kupacJeNovi=false;
+  document.getElementById('kupac-status').style.display='none';
   const q=document.getElementById('kupac-naziv').value.trim();
   const cont=document.getElementById('kupac-rezultati');
-  document.getElementById('kupac-registruj').checked=true;
   if(q.length<2){ cont.style.display='none'; return; }
   kupacTimer=setTimeout(async()=>{
     try{
@@ -467,21 +545,38 @@ function pretraziKupca(){
       const r=await fetch(`${API}/api/kupci?q=${encodeURIComponent(q)}&limit=10&objekt_id=${objId||''}`);
       const rows=await r.json();
       cont.style.display='block';
-      if(!rows.length){ cont.innerHTML='<div class="rez-item" style="color:#8b96a5;">Nema rezultata — biće registrovan kao novi kupac.</div>'; return; }
+      if(!rows.length){
+        cont.innerHTML=`<div class="rez-item" style="color:#8b96a5;">Nema rezultata za "${esc(q)}".</div>
+          <div class="rez-item" style="color:var(--blue);font-weight:700;" onclick="oznaciKaoNovogKupca()">+ Dodaj "${esc(q)}" kao novog kupca</div>`;
+        return;
+      }
       cont.innerHTML=rows.map(k=>`<div class="rez-item" onclick='izaberiPostojecegKupca(${JSON.stringify(k).replace(/'/g,"&apos;")})'>
         <b>${esc(k.naziv)}</b>${k.telefon?' · '+esc(k.telefon):''}
-      </div>`).join('');
+      </div>`).join('')+`<div class="rez-item" style="color:var(--blue);font-weight:700;" onclick="oznaciKaoNovogKupca()">+ Ipak dodaj "${esc(q)}" kao NOVOG kupca</div>`;
     }catch(e){ cont.innerHTML='<div class="rez-item">Greška pri pretrazi.</div>'; }
   }, 250);
 }
 
 function izaberiPostojecegKupca(k){
   kupacIzabranId=k.id;
+  kupacJeNovi=false;
   document.getElementById('kupac-naziv').value=k.naziv;
   document.getElementById('kupac-telefon').value=k.telefon||'';
   document.getElementById('kupac-adresa').value=k.adresa||'';
-  document.getElementById('kupac-registruj').checked=false;
   document.getElementById('kupac-rezultati').style.display='none';
+  const status=document.getElementById('kupac-status');
+  status.style.display='block';
+  status.style.background='#e6f4ea'; status.style.color='var(--green)';
+  status.textContent='✓ Postojeći kupac izabran.';
+}
+
+function oznaciKaoNovogKupca(){
+  kupacJeNovi=true;
+  document.getElementById('kupac-rezultati').style.display='none';
+  const status=document.getElementById('kupac-status');
+  status.style.display='block';
+  status.style.background='#fff8e6'; status.style.color='var(--orange)';
+  status.textContent='🆕 Biće registrovan kao NOVI kupac.';
 }
 
 checkAuth();

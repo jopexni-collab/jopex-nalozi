@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ponuda – JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f0f2f5;--border:#d0d7de;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:#1a2733;font-size:14px;}
+
+.toolbar{background:var(--blue);color:#fff;padding:10px 16px;display:flex;justify-content:space-between;
+  align-items:center;position:sticky;top:0;}
+.toolbar h1{font-size:15px;font-weight:700;}
+.btn-print{background:#fff;color:var(--blue);border:none;border-radius:6px;font:inherit;font-weight:700;
+  font-size:12.5px;padding:8px 14px;cursor:pointer;min-height:36px;}
+
+.dok{max-width:760px;margin:18px auto;background:#fff;border:1px solid var(--border);border-radius:10px;
+  padding:28px 24px;}
+
+.memo{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid var(--blue);
+  padding-bottom:16px;margin-bottom:20px;}
+.memo-naziv{font-size:22px;font-weight:800;color:var(--dark);letter-spacing:.5px;}
+.memo-info{font-size:11.5px;color:#6b7a8d;line-height:1.6;margin-top:4px;}
+.memo-doc-tip{text-align:right;font-size:13px;color:#6b7a8d;}
+.memo-doc-tip b{display:block;font-size:19px;color:var(--dark);}
+
+.meta-red{display:flex;justify-content:space-between;font-size:12.5px;color:#6b7a8d;margin-bottom:18px;
+  flex-wrap:wrap;gap:8px;}
+
+.kupac-box{background:#f7f8fa;border-radius:8px;padding:12px 16px;margin-bottom:16px;}
+.kupac-box .lbl{font-size:10.5px;font-weight:700;color:#8b96a5;text-transform:uppercase;letter-spacing:.5px;}
+.kupac-box .naziv{font-size:15px;font-weight:700;color:#1a2733;margin-top:2px;}
+.kupac-box .adresa{font-size:12.5px;color:#6b7a8d;margin-top:2px;}
+
+.uslovi{display:grid;grid-template-columns:1fr 1fr;gap:10px;background:#eef4fc;border-radius:8px;padding:12px 16px;margin-bottom:20px;}
+.uslovi .stavka{font-size:12px;}
+.uslovi .stavka b{display:block;font-size:10px;font-weight:700;color:#6b7a8d;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px;}
+
+table{width:100%;border-collapse:collapse;margin-bottom:16px;}
+thead th{background:#1f3864;color:#fff;font-size:11.5px;padding:8px 10px;text-align:left;}
+thead th.c{text-align:center;}
+thead th.r{text-align:right;}
+tbody td{padding:8px 10px;border-bottom:1px solid #e8eaed;font-size:12.5px;vertical-align:middle;}
+tbody td.c{text-align:center;}
+tbody td.r{text-align:right;}
+tbody tr:nth-child(even) td{background:#f7f8fa;}
+.slika-mini{width:38px;height:38px;object-fit:cover;border-radius:5px;vertical-align:middle;margin-right:6px;}
+
+.ukupno-red{display:flex;justify-content:flex-end;gap:20px;padding:12px 10px;font-size:15px;font-weight:800;color:var(--dark);border-top:2px solid var(--blue);margin-bottom:20px;}
+
+.napomena{font-size:11px;color:#9aa5b1;margin-top:10px;line-height:1.5;}
+.stanje-msg{text-align:center;color:#9aa5b1;font-size:13px;padding:60px 20px;}
+
+@media print{
+  body{background:#fff;}
+  .toolbar{display:none;}
+  .dok{border:none;margin:0;max-width:100%;}
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <h1>📝 Ponuda</h1>
+  <button class="btn-print" onclick="window.print()">🖨️ Štampaj / Sačuvaj kao PDF</button>
+</div>
+
+<div class="dok" id="dok">
+  <div class="stanje-msg" id="stanje-msg">Učitavanje...</div>
+</div>
+
+<script>
+const FIRMA = { naziv: 'JoPeX', adresa: '', pib: '', kontakt: '' };
+const API='';
+function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fd(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('sr-Latn-BA');}
+function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function getToken(){ return new URLSearchParams(location.search).get('token')||''; }
+
+const PARITET_TEKST = { fco_kupac:'FCO Kupac', fco_skladiste:'FCO Skladište', fco_drugo:'FCO — po adresi ispod' };
+
+async function ucitaj(){
+  const token=getToken();
+  const dok=document.getElementById('dok');
+  if(!token){ dok.innerHTML='<div class="stanje-msg">Nedostaje link ka ponudi.</div>'; return; }
+  try{
+    const r=await fetch(`${API}/api/terenske-ponude-javno/${encodeURIComponent(token)}`);
+    const p=await r.json();
+    if(!r.ok) throw new Error(p.error||'Ponuda nije pronađena.');
+
+    document.title=`Ponuda #${p.id} – JoPeX`;
+
+    const uslovi=[];
+    if(p.nacin_placanja) uslovi.push(['Način plaćanja', esc(p.nacin_placanja)]);
+    if(p.paritet) uslovi.push(['Paritet isporuke', esc(PARITET_TEKST[p.paritet]||p.paritet)+(p.paritet==='fco_drugo'&&p.paritet_adresa?' — '+esc(p.paritet_adresa):'')]);
+    if(p.vreme_isporuke) uslovi.push(['Vrijeme isporuke', esc(p.vreme_isporuke)]);
+    if(p.vazi_do) uslovi.push(['Ponuda važi do', fd(p.vazi_do)]);
+
+    dok.innerHTML=`
+      <div class="memo">
+        <div>
+          <img src="logo-plavi.png" alt="JoPeX" style="height:36px;margin-bottom:4px;">
+          ${p.objekt_naziv?`<div class="memo-naziv" style="font-size:15px;color:#6b7a8d;">${esc(p.objekt_naziv)}</div>`:''}
+          <div class="memo-info">
+            ${FIRMA.adresa?esc(FIRMA.adresa)+'<br>':''}
+            ${FIRMA.pib?esc(FIRMA.pib)+'<br>':''}
+            ${FIRMA.kontakt?esc(FIRMA.kontakt):''}
+          </div>
+        </div>
+        <div class="memo-doc-tip"><b>PONUDA</b>#${p.id}</div>
+      </div>
+
+      <div class="meta-red">
+        <span>Datum: <b>${fd(p.datum)}</b></span>
+        <span>Sastavio: ${esc(p.komercijalista_ime||'—')}</span>
+      </div>
+
+      <div class="kupac-box">
+        <div class="lbl">Kupac</div>
+        <div class="naziv">${esc(p.kupac_naziv||'—')}</div>
+        ${p.kupac_adresa?`<div class="adresa">${esc(p.kupac_adresa)}</div>`:''}
+        ${p.kupac_telefon?`<div class="adresa">${esc(p.kupac_telefon)}</div>`:''}
+      </div>
+
+      ${uslovi.length?`<div class="uslovi">${uslovi.map(([lbl,val])=>`<div class="stavka"><b>${lbl}</b>${val}</div>`).join('')}</div>`:''}
+
+      <table>
+        <thead>
+          <tr>
+            <th class="c" style="width:36px">Rb</th>
+            <th>Artikal</th>
+            <th class="c" style="width:100px">Količina</th>
+            <th class="r" style="width:90px">Cijena</th>
+            <th class="r" style="width:100px">Iznos</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${p.stavke.map(s=>`
+            <tr>
+              <td class="c">${s.rb}</td>
+              <td>${s.link_slika?`<img class="slika-mini" src="${esc(s.link_slika)}" onerror="this.style.display='none'">`:''}${esc(s.naziv)}${s.materijal?` <span style="color:#9aa5b1;">(${esc(s.materijal)})</span>`:''}${s.napomena?`<div style="font-size:10.5px;color:#9aa5b1;">${esc(s.napomena)}</div>`:''}</td>
+              <td class="c">${s.tip==='lager'?`${s.kolicina} ${esc(s.jed_mjera||'')}`:'1 kom'}</td>
+              <td class="r">${fm(s.cijena)} ${esc(p.valuta)}</td>
+              <td class="r">${fm(s.iznos)} ${esc(p.valuta)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div class="ukupno-red">UKUPNO: ${fm(p.ukupno)} ${esc(p.valuta)}</div>
+
+      <div style="text-align:center;font-size:10px;color:#8b96a5;">Dokument je izrađen elektronskim putem i važi bez pečata i potpisa.</div>
+      <div class="napomena">Ovo je ponuda, ne fiskalni račun niti otpremnica. Cijene i uslovi važe do navedenog roka (ako je naveden).</div>
+    `;
+  }catch(e){
+    dok.innerHTML=`<div class="stanje-msg">${esc(e.message)}</div>`;
+  }
+}
+ucitaj();
+</script>
+</body>
+</html>
