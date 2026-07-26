@@ -84,6 +84,13 @@ main{max-width:700px;margin:32px auto;padding:0 16px;}
       <div class="card-arrow">→</div>
     </a>
 
+    <a href="teren.html" class="card hidden" id="card-teren" style="border-left:4px solid #b8860b;">
+      <div class="card-icon">🚐</div>
+      <div class="card-title">Teren</div>
+      <div class="card-desc">Ponude i narudžbe sa terena — roba sa lagera i proizvodnja, na jednom mjestu.</div>
+      <div class="card-arrow">→</div>
+    </a>
+
     <a href="korisnici.html" class="card purple hidden" id="card-korisnici">
       <div class="card-icon">👥</div>
       <div class="card-title">Korisnici</div>
@@ -135,6 +142,9 @@ async function checkAuth(){
 
     // Ponude — moze_ugovarati ili admin
     if(admin || u.moze_ugovarati) show('card-ponude');
+
+    // Teren — komercijalista_teren ili admin
+    if(admin || u.komercijalista_teren) show('card-teren');
 
     // Admin only
     if(admin || u.moze_ugovarati || u.moze_prodavati) show('card-kupci');
