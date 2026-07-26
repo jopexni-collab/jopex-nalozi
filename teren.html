@@ -77,8 +77,8 @@ main{max-width:680px;margin:16px auto;padding:0 14px 60px;}
       <h2>Podaci o kupcu</h2>
       <div class="fg">
         <label class="req">Naziv / Ime</label>
-        <input type="text" id="kupac-naziv" list="kupci-list" placeholder="Ime kupca ili firme — počni da kucaš za postojeće">
-        <datalist id="kupci-list"></datalist>
+        <input type="text" id="kupac-naziv" placeholder="Ime kupca ili firme — počni da kucaš za postojeće" autocomplete="off" oninput="pretraziKupca()">
+        <div class="rez-list" id="kupac-rezultati" style="display:none;"></div>
       </div>
       <div class="row2">
         <div class="fg"><label>Telefon</label><input type="text" id="kupac-telefon"></div>
@@ -91,6 +91,7 @@ main{max-width:680px;margin:16px auto;padding:0 14px 60px;}
       <div class="fg">
         <label>Prodajni objekat (za robu sa lagera)</label>
         <select id="objekat-select"><option value="">— izaberi ako nudiš robu sa lagera —</option></select>
+        <div style="font-size:10.5px;color:#8b96a5;margin-top:3px;">Napomena: PJ Niš i BiH PJ-ovi (Aleksandrovac/Vrbanja/Vojkovići) imaju odvojene liste kupaca — izaberi PJ PRIJE pretrage kupca, radi tačnih rezultata.</div>
       </div>
     </div>
 
@@ -160,7 +161,6 @@ main{max-width:680px;margin:16px auto;padding:0 14px 60px;}
 const API='';
 let me=null;
 let objekti=[];
-let kupciLista=[];
 let trenutniTipStavke=null;
 let lagerIzabranaRoba=null;
 let stavke=[]; // {tip, ...}
@@ -300,9 +300,9 @@ async function posaljiPonudu(){
             naziv:kupacNaziv,
             telefon:document.getElementById('kupac-telefon').value||null,
             adresa:document.getElementById('kupac-adresa').value||null,
+            objekt_id:objId||null,
           }),
         });
-        if(rk.ok){ const novi=await rk.json(); kupciLista.push(novi); }
       }catch(e){ /* tiho — registracija kupca je "nice to have", ne smije blokirati ponudu */ }
     }
 
@@ -449,27 +449,40 @@ async function ucitajMaterijale(){
     (cfg.materijali||[]).forEach(m=>sel.append(new Option(m.naziv,m.naziv)));
     const selKat=document.getElementById('pr-kategorija');
     (cfg.kategorije_bonus||[]).forEach(k=>selKat.append(new Option(k.naziv,k.id)));
-    kupciLista=cfg.kupci||[];
-    const dl=document.getElementById('kupci-list');
-    kupciLista.forEach(k=>{const o=document.createElement('option');o.value=k.naziv;dl.append(o);});
   }catch(e){}
 }
 
-// Ako upisano ime TAČNO poklapa postojećeg kupca, popuni ostala polja i automatski
-// odčekiraj "registruj kao novog" (već postoji, ne treba duplikat u bazi).
-function provjeriPostojecegKupca(){
-  const uneseno=document.getElementById('kupac-naziv').value.trim();
-  const nadjen=kupciLista.find(k=>k.naziv===uneseno);
-  const cb=document.getElementById('kupac-registruj');
-  if(nadjen){
-    document.getElementById('kupac-telefon').value=nadjen.telefon||'';
-    document.getElementById('kupac-adresa').value=nadjen.adresa||'';
-    cb.checked=false;
-  }else{
-    cb.checked=true;
-  }
+let kupacTimer=null, kupacIzabranId=null;
+
+function pretraziKupca(){
+  clearTimeout(kupacTimer);
+  kupacIzabranId=null;
+  const q=document.getElementById('kupac-naziv').value.trim();
+  const cont=document.getElementById('kupac-rezultati');
+  document.getElementById('kupac-registruj').checked=true;
+  if(q.length<2){ cont.style.display='none'; return; }
+  kupacTimer=setTimeout(async()=>{
+    try{
+      const objId=document.getElementById('objekat-select').value;
+      const r=await fetch(`${API}/api/kupci?q=${encodeURIComponent(q)}&limit=10&objekt_id=${objId||''}`);
+      const rows=await r.json();
+      cont.style.display='block';
+      if(!rows.length){ cont.innerHTML='<div class="rez-item" style="color:#8b96a5;">Nema rezultata — biće registrovan kao novi kupac.</div>'; return; }
+      cont.innerHTML=rows.map(k=>`<div class="rez-item" onclick='izaberiPostojecegKupca(${JSON.stringify(k).replace(/'/g,"&apos;")})'>
+        <b>${esc(k.naziv)}</b>${k.telefon?' · '+esc(k.telefon):''}
+      </div>`).join('');
+    }catch(e){ cont.innerHTML='<div class="rez-item">Greška pri pretrazi.</div>'; }
+  }, 250);
 }
-document.getElementById('kupac-naziv').addEventListener('input', provjeriPostojecegKupca);
+
+function izaberiPostojecegKupca(k){
+  kupacIzabranId=k.id;
+  document.getElementById('kupac-naziv').value=k.naziv;
+  document.getElementById('kupac-telefon').value=k.telefon||'';
+  document.getElementById('kupac-adresa').value=k.adresa||'';
+  document.getElementById('kupac-registruj').checked=false;
+  document.getElementById('kupac-rezultati').style.display='none';
+}
 
 checkAuth();
 ucitajObjekte();

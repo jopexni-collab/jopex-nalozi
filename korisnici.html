@@ -114,6 +114,7 @@ input:checked+.slider:before{transform:translateX(16px);}
           <th style="text-align:center">Mijenja nalog</th>
           <th style="text-align:center">Maloprodaja</th>
           <th style="text-align:center">Roba/Magacin</th>
+          <th style="text-align:center">Teren</th>
           <th style="text-align:center">Blagajna (PJ)</th>
           <th style="text-align:center">Aktivan</th>
           <th>Lozinka</th>
@@ -121,7 +122,7 @@ input:checked+.slider:before{transform:translateX(16px);}
         </tr>
       </thead>
       <tbody id="tbody">
-        <tr><td colspan="14" style="text-align:center;padding:30px;color:#999">Učitavanje...</td></tr>
+        <tr><td colspan="15" style="text-align:center;padding:30px;color:#999">Učitavanje...</td></tr>
       </tbody>
     </table>
     </div>
@@ -280,6 +281,7 @@ function render(){
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.izmjena_naloga?'checked':''} onchange="togglePravo(${k.id},'izmjena_naloga',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_prodavati?'checked':''} onchange="togglePravo(${k.id},'moze_prodavati',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_roba_magacin?'checked':''} onchange="togglePravo(${k.id},'moze_roba_magacin',this.checked)"><span class="slider"></span></label></td>
+      <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.komercijalista_teren?'checked':''} onchange="togglePravo(${k.id},'komercijalista_teren',this.checked)"><span class="slider"></span></label></td>
       <td>
         <button class="btn-loz" style="font-size:10.5px;" onclick="openBlagajnikPopup(${k.id},'${esc(k.ime_prezime)}')">
           🏦 ${k.blagajnik_pj_nazivi ? esc(k.blagajnik_pj_nazivi) : '— nije blagajnik —'}

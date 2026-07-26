@@ -1329,7 +1329,7 @@ async function traziKupca(q){
   const list=document.getElementById('kupac-rez-list');
   list.innerHTML='<div class="spinner">Pretraga...</div>';
   try{
-    const r=await fetch(`${API}/api/kupci?q=${encodeURIComponent(q)}&limit=20`);
+    const r=await fetch(`${API}/api/kupci?q=${encodeURIComponent(q)}&limit=20&objekt_id=${trenutniObjekat?.id||''}`);
     const rows=await r.json();
     if(mojSeq!==kupacSearchSeq) return; // stigao je noviji upit u međuvremenu — ignoriši ovaj odgovor
     if(!rows.length){
@@ -1418,7 +1418,7 @@ async function traziKomitentaIsplata(q){
   if(!q||!q.trim()){cont.innerHTML='';return;}
   cont.innerHTML='<div class="spinner">Pretraga...</div>';
   try{
-    const r=await fetch(`${API}/api/kupci?q=${encodeURIComponent(q)}&limit=15`);
+    const r=await fetch(`${API}/api/kupci?q=${encodeURIComponent(q)}&limit=15&objekt_id=${trenutniObjekat?.id||''}`);
     const rows=await r.json();
     if(!rows.length){cont.innerHTML='<div class="empty-msg">Nema rezultata.</div>';return;}
     cont.innerHTML=rows.map(k=>`
@@ -1912,6 +1912,7 @@ async function sacuvajNovogKupca(){
         telefon:document.getElementById('nk-telefon').value.trim()||null,
         grad:document.getElementById('nk-grad').value.trim()||null,
         adresa:document.getElementById('nk-adresa').value.trim()||null,
+        objekt_id:trenutniObjekat?.id||null,
       }),
     });
     const data=await r.json();
@@ -2609,7 +2610,7 @@ async function traziKupcaUplata(q){
   if(!q||!q.trim()){cont.innerHTML='';return;}
   cont.innerHTML='<div class="spinner">Pretraga...</div>';
   try{
-    const r=await fetch(`${API}/api/kupci?q=${encodeURIComponent(q)}&limit=15`);
+    const r=await fetch(`${API}/api/kupci?q=${encodeURIComponent(q)}&limit=15&objekt_id=${trenutniObjekat?.id||''}`);
     const rows=await r.json();
     if(!rows.length){cont.innerHTML='<div class="empty-msg">Nema rezultata.</div>';return;}
     cont.innerHTML=rows.map(k=>`

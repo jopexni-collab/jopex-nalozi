@@ -9,6 +9,17 @@ router.use((req, res, next) => {
   return res.status(403).json({ error: 'Nemate dozvolu za maloprodaju.' });
 });
 
+// GET /api/prodajni-objekti/kupci-grupe - lista grupa kupaca (za admin podešavanje po PJ
+// — npr. "BiH" vs "Niš (Srbija)"). MORA biti prije "/:id" ispod.
+router.get('/kupci-grupe', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM kupci_grupe ORDER BY naziv');
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/prodajni-objekti - lista aktivnih (za birač u maloprodaji)
 router.get('/', async (req, res) => {
   try {
@@ -43,14 +54,15 @@ router.patch('/:id', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Samo admin može mijenjati prodajne objekte.' });
   try {
-    const { naziv, adresa, aktivan, email_knjigovodstvo, valuta, telefon_knjigovodstvo } = req.body;
+    const { naziv, adresa, aktivan, email_knjigovodstvo, valuta, telefon_knjigovodstvo, kupci_grupa_id } = req.body;
     const r = await pool.query(
       `UPDATE prodajni_objekti SET
          naziv=COALESCE($1,naziv), adresa=COALESCE($2,adresa), aktivan=COALESCE($3,aktivan),
          email_knjigovodstvo=COALESCE($4,email_knjigovodstvo), valuta=COALESCE($5,valuta),
-         telefon_knjigovodstvo=COALESCE($6,telefon_knjigovodstvo)
+         telefon_knjigovodstvo=COALESCE($6,telefon_knjigovodstvo),
+         kupci_grupa_id=COALESCE($8,kupci_grupa_id)
        WHERE id=$7 RETURNING *`,
-      [naziv, adresa, aktivan, email_knjigovodstvo, valuta, telefon_knjigovodstvo, req.params.id]
+      [naziv, adresa, aktivan, email_knjigovodstvo, valuta, telefon_knjigovodstvo, req.params.id, kupci_grupa_id]
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Nije pronađeno.' });
     res.json(r.rows[0]);
