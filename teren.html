@@ -422,7 +422,7 @@ async function checkAuth(){
       location.href='home.html';
       return;
     }
-    if(me.rola==='admin') document.getElementById('tab-admin-btn').style.display='block';
+    if(me.rola==='admin' || me.moze_ugovarati) document.getElementById('tab-admin-btn').style.display='block';
   }catch{location.href='login.html';}
 }
 

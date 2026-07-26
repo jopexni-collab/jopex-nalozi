@@ -3,21 +3,25 @@ const express = require('express');
 const router = express.Router();
 const pool = require('./db');
 
+// Ko sme da koristi ovaj modul uopšte: admin, terenac (komercijalista_teren), ili bilo ko
+// sa "Ponude sve" dozvolom (moze_ugovarati — isti krug ljudi kao Generator ponuda, sad
+// koriste i "Ponude robe" i mogu potvrđivati/otkazivati terenske ponude).
 function jeTerenacIliAdmin(user) {
-  return !!user && (user.rola === 'admin' || user.komercijalista_teren);
+  return !!user && (user.rola === 'admin' || user.komercijalista_teren || user.moze_ugovarati);
 }
 
-// GET /api/terenske-ponude - lista (admin vidi sve, terenac vidi SAMO svoje)
+// GET /api/terenske-ponude - lista (admin i "Ponude sve" vide SVE, terenac bez te
+// dozvole vidi SAMO svoje)
 router.get('/', async (req, res) => {
   const user = req.session?.user;
   if (!jeTerenacIliAdmin(user)) return res.status(403).json({ error: 'Nema pristupa.' });
   try {
-    const isAdmin = user.rola === 'admin';
+    const vidiSve = user.rola === 'admin' || user.moze_ugovarati;
     const { status } = req.query;
     const where = [];
     const vals = [];
     let i = 1;
-    if (!isAdmin) { where.push(`komercijalista_id = $${i++}`); vals.push(user.id); }
+    if (!vidiSve) { where.push(`komercijalista_id = $${i++}`); vals.push(user.id); }
     if (status) { where.push(`status = $${i++}`); vals.push(status); }
     const r = await pool.query(
       `SELECT * FROM terenske_ponude ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
@@ -38,7 +42,7 @@ router.get('/:id', async (req, res) => {
     const h = await pool.query('SELECT * FROM terenske_ponude WHERE id=$1', [req.params.id]);
     if (!h.rows.length) return res.status(404).json({ error: 'Nije pronađeno.' });
     const ponuda = h.rows[0];
-    if (user.rola !== 'admin' && ponuda.komercijalista_id !== user.id)
+    if (user.rola !== 'admin' && !user.moze_ugovarati && ponuda.komercijalista_id !== user.id)
       return res.status(403).json({ error: 'Nema pristupa.' });
     const s = await pool.query('SELECT * FROM terenska_ponuda_stavke WHERE ponuda_id=$1 ORDER BY id', [req.params.id]);
     res.json({ ...ponuda, stavke: s.rows });
@@ -119,7 +123,10 @@ router.post('/:id/otkazi', async (req, res) => {
 // isti princip kao Generator ponuda).
 router.post('/:id/potvrdi', async (req, res) => {
   const user = req.session?.user;
-  if (user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin može potvrditi ponudu.' });
+  // Potvrđuje admin ILI bilo ko sa "Ponude sve" dozvolom (moze_ugovarati) — isti krug
+  // ljudi koji već rade Generator ponuda i Ponude robe.
+  if (user?.rola !== 'admin' && !user?.moze_ugovarati)
+    return res.status(403).json({ error: 'Samo admin ili osoba sa "Ponude sve" dozvolom može potvrditi ponudu.' });
 
   const client = await pool.connect();
   try {
