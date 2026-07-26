@@ -2,10 +2,11 @@ const express = require('express');
 const router = express.Router();
 const pool = require('./db');
 
-// Admin uvijek prolazi; ostali moraju imati moze_prodavati=true.
+// Admin uvijek prolazi; ostali moraju imati moze_prodavati, komercijalista_teren, ili
+// moze_ugovarati (potrebno i terencu i "Ponude robe" korisnicima za listu PJ-ova).
 router.use((req, res, next) => {
   const u = req.session?.user;
-  if (u?.rola === 'admin' || u?.moze_prodavati) return next();
+  if (u?.rola === 'admin' || u?.moze_prodavati || u?.komercijalista_teren || u?.moze_ugovarati) return next();
   return res.status(403).json({ error: 'Nemate dozvolu za maloprodaju.' });
 });
 

@@ -9,7 +9,7 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 
 // Admin uvijek prolazi; ostali moraju imati moze_prodavati=true (dozvola iz korisnici.html).
 function zahtijevaProdaju(req, res, next) {
   const u = req.session?.user;
-  if (u?.rola === 'admin' || u?.moze_prodavati) return next();
+  if (u?.rola === 'admin' || u?.moze_prodavati || u?.komercijalista_teren || u?.moze_ugovarati) return next();
   return res.status(403).json({ error: 'Nemate dozvolu za maloprodaju.' });
 }
 
