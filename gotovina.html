@@ -228,6 +228,14 @@ td.num{text-align:right;font-weight:700;}
     <option value="Maloprodaja">Maloprodaja</option>
     <option value="Drugo">Drugo</option>
   </select>
+  <label>PJ:</label>
+  <select id="fil-pj" onchange="load()">
+    <option value="">Svi</option>
+  </select>
+  <label>Komercijalista:</label>
+  <select id="fil-komercijalista" onchange="load()">
+    <option value="">Svi</option>
+  </select>
   <label><input type="checkbox" id="fil-nepredano" onchange="load()"> Samo nepredano</label>
   <button class="btn-sm" onclick="resetFilteri()">✕ Resetuj</button>
   <span id="stat" style="margin-left:auto;color:#6b7a8d;font-size:11px;"></span>
@@ -241,7 +249,8 @@ td.num{text-align:right;font-weight:700;}
       <th>Datum</th>
       <th>Iznos</th>
       <th>Primio</th>
-      <th>Izvor</th>
+      <th>Izvor / PJ</th>
+      <th>Komercijalista</th>
       <th>Nalog/Otp</th>
       <th>Opis</th>
       <th>Predano blagajniku</th>
@@ -599,6 +608,8 @@ async function load(){
   if(gv('fil-do')) params.set('do',gv('fil-do'));
   if(gv('fil-primio')) params.set('primio',gv('fil-primio'));
   if(gv('fil-izvor')) params.set('izvor',gv('fil-izvor'));
+  if(gv('fil-pj')) params.set('objekt_naziv',gv('fil-pj'));
+  if(gv('fil-komercijalista')) params.set('komercijalista',gv('fil-komercijalista'));
   if(document.getElementById('fil-nepredano').checked) params.set('nepredano','true');
 
   try{
@@ -606,8 +617,9 @@ async function load(){
     all=await r.json();
     render();
     azurirajFilterPrimio();
+    azurirajFilterKomercijalista();
   }catch(e){
-    document.getElementById('tbody').innerHTML='<tr><td colspan="8" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>';
+    document.getElementById('tbody').innerHTML='<tr><td colspan="9" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>';
   }
 }
 
@@ -623,12 +635,31 @@ function azurirajFilterPrimio(){
   sel.innerHTML='<option value="">Svi</option>'+sva.map(n=>`<option ${n===trenutno?'selected':''}>${esc(n)}</option>`).join('');
 }
 
+// Isti obrazac kao "Primio" — dinamički iz podataka.
+function azurirajFilterKomercijalista(){
+  const sel=document.getElementById('fil-komercijalista');
+  const trenutno=sel.value;
+  const postojeca=[...sel.options].map(o=>o.value).filter(Boolean);
+  const nova=all.map(r=>r.komercijalista_ime).filter(Boolean);
+  const sva=[...new Set([...postojeca, ...nova])].sort();
+  sel.innerHTML='<option value="">Svi</option>'+sva.map(n=>`<option ${n===trenutno?'selected':''}>${esc(n)}</option>`).join('');
+}
+
+async function ucitajFilterPJ(){
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`);
+    const objekti=await r.json();
+    const sel=document.getElementById('fil-pj');
+    sel.innerHTML='<option value="">Svi</option>'+objekti.map(o=>`<option value="${esc(o.naziv)}">${esc(o.naziv)}</option>`).join('');
+  }catch(e){}
+}
+
 function render(){
   const rows=all;
   const ukupnoKM=rows.reduce((s,r)=>s+parseFloat(r.iznos||0)*(r.valuta==='EUR'?1.95:1),0);
   document.getElementById('stat').textContent=`${rows.length} zapisa | Ukupno: ${fm(ukupnoKM)} KM`;
   if(!rows.length){
-    document.getElementById('tbody').innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:#999">Nema podataka.</td></tr>';
+    document.getElementById('tbody').innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">Nema podataka.</td></tr>';
     return;
   }
   document.getElementById('tbody').innerHTML=rows.map(r=>{
@@ -645,6 +676,7 @@ function render(){
         ${r.izvor==='Maloprodaja'&&r.objekt_naziv?`<span class="izvor-pj">${esc(r.objekt_naziv)}</span>`:''}
         ${r.izvor==='Proizvodnja'&&r.objekt_naziv?`<span class="izvor-pj">${esc(r.objekt_naziv)}</span>`:''}
       </td>
+      <td>${esc(r.komercijalista_ime||'—')}</td>
       <td>${r.nalog_r_br?(/^\d+$/.test(String(r.nalog_r_br))
         ?`<a class="nalog-link" href="lista.html">#${r.nalog_r_br}</a>${r.narucilac?' — '+esc(r.narucilac):''}`
         :String(r.nalog_r_br).startsWith('OTP-')
@@ -1019,7 +1051,7 @@ async function obrisi(id){
 }
 
 function resetFilteri(){
-  ['fil-od','fil-do','fil-primio','fil-izvor'].forEach(id=>{
+  ['fil-od','fil-do','fil-primio','fil-izvor','fil-pj','fil-komercijalista'].forEach(id=>{
     const el=document.getElementById(id);
     if(el) el.value='';
   });
@@ -1058,6 +1090,7 @@ fetch(`${API}/api/auth/me`).then(r=>{
 
   load();
   loadSume();
+  ucitajFilterPJ();
   azurirajNalogPoljeVidljivost();
 
   // Automatsko osvježavanje — bez ovoga, promjene iz drugih ekrana (npr. štikliranje

@@ -27,7 +27,7 @@ router.use(async (req, res, next) => {
 // GET /api/gotovina - lista svih uplata
 router.get('/', async (req, res) => {
   try {
-    const { od, do: do_, primio, izvor, nepredano, objekt_naziv } = req.query;
+    const { od, do: do_, primio, izvor, nepredano, objekt_naziv, komercijalista } = req.query;
     let where = [];
     let vals = [];
     let i = 1;
@@ -37,6 +37,10 @@ router.get('/', async (req, res) => {
     if (izvor) { where.push(`g.izvor = $${i++}`); vals.push(izvor); }
     if (nepredano === 'true') { where.push(`g.predao_blagajniku = false`); }
     if (objekt_naziv) { where.push(`g.objekt_naziv = $${i++}`); vals.push(objekt_naziv); }
+    if (komercijalista) {
+      where.push(`(p.ugovorio = $${i} OR o.komercijalista_ime = $${i})`);
+      vals.push(komercijalista); i++;
+    }
     // Blagajnik je FORSIRAN da vidi SVOJE PJ (jedan ili više) — ALI i SVE zapise koji NISU
     // vezani ni za jedan PJ (npr. naplata sa radnog naloga, koja nema objekt_naziv jer nije
     // maloprodajna) — takav novac je "zajednička" odgovornost svih blagajnika (ko god ga
@@ -50,9 +54,14 @@ router.get('/', async (req, res) => {
     // poredi kao tekst (p.r_br::text), inače bi Postgres bacio grešku tipa na ne-brojčane
     // vrijednosti (otpremnica brojevi). Za redove sa OTP brojem JOIN jednostavno neće naći
     // poklapanje (narucilac/zadatak ostaju NULL), što je ispravno ponašanje.
-    const sql = `SELECT g.*, p.narucilac, p.zadatak, COALESCE(po.valuta,'KM') AS valuta
+    // Drugi LEFT JOIN (na otpremnice) hvata OTP-brojeve — "komercijalista" tako pokriva
+    // OBA izvora (proizvodnja preko ugovorio, maloprodaja preko komercijalista_ime).
+    const sql = `SELECT g.*, p.narucilac, p.zadatak, p.ugovorio,
+        COALESCE(o.komercijalista_ime, p.ugovorio) AS komercijalista_ime,
+        COALESCE(po.valuta,'KM') AS valuta
       FROM gotovina g
       LEFT JOIN proizvodnja_jopex p ON g.nalog_r_br = p.r_br::text
+      LEFT JOIN otpremnice o ON g.nalog_r_br = o.broj
       LEFT JOIN prodajni_objekti po ON po.naziv = g.objekt_naziv
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY g.datum DESC, g.kreirano DESC`;
