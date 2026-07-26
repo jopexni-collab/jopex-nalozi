@@ -75,11 +75,19 @@ main{max-width:680px;margin:16px auto;padding:0 14px 60px;}
   <div class="view active" id="view-nova">
     <div class="card">
       <h2>Podaci o kupcu</h2>
-      <div class="fg"><label class="req">Naziv / Ime</label><input type="text" id="kupac-naziv" placeholder="Ime kupca ili firme"></div>
+      <div class="fg">
+        <label class="req">Naziv / Ime</label>
+        <input type="text" id="kupac-naziv" list="kupci-list" placeholder="Ime kupca ili firme — počni da kucaš za postojeće">
+        <datalist id="kupci-list"></datalist>
+      </div>
       <div class="row2">
         <div class="fg"><label>Telefon</label><input type="text" id="kupac-telefon"></div>
         <div class="fg"><label>Adresa</label><input type="text" id="kupac-adresa"></div>
       </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;background:#eef4fc;padding:9px 11px;border-radius:8px;cursor:pointer;margin-bottom:2px;">
+        <input type="checkbox" id="kupac-registruj" checked>
+        <span>Ovo je NOVI kupac — registruj ga u bazu (da bude pretraživ ubuduće)</span>
+      </label>
       <div class="fg">
         <label>Prodajni objekat (za robu sa lagera)</label>
         <select id="objekat-select"><option value="">— izaberi ako nudiš robu sa lagera —</option></select>
@@ -152,6 +160,7 @@ main{max-width:680px;margin:16px auto;padding:0 14px 60px;}
 const API='';
 let me=null;
 let objekti=[];
+let kupciLista=[];
 let trenutniTipStavke=null;
 let lagerIzabranaRoba=null;
 let stavke=[]; // {tip, ...}
@@ -280,6 +289,23 @@ async function posaljiPonudu(){
 
   btn.disabled=true; btn.textContent='Slanje...';
   try{
+    // Ako je čekirano "registruj kao novog", prvo ga upiši u bazu kupaca (da bude
+    // pretraživ ubuduće) — greška pri registraciji ne smije spriječiti slanje ponude,
+    // samo se prijavljuje kao upozorenje (novac/posao je bitniji od duplikata u šifrarniku).
+    if(document.getElementById('kupac-registruj').checked){
+      try{
+        const rk=await fetch(`${API}/api/kupci`,{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            naziv:kupacNaziv,
+            telefon:document.getElementById('kupac-telefon').value||null,
+            adresa:document.getElementById('kupac-adresa').value||null,
+          }),
+        });
+        if(rk.ok){ const novi=await rk.json(); kupciLista.push(novi); }
+      }catch(e){ /* tiho — registracija kupca je "nice to have", ne smije blokirati ponudu */ }
+    }
+
     const r=await fetch(`${API}/api/terenske-ponude`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
@@ -298,6 +324,7 @@ async function posaljiPonudu(){
     document.getElementById('kupac-naziv').value='';
     document.getElementById('kupac-telefon').value='';
     document.getElementById('kupac-adresa').value='';
+    document.getElementById('kupac-registruj').checked=true;
   }catch(err){
     msg.className='err'; msg.style.display='block'; msg.textContent='✗ '+err.message;
   }finally{ btn.disabled=false; btn.textContent='📤 Pošalji ponudu'; }
@@ -422,8 +449,27 @@ async function ucitajMaterijale(){
     (cfg.materijali||[]).forEach(m=>sel.append(new Option(m.naziv,m.naziv)));
     const selKat=document.getElementById('pr-kategorija');
     (cfg.kategorije_bonus||[]).forEach(k=>selKat.append(new Option(k.naziv,k.id)));
+    kupciLista=cfg.kupci||[];
+    const dl=document.getElementById('kupci-list');
+    kupciLista.forEach(k=>{const o=document.createElement('option');o.value=k.naziv;dl.append(o);});
   }catch(e){}
 }
+
+// Ako upisano ime TAČNO poklapa postojećeg kupca, popuni ostala polja i automatski
+// odčekiraj "registruj kao novog" (već postoji, ne treba duplikat u bazi).
+function provjeriPostojecegKupca(){
+  const uneseno=document.getElementById('kupac-naziv').value.trim();
+  const nadjen=kupciLista.find(k=>k.naziv===uneseno);
+  const cb=document.getElementById('kupac-registruj');
+  if(nadjen){
+    document.getElementById('kupac-telefon').value=nadjen.telefon||'';
+    document.getElementById('kupac-adresa').value=nadjen.adresa||'';
+    cb.checked=false;
+  }else{
+    cb.checked=true;
+  }
+}
+document.getElementById('kupac-naziv').addEventListener('input', provjeriPostojecegKupca);
 
 checkAuth();
 ucitajObjekte();
