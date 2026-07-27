@@ -76,6 +76,17 @@ td.num{text-align:right;font-weight:700;}
   </nav>
 </header>
 
+<div class="glavni-tabovi" style="display:flex;gap:8px;padding:12px 20px 0;">
+  <button class="glavni-tab-btn active" data-tab="gotovina" onclick="prebaciGlavniTab('gotovina')">💰 Gotovina</button>
+  <button class="glavni-tab-btn" data-tab="banka" onclick="prebaciGlavniTab('banka')">🏦 Banka</button>
+  <button class="glavni-tab-btn" data-tab="klijenti" onclick="prebaciGlavniTab('klijenti')">👥 Klijenti finansije</button>
+</div>
+<style>
+.glavni-tab-btn{padding:9px 18px;border-radius:8px 8px 0 0;border:1px solid var(--border,#ddd);border-bottom:none;background:#eef0f3;font-weight:700;font-size:13px;cursor:pointer;color:#6b7a8d;}
+.glavni-tab-btn.active{background:#fff;color:var(--dark,#134a85);}
+</style>
+
+<div id="tab-gotovina">
 <!-- SUME -->
 <div class="sume" id="sume-box">
   <div class="suma-box" id="card-danas"><div class="val" id="s-danas">—</div><div class="lbl">Danas</div></div>
@@ -261,6 +272,55 @@ td.num{text-align:right;font-weight:700;}
     <tr><td colspan="8" style="text-align:center;padding:30px;color:#999">Učitavanje...</td></tr>
   </tbody>
 </table>
+</div>
+
+</div><!-- /tab-gotovina -->
+
+<!-- ═══ TAB: BANKA ═══════════════════════════════════════════════════════ -->
+<div id="tab-banka" style="display:none;padding:16px 20px;">
+  <div class="sume" id="banka-sume-box" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
+  <div class="filteri" style="margin-bottom:12px;">
+    <label>Banka:</label>
+    <select id="banka-fil" onchange="ucitajBankaListu()">
+      <option value="">Sve</option>
+      <option value="rfb">rfb</option>
+      <option value="uni">uni</option>
+      <option value="mf">mf</option>
+      <option value="nlb">nlb</option>
+      <option value="uni1">uni1</option>
+      <option value="nerasporedjeno">🔴 Neraspoređeno</option>
+    </select>
+  </div>
+  <div class="wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Datum</th><th>Iznos</th><th>Banka</th><th>Izvor</th><th>Nalog/Otp</th>
+          <th>Kupac</th><th>Upisao</th><th>Napomena</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="banka-tbody"><tr><td colspan="9" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ TAB: KLIJENTI FINANSIJE ═══════════════════════════════════════════ -->
+<div id="tab-klijenti" style="display:none;padding:16px 20px;">
+  <div style="font-size:11.5px;color:#8b96a5;margin-bottom:12px;line-height:1.5;">
+    Prikazuje koliko svaki klijent duguje, razdvojeno po očekivanom načinu naplate (banka/gotovina) —
+    iz maloprodaje i radnih naloga. Neregistrovani klijenti (bez ID-a) su označeni upozorenjem.
+  </div>
+  <div class="wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Klijent</th><th>Duguje — Banka</th><th>Duguje — Gotovina</th><th>Duguje — Nepoznato</th>
+          <th>Ukupno duguje</th><th>Uplaćeno u banku (istorijski)</th>
+        </tr>
+      </thead>
+      <tbody id="klijenti-tbody"><tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr></tbody>
+    </table>
+  </div>
 </div>
 
 <script>
@@ -1104,6 +1164,100 @@ fetch(`${API}/api/auth/me`).then(r=>{
     }
   }, 20000);
 }).catch(()=>location.href='login.html');
+
+/* ═══ TAB: BANKA / KLIJENTI FINANSIJE ═══════════════════════════════════ */
+
+function prebaciGlavniTab(tab){
+  document.querySelectorAll('.glavni-tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.getElementById('tab-gotovina').style.display = tab==='gotovina' ? 'block' : 'none';
+  document.getElementById('tab-banka').style.display = tab==='banka' ? 'block' : 'none';
+  document.getElementById('tab-klijenti').style.display = tab==='klijenti' ? 'block' : 'none';
+  if(tab==='banka'){ ucitajBankaSume(); ucitajBankaListu(); }
+  if(tab==='klijenti'){ ucitajKlijentiListu(); }
+}
+
+const BANKA_NAZIVI={rfb:'RFB',uni:'UNI',mf:'MF',nlb:'NLB',uni1:'UNI1',nerasporedjeno:'🔴 Neraspoređeno'};
+
+async function ucitajBankaSume(){
+  const cont=document.getElementById('banka-sume-box');
+  try{
+    const r=await fetch(`${API}/api/finansije/banka/stanje`);
+    const rows=await r.json();
+    cont.innerHTML=rows.map(x=>`
+      <div class="suma-box" style="${x.banka==='nerasporedjeno'&&x.zbir>0?'border:2px solid var(--red,#c0392b);':''}">
+        <div class="val">${fm(x.zbir)}</div>
+        <div class="lbl">${BANKA_NAZIVI[x.banka]||x.banka} (${x.broj})</div>
+      </div>
+    `).join('');
+  }catch(e){ cont.innerHTML='<div style="color:red;">Greška pri učitavanju.</div>'; }
+}
+
+async function ucitajBankaListu(){
+  const tbody=document.getElementById('banka-tbody');
+  tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr>';
+  try{
+    const fil=document.getElementById('banka-fil').value;
+    const params=new URLSearchParams();
+    if(fil==='nerasporedjeno') params.set('nerasporedjeno','true');
+    else if(fil) params.set('banka',fil);
+    const r=await fetch(`${API}/api/finansije/banka?${params}`);
+    const rows=await r.json();
+    if(!rows.length){ tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">Nema podataka.</td></tr>'; return; }
+    tbody.innerHTML=rows.map(r=>`
+      <tr>
+        <td>${new Date(r.datum).toLocaleDateString('sr-Latn-BA')}</td>
+        <td style="font-weight:700;">${fm(r.iznos)}</td>
+        <td>${r.banka?`<span class="chip-izvor iz-malo">${esc(BANKA_NAZIVI[r.banka]||r.banka)}</span>`:'<span class="chip-izvor iz-drugo" style="color:var(--red);">🔴 Neraspoređeno</span>'}</td>
+        <td>${esc(r.izvor)}</td>
+        <td>${esc(r.nalog_r_br||'—')}</td>
+        <td>${esc(r.kupac_naziv||'—')}</td>
+        <td>${esc(r.upisao_ime||'—')}</td>
+        <td style="font-size:11px;color:#8b96a5;">${esc(r.napomena||'')}</td>
+        <td>
+          <select onchange="if(this.value){dodijeliBanku(${r.id},this.value);}" style="font-size:11px;padding:3px 5px;">
+            <option value="">Dodijeli/Promijeni →</option>
+            ${['rfb','uni','mf','nlb','uni1'].map(b=>`<option value="${b}" ${r.banka===b?'selected':''}>${b}</option>`).join('')}
+          </select>
+        </td>
+      </tr>
+    `).join('');
+  }catch(e){ tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>'; }
+}
+
+async function dodijeliBanku(id, banka){
+  try{
+    const r=await fetch(`${API}/api/finansije/banka/${id}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({banka}),
+    });
+    if(!r.ok){ const d=await r.json(); alert('✗ '+(d.error||'Greška.')); return; }
+    ucitajBankaSume();
+    ucitajBankaListu();
+  }catch(e){ alert('✗ Greška pri dodjeli.'); }
+}
+
+async function ucitajKlijentiListu(){
+  const tbody=document.getElementById('klijenti-tbody');
+  tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr>';
+  try{
+    const r=await fetch(`${API}/api/finansije/klijenti`);
+    const rows=await r.json();
+    if(!rows.length){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Nema klijenata sa dugom.</td></tr>'; return; }
+    tbody.innerHTML=rows.map(k=>`
+      <tr>
+        <td>
+          ${esc(k.kupac_naziv||'—')}
+          ${!k.registrovan?'<div style="font-size:10px;color:var(--red);font-weight:700;">⚠ Preporučuje se registracija kupca</div>':''}
+        </td>
+        <td>${k.duguje_banka>0?fm(k.duguje_banka):'—'}</td>
+        <td>${k.duguje_gotovina>0?fm(k.duguje_gotovina):'—'}</td>
+        <td>${k.duguje_nepoznato>0?fm(k.duguje_nepoznato):'—'}</td>
+        <td style="font-weight:700;">${fm(k.duguje_ukupno)}</td>
+        <td>${k.uplaceno_banka_istorijski>0?fm(k.uplaceno_banka_istorijski):'—'}</td>
+      </tr>
+    `).join('');
+  }catch(e){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>'; }
+}
 </script>
 </body>
 </html>
