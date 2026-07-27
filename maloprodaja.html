@@ -201,6 +201,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 .st-kreirana{background:#fff3e0;color:#e67e22;}
 .st-potvrdjena{background:#e6f4ea;color:var(--green);}
 .st-stornirana{background:#fce8e6;color:var(--red);}
+.st-stornirana{background:#fce8e6;color:var(--red);}
 .badge-odstupanje{background:#fce8e6;color:var(--red);font-size:10px;font-weight:700;
   padding:2px 8px;border-radius:8px;white-space:nowrap;}
 .otp-meta{font-size:11.5px;color:#6b7a8d;line-height:1.5;}
@@ -1609,6 +1610,17 @@ async function ucitajUplateSume(){
   }catch(e){}
 }
 
+async function stornirajIsplatu(id){
+  if(!confirm('Storniraj ovu isplatu? (npr. ako je greškom unesena dva puta) — ostaje trag, novac se vraća u blagajnu.')) return;
+  try{
+    const r=await fetch(`${API}/api/isplate/${id}/storniraj`,{method:'POST'});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error);
+    ucitajIsplateListu();
+    ucitajIsplateSume();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
 async function ucitajIsplateListu(tiho){
   const cont=document.getElementById('isplate-lista');
   const totalDiv=document.getElementById('isplate-total');
@@ -1624,16 +1636,18 @@ async function ucitajIsplateListu(tiho){
       return;
     }
     cont.innerHTML=rows.map(o=>`
-      <div class="otp-card">
+      <div class="otp-card" style="${o.stornirano?'opacity:.6;':''}">
         <div class="otp-top">
           <span class="otp-broj">${esc(RAZLOG_ISPLATE_LABEL[o.razlog]||o.razlog)}</span>
-          <span class="otp-status st-potvrdjena">✓ Potvrđeno</span>
+          <span class="otp-status ${o.stornirano?'st-stornirana':'st-potvrdjena'}">${o.stornirano?'✕ Stornirano':'✓ Potvrđeno'}</span>
         </div>
         <div class="otp-meta">
           ${fd(o.datum)} &middot; Primalac: ${esc(o.primalac_ime)}<br>
           ${o.napomena?esc(o.napomena)+'<br>':''}Izdao: ${esc(o.komercijalista_ime||'—')}
+          ${o.stornirano?`<br><span style="color:var(--red);">Stornirao: ${esc(o.stornirao_ime||'')} — ${fd(o.stornirano_kada)}</span>`:''}
         </div>
         <div class="otp-iznos" style="color:var(--red);">− ${fmMoney(o.iznos)}</div>
+        ${!o.stornirano?`<button onclick="stornirajIsplatu(${o.id})" style="width:100%;margin-top:8px;padding:7px;background:none;border:1px solid var(--red);color:var(--red);border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;">✕ Storniraj (greška — dupli klik i sl.)</button>`:''}
       </div>
     `).join('');
     const ukupno=rows.reduce((s,o)=>s+parseFloat(o.iznos||0),0);
@@ -1838,9 +1852,19 @@ async function potvrdiNaplatuDuga(){
     let poruka=`✓ Naplaćeno ${fmMoney(data.naplaceno_sada)} za ${data.broj}.`;
     if(data.visak_u_avans>0) poruka+=` Višak od ${fmMoney(data.visak_u_avans)} je postao avans.`;
     poruka+=(data.preostalo_duguje>0?` Preostalo duguje: ${fmMoney(data.preostalo_duguje)}.`:' Otpremnica je sad u potpunosti plaćena.');
-    alert(poruka);
     dugZaNaplatu=null;
     if(dugPrikaz==='kupci') ucitajSaldoPoKupcima(); else ucitajDugovanja();
+    // Odmah ponudi brz storno (najčešći slučaj greške — dupli klik na "Naplati") umjesto
+    // da se to traži kasnije kroz posebnu listu.
+    if(confirm(poruka+'\n\nAko je ovo bio DUPLI KLIK ili greška, klikni OK da ODMAH storniraš (novac se vraća). Klikni Otkaži da zadržiš naplatu kako jeste.')){
+      try{
+        const rs=await fetch(`${API}/api/otpremnice/naplate-log/${data.naplata_log_id}/storniraj`,{method:'POST'});
+        const ds=await rs.json();
+        if(!rs.ok) throw new Error(ds.error);
+        alert('✓ Naplata je stornirana.');
+        if(dugPrikaz==='kupci') ucitajSaldoPoKupcima(); else ucitajDugovanja();
+      }catch(e){ alert('✗ Greška pri storniranju: '+e.message); }
+    }
   }catch(e){
     alert(e.message);
   }finally{

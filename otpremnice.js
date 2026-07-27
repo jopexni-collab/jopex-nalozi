@@ -872,13 +872,117 @@ router.post('/:id/naplati-dug', async (req, res) => {
       }
     }
 
+    // Log ove konkretne naplate — omogućava STORNO (poništavanje) kasnije, kao cjelina
+    // (bez ovoga, nema traga da je BAŠ OVAJ poziv izazvao te promjene, pa se ne bi moglo
+    // pouzdano poništiti — npr. ako je neko greškom dva puta kliknuo naplatu).
+    const logRes = await client.query(
+      `INSERT INTO naplate_duga_log
+         (otpremnica_id, otpremnica_broj, iznos, izvor, iznos_za_dug, visak, gotovina_id,
+          kupac_id, upisao_id, upisao_ime)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+      [otp.id, otp.broj, iznos, izvor, iznosZaDug, visak, gotovinaId,
+       otp.kupac_id || null, user.id, user.ime_prezime]
+    );
+
     await client.query('COMMIT');
     res.json({
       ok: true, otpremnica_id: otp.id, broj: otp.broj, naplaceno_sada: iznosZaDug, visak_u_avans: visak,
       iznos_placeno: noviIznosPlaceno, status_placanja: noviStatus,
       preostalo_duguje: +(parseFloat(otp.ukupan_iznos) - noviIznosPlaceno).toFixed(2),
-      gotovina_id: gotovinaId,
+      gotovina_id: gotovinaId, naplata_log_id: logRes.rows[0].id,
     });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/otpremnice/naplate-log?objekt_id=X&limit=20 - poslednje naplate duga (za brz
+// pregled/storno u maloprodaji — npr. "jesam li greškom kliknuo dva puta").
+router.get('/naplate-log', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+  try {
+    const { objekt_id, limit } = req.query;
+    const where = [];
+    const vals = [];
+    let i = 1;
+    if (objekt_id) {
+      where.push(`otpremnica_id IN (SELECT id FROM otpremnice WHERE objekt_id=$${i++})`);
+      vals.push(objekt_id);
+    }
+    const lim = Math.min(parseInt(limit) || 20, 100);
+    vals.push(lim);
+    const r = await pool.query(
+      `SELECT * FROM naplate_duga_log ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+       ORDER BY kreirano DESC LIMIT $${vals.length}`,
+      vals
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/otpremnice/naplate-log/:id/storniraj - poništava JEDNU konkretnu naplatu duga
+// kao cjelinu (otpremnica se vraća na staro stanje, gotovina dobija REVERZNI red — ne
+// briše se originalni, kupac_transakcije dobijaju svoj reverzni par). Trag ostaje potpun:
+// oba (originalni i reverzni) reda su vidljiva, ništa se ne briše.
+router.post('/naplate-log/:id/storniraj', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const logRes = await client.query('SELECT * FROM naplate_duga_log WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!logRes.rows.length) throw Object.assign(new Error('Zapis nije pronađen.'), { status: 404 });
+    const log = logRes.rows[0];
+    if (log.stornirano) throw Object.assign(new Error('Ova naplata je već stornirana.'), { status: 400 });
+
+    const otpRes = await client.query('SELECT * FROM otpremnice WHERE id=$1 FOR UPDATE', [log.otpremnica_id]);
+    if (!otpRes.rows.length) throw Object.assign(new Error('Otpremnica nije pronađena.'), { status: 404 });
+    const otp = otpRes.rows[0];
+
+    // Vrati otpremnicu na staro stanje — umanji iznos_placeno za ono što je OVA naplata
+    // dodala (i za dug-dio i za eventualni višak, pošto je i višak povećao iznos_placeno).
+    const ukupnoZaVratiti = +(parseFloat(log.iznos_za_dug) + parseFloat(log.visak)).toFixed(2);
+    const noviIznosPlaceno = +(parseFloat(otp.iznos_placeno) - ukupnoZaVratiti).toFixed(2);
+    const noviStatus = noviIznosPlaceno <= 0.005 ? 'duguje' : (noviIznosPlaceno >= parseFloat(otp.ukupan_iznos) ? 'placeno' : 'djelimicno');
+    await client.query(
+      'UPDATE otpremnice SET iznos_placeno=$1, status_placanja=$2 WHERE id=$3',
+      [Math.max(0, noviIznosPlaceno), noviStatus, otp.id]
+    );
+
+    // Reverzni red u gotovini (ako je izvor bio gotovina — avans ne dira gotovinu).
+    if (log.gotovina_id) {
+      await client.query(
+        `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
+         VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5)`,
+        [-parseFloat(log.iznos), user.ime_prezime, `STORNO naplate — ${log.otpremnica_broj}`, otp.objekt_naziv, otp.broj]
+      );
+    }
+
+    // Reverzni par u kartici kupca (ako je postojao kupac_id).
+    if (log.kupac_id) {
+      await client.query(
+        `INSERT INTO kupac_transakcije
+           (kupac_id, tip, iznos, opis, otpremnica_id, otpremnica_broj, objekt_id, objekt_naziv,
+            komercijalista_id, komercijalista_ime)
+         VALUES ($1,'naplata_duga',$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [log.kupac_id, ukupnoZaVratiti, `STORNO naplate za ${otp.broj}`, otp.id, otp.broj,
+         otp.objekt_id, otp.objekt_naziv, user.id, user.ime_prezime]
+      );
+    }
+
+    await client.query(
+      `UPDATE naplate_duga_log SET stornirano=true, stornirao_id=$1, stornirao_ime=$2, stornirano_kada=now() WHERE id=$3`,
+      [user.id, user.ime_prezime, log.id]
+    );
+
+    await client.query('COMMIT');
+    res.json({ ok: true });
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(err.status || 500).json({ error: err.message });

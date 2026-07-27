@@ -143,12 +143,35 @@ router.post('/', async (req, res) => {
 });
 
 // DELETE /api/isplate/:id - samo admin (ispravka greške u unosu) — briše i povezan red u gotovini
-router.delete('/:id', async (req, res) => {
-  if (req.session?.user?.rola !== 'admin')
-    return res.status(403).json({ error: 'Samo admin može brisati isplate.' });
+// POST /api/isplate/:id/storniraj — poništava isplatu (npr. dupli klik greškom). NE
+// briše ništa — markira kao stornirano i pravi REVERZNI red u gotovini (ako je postojao),
+// da trag ostane potpun. Ista dozvola kao kreiranje (admin/moze_prodavati/blagajnik) —
+// namjerno NIJE samo admin, da radnik u maloprodaji može sam ispraviti sopstvenu grešku.
+router.post('/:id/storniraj', async (req, res) => {
+  const user = req.session?.user;
   try {
-    await pool.query('DELETE FROM gotovina WHERE nalog_r_br=$1 AND izvor=$2', [`ISP-${req.params.id}`, 'Maloprodaja']);
-    await pool.query('DELETE FROM isplate WHERE id=$1', [req.params.id]);
+    const r = await pool.query('SELECT * FROM isplate WHERE id=$1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Isplata nije pronađena.' });
+    const isp = r.rows[0];
+    if (isp.stornirano) return res.status(400).json({ error: 'Ova isplata je već stornirana.' });
+
+    await pool.query(
+      `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
+       VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5)`,
+      [isp.iznos, user.ime_prezime, `STORNO isplate — ${isp.napomena || isp.razlog}`, isp.objekt_naziv, `ISP-${isp.id}`]
+    );
+    if (isp.razlog === 'povrat_komitentu' && isp.kupac_id) {
+      await pool.query(
+        `INSERT INTO kupac_transakcije
+           (kupac_id, tip, iznos, opis, objekt_id, objekt_naziv, komercijalista_id, komercijalista_ime)
+         VALUES ($1,'povrat_komitentu',$2,$3,$4,$5,$6,$7)`,
+        [isp.kupac_id, isp.iznos, `STORNO povrata — ISP-${isp.id}`, isp.objekt_id, isp.objekt_naziv, user.id, user.ime_prezime]
+      );
+    }
+    await pool.query(
+      `UPDATE isplate SET stornirano=true, stornirao_id=$1, stornirao_ime=$2, stornirano_kada=now() WHERE id=$3`,
+      [user.id, user.ime_prezime, isp.id]
+    );
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
