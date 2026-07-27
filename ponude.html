@@ -346,10 +346,24 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
           <div class="fg"><label>Dubina upuštanja (mm)</label><input type="text" inputmode="decimal" id="sud-dub" value="5" oninput="fixComma(this);refresh()"></div>
           <div class="fg"><label>Širina upuštanja (mm)</label><input type="text" inputmode="decimal" id="sud-step" value="5" oninput="fixComma(this);refresh()"></div>
         </div>
-        <div class="hint">Pozicija od prednje-lijeve ivice strane A</div>
+        <div class="hint">Pozicija otvora — biraj od koje se STVARNE ivice kraka mjeri</div>
         <div class="r2">
-          <div class="fg"><label>Od lijeve ivice (mm)</label><input type="number" id="sud-x" value="200" min="0" oninput="fixComma(this);refresh()"></div>
-          <div class="fg"><label>Od prednje ivice (mm)</label><input type="number" id="sud-y" value="50" min="0" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Vodoravno</label>
+            <select id="sud-xref" onchange="refresh()">
+              <option value="lijeva">Od lijeve ivice</option>
+              <option value="desna">Od desne ivice</option>
+            </select>
+          </div>
+          <div class="fg"><label>Rastojanje (mm)</label><input type="number" id="sud-x" value="200" min="0" oninput="fixComma(this);refresh()"></div>
+        </div>
+        <div class="r2">
+          <div class="fg"><label>Uspravno</label>
+            <select id="sud-yref" onchange="refresh()">
+              <option value="prednja">Od prednje ivice</option>
+              <option value="zadnja">Od zadnje ivice</option>
+            </select>
+          </div>
+          <div class="fg"><label>Rastojanje (mm)</label><input type="number" id="sud-y" value="50" min="0" oninput="fixComma(this);refresh()"></div>
         </div>
         <div class="hint">Radijus uglova otvora (R mm)</div>
         <div class="r2">
@@ -395,9 +409,24 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
           <div class="fg"><label>Dubina upuštanja (mm)</label><input type="text" inputmode="decimal" id="plo-dub" value="5" oninput="fixComma(this);refresh()"></div>
           <div class="fg"><label>Širina upuštanja (mm)</label><input type="text" inputmode="decimal" id="plo-step" value="5" oninput="fixComma(this);refresh()"></div>
         </div>
+        <div class="hint">Pozicija otvora — biraj od koje se STVARNE ivice kraka mjeri</div>
         <div class="r2">
-          <div class="fg"><label>Od lijeve ivice (mm)</label><input type="number" id="plo-x" value="1000" min="0" oninput="fixComma(this);refresh()"></div>
-          <div class="fg"><label>Od prednje ivice (mm)</label><input type="number" id="plo-y" value="50" min="0" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Vodoravno</label>
+            <select id="plo-xref" onchange="refresh()">
+              <option value="lijeva">Od lijeve ivice</option>
+              <option value="desna">Od desne ivice</option>
+            </select>
+          </div>
+          <div class="fg"><label>Rastojanje (mm)</label><input type="number" id="plo-x" value="1000" min="0" oninput="fixComma(this);refresh()"></div>
+        </div>
+        <div class="r2">
+          <div class="fg"><label>Uspravno</label>
+            <select id="plo-yref" onchange="refresh()">
+              <option value="prednja">Od prednje ivice</option>
+              <option value="zadnja">Od zadnje ivice</option>
+            </select>
+          </div>
+          <div class="fg"><label>Rastojanje (mm)</label><input type="number" id="plo-y" value="50" min="0" oninput="fixComma(this);refresh()"></div>
         </div>
         <div class="hint">Radijus uglova otvora (R mm)</div>
         <div class="r2">
@@ -1547,6 +1576,7 @@ function makeDefaultItem(tipArg){
       'mat-d-sel':'20','mat-d-inp':'','mat-naziv':'',
       'k-ugr':'0','k-mer':'0','k-nap':'',
       'cb-sud':true,'sud-w':'500','sud-h':'500','sud-x':'200','sud-y':'50',
+      'sud-xref':'lijeva','sud-yref':'prednja','plo-xref':'lijeva','plo-yref':'prednja',
       'sud-t':'bez','cb-plo':false,'plo-w':'500','plo-h':'500',
       'plo-x':'1000','plo-y':'50','plo-t':'bez','plo-c':'0',
       'sud-c':'0','sud-dub':'5','sud-step':'5','plo-dub':'5','plo-step':'5',
@@ -1605,6 +1635,7 @@ function getItemInputIds(t){
   var ids={k:['sud-w','sud-h','sud-c','sud-x','sud-y','plo-w','plo-h','plo-c','plo-x','plo-y',
               'k-ugr','k-mer','cb-sud','cb-plo',
               'sud-t','plo-t','sud-dub','sud-step','plo-dub','plo-step','k-nap','k-narucilac','k-ugovorio','mat-naziv','mat-c',
+              'sud-xref','sud-yref','plo-xref','plo-yref',
               'sud-r-tl-sel','sud-r-tl-inp','sud-r-tr-sel','sud-r-tr-inp',
               'sud-r-br-sel','sud-r-br-inp','sud-r-bl-sel','sud-r-bl-inp',
               'plo-r-tl-sel','plo-r-tl-inp','plo-r-tr-sel','plo-r-tr-inp',
@@ -1805,6 +1836,36 @@ function _bbMM(sh,d,vo){
 // Vertikalni presjek ploče na datom x — vraća {top,bottom} u mm, tj. gdje
 // materijal počinje i gdje se završava na toj poziciji. Kod U/L/V oblika
 // svaki krak ima svoju dubinu, pa ovo daje ivicu TOG kraka, ne cijele ploče.
+// Vodoravni presjek ploče na datoj visini y — vraća SVE odsječke materijala
+// kao [[x1,x2],...]. Kod U oblika na dubini iza gornjeg kraka postoje DVA
+// odvojena odsječka (lijevi i desni krak), pa otvor mora znati u kojem leži.
+function _plateXSpansAtY(outlineMM,y){
+  var n=outlineMM.length, xs=[];
+  for(var i=0;i<n;i++){
+    var p1=outlineMM[i], p2=outlineMM[(i+1)%n];
+    if(p1[1]===p2[1]) continue; // vodoravna ivica
+    var lo=Math.min(p1[1],p2[1]), hi=Math.max(p1[1],p2[1]);
+    if(y<lo||y>hi) continue;
+    var t=(y-p1[1])/(p2[1]-p1[1]);
+    xs.push(p1[0]+t*(p2[0]-p1[0]));
+  }
+  xs.sort(function(a,b){return a-b;});
+  var spans=[];
+  for(var k=0;k+1<xs.length;k+=2) spans.push([xs[k],xs[k+1]]);
+  return spans;
+}
+// Odsječak u kojem leži tačka x (ili najbliži, ako je tačno na granici).
+function _spanContaining(spans,x){
+  if(!spans||!spans.length) return null;
+  for(var i=0;i<spans.length;i++) if(x>=spans[i][0]-0.01 && x<=spans[i][1]+0.01) return spans[i];
+  var best=spans[0], bd=Infinity;
+  spans.forEach(function(s){
+    var d=Math.min(Math.abs(x-s[0]),Math.abs(x-s[1]));
+    if(d<bd){bd=d;best=s;}
+  });
+  return best;
+}
+
 function _plateYSpanAtX(outlineMM,x){
   var n=outlineMM.length, ys=[];
   for(var i=0;i<n;i++){
@@ -1839,27 +1900,56 @@ function _backEdgeMM(sh,d,vo,x0,x1){
   return flip?sp.bottom:sp.top;
 }
 // ── JEDINSTVENE POZICIJE OTVORA (mm) ───────────────────────────────
-// Canvas i DXF OBA idu preko ovih funkcija — tako ne mogu razići.
-// Vraćaju {x,y,w,h} gdje je y GORNJA ivica otvora mjerena od vrha ploče.
-function _otvorYodPrednje(sh,d,vo,x,w,unosY,h){
-  var front=_frontEdgeMM(sh,d,vo,x,x+w);
-  if(front==null) front=_bbMM(sh,d,vo).h;
-  return _isYFlipped(sh,vo) ? (front+unosY) : (front-unosY-h);
+// Canvas i DXF OBA idu preko ovih funkcija - tako ne mogu razici.
+// Referentne ivice su STVARNE ivice kraka u kojem otvor lezi (ne bounding
+// box cijele ploce), i korisnik bira od koje se mjeri:
+//   xref: 'lijeva' | 'desna'      yref: 'prednja' | 'zadnja'
+// Vraca {x,y,w,h, left,right,front,back} - sve u mm, y je GORNJA ivica otvora.
+function _rjesiOtvorMM(w,h,ux,uy,xref,yref){
+  var sh=shape, d=dims, vo=vOrient;
+  var outl=getShapeOutline(sh,d,vo), flip=_isYFlipped(sh,vo);
+  var bb=_bbMM(sh,d,vo);
+  // 1) Gruba X pozicija - dovoljna da se odredi u kojem je kraku otvor.
+  var xApprox=(xref==='desna')?(bb.w-ux-w):ux;
+  var cx=xApprox+w/2;
+  // 2) Uspravne granice tog kraka na toj X poziciji.
+  var vs=_plateYSpanAtX(outl,cx);
+  var back  = vs ? (flip?vs.bottom:vs.top)    : 0;
+  var front = vs ? (flip?vs.top:vs.bottom)    : bb.h;
+  // 3) Y prema izabranoj referenci.
+  var y;
+  if(yref==='zadnja') y = flip ? (back-uy-h) : (back+uy);
+  else                y = flip ? (front+uy)  : (front-uy-h);
+  // 4) Vodoravne granice na sredini visine otvora - tek sada znamo tacno
+  //    koji odsjecak materijala je u pitanju.
+  var cy=y+h/2;
+  var sp=_spanContaining(_plateXSpansAtY(outl,cy),cx)||[0,bb.w];
+  var x=(xref==='desna')?(sp[1]-ux-w):(sp[0]+ux);
+  return {x:x,y:y,w:w,h:h,left:sp[0],right:sp[1],front:front,back:back};
+}
+function _otvorRef(prefix,osa){
+  var v=gs(prefix+'-'+osa+'ref');
+  if(osa==='x') return (v==='desna')?'desna':'lijeva';
+  return (v==='zadnja')?'zadnja':'prednja';
 }
 function getOtvorRectMM(prefix){
-  var w=gi(prefix+'-w'), h=gi(prefix+'-h'), x=gi(prefix+'-x');
-  return {x:x, y:_otvorYodPrednje(shape,dims,vOrient,x,w,gi(prefix+'-y'),h), w:w, h:h};
+  return _rjesiOtvorMM(gi(prefix+'-w'),gi(prefix+'-h'),
+    gi(prefix+'-x'),gi(prefix+'-y'),
+    _otvorRef(prefix,'x'),_otvorRef(prefix,'y'));
 }
 function getCustomOtvorRectMM(c){
-  var w=c.w||0, h=c.h||0, x=c.x||0;
-  return {x:x, y:_otvorYodPrednje(shape,dims,vOrient,x,w,c.y||0,h), w:w, h:h};
+  return _rjesiOtvorMM(c.w||0,c.h||0,c.x||0,c.y||0,
+    (c.xref==='desna')?'desna':'lijeva',
+    (c.yref==='zadnja')?'zadnja':'prednja');
 }
 function getSlavinaPosMM(s){
-  var x=s.x||400, yz=s.yz||50;
-  var back=_backEdgeMM(shape,dims,vOrient,x,x);
-  if(back==null) back=0;
-  return {x:x, y:_isYFlipped(shape,vOrient) ? (back-yz) : (back+yz)};
+  // Slavina je tacka - w/h = 0, pa vazi ista logika referentnih ivica.
+  var r=_rjesiOtvorMM(0,0,s.x||0,s.yz||0,
+    (s.xref==='desna')?'desna':'lijeva',
+    (s.yref==='prednja')?'prednja':'zadnja');
+  return {x:r.x,y:r.y,left:r.left,right:r.right,front:r.front,back:r.back};
 }
+
 
 function _getFbb(sh,d,scVal){
   var _sh=(sh!=null?sh:shape)||'I';
@@ -4018,6 +4108,30 @@ function drawOtvor(ctx,x,y,w,h,col,lbl,dw,dh,radMM,stepPx,cornerSelArr,cornerEdi
   });
 }
 
+// Crta kote polozaja otvora OD IZABRANE REFERENTNE IVICE. r je rezultat
+// getOtvorRectMM (sadrzi left/right/front/back tog kraka, u mm).
+function _kotePozicijeOtvora(ctx,sc,r,prefix,boja,offDolje,offDesno){
+  var xref=_otvorRef(prefix,'x'), yref=_otvorRef(prefix,'y');
+  var x1=r.x*sc, x2=(r.x+r.w)*sc, y1=r.y*sc, y2=(r.y+r.h)*sc;
+  var L=r.left*sc, R=r.right*sc, F=r.front*sc, B=r.back*sc;
+  var kY=Math.max(F,B)+offDolje;          // linija vodoravne kote, ispod ploce
+  var kX=R+offDesno;                      // linija uspravne kote, desno od kraka
+  // Vodoravna kota
+  if(xref==='desna') kota(ctx,x2,kY,R,kY,gi(prefix+'-x')+' mm',_inputEditDesc(prefix+'-x','Udaljenost od desne ivice'),'#'+prefix+'-x');
+  else               kota(ctx,L,kY,x1,kY,gi(prefix+'-x')+' mm',_inputEditDesc(prefix+'-x','Udaljenost od lijeve ivice'),'#'+prefix+'-x');
+  // Uspravna kota
+  if(yref==='zadnja') kota(ctx,kX,B,kX,y1,gi(prefix+'-y')+' mm',_inputEditDesc(prefix+'-y','Udaljenost od zadnje ivice'),'#'+prefix+'-y');
+  else                kota(ctx,kX,y2,kX,F,gi(prefix+'-y')+' mm',_inputEditDesc(prefix+'-y','Udaljenost od prednje ivice'),'#'+prefix+'-y');
+  // Tanke pomocne linije do kota, da se vidi OD CEGA se mjeri
+  ctx.save();ctx.strokeStyle=boja;ctx.lineWidth=0.6;ctx.setLineDash([4,3]);
+  var xa=(xref==='desna')?R:L, xb=(xref==='desna')?x2:x1;
+  ctx.beginPath();ctx.moveTo(xa,Math.min(y1,F));ctx.lineTo(xa,kY);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(xb,y2);ctx.lineTo(xb,kY);ctx.stroke();
+  var ya=(yref==='zadnja')?B:F, yb=(yref==='zadnja')?y1:y2;
+  ctx.beginPath();ctx.moveTo(x2,ya);ctx.lineTo(kX,ya);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x2,yb);ctx.lineTo(kX,yb);ctx.stroke();
+  ctx.setLineDash([]);ctx.restore();
+}
 function drawOtvori(ctx,sc,aX,aY,aW,aH){
   // Helper za kotu polozaja (isprekidana referentna linija + kota)
   function kotaPos(x1,y1,x2,y2,lbl,clr){
@@ -4093,16 +4207,9 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
     // Dimenzije otvora
     kota(ctx,sx,sy-22,sx+ssw,sy-22,gi('sud-w')+' mm',_inputEditDesc('sud-w','Širina sudopere'),'#sud-w');
     kota(ctx,sx+ssw+18,sy,sx+ssw+18,sy+ssh,gi('sud-h')+' mm',_inputEditDesc('sud-h','Visina sudopere'),'#sud-h');
-    // Kota pozicije: od lijeve ivice (0) do lijevog ruba otvora
-    // sx je već apsolutna od 0, pa label = sx/sc = gi('sud-x') direktno
-    kota(ctx,0,_fbbH+22,sx,_fbbH+22,gi('sud-x')+' mm',_inputEditDesc('sud-x','Udaljenost od lijeve ivice'),'#sud-x');
-    // Kota pozicije: od prednje ivice
-    kota(ctx,sx+ssw+38,sy+ssh,sx+ssw+38,_fbbH,gi('sud-y')+' mm',_inputEditDesc('sud-y','Udaljenost od prednje ivice'),'#sud-y');
-    // Extension linije prema koti
-    ctx.save();ctx.strokeStyle='#1a5fa8';ctx.lineWidth=0.6;ctx.setLineDash([4,3]);
-    ctx.beginPath();ctx.moveTo(0,_fbbH);ctx.lineTo(0,_fbbH+26);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(sx,_fbbH);ctx.lineTo(sx,_fbbH+26);ctx.stroke();
-    ctx.setLineDash([]);ctx.restore();
+    // Kote pozicije IDU OD STVARNE REFERENTNE IVICE tog kraka (ne od
+    // bounding boxa) i prate izbor lijeva/desna odnosno prednja/zadnja.
+    _kotePozicijeOtvora(ctx,sc,_rS,'sud','#1a5fa8',22,38);
   }
 
   // ── PLOČA ZA KUVANJE ─────────────────────────────────────
@@ -4124,54 +4231,31 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
     // Dimenzije otvora
     kota(ctx,px2,py2+pph+18,px2+ppw,py2+pph+18,gi('plo-w')+' mm',_inputEditDesc('plo-w','Širina ploče za kuvanje'),'#plo-w');
     kota(ctx,px2-22,py2,px2-22,py2+pph,gi('plo-h')+' mm',_inputEditDesc('plo-h','Visina ploče za kuvanje'),'#plo-h');
-    // Kota pozicije: od lijeve ivice (0)
-    kota(ctx,0,_fbbH+42,px2,_fbbH+42,gi('plo-x')+' mm',_inputEditDesc('plo-x','Udaljenost od lijeve ivice'),'#plo-x');
-    // Kota pozicije: od prednje ivice
-    kota(ctx,px2+ppw+38,py2+pph,px2+ppw+38,_fbbH,gi('plo-y')+' mm',_inputEditDesc('plo-y','Udaljenost od prednje ivice'),'#plo-y');
-    // Extension linije prema koti
-    ctx.save();ctx.strokeStyle='#c0392b';ctx.lineWidth=0.6;ctx.setLineDash([4,3]);
-    ctx.beginPath();ctx.moveTo(0,_fbbH);ctx.lineTo(0,_fbbH+46);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(px2,_fbbH);ctx.lineTo(px2,_fbbH+46);ctx.stroke();
-    ctx.setLineDash([]);ctx.restore();
+    _kotePozicijeOtvora(ctx,sc,_rP,'plo','#c0392b',42,58);
   }
 
   // ── PROVJERA PREKLAPANJA sudopere i ploče za kuvanje ─────
   if(gc('cb-sud')&&gc('cb-plo')){
-    // Izračunaj pozicije u mm (bez sc) za tačnu provjeru
-    var _fbbChk=_getFbb(shape,dims,_lastSc), _fWc=_fbbChk.w, _fHc=_fbbChk.h;
-    var _sc=_lastSc||1;
-    var _sswc=Math.min(gi('sud-w')*_sc,_fWc-8);
-    var _sshc=Math.min(gi('sud-h')*_sc,_fHc-8);
-    var _sxc=Math.max(4,Math.min(gi('sud-x')*_sc,_fWc-_sswc-4));
-    var _syfc=Math.max(4,Math.min(gi('sud-y')*_sc,_fHc-_sshc-4));
-    var _syc=Math.max(0,Math.min(_fHc-_syfc-_sshc,_fHc-_sshc));
-    var _ppwc=Math.min(gi('plo-w')*_sc,_fWc-8);
-    var _pphc=Math.min(gi('plo-h')*_sc,_fHc-8);
-    var _px2c=Math.max(4,Math.min(gi('plo-x')*_sc,_fWc-_ppwc-4));
-    var _pyfc=Math.max(4,Math.min(gi('plo-y')*_sc,_fHc-_pphc-4));
-    var _py2c=Math.max(0,Math.min(_fHc-_pyfc-_pphc,_fHc-_pphc));
-    // AABB test preklapanja
-    var _overlapX=_sxc<_px2c+_ppwc && _sxc+_sswc>_px2c;
-    var _overlapY=_syc<_py2c+_pphc && _syc+_sshc>_py2c;
-    if(_overlapX&&_overlapY){
-      // Nacrtaj upozorenje - crveni okvir oko zone preklapanja i tekst
-      var _ox1=Math.max(_sxc,_px2c), _oy1=Math.max(_syc,_py2c);
-      var _ox2=Math.min(_sxc+_sswc,_px2c+_ppwc), _oy2=Math.min(_syc+_sshc,_py2c+_pphc);
+    // Preklapanje se provjerava na ISTIM pozicijama koje su nacrtane (mm),
+    // ne na zasebnom paralelnom racunu - inace upozorenje moze promasiti.
+    var _a=getOtvorRectMM('sud'), _b=getOtvorRectMM('plo');
+    var _ovX=_a.x < _b.x+_b.w && _a.x+_a.w > _b.x;
+    var _ovY=_a.y < _b.y+_b.h && _a.y+_a.h > _b.y;
+    if(_ovX&&_ovY){
+      var _ox1=Math.max(_a.x,_b.x)*sc, _oy1=Math.max(_a.y,_b.y)*sc;
+      var _ox2=Math.min(_a.x+_a.w,_b.x+_b.w)*sc, _oy2=Math.min(_a.y+_a.h,_b.y+_b.h)*sc;
       ctx.save();
+      ctx.fillStyle='rgba(231,76,60,0.15)';
+      ctx.fillRect(_ox1,_oy1,_ox2-_ox1,_oy2-_oy1);
       ctx.strokeStyle='#e74c3c';ctx.lineWidth=2;ctx.setLineDash([5,3]);
       ctx.strokeRect(_ox1,_oy1,_ox2-_ox1,_oy2-_oy1);
       ctx.setLineDash([]);
       ctx.fillStyle='#e74c3c';ctx.font='bold 11px Segoe UI,Arial';
       ctx.textAlign='center';ctx.textBaseline='middle';
-      var _cx=(_ox1+_ox2)/2, _cy=(_oy1+_oy2)/2;
-      ctx.fillStyle='rgba(231,76,60,0.15)';
-      ctx.fillRect(_ox1,_oy1,_ox2-_ox1,_oy2-_oy1);
-      ctx.fillStyle='#e74c3c';
-      ctx.fillText('⚠ PREKLAPANJE',_cx,_cy);
+      ctx.fillText('⚠ PREKLAPANJE',(_ox1+_ox2)/2,(_oy1+_oy2)/2);
       ctx.restore();
     }
   }
-
   // ── DODATNI OTVORI (plutajući, 4 strane) ─────────────────
   // Pozicioniraju se u odnosu na CIJELU ploču (ne samo zonu sudopere/ploče)
   var _fbb3=_getFbb(shape,dims,_lastSc), _fbbW=_fbb3.w, _fbbH=_fbb3.h;
