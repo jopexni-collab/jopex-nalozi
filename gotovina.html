@@ -68,7 +68,7 @@ td.num{text-align:right;font-weight:700;}
 </head>
 <body>
 <header>
-  <h1><img src="logo-bijeli.png" alt="JoPeX" style="height:30px;vertical-align:middle;margin-right:8px;">Gotovinska naplata</h1>
+  <h1><img src="logo-bijeli.png" alt="JoPeX" style="height:30px;vertical-align:middle;margin-right:8px;">Naplata</h1>
   <nav>
     <span id="who"></span>
     <a href="home.html">← Početna</a>
@@ -279,6 +279,17 @@ td.num{text-align:right;font-weight:700;}
 <!-- ═══ TAB: BANKA ═══════════════════════════════════════════════════════ -->
 <div id="tab-banka" style="display:none;padding:16px 20px;">
   <div class="sume" id="banka-sume-box" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
+
+  <div style="background:#fff8e6;border:1px solid #f0d78c;border-radius:10px;padding:14px;margin-bottom:18px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <h3 style="margin:0;font-size:14px;">📞 Očekivane uplate (obećanje klijenta)</h3>
+      <button class="btn-sm" onclick="otvoriOcekivanaUplata()" style="background:var(--orange,#b8860b);color:#fff;">+ Dodaj</button>
+    </div>
+    <div style="font-size:11px;color:#8b8060;margin-bottom:10px;">Klijent je obećao uplatu (npr. telefonom) — nije još vidljivo na bankovnom izvodu. Kad se pojavi, admin čekira "Realizovano".</div>
+    <input type="text" id="oc-pretraga" placeholder="🔍 Pretraga po klijentu..." oninput="ucitajOcekivaneUplate()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:10px;">
+    <div id="ocekivane-lista"><div style="text-align:center;color:#999;padding:10px;font-size:12px;">Učitavanje...</div></div>
+  </div>
+
   <div class="filteri" style="margin-bottom:12px;">
     <label>Banka:</label>
     <select id="banka-fil" onchange="ucitajBankaListu()">
@@ -304,6 +315,40 @@ td.num{text-align:right;font-weight:700;}
   </div>
 </div>
 
+<!-- ═══ MODAL: OČEKIVANA UPLATA ═══ -->
+<div class="modal" id="modal-ocekivana" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;">
+  <div class="modal-box" style="background:#fff;border-radius:12px;padding:20px;max-width:420px;width:92vw;">
+    <h3 style="margin:0 0 4px;">Očekivana uplata</h3>
+    <div style="font-size:11px;color:#8b96a5;margin-bottom:14px;">Klijent je obećao da će uplatiti — evidentira se dok se ne pojavi na bankovnom izvodu.</div>
+    <div class="fg">
+      <label style="font-size:11.5px;font-weight:600;">Klijent (pretraga)</label>
+      <input type="text" id="oc-kupac-naziv" placeholder="Ime kupca..." oninput="pretraziOcekivanaKupca()" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;">
+      <div id="oc-kupac-rezultati" style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;margin-top:4px;display:none;"></div>
+    </div>
+    <input type="hidden" id="oc-kupac-id">
+    <div class="fg" style="margin-top:10px;">
+      <label style="font-size:11.5px;font-weight:600;">Banka</label>
+      <select id="oc-banka-select" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;">
+        <option value="rfb">rfb</option><option value="uni">uni</option><option value="mf">mf</option>
+        <option value="nlb">nlb</option><option value="uni1">uni1</option>
+      </select>
+    </div>
+    <div class="fg" style="margin-top:10px;">
+      <label style="font-size:11.5px;font-weight:600;">Iznos</label>
+      <input type="number" id="oc-iznos" step="0.01" min="0.01" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;">
+    </div>
+    <div class="fg" style="margin-top:10px;">
+      <label style="font-size:11.5px;font-weight:600;">Napomena (opciono)</label>
+      <input type="text" id="oc-napomena" placeholder="npr. obećao do petka" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;">
+    </div>
+    <div id="oc-msg" style="display:none;margin-top:10px;padding:8px 10px;border-radius:6px;font-size:12px;"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;">
+      <button class="btn-sm" onclick="sacuvajOcekivanaUplata()" style="flex:1;background:var(--blue,#1a5fa8);color:#fff;">Sačuvaj</button>
+      <button class="btn-sm" onclick="document.getElementById('modal-ocekivana').style.display='none'" style="flex:1;">Otkaži</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ TAB: KLIJENTI FINANSIJE ═══════════════════════════════════════════ -->
 <div id="tab-klijenti" style="display:none;padding:16px 20px;">
   <div style="font-size:11.5px;color:#8b96a5;margin-bottom:12px;line-height:1.5;">
@@ -316,11 +361,11 @@ td.num{text-align:right;font-weight:700;}
     <table>
       <thead>
         <tr>
-          <th>Klijent</th><th>Duguje — Nepoznato</th>
-          <th>Ukupno duguje</th><th>Pretplata</th><th>Uplaćeno u banku (istorijski)</th>
+          <th>Klijent</th><th>Duguje (stvarno)</th><th>Očekivano (obećano)</th><th>Duguje — preostalo</th>
+          <th>Pretplata</th><th>Uplaćeno u banku (istorijski)</th>
         </tr>
       </thead>
-      <tbody id="klijenti-tbody"><tr><td colspan="5" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr></tbody>
+      <tbody id="klijenti-tbody"><tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -1224,7 +1269,7 @@ function prebaciGlavniTab(tab){
   document.getElementById('tab-gotovina').style.display = tab==='gotovina' ? 'block' : 'none';
   document.getElementById('tab-banka').style.display = tab==='banka' ? 'block' : 'none';
   document.getElementById('tab-klijenti').style.display = tab==='klijenti' ? 'block' : 'none';
-  if(tab==='banka'){ ucitajBankaSume(); ucitajBankaListu(); }
+  if(tab==='banka'){ ucitajBankaSume(); ucitajBankaListu(); ucitajOcekivaneUplate(); }
   if(tab==='klijenti'){ ucitajKlijentiListu(); }
 }
 
@@ -1327,24 +1372,25 @@ async function dodijeliBanku(id, banka){
 
 async function ucitajKlijentiListu(){
   const tbody=document.getElementById('klijenti-tbody');
-  tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr>';
+  tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr>';
   try{
     const r=await fetch(`${API}/api/finansije/klijenti`);
     const rows=await r.json();
-    if(!rows.length){ tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">Nema klijenata sa dugom/pretplatom.</td></tr>'; return; }
+    if(!rows.length){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Nema klijenata sa dugom/pretplatom.</td></tr>'; return; }
     tbody.innerHTML=rows.map(k=>`
       <tr style="${k.kupac_id?'cursor:pointer;':''}" ${k.kupac_id?`ondblclick="otvoriDugKlijenta(${k.kupac_id},'${esc(k.kupac_naziv||'').replace(/'/g,"\\'")}')"  title="Dvoklik za detalje i naplatu"`:''}>
         <td>
           ${esc(k.kupac_naziv||'—')}
           ${!k.registrovan?'<div style="font-size:10px;color:var(--red);font-weight:700;">⚠ Preporučuje se registracija kupca</div>':''}
         </td>
-        <td>${k.duguje_nepoznato>0?fm(k.duguje_nepoznato):'—'}</td>
         <td style="font-weight:700;">${k.duguje_ukupno>0?fm(k.duguje_ukupno):'—'}</td>
+        <td style="${k.ocekivano>0?'color:var(--orange,#b8860b);':''}">${k.ocekivano>0?fm(k.ocekivano):'—'}</td>
+        <td>${k.duguje_soft>0?fm(k.duguje_soft):'—'}</td>
         <td style="${k.pretplata>0?'color:var(--green);font-weight:700;':''}">${k.pretplata>0?'+ '+fm(k.pretplata):'—'}</td>
         <td>${k.uplaceno_banka_istorijski>0?fm(k.uplaceno_banka_istorijski):'—'}</td>
       </tr>
     `).join('');
-  }catch(e){ tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>'; }
+  }catch(e){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>'; }
 }
 
 /* ── ISTORIJSKI UNOS ─────────────────────────────────────────────────── */
@@ -1439,6 +1485,116 @@ async function otvoriDugKlijenta(kupacId, naziv){
       </div>
     `).join('');
   }catch(e){ cont.innerHTML='<div style="text-align:center;color:red;padding:20px;">Greška pri učitavanju.</div>'; }
+}
+
+/* ── OČEKIVANE UPLATE ────────────────────────────────────────────────── */
+let ocKupacId=null, ocPretragaTimer=null;
+
+function otvoriOcekivanaUplata(){
+  document.getElementById('modal-ocekivana').style.display='flex';
+  document.getElementById('oc-kupac-naziv').value='';
+  document.getElementById('oc-kupac-id').value='';
+  document.getElementById('oc-iznos').value='';
+  document.getElementById('oc-napomena').value='';
+  document.getElementById('oc-msg').style.display='none';
+  ocKupacId=null;
+}
+
+function pretraziOcekivanaKupca(){
+  clearTimeout(ocPretragaTimer);
+  ocKupacId=null;
+  document.getElementById('oc-kupac-id').value='';
+  const q=document.getElementById('oc-kupac-naziv').value.trim();
+  const cont=document.getElementById('oc-kupac-rezultati');
+  if(q.length<2){ cont.style.display='none'; return; }
+  ocPretragaTimer=setTimeout(async()=>{
+    try{
+      const r=await fetch(`${API}/api/kupci?q=${encodeURIComponent(q)}&limit=8`);
+      const rows=await r.json();
+      cont.style.display='block';
+      if(!rows.length){ cont.innerHTML='<div style="padding:8px;font-size:12px;color:#8b96a5;">Nema rezultata — biće upisan kao slobodno ime.</div>'; return; }
+      cont.innerHTML=rows.map(k=>`<div style="padding:7px 8px;font-size:12.5px;cursor:pointer;border-bottom:1px solid #f0f2f5;" onclick="izaberiOcekivanaKupca(${k.id},'${esc(k.naziv).replace(/'/g,"\\'")}')">${esc(k.naziv)}</div>`).join('');
+    }catch(e){}
+  }, 250);
+}
+function izaberiOcekivanaKupca(id, naziv){
+  ocKupacId=id;
+  document.getElementById('oc-kupac-id').value=id;
+  document.getElementById('oc-kupac-naziv').value=naziv;
+  document.getElementById('oc-kupac-rezultati').style.display='none';
+}
+
+async function sacuvajOcekivanaUplata(){
+  const msg=document.getElementById('oc-msg');
+  msg.style.display='none';
+  const naziv=document.getElementById('oc-kupac-naziv').value.trim();
+  const iznos=parseFloat(document.getElementById('oc-iznos').value);
+  if(!naziv){ msg.style.display='block'; msg.style.background='#fce8e6'; msg.style.color='var(--red)'; msg.textContent='Unesite klijenta.'; return; }
+  if(!iznos||iznos<=0){ msg.style.display='block'; msg.style.background='#fce8e6'; msg.style.color='var(--red)'; msg.textContent='Unesite ispravan iznos.'; return; }
+  try{
+    const r=await fetch(`${API}/api/finansije/ocekivana-uplata`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        kupac_id: ocKupacId, kupac_naziv: naziv,
+        banka: document.getElementById('oc-banka-select').value,
+        iznos, napomena: document.getElementById('oc-napomena').value||null,
+      }),
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error);
+    msg.style.display='block'; msg.style.background='#e6f4ea'; msg.style.color='var(--green)';
+    msg.textContent='✓ Sačuvano.';
+    setTimeout(()=>{ document.getElementById('modal-ocekivana').style.display='none'; ucitajOcekivaneUplate(); if(document.getElementById('tab-klijenti').style.display==='block') ucitajKlijentiListu(); }, 900);
+  }catch(e){
+    msg.style.display='block'; msg.style.background='#fce8e6'; msg.style.color='var(--red)'; msg.textContent='✗ '+e.message;
+  }
+}
+
+async function ucitajOcekivaneUplate(){
+  const cont=document.getElementById('ocekivane-lista');
+  cont.innerHTML='<div style="text-align:center;color:#999;padding:10px;font-size:12px;">Učitavanje...</div>';
+  try{
+    const q=document.getElementById('oc-pretraga').value.trim();
+    const r=await fetch(`${API}/api/finansije/ocekivane-uplate?q=${encodeURIComponent(q)}`);
+    const rows=await r.json();
+    if(!rows.length){ cont.innerHTML='<div style="text-align:center;color:#999;padding:10px;font-size:12px;">Nema aktivnih očekivanih uplata.</div>'; return; }
+    cont.innerHTML=rows.map(o=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:12.5px;">
+        <div>
+          <b>${esc(o.kupac_naziv)}</b> — ${fm(o.iznos)} → ${esc(BANKA_NAZIVI[o.banka]||o.banka)}
+          ${o.napomena?`<div style="font-size:10.5px;color:#8b8060;">${esc(o.napomena)}</div>`:''}
+          <div style="font-size:10px;color:#8b96a5;">Uneo: ${esc(o.upisao_ime||'')} · ${new Date(o.kreirano).toLocaleDateString('sr-Latn-BA')}</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          ${isAdmin?`<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;font-weight:700;color:var(--green);"><input type="checkbox" onchange="if(this.checked)realizujOcekivanaUplata(${o.id});else this.checked=false;"> Realizovano</label>`:''}
+          <button class="btn-sm" onclick="otkaziOcekivanaUplata(${o.id})" style="color:var(--red);">✕</button>
+        </div>
+      </div>
+    `).join('');
+  }catch(e){ cont.innerHTML='<div style="text-align:center;color:red;padding:10px;font-size:12px;">Greška pri učitavanju.</div>'; }
+}
+
+async function realizujOcekivanaUplata(id){
+  if(!confirm('Potvrdi da je ova uplata STVARNO vidljiva na bankovnom izvodu? Ovo kreira pravi, potvrđen zapis u banci.')) return;
+  try{
+    const r=await fetch(`${API}/api/finansije/ocekivana-uplata/${id}/realizuj`,{method:'POST'});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error);
+    ucitajOcekivaneUplate();
+    ucitajBankaSume();
+    if(document.getElementById('banka-tbody')) ucitajBankaListu();
+    if(document.getElementById('tab-klijenti').style.display==='block') ucitajKlijentiListu();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+async function otkaziOcekivanaUplata(id){
+  if(!confirm('Otkazati ovu očekivanu uplatu?')) return;
+  try{
+    const r=await fetch(`${API}/api/finansije/ocekivana-uplata/${id}/otkazi`,{method:'POST'});
+    if(!r.ok){ const d=await r.json(); alert('✗ '+(d.error||'Greška.')); return; }
+    ucitajOcekivaneUplate();
+    if(document.getElementById('tab-klijenti').style.display==='block') ucitajKlijentiListu();
+  }catch(e){ alert('✗ Greška.'); }
 }
 </script>
 </body>

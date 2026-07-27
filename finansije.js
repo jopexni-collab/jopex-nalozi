@@ -151,6 +151,17 @@ router.get('/klijenti', async (req, res) => {
       HAVING SUM(t.iznos) > 0.01
     `);
 
+    // Aktivne (nije realizovano/otkazano) očekivane uplate — SOFT umanjuju prikazani dug
+    // (obećanje klijenta, još nije stvarno stiglo na račun).
+    const ocekivane = await pool.query(`
+      SELECT
+        COALESCE(kupac_id::text, 'ime:'||LOWER(TRIM(kupac_naziv))) AS kljuc,
+        kupac_id, kupac_naziv, SUM(iznos) AS iznos
+      FROM ocekivane_uplate
+      WHERE realizovano=false AND otkazano=false
+      GROUP BY kljuc, kupac_id, kupac_naziv
+    `);
+
     // Sastavi jedinstvenu mapu po klijentu.
     const klijenti = {};
     function osiguraj(kljuc, kupacId, naziv) {
@@ -159,7 +170,7 @@ router.get('/klijenti', async (req, res) => {
           kupac_id: kupacId || null, kupac_naziv: naziv,
           registrovan: !!kupacId,
           duguje_banka: 0, duguje_gotovina: 0, duguje_nepoznato: 0,
-          uplaceno_banka_istorijski: 0, pretplata: 0,
+          uplaceno_banka_istorijski: 0, pretplata: 0, ocekivano: 0,
         };
       }
       return klijenti[kljuc];
@@ -180,17 +191,30 @@ router.get('/klijenti', async (req, res) => {
       const k = osiguraj('' + row.kupac_id, row.kupac_id, row.kupac_naziv);
       k.pretplata = +row.saldo;
     }
+    for (const row of ocekivane.rows) {
+      const k = osiguraj(row.kljuc, row.kupac_id, row.kupac_naziv);
+      k.ocekivano += +row.iznos;
+    }
 
     const lista = Object.values(klijenti)
-      .map(k => ({
-        ...k,
-        duguje_ukupno: +(k.duguje_banka + k.duguje_gotovina + k.duguje_nepoznato).toFixed(2),
-        duguje_banka: +k.duguje_banka.toFixed(2),
-        duguje_gotovina: +k.duguje_gotovina.toFixed(2),
-        duguje_nepoznato: +k.duguje_nepoznato.toFixed(2),
-        uplaceno_banka_istorijski: +k.uplaceno_banka_istorijski.toFixed(2),
-        pretplata: +k.pretplata.toFixed(2),
-      }))
+      .map(k => {
+        const dugujeStvarno = +(k.duguje_banka + k.duguje_gotovina + k.duguje_nepoznato).toFixed(2);
+        // "duguje_soft" = dug umanjen za AKTIVNE očekivane uplate (obećanje, još ne
+        // stvarno stiglo) — informativno, da tim vidi "šta je stvarno još nerešeno" vs
+        // "šta je obećano, čeka se na bankovni izvod".
+        const dugujeSoft = +Math.max(0, dugujeStvarno - k.ocekivano).toFixed(2);
+        return {
+          ...k,
+          duguje_ukupno: dugujeStvarno,
+          duguje_soft: dugujeSoft,
+          duguje_banka: +k.duguje_banka.toFixed(2),
+          duguje_gotovina: +k.duguje_gotovina.toFixed(2),
+          duguje_nepoznato: +k.duguje_nepoznato.toFixed(2),
+          uplaceno_banka_istorijski: +k.uplaceno_banka_istorijski.toFixed(2),
+          pretplata: +k.pretplata.toFixed(2),
+          ocekivano: +k.ocekivano.toFixed(2),
+        };
+      })
       .filter(k => k.duguje_ukupno > 0.01 || k.uplaceno_banka_istorijski > 0.01 || k.pretplata > 0.01)
       .sort((a, b) => b.duguje_ukupno - a.duguje_ukupno);
 
@@ -265,6 +289,102 @@ router.post('/istorijski-unos', async (req, res) => {
        objektNaziv, jeAdmin, jeAdmin ? new Date() : null, jeAdmin ? user.ime_prezime : null]
     );
     res.json({ ok: true, tip: 'gotovina', potvrdjeno: jeAdmin, row: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ═══ OČEKIVANE UPLATE (obećanje klijenta — soft praćenje prije bankovnog izvoda) ══ */
+
+// POST /api/finansije/ocekivana-uplata — blagajnik/admin evidentira da je klijent
+// OBEĆAO uplatu (npr. telefonom). NIJE stvarna, potvrđena uplata — vidljivo odvojeno,
+// SOFT smanjuje prikazani dug u "Klijenti finansije" dok se stvarno ne potvrdi.
+router.post('/ocekivana-uplata', async (req, res) => {
+  const user = req.session?.user;
+  if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });
+  const { kupac_id, kupac_naziv, banka, iznos, napomena } = req.body;
+  const iznosNum = parseFloat(iznos);
+  if (!iznosNum || iznosNum <= 0) return res.status(400).json({ error: 'Unesite ispravan iznos.' });
+  if (!kupac_naziv || !kupac_naziv.trim()) return res.status(400).json({ error: 'Nedostaje klijent.' });
+  if (!BANKE.includes(banka)) return res.status(400).json({ error: 'Izaberite banku.' });
+  try {
+    const r = await pool.query(
+      `INSERT INTO ocekivane_uplate (kupac_id, kupac_naziv, banka, iznos, napomena, upisao_id, upisao_ime)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [kupac_id || null, kupac_naziv.trim(), banka, iznosNum, napomena || null, user.id, user.ime_prezime]
+    );
+    res.json({ ok: true, row: r.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/finansije/ocekivane-uplate?q=pretraga — lista AKTIVNIH (nije realizovano ni
+// otkazano) obećanja, sa kvalitetnom pretragom po nazivu klijenta.
+router.get('/ocekivane-uplate', async (req, res) => {
+  const user = req.session?.user;
+  if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });
+  try {
+    const { q } = req.query;
+    const where = ['realizovano = false', 'otkazano = false'];
+    const vals = [];
+    if (q && q.trim()) { where.push(`kupac_naziv ILIKE $1`); vals.push(`%${q.trim()}%`); }
+    const r = await pool.query(
+      `SELECT * FROM ocekivane_uplate WHERE ${where.join(' AND ')} ORDER BY kreirano DESC LIMIT 200`,
+      vals
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/finansije/ocekivana-uplata/:id/realizuj — SAMO ADMIN, "čekira" da se uplata
+// STVARNO pojavila na bankovnom izvodu. Ovim se kreira PRAVI (potvrđeni) banka_uplate
+// zapis — tek OD SAD se stvarno broji u stanju banke.
+router.post('/ocekivana-uplata/:id/realizuj', async (req, res) => {
+  const user = req.session?.user;
+  if (user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin može potvrditi realizaciju.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await client.query('SELECT * FROM ocekivane_uplate WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!r.rows.length) throw Object.assign(new Error('Nije pronađeno.'), { status: 404 });
+    const ou = r.rows[0];
+    if (ou.realizovano || ou.otkazano) throw Object.assign(new Error('Ova stavka je već obrađena.'), { status: 400 });
+
+    await client.query(
+      `INSERT INTO banka_uplate (iznos, banka, izvor, kupac_id, kupac_naziv, upisao_id, upisao_ime, napomena, potvrdjeno, potvrdio_id, potvrdio_ime, potvrdjeno_kada)
+       VALUES ($1,$2,'Ocekivana uplata',$3,$4,$5,$6,$7,true,$8,$9,now())`,
+      [ou.iznos, ou.banka, ou.kupac_id, ou.kupac_naziv, ou.upisao_id, ou.upisao_ime,
+       `Realizovana očekivana uplata${ou.napomena ? ': ' + ou.napomena : ''}`, user.id, user.ime_prezime]
+    );
+    await client.query(
+      `UPDATE ocekivane_uplate SET realizovano=true, realizovao_id=$1, realizovao_ime=$2, realizovano_kada=now() WHERE id=$3`,
+      [user.id, user.ime_prezime, ou.id]
+    );
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /api/finansije/ocekivana-uplata/:id/otkazi — poništava pogrešno unesenu
+// očekivanu uplatu (npr. klijent se predomislio, ili greška u unosu).
+router.post('/ocekivana-uplata/:id/otkazi', async (req, res) => {
+  const user = req.session?.user;
+  if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });
+  try {
+    const r = await pool.query(
+      `UPDATE ocekivane_uplate SET otkazano=true WHERE id=$1 AND realizovano=false RETURNING *`,
+      [req.params.id]
+    );
+    if (!r.rows.length) return res.status(400).json({ error: 'Nije pronađeno ili je već obrađeno.' });
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
