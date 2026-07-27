@@ -1802,6 +1802,65 @@ function _bbMM(sh,d,vo){
   return {w:maxX,h:maxY};
 }
 
+// Vertikalni presjek ploče na datom x — vraća {top,bottom} u mm, tj. gdje
+// materijal počinje i gdje se završava na toj poziciji. Kod U/L/V oblika
+// svaki krak ima svoju dubinu, pa ovo daje ivicu TOG kraka, ne cijele ploče.
+function _plateYSpanAtX(outlineMM,x){
+  var n=outlineMM.length, ys=[];
+  for(var i=0;i<n;i++){
+    var p1=outlineMM[i], p2=outlineMM[(i+1)%n];
+    if(p1[0]===p2[0]) continue; // vertikalna ivica — ne siječe se korisno
+    var lo=Math.min(p1[0],p2[0]), hi=Math.max(p1[0],p2[0]);
+    if(x<lo||x>hi) continue;
+    var t=(x-p1[0])/(p2[0]-p1[0]);
+    ys.push(p1[1]+t*(p2[1]-p1[1]));
+  }
+  if(!ys.length) return null;
+  return {top:Math.min.apply(null,ys), bottom:Math.max.apply(null,ys)};
+}
+// Kod U oblika okrenutog naopako (∩) prednja i zadnja ivica zamjenjuju mjesta.
+// L i V se pri okretanju zrcale samo lijevo-desno, pa njih ovo ne dira.
+function _isYFlipped(sh,vo){ return sh==='U' && vo===1; }
+// Ivica se odreduje prema SREDISTU otvora - tj. prema kraku u kojem otvor
+// stvarno lezi. Namjerno se NE uzima najplica vrijednost duz cijele sirine:
+// otvor koji tek malo prede granicu kraka bi tada skokovito promijenio
+// referencu (npr. sa 1600 na 600 kod U oblika), sto zbunjuje pri unosu.
+function _refXZaOtvor(x0,x1){ return (x1>x0)?((x0+x1)/2):x0; }
+function _frontEdgeMM(sh,d,vo,x0,x1){
+  var outl=getShapeOutline(sh,d,vo), flip=_isYFlipped(sh,vo);
+  var sp=_plateYSpanAtX(outl,_refXZaOtvor(x0,x1));
+  if(!sp) return null;
+  return flip?sp.top:sp.bottom;
+}
+function _backEdgeMM(sh,d,vo,x0,x1){
+  var outl=getShapeOutline(sh,d,vo), flip=_isYFlipped(sh,vo);
+  var sp=_plateYSpanAtX(outl,_refXZaOtvor(x0,x1));
+  if(!sp) return null;
+  return flip?sp.bottom:sp.top;
+}
+// ── JEDINSTVENE POZICIJE OTVORA (mm) ───────────────────────────────
+// Canvas i DXF OBA idu preko ovih funkcija — tako ne mogu razići.
+// Vraćaju {x,y,w,h} gdje je y GORNJA ivica otvora mjerena od vrha ploče.
+function _otvorYodPrednje(sh,d,vo,x,w,unosY,h){
+  var front=_frontEdgeMM(sh,d,vo,x,x+w);
+  if(front==null) front=_bbMM(sh,d,vo).h;
+  return _isYFlipped(sh,vo) ? (front+unosY) : (front-unosY-h);
+}
+function getOtvorRectMM(prefix){
+  var w=gi(prefix+'-w'), h=gi(prefix+'-h'), x=gi(prefix+'-x');
+  return {x:x, y:_otvorYodPrednje(shape,dims,vOrient,x,w,gi(prefix+'-y'),h), w:w, h:h};
+}
+function getCustomOtvorRectMM(c){
+  var w=c.w||0, h=c.h||0, x=c.x||0;
+  return {x:x, y:_otvorYodPrednje(shape,dims,vOrient,x,w,c.y||0,h), w:w, h:h};
+}
+function getSlavinaPosMM(s){
+  var x=s.x||400, yz=s.yz||50;
+  var back=_backEdgeMM(shape,dims,vOrient,x,x);
+  if(back==null) back=0;
+  return {x:x, y:_isYFlipped(shape,vOrient) ? (back-yz) : (back+yz)};
+}
+
 function _getFbb(sh,d,scVal){
   var _sh=(sh!=null?sh:shape)||'I';
   var _d=d||dims;
@@ -3977,8 +4036,9 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
   var _slBaseX=0, _slBaseY=0, _slBaseW=_fbbSl.w, _slBaseH=_fbbSl.h;
   (slavine||[]).forEach(function(s,si){
     var fi=Math.max(3,(s.fi||35)*sc/2);
-    var slx=_slBaseX+(s.x||400)*sc;
-    var sly=_slBaseY+(s.yz||50)*sc;
+    var _pSl=getSlavinaPosMM(s);
+    var slx=_pSl.x*sc;
+    var sly=_pSl.y*sc;
     ctx.save();
     ctx.beginPath();ctx.arc(slx,sly,fi,0,Math.PI*2);
     ctx.fillStyle='rgba(255,255,255,0.9)';ctx.fill();
@@ -4015,14 +4075,10 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
   // ── SUDOPERA ─────────────────────────────────────────────
   if(gc('cb-sud')){
     var _fbb=_getFbb(shape,dims,_lastSc), _fbbW=_fbb.w, _fbbH=_fbb.h;
-    var ssw=Math.min(gi('sud-w')*sc,_fbbW-8);
-    var ssh=Math.min(gi('sud-h')*sc,_fbbH-8);
-    // sx je od LIJEVE IVICE PLOČE (0), ne od aX zone - otvor može biti
-    // u bilo kom kraku (uključujući lijevi krak U oblika)
-    var sx=Math.max(4,Math.min(gi('sud-x')*sc, _fbbW-ssw-4));
-    var sy_front=Math.max(4,Math.min(gi('sud-y')*sc, _fbbH-ssh-4));
-    var sy=_fbbH-sy_front-ssh;
-    sy=Math.max(0,Math.min(sy,_fbbH-ssh));
+    // Pozicija se racuna u MM preko zajednicke funkcije (ista koju koristi DXF),
+    // pa se tek onda skalira - tako crtez i DXF ne mogu razici.
+    var _rS=getOtvorRectMM('sud');
+    var ssw=_rS.w*sc, ssh=_rS.h*sc, sx=_rS.x*sc, sy=_rS.y*sc;
     var _sudR={
       tl:getSinkRadius('tl'),tr:getSinkRadius('tr'),br:getSinkRadius('br'),bl:getSinkRadius('bl')
     };
@@ -4052,12 +4108,8 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
   // ── PLOČA ZA KUVANJE ─────────────────────────────────────
   if(gc('cb-plo')){
     var _fbb2=_getFbb(shape,dims,_lastSc), _fbbW=_fbb2.w, _fbbH=_fbb2.h;
-    var ppw=Math.min(gi('plo-w')*sc,_fbbW-8);
-    var pph=Math.min(gi('plo-h')*sc,_fbbH-8);
-    var px2=Math.max(4,Math.min(gi('plo-x')*sc, _fbbW-ppw-4));
-    var py_front=Math.max(4,Math.min(gi('plo-y')*sc, _fbbH-pph-4));
-    var py2=_fbbH-py_front-pph;
-    py2=Math.max(0,Math.min(py2,_fbbH-pph));
+    var _rP=getOtvorRectMM('plo');
+    var ppw=_rP.w*sc, pph=_rP.h*sc, px2=_rP.x*sc, py2=_rP.y*sc;
     var _ploR={
       tl:getPloRadius('tl'),tr:getPloRadius('tr'),br:getPloRadius('br'),bl:getPloRadius('bl')
     };
@@ -4125,12 +4177,8 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
   var _fbb3=_getFbb(shape,dims,_lastSc), _fbbW=_fbb3.w, _fbbH=_fbb3.h;
   (customOtvori||[]).forEach(function(c,ci){
     if(c.sides!==4||(c.loc&&c.loc!=='plate')) return;
-    var cw=Math.min((c.w||0)*sc,_fbbW-8);
-    var ch=Math.min((c.h||0)*sc,_fbbH-8);
-    var cx2=Math.max(4,Math.min((c.x||0)*sc, _fbbW-cw-4));
-    var cyFront=Math.max(4,Math.min((c.y||0)*sc, _fbbH-ch-4));
-    var cy2=_fbbH-cyFront-ch;
-    cy2=Math.max(0,Math.min(cy2,_fbbH-ch));
+    var _rC=getCustomOtvorRectMM(c);
+    var cw=_rC.w*sc, ch=_rC.h*sc, cx2=_rC.x*sc, cy2=_rC.y*sc;
     var r=c.r||[0,0,0,0];
     var _cR={tl:r[0]||0,tr:r[1]||0,br:r[2]||0,bl:r[3]||0};
     _cR.tlPx=_cR.tl*sc;_cR.trPx=_cR.tr*sc;_cR.brPx=_cR.br*sc;_cR.blPx=_cR.bl*sc;
@@ -5981,17 +6029,17 @@ function genDXF(){
       // identicno kao na canvasu (vidi _bbMM). Ranije se koristila
       // getOtvorZone().aH (dubina jednog kraka), pa je npr. kod U oblika
       // otvor zavrsavao 1000mm previsoko, izvan kuhinje.
-      var _bbK=_bbMM(sh,d,vOrient);
+      // ISTE funkcije koje koristi canvas (getOtvorRectMM / getSlavinaPosMM) -
+      // prednja ivica se odredjuje LOKALNO po kraku, jer kod U oblika srednji
+      // krak ima dubinu D, a bocni B odnosno C.
       if(gc('cb-sud')){
-        var _sudX=gi('sud-x');
-        var _sudY=_bbK.h-gi('sud-y')-gi('sud-h');
-        dxfRoundedRect(_sudX,_sudY,gi('sud-w'),gi('sud-h'),
+        var _rSD=getOtvorRectMM('sud');
+        dxfRoundedRect(_rSD.x,_rSD.y,_rSD.w,_rSD.h,
           getSinkRadius('tl'),getSinkRadius('tr'),getSinkRadius('br'),getSinkRadius('bl'),'OTVORI',yOff);
       }
       if(gc('cb-plo')){
-        var _ploX=gi('plo-x');
-        var _ploY=_bbK.h-gi('plo-y')-gi('plo-h');
-        dxfRoundedRect(_ploX,_ploY,gi('plo-w'),gi('plo-h'),
+        var _rPD=getOtvorRectMM('plo');
+        dxfRoundedRect(_rPD.x,_rPD.y,_rPD.w,_rPD.h,
           getPloRadius('tl'),getPloRadius('tr'),getPloRadius('br'),getPloRadius('bl'),'OTVORI',yOff);
       }
       (customOtvori||[]).forEach(function(c){
@@ -5999,8 +6047,9 @@ function genDXF(){
         var r=c.r||[0,0,0,0];
         // Pozicioniran u odnosu na CIJELU ploču (isto kao canvas nakon ispravke za
         // donji krak L oblika) - y je "od prednje ivice", flip u internu (od zadnje) konvenciju
-        var cYFlipped=_bbK.h-(c.y||0)-(c.h||0);
-        dxfRoundedRect(c.x||0,cYFlipped,c.w||0,c.h||0,r[0]||0,r[1]||0,r[2]||0,r[3]||0,'OTVORI',yOff);
+        var _rCD=getCustomOtvorRectMM(c);
+        var cYFlipped=_rCD.y;
+        dxfRoundedRect(_rCD.x,cYFlipped,_rCD.w,_rCD.h,r[0]||0,r[1]||0,r[2]||0,r[3]||0,'OTVORI',yOff);
         txY((c.x||0)+10,cYFlipped+12,2.5,c.name||'Otvor','TEKST');
         dxfCornerLabels(
           [{x:c.x||0,y:cYFlipped},{x:(c.x||0)+(c.w||0),y:cYFlipped},{x:(c.x||0)+(c.w||0),y:cYFlipped+(c.h||0)},{x:c.x||0,y:cYFlipped+(c.h||0)}],
@@ -6008,7 +6057,8 @@ function genDXF(){
         );
       });
       (slavine||[]).forEach(function(s){
-        var sfx=(s.x||400), sfy=(s.yz||50)+yOff, sfr=(s.fi||35)/2;
+        var _pSD=getSlavinaPosMM(s);
+        var sfx=_pSD.x, sfy=_pSD.y+yOff, sfr=(s.fi||35)/2;
         for(var si=0;si<24;si++){
           var a1=si*Math.PI*2/24,a2=(si+1)*Math.PI*2/24;
           ln(sfx+sfr*Math.cos(a1),sfy+sfr*Math.sin(a1),sfx+sfr*Math.cos(a2),sfy+sfr*Math.sin(a2),'OTVORI');
@@ -6357,6 +6407,11 @@ window.addEventListener('keydown',function(e){
 const API_URL = '';  // relativni URL — radi na Railway serveru
 let _currentUser = null;
 let _sviKupci = [];
+// Podaci o nalogu koji je NASTAO iz ove ponude. Cuva se u projektu (i lokalno
+// i na oblaku), pa se pri ponovnom ucitavanju zna da ponuda vec ima nalog i
+// da svako sljedece usvajanje predstavlja IZMJENU, a ne novi posao.
+// {r_br, verzija, naziv_ponude}
+var _nalogInfo=null;
 
 // AUTH — provjeri login
 async function _checkAuth(){
@@ -6521,7 +6576,7 @@ async function noviKupacSacuvaj(){
 }
 
 // CLOUD ČUVANJE PONUDA
-function _generisiNazivPonude(){
+function _generisiNazivPonude(verzija){
   const kupac = (document.getElementById('kl-ime')||{}).value.trim() || 'Nepoznat';
   const kupacSlug = kupac.replace(/[^a-zA-ZčćžšđČĆŽŠĐ0-9]/g,'').slice(0,10);
   const inicijali = _currentUser
@@ -6531,15 +6586,21 @@ function _generisiNazivPonude(){
   const datum = String(sada.getMonth()+1).padStart(2,'0') + String(sada.getDate()).padStart(2,'0');
   const god = String(sada.getFullYear()).slice(2);
   const rb = String(Math.floor(Math.random()*900)+100); // privremeno — server dodjeljuje pravi RB
-  return `${kupacSlug}_${inicijali}_${datum}_${rb}_${god}`;
+  // Kod izmjene ZADRŽAVAMO originalni naziv ponude i dodajemo samo _vN, da se
+  // sve verzije istog posla lako prepoznaju i sortiraju jedna uz drugu.
+  let base = `${kupacSlug}_${inicijali}_${datum}_${rb}_${god}`;
+  if(_nalogInfo && _nalogInfo.naziv_ponude){
+    base = String(_nalogInfo.naziv_ponude).replace(/_v\d+$/,'');
+  }
+  return (verzija && verzija>0) ? (base+'_v'+verzija) : base;
 }
 
 // Jezgro cloud čuvanja — BACA grešku ako ne uspije (bez alert-a), da ga
 // pozivalac može uhvatiti i odlučiti šta dalje (npr. usvojiPonudu pada nazad
 // na lokalno čuvanje). Vraća naziv pod kojim je ponuda sačuvana.
-async function _cloudSaveCore(){
+async function _cloudSaveCore(verzija){
   if(!_currentUser) throw new Error('Niste prijavljeni.');
-  const naziv = _generisiNazivPonude();
+  const naziv = _generisiNazivPonude(verzija);
   const projekat = _getProjectData();
   // Sigurno citanje odgovora: ako server vrati HTML (404/500 stranicu) umjesto
   // JSON-a, r.json() bi bacio nejasan "Unexpected token <". Ovako korisnik
@@ -6652,6 +6713,7 @@ async function _ucitajPonudu(linkJson, naziv){
     if(!r.ok) throw new Error('Greška pri preuzimanju.');
     const p = await r.json();
     if(!p.items) throw new Error('Nevažeći format ponude.');
+    _nalogInfo = p.nalog || null;   // ako ponuda vec ima nalog, sljedece usvajanje je IZMJENA
     // Postavi klijenta
     if(p.klijent){
       if(ge('kl-ime')) ge('kl-ime').value=p.klijent.ime||'';
@@ -6713,6 +6775,7 @@ function _getProjectData(){
       },
       items: typeof items!=='undefined'?items:[],
       activeIdx: typeof activeIdx!=='undefined'?activeIdx:0,
+      nalog: _nalogInfo,   // veza ponuda -> radni nalog (za revizije)
       timestamp: new Date().toISOString(),
     };
   }catch(e){ return {version:1,items:[]}; }
@@ -6822,10 +6885,28 @@ async function usvojiPonudu(){
     btn.disabled=false;btn.textContent='✅ Usvoji ponudu → Nalog';
     return;
   }
-  showMsg('Čuvam ponudu na oblak...',true);
+  // ── Je li ovo PRVO usvajanje ili IZMJENA vec usvojene ponude? ──────
+  var _jeIzmjena = !!(_nalogInfo && _nalogInfo.r_br);
+  var _novaVerzija = _jeIzmjena ? ((_nalogInfo.verzija||0)+1) : 0;
+  if(_jeIzmjena){
+    var _okIzm=confirm(
+      'Ova ponuda je VEC usvojena kao radni nalog #'+_nalogInfo.r_br+
+      (_nalogInfo.verzija?' (v'+_nalogInfo.verzija+')':'')+'.\n\n'+
+      'OK  = upisi IZMJENU kao v'+_novaVerzija+' na ISTI nalog #'+_nalogInfo.r_br+'\n'+
+      '      (u napomenu ide upozorenje koje mora potvrditi neko sa pravom izmjene statusa)\n\n'+
+      'Otkazi = prekini'
+    );
+    if(!_okIzm){
+      showMsg('Prekinuto — nalog #'+_nalogInfo.r_br+' nije mijenjan.',false);
+      btn.disabled=false;btn.textContent='✅ Usvoji ponudu → Nalog';
+      return;
+    }
+  }
+
+  showMsg(_jeIzmjena?('Čuvam izmjenu (v'+_novaVerzija+') na oblak...'):'Čuvam ponudu na oblak...',true);
   var _sacuvanoKao=null, _sacuvanoGdje='';
   try{
-    _sacuvanoKao=await _cloudSaveCore();
+    _sacuvanoKao=await _cloudSaveCore(_novaVerzija);
     _sacuvanoGdje='oblak';
     showMsg('✓ Ponuda sačuvana na oblak: '+_sacuvanoKao,true);
   }catch(errCloud){
@@ -6887,16 +6968,61 @@ async function usvojiPonudu(){
     if(uploadD.radni_nalog_link) body.link_ponuda=uploadD.radni_nalog_link;
     console.log('body link_ponuda:', body.link_ponuda);
 
-    // 6. Upiši nalog u bazu
-    showMsg('Upisivanje naloga...',true);
-    var r=await fetch(url+'/api/proizvodnja',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(body),
-    });
-    var d=await r.json();
-    if(!r.ok) throw new Error(d.error||'Greška');
-    showMsg('✓ Nalog #'+d.r_br+' upisan! DXF i Radni nalog uploadovani.'
+    // 6. Upis naloga u bazu
+    //    - PRVO usvajanje  -> POST (novi red u radnim nalozima)
+    //    - IZMJENA         -> PATCH na ISTI r_br, da posao ostane u istoj liniji
+    var d=null;
+    if(_jeIzmjena){
+      showMsg('Upisujem izmjenu na nalog #'+_nalogInfo.r_br+'...',true);
+      var _danas=new Date().toLocaleDateString('hr',{day:'2-digit',month:'2-digit',year:'numeric'});
+      var _upoz='⚠ IZMJENA v'+_novaVerzija+' ('+_danas+', '+
+        ((_currentUser&&_currentUser.ime_prezime)||'nepoznat')+') — POTREBNA POTVRDA. Ponuda: '+(_sacuvanoKao||'');
+      var patchBody=Object.assign({},body,{
+        napomena:_upoz,
+        verzija:_novaVerzija,
+        izmjena_ceka_potvrdu:true,   // lista.html: prikazi upozorenje dok se ne potvrdi
+      });
+      var pr=await fetch(url+'/api/proizvodnja/'+_nalogInfo.r_br,{
+        method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(patchBody),
+      });
+      if(pr.status===404||pr.status===405){
+        // Server jos ne podrzava izmjenu naloga - ne gubimo posao, upisujemo
+        // novi nalog i jasno kazemo korisniku sta se desilo.
+        console.warn('PATCH /api/proizvodnja/:r_br nije podrzan (HTTP '+pr.status+') - upisujem novi nalog.');
+        var r2n=await fetch(url+'/api/proizvodnja',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(Object.assign({},body,{napomena:_upoz})),
+        });
+        d=await r2n.json();
+        if(!r2n.ok) throw new Error(d.error||'Greška');
+        alert('Server jos ne podrzava izmjenu postojeceg naloga.\n\n'+
+              'Izmjena je upisana kao NOVI nalog #'+d.r_br+' (v'+_novaVerzija+'), '+
+              'a ne u liniju naloga #'+_nalogInfo.r_br+'.');
+      } else {
+        d=await pr.json();
+        if(!pr.ok) throw new Error(d.error||'Greška pri izmjeni naloga');
+        if(!d.r_br) d.r_br=_nalogInfo.r_br;
+      }
+    } else {
+      showMsg('Upisivanje naloga...',true);
+      var r=await fetch(url+'/api/proizvodnja',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body),
+      });
+      d=await r.json();
+      if(!r.ok) throw new Error(d.error||'Greška');
+    }
+
+    // Zapamti vezu ponuda -> nalog, da svako sljedece usvajanje bude izmjena.
+    _nalogInfo={r_br:d.r_br, verzija:_novaVerzija, naziv_ponude:_sacuvanoKao||(_nalogInfo&&_nalogInfo.naziv_ponude)||null};
+
+    showMsg((_jeIzmjena
+        ? '✓ Izmjena v'+_novaVerzija+' upisana na nalog #'+d.r_br+' — ceka potvrdu.'
+        : '✓ Nalog #'+d.r_br+' upisan!')
+      +' DXF i Radni nalog uploadovani.'
       +(_sacuvanoGdje?' Ponuda sačuvana ('+_sacuvanoGdje+'): '+_sacuvanoKao:''),true);
   }catch(err){
     showMsg('✗ '+err.message,false);
