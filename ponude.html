@@ -1785,6 +1785,23 @@ function _slavinaDimEditDesc(idx,field,label){
 // na koji oblik (I/L/U/V...) ili "zonu" (aX/aW) je aktivan.
 // Kada se zove iz calcItemCost/genPon (van drawK), sh/scVal mogu biti
 // undefined - tada koristi globalne shape/_lastSc.
+// Bounding box konture u MILIMETRIMA (bez skale). Ovo je JEDINI referentni
+// okvir za pozicioniranje otvora — i na canvasu i u DXF-u. Sve pozicije koje
+// korisnik unosi su u odnosu na njega:
+//   "Od lijeve ivice"   -> x od 0
+//   "Od zadnje ivice"   -> y od 0 (gore)
+//   "Od prednje ivice"  -> y od dna, tj. interno y = bbH - unos - visina
+// NE koristiti getOtvorZone() za ovo — ona vraća zonu POJEDINOG kraka
+// (npr. za U oblik aH = dubina gornjeg kraka, a ne puna visina), pa je otvor
+// završavao van ploče u DXF-u.
+function _bbMM(sh,d,vo){
+  var outl=getShapeOutline(sh!=null?sh:shape, d||dims,
+    vo!=null?vo:(((sh||shape)==='L'||(sh||shape)==='V'||(sh||shape)==='U')?vOrient:0));
+  var maxX=0,maxY=0;
+  outl.forEach(function(p){if(p[0]>maxX)maxX=p[0];if(p[1]>maxY)maxY=p[1];});
+  return {w:maxX,h:maxY};
+}
+
 function _getFbb(sh,d,scVal){
   var _sh=(sh!=null?sh:shape)||'I';
   var _d=d||dims;
@@ -3953,10 +3970,15 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
   }
 
   // ── SLAVINA (dinamička lista) ─────────────────────────────
+  // VAZNO: slavina se pozicionira od LIJEVE i ZADNJE ivice CIJELE ploce
+  // (apsolutno, od 0) - isto kao sudopera i ploca za kuvanje. Ranije je
+  // koristila aX/aY (offset kraka), pa se na U obliku razilazila sa DXF-om.
+  var _fbbSl=_getFbb(shape,dims,_lastSc);
+  var _slBaseX=0, _slBaseY=0, _slBaseW=_fbbSl.w, _slBaseH=_fbbSl.h;
   (slavine||[]).forEach(function(s,si){
     var fi=Math.max(3,(s.fi||35)*sc/2);
-    var slx=aX+(s.x||400)*sc;
-    var sly=aY+(s.yz||50)*sc;
+    var slx=_slBaseX+(s.x||400)*sc;
+    var sly=_slBaseY+(s.yz||50)*sc;
     ctx.save();
     ctx.beginPath();ctx.arc(slx,sly,fi,0,Math.PI*2);
     ctx.fillStyle='rgba(255,255,255,0.9)';ctx.fill();
@@ -3967,22 +3989,22 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
     // Kote pozicije slavine: od lijeve ivice i od gornje ivice (zida)
     var slavX=s.x||400, slavY=s.yz||50;
     // Kota od lijeve ivice (X) -> DOLJE od ploce, pomjerena po indeksu da se ne preklapaju
-    var slavKotaY=aY+aH+32+si*16;
+    var slavKotaY=_slBaseY+_slBaseH+32+si*16;
     // Kota od gornje ivice (Y) -> DESNO od ploce, pomjerena po indeksu
-    var slavKotaX=aX+aW+32+si*16;
+    var slavKotaX=_slBaseX+_slBaseW+32+si*16;
     // Horizontalna kota dolje: od lijeve ivice do slavine
-    kota(ctx,aX,slavKotaY,slx,slavKotaY,slavX+' mm',_slavinaDimEditDesc(si,'x','Udaljenost slavine '+(si+1)+' od lijeve ivice'),'#slavina-list [data-sl-idx="'+si+'"]');
+    kota(ctx,_slBaseX,slavKotaY,slx,slavKotaY,slavX+' mm',_slavinaDimEditDesc(si,'x','Udaljenost slavine '+(si+1)+' od lijeve ivice'),'#slavina-list [data-sl-idx="'+si+'"]');
     // Vertikalna kota desno: od zadnje ivice do slavine
-    kota(ctx,slavKotaX,aY,slavKotaX,sly,slavY+' mm',_slavinaDimEditDesc(si,'yz','Udaljenost slavine '+(si+1)+' od zadnje ivice'),'#slavina-list [data-sl-idx="'+si+'"]');
+    kota(ctx,slavKotaX,_slBaseY,slavKotaX,sly,slavY+' mm',_slavinaDimEditDesc(si,'yz','Udaljenost slavine '+(si+1)+' od zadnje ivice'),'#slavina-list [data-sl-idx="'+si+'"]');
     _regClickRect(slx-fi,sly-fi,fi*2,fi*2,'#slavina-list [data-sl-idx="'+si+'"]');
     // Referentne isprekidane linije
     ctx.save();ctx.strokeStyle='#e74c3c';ctx.lineWidth=0.6;ctx.setLineDash([3,3]);
     // Ref za X kotu: vertikalne linije gore od ploce
     ctx.beginPath();ctx.moveTo(slx,sly-fi);ctx.lineTo(slx,slavKotaY);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(aX,aY);ctx.lineTo(aX,slavKotaY);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(_slBaseX,_slBaseY);ctx.lineTo(_slBaseX,slavKotaY);ctx.stroke();
     // Ref za Y kotu: horizontalne linije lijevo od ploce
     ctx.beginPath();ctx.moveTo(slx-fi,sly);ctx.lineTo(slavKotaX,sly);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(aX,aY);ctx.lineTo(slavKotaX,aY);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(_slBaseX,_slBaseY);ctx.lineTo(slavKotaX,_slBaseY);ctx.stroke();
     ctx.setLineDash([]);ctx.restore();
     // Fi oznaka
     ctx.fillStyle='#e74c3c';ctx.font='11px Segoe UI,Arial';
@@ -5922,7 +5944,9 @@ function genDXF(){
         dHY(E2,d.D,xR,'A='+d.A+' mm',30);
         dHY(0,0,xR+d.F,'Ukupno='+(d.E+d.A+d.F)+' mm',70);
         dVY(-65,0,d.B,'B='+d.B+' mm');
-        bbox_h=d.B;
+        // Visina bounding boxa je NAJDUZI krak (B ili C), ne uvijek B -
+        // inace se stavke u DXF-u preklapaju kad je C > B.
+        bbox_h=Math.max(d.B||0,d.C||0);
       } else if(sh==='V'){
         var F=d.F,G=d.G;
         var _finV=getFinalOutline('V',d,vOrient);
@@ -5953,17 +5977,20 @@ function genDXF(){
         dHY(0,0,d.A,'A='+d.A+' mm',55); dVY(-65,0,d.B,'B='+d.B+' mm');
         bbox_h=d.B;
       }
+      // Otvori se pozicioniraju u odnosu na BOUNDING BOX cijele ploce -
+      // identicno kao na canvasu (vidi _bbMM). Ranije se koristila
+      // getOtvorZone().aH (dubina jednog kraka), pa je npr. kod U oblika
+      // otvor zavrsavao 1000mm previsoko, izvan kuhinje.
+      var _bbK=_bbMM(sh,d,vOrient);
       if(gc('cb-sud')){
-        var _zSud=getOtvorZone(sh,d,vOrient);
         var _sudX=gi('sud-x');
-        var _sudY=_zSud.aH-gi('sud-y')-gi('sud-h');
+        var _sudY=_bbK.h-gi('sud-y')-gi('sud-h');
         dxfRoundedRect(_sudX,_sudY,gi('sud-w'),gi('sud-h'),
           getSinkRadius('tl'),getSinkRadius('tr'),getSinkRadius('br'),getSinkRadius('bl'),'OTVORI',yOff);
       }
       if(gc('cb-plo')){
-        var _zPlo=getOtvorZone(sh,d,vOrient);
         var _ploX=gi('plo-x');
-        var _ploY=_zPlo.aH-gi('plo-y')-gi('plo-h');
+        var _ploY=_bbK.h-gi('plo-y')-gi('plo-h');
         dxfRoundedRect(_ploX,_ploY,gi('plo-w'),gi('plo-h'),
           getPloRadius('tl'),getPloRadius('tr'),getPloRadius('br'),getPloRadius('bl'),'OTVORI',yOff);
       }
@@ -5972,7 +5999,7 @@ function genDXF(){
         var r=c.r||[0,0,0,0];
         // Pozicioniran u odnosu na CIJELU ploču (isto kao canvas nakon ispravke za
         // donji krak L oblika) - y je "od prednje ivice", flip u internu (od zadnje) konvenciju
-        var cYFlipped=bbox_h-(c.y||0)-(c.h||0);
+        var cYFlipped=_bbK.h-(c.y||0)-(c.h||0);
         dxfRoundedRect(c.x||0,cYFlipped,c.w||0,c.h||0,r[0]||0,r[1]||0,r[2]||0,r[3]||0,'OTVORI',yOff);
         txY((c.x||0)+10,cYFlipped+12,2.5,c.name||'Otvor','TEKST');
         dxfCornerLabels(
