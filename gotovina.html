@@ -307,19 +307,71 @@ td.num{text-align:right;font-weight:700;}
 <!-- ═══ TAB: KLIJENTI FINANSIJE ═══════════════════════════════════════════ -->
 <div id="tab-klijenti" style="display:none;padding:16px 20px;">
   <div style="font-size:11.5px;color:#8b96a5;margin-bottom:12px;line-height:1.5;">
-    Prikazuje koliko svaki klijent duguje, razdvojeno po očekivanom načinu naplate (banka/gotovina) —
-    iz maloprodaje i radnih naloga. Neregistrovani klijenti (bez ID-a) su označeni upozorenjem.
+    Prikazuje koliko svaki klijent duguje, iz maloprodaje i radnih naloga, plus pretplatu (avans) ako je ima.
+    Neregistrovani klijenti (bez ID-a) su označeni upozorenjem. <b>Klikni na klijenta</b> da vidiš njegove otpremnice
+    sa dugom i naplatiš konkretnu.
   </div>
+  <button class="btn-sm" onclick="otvoriIstorijskiUnos()" style="margin-bottom:12px;">+ Istorijski unos (početno stanje)</button>
   <div class="wrap">
     <table>
       <thead>
         <tr>
-          <th>Klijent</th><th>Duguje — Banka</th><th>Duguje — Gotovina</th><th>Duguje — Nepoznato</th>
-          <th>Ukupno duguje</th><th>Uplaćeno u banku (istorijski)</th>
+          <th>Klijent</th><th>Duguje — Nepoznato</th>
+          <th>Ukupno duguje</th><th>Pretplata</th><th>Uplaćeno u banku (istorijski)</th>
         </tr>
       </thead>
-      <tbody id="klijenti-tbody"><tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr></tbody>
+      <tbody id="klijenti-tbody"><tr><td colspan="5" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr></tbody>
     </table>
+  </div>
+</div>
+
+<!-- ═══ MODAL: ISTORIJSKI UNOS ═══ -->
+<div class="modal" id="modal-istorijski" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;">
+  <div class="modal-box" style="background:#fff;border-radius:12px;padding:20px;max-width:420px;width:92vw;">
+    <h3 style="margin:0 0 4px;">Istorijski unos — početno stanje</h3>
+    <div style="font-size:11px;color:#8b96a5;margin-bottom:14px;">Za novac koji je klijent VEĆ platio prije ovog sistema. Nije vezano za konkretnu otpremnicu.</div>
+    <div class="fg">
+      <label style="font-size:11.5px;font-weight:600;">Klijent (pretraga)</label>
+      <input type="text" id="ist-kupac-naziv" placeholder="Ime kupca..." oninput="pretraziIstorijskiKupca()" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;">
+      <div id="ist-kupac-rezultati" style="max-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;margin-top:4px;display:none;"></div>
+    </div>
+    <input type="hidden" id="ist-kupac-id">
+    <div class="fg" style="margin-top:10px;">
+      <label style="font-size:11.5px;font-weight:600;">Tip</label>
+      <div style="display:flex;gap:8px;margin-top:4px;">
+        <button type="button" class="ce-tip-btn" data-ist-tip="gotovina" onclick="postaviIstorijskiTip('gotovina')">Gotovina</button>
+        <button type="button" class="ce-tip-btn" data-ist-tip="banka" onclick="postaviIstorijskiTip('banka')">Banka</button>
+      </div>
+    </div>
+    <div id="ist-banka-fld" style="display:none;margin-top:8px;">
+      <label style="font-size:11.5px;font-weight:600;">Koja banka</label>
+      <select id="ist-banka-select" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;">
+        <option value="rfb">rfb</option><option value="uni">uni</option><option value="mf">mf</option>
+        <option value="nlb">nlb</option><option value="uni1">uni1</option>
+      </select>
+    </div>
+    <div class="fg" style="margin-top:10px;">
+      <label style="font-size:11.5px;font-weight:600;">Iznos</label>
+      <input type="number" id="ist-iznos" step="0.01" min="0.01" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;">
+    </div>
+    <div class="fg" style="margin-top:10px;">
+      <label style="font-size:11.5px;font-weight:600;">Napomena (opciono)</label>
+      <input type="text" id="ist-napomena" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;">
+    </div>
+    <div id="ist-msg" style="display:none;margin-top:10px;padding:8px 10px;border-radius:6px;font-size:12px;"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;">
+      <button class="btn-sm" onclick="sacuvajIstorijskiUnos()" style="flex:1;background:var(--blue,#1a5fa8);color:#fff;">Sačuvaj</button>
+      <button class="btn-sm" onclick="document.getElementById('modal-istorijski').style.display='none'" style="flex:1;">Otkaži</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: DUG KLIJENTA (dvoklik) ═══ -->
+<div class="modal" id="modal-klijent-dug" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;">
+  <div class="modal-box" style="background:#fff;border-radius:12px;padding:20px;max-width:460px;width:92vw;max-height:80vh;overflow-y:auto;">
+    <h3 id="kd-naslov" style="margin:0 0 12px;">Otpremnice sa dugom</h3>
+    <div id="kd-lista"></div>
+    <button class="btn-sm" onclick="document.getElementById('modal-klijent-dug').style.display='none'" style="width:100%;margin-top:14px;">Zatvori</button>
   </div>
 </div>
 
@@ -1182,14 +1234,51 @@ async function ucitajBankaSume(){
   const cont=document.getElementById('banka-sume-box');
   try{
     const r=await fetch(`${API}/api/finansije/banka/stanje`);
-    const rows=await r.json();
-    cont.innerHTML=rows.map(x=>`
+    const d=await r.json();
+    cont.innerHTML=d.banke.map(x=>`
       <div class="suma-box" style="${x.banka==='nerasporedjeno'&&x.zbir>0?'border:2px solid var(--red,#c0392b);':''}">
         <div class="val">${fm(x.zbir)}</div>
         <div class="lbl">${BANKA_NAZIVI[x.banka]||x.banka} (${x.broj})</div>
       </div>
-    `).join('');
+    `).join('') + (d.na_cekanju>0?`
+      <div class="suma-box" style="border:2px solid var(--orange,#b8860b);cursor:pointer;" onclick="document.getElementById('banka-fil').value='';ucitajBankaListuNaCekanju();">
+        <div class="val" style="color:var(--orange,#b8860b);">${d.na_cekanju}</div>
+        <div class="lbl">⏳ Čeka potvrdu (istorijski)</div>
+      </div>`:'');
   }catch(e){ cont.innerHTML='<div style="color:red;">Greška pri učitavanju.</div>'; }
+}
+
+async function ucitajBankaListuNaCekanju(){
+  const tbody=document.getElementById('banka-tbody');
+  tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr>';
+  try{
+    const r=await fetch(`${API}/api/finansije/banka?na_cekanju=true`);
+    const rows=await r.json();
+    if(!rows.length){ tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">Nema zapisa na čekanju.</td></tr>'; return; }
+    tbody.innerHTML=rows.map(r=>`
+      <tr>
+        <td>${new Date(r.datum).toLocaleDateString('sr-Latn-BA')}</td>
+        <td style="font-weight:700;">${fm(r.iznos)}</td>
+        <td><span class="chip-izvor iz-malo">${esc(BANKA_NAZIVI[r.banka]||r.banka)}</span></td>
+        <td>${esc(r.izvor)}</td>
+        <td>${esc(r.nalog_r_br||'—')}</td>
+        <td>${esc(r.kupac_naziv||'—')}</td>
+        <td>${esc(r.upisao_ime||'—')}</td>
+        <td style="font-size:11px;color:#8b96a5;">${esc(r.napomena||'')}</td>
+        <td><button class="btn-sm" onclick="potvrdiBankaIstorijski(${r.id})" style="background:var(--green,#1f8a4c);color:#fff;">✓ Potvrdi</button></td>
+      </tr>
+    `).join('');
+  }catch(e){ tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>'; }
+}
+
+async function potvrdiBankaIstorijski(id){
+  if(!isAdmin){ alert('Samo admin može potvrditi.'); return; }
+  try{
+    const r=await fetch(`${API}/api/finansije/banka/${id}/potvrdi`,{method:'POST'});
+    if(!r.ok){ const d=await r.json(); alert('✗ '+(d.error||'Greška.')); return; }
+    ucitajBankaSume();
+    ucitajBankaListuNaCekanju();
+  }catch(e){ alert('✗ Greška.'); }
 }
 
 async function ucitajBankaListu(){
@@ -1238,25 +1327,118 @@ async function dodijeliBanku(id, banka){
 
 async function ucitajKlijentiListu(){
   const tbody=document.getElementById('klijenti-tbody');
-  tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr>';
+  tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr>';
   try{
     const r=await fetch(`${API}/api/finansije/klijenti`);
     const rows=await r.json();
-    if(!rows.length){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Nema klijenata sa dugom.</td></tr>'; return; }
+    if(!rows.length){ tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">Nema klijenata sa dugom/pretplatom.</td></tr>'; return; }
     tbody.innerHTML=rows.map(k=>`
-      <tr>
+      <tr style="${k.kupac_id?'cursor:pointer;':''}" ${k.kupac_id?`ondblclick="otvoriDugKlijenta(${k.kupac_id},'${esc(k.kupac_naziv||'').replace(/'/g,"\\'")}')"  title="Dvoklik za detalje i naplatu"`:''}>
         <td>
           ${esc(k.kupac_naziv||'—')}
           ${!k.registrovan?'<div style="font-size:10px;color:var(--red);font-weight:700;">⚠ Preporučuje se registracija kupca</div>':''}
         </td>
-        <td>${k.duguje_banka>0?fm(k.duguje_banka):'—'}</td>
-        <td>${k.duguje_gotovina>0?fm(k.duguje_gotovina):'—'}</td>
         <td>${k.duguje_nepoznato>0?fm(k.duguje_nepoznato):'—'}</td>
-        <td style="font-weight:700;">${fm(k.duguje_ukupno)}</td>
+        <td style="font-weight:700;">${k.duguje_ukupno>0?fm(k.duguje_ukupno):'—'}</td>
+        <td style="${k.pretplata>0?'color:var(--green);font-weight:700;':''}">${k.pretplata>0?'+ '+fm(k.pretplata):'—'}</td>
         <td>${k.uplaceno_banka_istorijski>0?fm(k.uplaceno_banka_istorijski):'—'}</td>
       </tr>
     `).join('');
-  }catch(e){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>'; }
+  }catch(e){ tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>'; }
+}
+
+/* ── ISTORIJSKI UNOS ─────────────────────────────────────────────────── */
+let istorijskiTipTrenutni='gotovina', istorijskiKupacId=null;
+
+function otvoriIstorijskiUnos(){
+  document.getElementById('modal-istorijski').style.display='flex';
+  document.getElementById('ist-kupac-naziv').value='';
+  document.getElementById('ist-kupac-id').value='';
+  document.getElementById('ist-iznos').value='';
+  document.getElementById('ist-napomena').value='';
+  document.getElementById('ist-msg').style.display='none';
+  istorijskiKupacId=null;
+  postaviIstorijskiTip('gotovina');
+}
+
+function postaviIstorijskiTip(tip){
+  istorijskiTipTrenutni=tip;
+  document.querySelectorAll('[data-ist-tip]').forEach(b=>b.classList.toggle('active', b.dataset.istTip===tip));
+  document.getElementById('ist-banka-fld').style.display = tip==='banka' ? 'block' : 'none';
+}
+
+let istKupacTimer=null;
+function pretraziIstorijskiKupca(){
+  clearTimeout(istKupacTimer);
+  istorijskiKupacId=null;
+  document.getElementById('ist-kupac-id').value='';
+  const q=document.getElementById('ist-kupac-naziv').value.trim();
+  const cont=document.getElementById('ist-kupac-rezultati');
+  if(q.length<2){ cont.style.display='none'; return; }
+  istKupacTimer=setTimeout(async()=>{
+    try{
+      const r=await fetch(`${API}/api/kupci?q=${encodeURIComponent(q)}&limit=8`);
+      const rows=await r.json();
+      cont.style.display='block';
+      if(!rows.length){ cont.innerHTML='<div style="padding:8px;font-size:12px;color:#8b96a5;">Nema rezultata — biće upisan kao slobodno ime.</div>'; return; }
+      cont.innerHTML=rows.map(k=>`<div style="padding:7px 8px;font-size:12.5px;cursor:pointer;border-bottom:1px solid #f0f2f5;" onclick="izaberiIstorijskiKupca(${k.id},'${esc(k.naziv).replace(/'/g,"\\'")}')">${esc(k.naziv)}</div>`).join('');
+    }catch(e){}
+  }, 250);
+}
+function izaberiIstorijskiKupca(id, naziv){
+  istorijskiKupacId=id;
+  document.getElementById('ist-kupac-id').value=id;
+  document.getElementById('ist-kupac-naziv').value=naziv;
+  document.getElementById('ist-kupac-rezultati').style.display='none';
+}
+
+async function sacuvajIstorijskiUnos(){
+  const msg=document.getElementById('ist-msg');
+  msg.style.display='none';
+  const naziv=document.getElementById('ist-kupac-naziv').value.trim();
+  const iznos=parseFloat(document.getElementById('ist-iznos').value);
+  if(!naziv){ msg.style.display='block'; msg.style.background='#fce8e6'; msg.style.color='var(--red)'; msg.textContent='Unesite klijenta.'; return; }
+  if(!iznos||iznos<=0){ msg.style.display='block'; msg.style.background='#fce8e6'; msg.style.color='var(--red)'; msg.textContent='Unesite ispravan iznos.'; return; }
+  try{
+    const r=await fetch(`${API}/api/finansije/istorijski-unos`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        kupac_id: istorijskiKupacId, kupac_naziv: naziv, tip: istorijskiTipTrenutni,
+        banka: document.getElementById('ist-banka-select').value,
+        iznos, napomena: document.getElementById('ist-napomena').value||null,
+        objekt_id: blagajnaObjektId||null,
+      }),
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error);
+    msg.style.display='block'; msg.style.background='#e6f4ea'; msg.style.color='var(--green)';
+    msg.textContent = d.potvrdjeno ? '✓ Sačuvano i odmah potvrđeno.' : '✓ Sačuvano — čeka potvrdu admina.';
+    setTimeout(()=>{ document.getElementById('modal-istorijski').style.display='none'; ucitajKlijentiListu(); if(document.getElementById('tab-banka').style.display==='block'){ucitajBankaSume();ucitajBankaListu();} }, 1200);
+  }catch(e){
+    msg.style.display='block'; msg.style.background='#fce8e6'; msg.style.color='var(--red)'; msg.textContent='✗ '+e.message;
+  }
+}
+
+/* ── DVOKLIK NA KLIJENTA → NJEGOVE OTPREMNICE SA DUGOM ─────────────────── */
+async function otvoriDugKlijenta(kupacId, naziv){
+  document.getElementById('kd-naslov').textContent='Dug — '+naziv;
+  document.getElementById('modal-klijent-dug').style.display='flex';
+  const cont=document.getElementById('kd-lista');
+  cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/finansije/klijent/${kupacId}/otpremnice-dug`);
+    const rows=await r.json();
+    if(!rows.length){ cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Nema otpremnica sa otvorenim dugom (dug je možda iz radnih naloga — naplati kroz lista.html).</div>'; return; }
+    cont.innerHTML=rows.map(o=>`
+      <div style="border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;">
+          <span>#${esc(o.broj)}</span><span style="color:var(--red);">${fm(o.duguje)}</span>
+        </div>
+        <div style="font-size:11px;color:#8b96a5;margin-top:2px;">${new Date(o.datum).toLocaleDateString('sr-Latn-BA')} · ${esc(o.objekt_naziv||'')} · Ukupno: ${fm(o.ukupan_iznos)}, plaćeno: ${fm(o.iznos_placeno)}</div>
+        <button class="btn-sm" onclick="location.href='maloprodaja.html?naplati_otpremnicu=${o.id}'" style="width:100%;margin-top:8px;background:var(--blue,#1a5fa8);color:#fff;">Naplati ovu →</button>
+      </div>
+    `).join('');
+  }catch(e){ cont.innerHTML='<div style="text-align:center;color:red;padding:20px;">Greška pri učitavanju.</div>'; }
 }
 </script>
 </body>

@@ -1155,6 +1155,26 @@ function azurirajValutaLabele(){
 async function otvoriDeepLinkOtpremnicuAkoPostoji(){
   const params=new URLSearchParams(location.search);
   const broj=params.get('otp');
+  const naplatiId=params.get('naplati_otpremnicu');
+  if(naplatiId){
+    try{
+      const r=await fetch(`${API}/api/otpremnice/${naplatiId}`);
+      if(!r.ok){ alert('Otpremnica nije pronađena ili nemate pristup.'); return; }
+      const otp=await r.json();
+      otp.duguje=+(parseFloat(otp.ukupan_iznos)-parseFloat(otp.iznos_placeno)).toFixed(2);
+      if(otp.duguje<=0){ alert('Ova otpremnica je već u potpunosti plaćena.'); return; }
+      document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+      document.querySelector('.tab-btn[data-tab="dugovanja"]').classList.add('active');
+      document.getElementById('view-dugovanja').classList.add('active');
+      otvoriNaplatuDuga(otp);
+    }catch(e){
+      alert('Greška pri otvaranju naplate duga.');
+    }finally{
+      history.replaceState(null, '', location.pathname);
+    }
+    return;
+  }
   if(!broj) return;
   try{
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
