@@ -397,6 +397,15 @@ router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
           [iznosNum, imeUneseno, String(nalog.r_br), opisGotovine, PROIZVODNJA_PJ]
         );
       }
+    } else {
+      // nacin je bank kod (rfb/uni/mf/nlb/uni1) — strukturisan zapis, direktno u tu banku
+      // (već je konkretno izabrana ovde).
+      await pool.query(
+        `INSERT INTO banka_uplate (iznos, banka, izvor, nalog_r_br, kupac_naziv, upisao_id, upisao_ime, napomena)
+         VALUES ($1,$2,'Proizvodnja',$3,$4,$5,$6,$7)`,
+        [iznosNum, nacin, String(nalog.r_br), nalog.narucilac || null, user.id, user.ime_prezime,
+         `Avans (rata) - nalog #${nalog.r_br}`]
+      );
     }
 
     res.json({ ok: true, avans: noviAvans, avans_opis: noviOpis, za_naplatu: +noviZaNaplatu.toFixed(2), naplaceno: autoNaplaceno });
@@ -446,7 +455,17 @@ router.post('/:r_br/naplati-ostatak', async (req, res) => {
 
     const danasKratko = new Date().toLocaleDateString('sr-Latn-BA', { day: '2-digit', month: '2-digit' });
     const noviRedovi = [];
-    if (bankaNum > 0) noviRedovi.push(`${nacin_banka} ${danasKratko} - ${bankaNum.toFixed(2)}`);
+    if (bankaNum > 0) {
+      noviRedovi.push(`${nacin_banka} ${danasKratko} - ${bankaNum.toFixed(2)}`);
+      // Strukturisan zapis (pored teksta iznad) — banka je VEĆ konkretno izabrana ovde,
+      // pa ide DIREKTNO u tu banku (ne u "neraspoređeno").
+      await pool.query(
+        `INSERT INTO banka_uplate (iznos, banka, izvor, nalog_r_br, kupac_naziv, upisao_id, upisao_ime, napomena)
+         VALUES ($1,$2,'Proizvodnja',$3,$4,$5,$6,$7)`,
+        [bankaNum, nacin_banka, String(nalog.r_br), nalog.narucilac || null, user.id, user.ime_prezime,
+         `Naplata ostatka - nalog #${nalog.r_br}`]
+      );
+    }
     if (gotovinaNum > 0) noviRedovi.push(`got ${ime_gotovina.trim()} ${danasKratko} - ${gotovinaNum.toFixed(2)}`);
     // Naplata ostatka ima SVOJ, ODVOJEN log — ne miješa se sa avans_opis (avans je nešto
     // već davno uplaćeno, naplata ostatka je zaseban događaj poslije posla).

@@ -536,6 +536,7 @@ router.post('/potvrdi', async (req, res) => {
   const {
     stavke, kupac_naziv, kupac_adresa, kupac_telefon, kupac_email, kupac_grad, kupac_id,
     potvrdio_kupac_ime, nacin_placanja, iznos_placeno_sada,
+    iznos_banka_sada, nacin_banka_sada, ocekivani_nacin_naplate,
   } = req.body;
   if (!Array.isArray(stavke) || !stavke.length)
     return res.status(400).json({ error: 'Košarica je prazna.' });
@@ -597,6 +598,14 @@ router.post('/potvrdi', async (req, res) => {
         throw Object.assign(new Error('Iznos koji kupac plaća sada ne može biti veći od preostalog iznosa (nakon avansa).'), { status: 400 });
     }
     iznosGotovinomSada = +iznosGotovinomSada.toFixed(2);
+    // Podjela DELA koji se plaća SAD na gotovinu i banku — ČISTO pitanje GDE se novac
+    // upisuje (koja tabela/banka), NE MIJENJA iznosGotovinomSada niti ijedan drugi broj
+    // korišten za dug/status_placanja/kupac_transakcije ispod. Ako banka dio nije poslan,
+    // ponaša se identično kao ranije (sve u gotovinu).
+    const iznosBankaSadaNum = Math.min(parseFloat(iznos_banka_sada) || 0, iznosGotovinomSada);
+    if (iznosBankaSadaNum > 0 && !nacin_banka_sada)
+      throw Object.assign(new Error('Izaberite banku za bankovni dio.'), { status: 400 });
+    const iznosGotovinomSadaKes = +(iznosGotovinomSada - iznosBankaSadaNum).toFixed(2);
     let iznosPlaceno = +(iznosIzAvansa + iznosGotovinomSada).toFixed(2);
     const statusPlacanja = iznosPlaceno >= ukupanIznos ? 'placeno' : (iznosPlaceno > 0 ? 'djelimicno' : 'duguje');
 
@@ -649,11 +658,14 @@ router.post('/potvrdi', async (req, res) => {
       // vrijednost kao PLUS (bruto prodaja), i nenaplaćeni dio kao MINUS (dug). Njihov
       // zbir = tačno svježa gotovina primljena sad, ali ostaju vidljiva DVA reda —
       // jedan pokazuje ukupnu prodaju, drugi šta konkretno nije naplaćeno.
-      if (brutoZaBlagajnu > 0) {
+      // Bruto se umanjuje za bankovni dio (taj dio ide u banka_uplate, ne u gotovinu) —
+      // preostaliDug (minus red ispod) se NE dira, to je nezavisno pitanje duga.
+      const brutoKes = +(brutoZaBlagajnu - iznosBankaSadaNum).toFixed(2);
+      if (brutoKes > 0) {
         const g = await client.query(
           `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
            VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5) RETURNING id`,
-          [brutoZaBlagajnu, user.ime_prezime, `Prodaja (bruto) — ${opisKupca}`, objektNaziv, broj]
+          [brutoKes, user.ime_prezime, `Prodaja (bruto) — ${opisKupca}`, objektNaziv, broj]
         );
         gotovinaId = g.rows[0].id;
       }
@@ -662,16 +674,33 @@ router.post('/potvrdi', async (req, res) => {
          VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5)`,
         [-preostaliDug, user.ime_prezime, `Dug po otpremnici — ${opisKupca}`, objektNaziv, broj]
       );
-    } else if (iznosGotovinomSada > 0) {
-      // Sve plaćeno (gotovinom i/ili avansom), nema duga — jedan običan red kao i do sad.
+    } else if (iznosGotovinomSadaKes > 0) {
+      // Sve plaćeno (gotovinom i/ili avansom), nema duga — jedan običan red kao i do sad
+      // (umanjen za bankovni dio, ako ga je bilo).
       const g = await client.query(
         `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
          VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5) RETURNING id`,
-        [iznosGotovinomSada, user.ime_prezime, opisKupca, objektNaziv, broj]
+        [iznosGotovinomSadaKes, user.ime_prezime, opisKupca, objektNaziv, broj]
       );
       gotovinaId = g.rows[0].id;
     }
     if (gotovinaId) await client.query('UPDATE otpremnice SET gotovina_id=$1 WHERE id=$2', [gotovinaId, otpId]);
+
+    // Bankovni dio (ako ga je bilo) — strukturisan zapis, direktno u izabranu banku.
+    if (iznosBankaSadaNum > 0) {
+      await client.query(
+        `INSERT INTO banka_uplate (iznos, banka, izvor, nalog_r_br, kupac_id, kupac_naziv, objekt_naziv, upisao_id, upisao_ime, napomena)
+         VALUES ($1,$2,'Maloprodaja',$3,$4,$5,$6,$7,$8,$9)`,
+        [iznosBankaSadaNum, nacin_banka_sada, broj, kupac_id || null, opisKupca, objektNaziv,
+         user.id, user.ime_prezime, `Prodaja — ${opisKupca}`]
+      );
+    }
+    // Kad se ništa ne plaća sad ("dug"), čisto informativno bilježimo KAKO se očekuje da
+    // će dug biti naplaćen (banka ili gotovina) — ne stvara zapis u banka_uplate/gotovina
+    // dok se stvarno ne naplati, samo pomaže "Klijenti finansije" da pokaže OČEKIVANU sliku.
+    if (nacin === 'dug' && ['banka', 'gotovina'].includes(ocekivani_nacin_naplate)) {
+      await client.query('UPDATE otpremnice SET ocekivani_nacin_naplate=$1 WHERE id=$2', [ocekivani_nacin_naplate, otpId]);
+    }
 
     // Kartica kupca: prvo zapiši korišćen avans (ako ga je bilo), pa preostali (novi) dug.
     if (kupac_id) {

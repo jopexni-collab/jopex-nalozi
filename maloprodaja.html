@@ -769,8 +769,29 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         <input type="number" id="ov-iznos-djelimicno" step="0.01" min="0.01" placeholder="0.00" oninput="azurirajPreostaliDug()">
         <div id="ov-preostali-dug" style="font-size:12px;color:var(--red);font-weight:700;margin-top:4px;"></div>
       </div>
+      <div id="ov-banka-split-fld" style="display:none;margin-top:8px;background:#f7f8fa;border-radius:8px;padding:10px;">
+        <label style="font-size:11.5px;color:#6b7a8d;font-weight:600;">Od toga na BANKU (opciono, ostatak ide u gotovinu):</label>
+        <div style="display:flex;gap:8px;margin-top:4px;">
+          <input type="number" id="ov-iznos-banka" step="0.01" min="0" placeholder="0.00" style="flex:1;" oninput="azurirajPreostaliDug()">
+          <select id="ov-nacin-banka" style="flex:1;">
+            <option value="rfb">rfb (banka)</option>
+            <option value="uni">uni (banka)</option>
+            <option value="mf">mf (banka)</option>
+            <option value="nlb">nlb (banka)</option>
+            <option value="uni1">uni1 (banka)</option>
+          </select>
+        </div>
+      </div>
       <div id="ov-dug-napomena" style="display:none;font-size:11.5px;color:var(--red);margin-top:6px;line-height:1.4;">
         ⚠ Roba izlazi bez plaćanja — ide na račun kupca. Naplatiće se kasnije kroz tab "Dugovanja".
+      </div>
+      <div id="ov-dug-ocekivano-fld" style="display:none;margin-top:8px;">
+        <label style="font-size:11.5px;color:#6b7a8d;font-weight:600;">Očekivani način naplate (informativno, za kasnije):</label>
+        <div class="ce-row" style="margin-top:4px;">
+          <button type="button" class="ce-tip-btn" data-ocekivano="" onclick="postaviOcekivanuNaplatu('')">Nije određeno</button>
+          <button type="button" class="ce-tip-btn" data-ocekivano="banka" onclick="postaviOcekivanuNaplatu('banka')">Banka</button>
+          <button type="button" class="ce-tip-btn" data-ocekivano="gotovina" onclick="postaviOcekivanuNaplatu('gotovina')">Gotovina</button>
+        </div>
       </div>
     </div>
 
@@ -2411,6 +2432,9 @@ function prikaziPotvrduEkran(pregled){
   }
   postaviNacinPlacanja('kompletno'); // svaki put počinje od podrazumijevanog (plaća sve)
   document.getElementById('ov-iznos-djelimicno').value='';
+  document.getElementById('ov-iznos-banka').value='';
+  document.getElementById('ov-nacin-banka').value='rfb';
+  postaviOcekivanuNaplatu('');
   // Kupac je već izabran na početku (trenutniKupac) — ne treba ponovo kucati ime,
   // samo se predlaže i ostaje izmjenjivo (npr. ako fizički preuzima neko drugi).
   document.getElementById('ov-kupac-ime').value=trenutniKupac?.naziv||'';
@@ -2444,12 +2468,25 @@ function otkaziOtpremnicu(){
    čita cijenu i stanje iz roba tabele — ovdje se sve konačno zaključava,
    uključujući i eventualna odstupanja od zadane cijene. */
 let nacinPlacanjaTrenutni='kompletno';
+let ocekivanaNaplataTrenutna='';
 function postaviNacinPlacanja(nacin){
   nacinPlacanjaTrenutni=nacin;
   document.querySelectorAll('.ce-tip-btn[data-nacin-pl]').forEach(b=>b.classList.toggle('active', b.dataset.nacinPl===nacin));
   document.getElementById('ov-djelimicno-fld').style.display = nacin==='djelimicno' ? 'block' : 'none';
   document.getElementById('ov-dug-napomena').style.display = nacin==='dug' ? 'block' : 'none';
+  // Podjela gotovina/banka ima smisla SAMO kad se nešto stvarno plaća sad (kompletno ili
+  // djelimično) — kod "dug" ništa se ne plaća, pa se umjesto toga bira OČEKIVANI način.
+  document.getElementById('ov-banka-split-fld').style.display = (nacin==='kompletno'||nacin==='djelimicno') ? 'block' : 'none';
+  document.getElementById('ov-dug-ocekivano-fld').style.display = nacin==='dug' ? 'block' : 'none';
+  if(nacin!=='kompletno' && nacin!=='djelimicno'){
+    document.getElementById('ov-iznos-banka').value='';
+  }
   azurirajPreostaliDug();
+}
+
+function postaviOcekivanuNaplatu(vrednost){
+  ocekivanaNaplataTrenutna=vrednost;
+  document.querySelectorAll('.ce-tip-btn[data-ocekivano]').forEach(b=>b.classList.toggle('active', b.dataset.ocekivano===vrednost));
 }
 
 let kupacAvansSaldo=0;
@@ -2492,6 +2529,14 @@ async function potvrdiOtpremnicu(){
     if(!iznosPlacenoSada||iznosPlacenoSada<=0){alert('Unesite iznos koji kupac plaća sada.');return;}
     if(iznosPlacenoSada>potvrdaUkupanIznos){alert('Iznos ne može biti veći od ukupnog iznosa otpremnice.');return;}
   }
+  const bankaIznosProvjera=parseFloat(document.getElementById('ov-iznos-banka').value)||0;
+  if(bankaIznosProvjera>0 && (nacinPlacanjaTrenutni==='kompletno'||nacinPlacanjaTrenutni==='djelimicno')){
+    const placenoSadaMax = nacinPlacanjaTrenutni==='kompletno' ? potvrdaUkupanIznos : iznosPlacenoSada;
+    if(bankaIznosProvjera>placenoSadaMax+0.01){
+      alert('Iznos na banku ne može biti veći od iznosa koji se plaća sada.');
+      return;
+    }
+  }
   const btn=document.getElementById('btn-potvrdi');
   btn.disabled=true; btn.textContent='Obrada...';
   try{
@@ -2509,6 +2554,9 @@ async function potvrdiOtpremnicu(){
         nacin_placanja: nacinPlacanjaTrenutni,
         iznos_placeno_sada: iznosPlacenoSada,
         koristi_avans: document.getElementById('ov-koristi-avans').checked,
+        iznos_banka_sada: parseFloat(document.getElementById('ov-iznos-banka').value)||0,
+        nacin_banka_sada: document.getElementById('ov-nacin-banka').value,
+        ocekivani_nacin_naplate: ocekivanaNaplataTrenutna||null,
       }),
     });
     const data=await r.json();
