@@ -141,7 +141,7 @@ async function checkAuth(){
     if(admin || u.moze_roba_magacin) show('card-roba-magacin');
 
     // Ponude — moze_ugovarati ili admin
-    if(admin || u.moze_ugovarati) show('card-ponude');
+    if(admin || u.moze_ugovarati || u.unos_naloga) show('card-ponude');
 
     // Teren — komercijalista_teren ili admin
     if(admin || u.komercijalista_teren) show('card-teren');

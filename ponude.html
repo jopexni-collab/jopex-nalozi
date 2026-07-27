@@ -6503,7 +6503,7 @@ async function _checkAuth(){
     const r = await fetch(API_URL+'/api/auth/me');
     if(!r.ok){ location.href='login.html'; return; }
     const u = await r.json();
-    if(!u.moze_ugovarati && u.rola!=='admin'){
+    if(!u.moze_ugovarati && !u.unos_naloga && u.rola!=='admin'){
       alert('Nemate dozvolu za Generator ponuda. Obratite se administratoru.');
       location.href='home.html';
       return;

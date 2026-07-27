@@ -54,6 +54,10 @@ fetch(API+'/api/auth/me').then(r=>{
     document.getElementById('card-proizvodnja').classList.remove('hidden');
     document.getElementById('card-robe').classList.remove('hidden');
     document.getElementById('card-pregled').classList.remove('hidden');
+  }else if(u.unos_naloga){
+    // Unos naloga smije da PRAVI ponude za proizvodnju (Generator), ali ne i da vidi/
+    // usvaja terensku/robnu ponudu — to ostaje samo za "Ponude sve" (moze_ugovarati).
+    document.getElementById('card-proizvodnja').classList.remove('hidden');
   }
 }).catch(()=>location.href='login.html');
 </script>
