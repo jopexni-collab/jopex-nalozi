@@ -2,7 +2,7 @@
 <html lang="sr">
 <head>
 <meta charset="UTF-8">
-<title>JoPeX – Ponude za proizvodnju</title>
+<title>JoPeX – Generator Ponuda</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:"Segoe UI",Tahoma,sans-serif;background:#f0f2f5;color:#1a2332;font-size:13px;}
@@ -171,7 +171,6 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
 <body>
 <header>
   <div class="hdr-btns">
-    <button class="hdr-btn" onclick="location.href='ponude-meni.html'" title="Nazad na Ponude" style="background:rgba(255,255,255,0.2);">← Ponude</button>
     <button class="hdr-btn" onclick="location.href='home.html'" title="Početna" style="background:rgba(255,255,255,0.2);">🏠 Home</button>
     <button class="hdr-btn" onclick="saveProject()" title="Sačuvaj lokalno (Ctrl+S)">💾 Sačuvaj</button>
     <button class="hdr-btn" onclick="loadProject()" title="Učitaj lokalno (Ctrl+O)">📂 Učitaj</button>
@@ -5397,16 +5396,25 @@ function genRadniNalog(returnHtml){try{
   }
   var dat=new Date().toLocaleDateString('hr',{day:'2-digit',month:'2-digit',year:'numeric'});
   var ime=gs('kl-ime')||'Nepoznat klijent';
-  var mv=getMatV(),md=getMatD(),mn=gs('mat-naziv')||'';
-  var ms=mv+(mn?' – '+mn:'')+', '+md+' mm';
   var savedIdxRN=activeIdx;
   var allSections='';
+  // Materijal se NE smije racunati jednom prije petlje — svaka stavka moze
+  // imati svoju vrstu/boju/debljinu. Skupljamo i listu razlicitih materijala
+  // za zaglavlje naloga.
+  var _rnMaterijali=[];
 
   _results=calcAllItems();
   _results.forEach(function(res,i){
     activeIdx=i; syncFromActive(); loadItemInputs();
     var it=items[i];
     var tipLbl={'k':'Kuhinjska radna ploča','kl':'Prozorska klupica','st':'Gaziste stepenica','sto':'Stol'}[it.tip]||'Stavka';
+    // Materijal OVE stavke: vrsta (Granit/Kvarc/...) + model/boja + debljina.
+    // "mnBoja" je konkretan naziv/boja (npr. Bianco Tiffone) — bez njega
+    // radnik u pogonu ne zna KOJI granit, jer ih ima mnogo vrsta.
+    var mvIt=getMatV(), mdIt=getMatD(), mnIt=gs('mat-naziv')||'';
+    var msVrsta=mvIt+(mnIt?' – '+mnIt:'');        // Granit – Bianco Tiffone
+    var ms=msVrsta+', '+mdIt+' mm';                 // + debljina, za desni blok
+    if(_rnMaterijali.indexOf(ms)<0) _rnMaterijali.push(ms);
 
     // Adaptivna velicina prema obliku/produzecima - vise prostora za crtez
     var _csz=getCanvasSizeForItem();
@@ -5475,7 +5483,7 @@ function genRadniNalog(returnHtml){try{
       '<div class="rn-stavka">'+
       '<div class="rn-stavka-hd">'+
         '<span class="rn-br">'+(i+1)+'</span>'+
-        '<span class="rn-tip">'+tipLbl+'</span>'+
+        '<span class="rn-tip">'+tipLbl+' · <span style="font-weight:400;opacity:.9">'+msVrsta+'</span></span>'+
         '<span class="rn-mat">'+ms+'</span>'+
       '</div>'+
       '<div class="rn-body">'+
@@ -5516,7 +5524,7 @@ function genRadniNalog(returnHtml){try{
       '.rn-stavka-hd{background:#1a3f7a;color:#fff;padding:8px 14px;display:flex;align-items:center;gap:14px;}'+
       '.rn-br{background:#fff;color:#1a3f7a;font-weight:700;font-size:16px;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;}'+
       '.rn-tip{font-size:15px;font-weight:700;}'+
-      '.rn-mat{margin-left:auto;font-size:12px;opacity:.85;}'+
+      '.rn-mat{margin-left:auto;font-size:12.5px;font-weight:600;opacity:1;}'+
       '.rn-body{display:flex;gap:0;}'+
       '.rn-crtez{flex:1;padding:8px;border-right:1px solid #dde2ea;}'+
       '.rn-right{width:240px;flex-shrink:0;align-self:start;padding:0 8px;}'+
@@ -5536,7 +5544,7 @@ function genRadniNalog(returnHtml){try{
       '</div>'+
     '</div>'+
     '<div class="rn-meta">'+
-      '<div><b>Materijal:</b> '+ms+'</div>'+
+      '<div><b>Materijal:</b> '+(_rnMaterijali.length?_rnMaterijali.join('  |  '):'—')+'</div>'+
       '<div><b>Stavki:</b> '+items.length+'</div>'+
       '<div><b>Nalog izdao:</b> '+(getRefIme()||'JoPeX d.o.o.')+'</div>'+
     '</div>'+
@@ -6386,7 +6394,6 @@ async function _loadConfig(){
       katSel.innerHTML = '<option value="">— izaberi —</option>'+
         cfg.kategorije_bonus.map(k=>`<option value="${k.id}">${k.naziv}</option>`).join('');
     }
-
     // Ugovorio select (u sekciji Narudžba)
     var kUgov = document.getElementById('k-ugovorio');
     if(kUgov){
@@ -6500,31 +6507,54 @@ function _generisiNazivPonude(){
   return `${kupacSlug}_${inicijali}_${datum}_${rb}_${god}`;
 }
 
-async function cloudSave(){
-  if(!_currentUser){ alert('Niste prijavljeni.'); return; }
+// Jezgro cloud čuvanja — BACA grešku ako ne uspije (bez alert-a), da ga
+// pozivalac može uhvatiti i odlučiti šta dalje (npr. usvojiPonudu pada nazad
+// na lokalno čuvanje). Vraća naziv pod kojim je ponuda sačuvana.
+async function _cloudSaveCore(){
+  if(!_currentUser) throw new Error('Niste prijavljeni.');
   const naziv = _generisiNazivPonude();
   const projekat = _getProjectData();
+  // 1. Upload JSON na R2
+  const jsonB64 = btoa(unescape(encodeURIComponent(JSON.stringify(projekat))));
+  const r1 = await fetch(API_URL+'/api/upload/ponuda-json',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ naziv, json_b64: jsonB64 })
+  });
+  const d1 = await r1.json();
+  if(!r1.ok) throw new Error(d1.error||'Greška pri uploadu');
+  // 2. Upis metapodataka u bazu
+  const kupac = (document.getElementById('kl-ime')||{}).value.trim()||null;
+  const r2 = await fetch(API_URL+'/api/ponude',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ naziv, kupac, link_json: d1.link })
+  });
+  const d2 = await r2.json();
+  if(!r2.ok) throw new Error(d2.error||'Greška pri upisu');
+  return naziv;
+}
+
+async function cloudSave(){
   try{
-    // 1. Upload JSON na R2
-    const jsonB64 = btoa(unescape(encodeURIComponent(JSON.stringify(projekat))));
-    const r1 = await fetch(API_URL+'/api/upload/ponuda-json',{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ naziv, json_b64: jsonB64 })
-    });
-    const d1 = await r1.json();
-    if(!r1.ok) throw new Error(d1.error||'Greška pri uploadu');
-
-    // 2. Upis metapodataka u bazu
-    const kupac = (document.getElementById('kl-ime')||{}).value.trim()||null;
-    const r2 = await fetch(API_URL+'/api/ponude',{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ naziv, kupac, link_json: d1.link })
-    });
-    const d2 = await r2.json();
-    if(!r2.ok) throw new Error(d2.error||'Greška pri upisu');
-
+    const naziv = await _cloudSaveCore();
     alert('✓ Ponuda sačuvana:\n'+naziv);
   }catch(e){ alert('Greška pri cloud čuvanju: '+e.message); }
+}
+
+// Rezervno lokalno čuvanje — isti JSON kao cloud, ali kao preuzimanje fajla
+// na računar. Koristi se automatski kad cloud čuvanje pri usvajanju ne uspije,
+// da ponuda NIKAD ne ostane nesačuvana.
+function _lokalniBackupPonude(){
+  try{
+    var projekat=_getProjectData();
+    var naziv=_generisiNazivPonude();
+    var blob=new Blob([JSON.stringify(projekat,null,2)],{type:'application/json;charset=utf-8'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url; a.download='JoPeX_REZERVA_'+naziv+'.json';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+    return naziv;
+  }catch(e){ return null; }
 }
 
 async function cloudLoad(){
@@ -6744,6 +6774,24 @@ async function usvojiPonudu(){
   };
 
   btn.disabled=true;btn.textContent='Priprema...';
+
+  // ── 0. ČUVANJE PONUDE (prvo na oblak, ako padne → lokalno) ──────────
+  // Ovo se radi PRIJE upisa naloga, da ponuda bude sačuvana i u slučaju
+  // da neki od kasnijih koraka (DXF/upload/baza) pukne.
+  showMsg('Čuvam ponudu na oblak...',true);
+  var _sacuvanoKao=null, _sacuvanoGdje='';
+  try{
+    _sacuvanoKao=await _cloudSaveCore();
+    _sacuvanoGdje='oblak';
+  }catch(errCloud){
+    console.warn('Cloud čuvanje nije uspjelo, prebacujem na lokalno:',errCloud.message);
+    _sacuvanoKao=_lokalniBackupPonude();
+    _sacuvanoGdje=_sacuvanoKao?'lokalno (oblak nedostupan)':'';
+    if(!_sacuvanoKao){
+      showMsg('⚠ Ponuda nije sačuvana ni na oblak ni lokalno — nastavljam sa nalogom.',false);
+    }
+  }
+
   showMsg('Generišem fajlove...',true);
 
   try{
@@ -6792,7 +6840,8 @@ async function usvojiPonudu(){
     });
     var d=await r.json();
     if(!r.ok) throw new Error(d.error||'Greška');
-    showMsg('✓ Nalog #'+d.r_br+' upisan! DXF i Radni nalog uploadovani.',true);
+    showMsg('✓ Nalog #'+d.r_br+' upisan! DXF i Radni nalog uploadovani.'
+      +(_sacuvanoGdje?' Ponuda sačuvana ('+_sacuvanoGdje+'): '+_sacuvanoKao:''),true);
   }catch(err){
     showMsg('✗ '+err.message,false);
   }finally{
