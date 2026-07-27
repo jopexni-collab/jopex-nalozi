@@ -6508,6 +6508,20 @@ async function _checkAuth(){
       location.href='home.html';
       return;
     }
+    // "Usvoji ponudu → Nalog" smije SAMO admin/"Ponude sve" (moze_ugovarati) — "Unos
+    // naloga" (bez te dozvole) smije samo da pravi i ČUVA ponudu (cloud), ne i da je
+    // sam usvoji u stvaran nalog. I backend ovo odbija (403) ako se ipak pozove — ovo
+    // je samo da dugme ne bude ni vidljivo/zbunjujuće za nekog ko ga ionako ne smije koristiti.
+    if(!u.moze_ugovarati && u.rola!=='admin'){
+      const btnUsvoji=document.getElementById('btn-usvoji');
+      if(btnUsvoji){
+        btnUsvoji.style.display='none';
+        const napomena=document.createElement('div');
+        napomena.style.cssText='margin-top:10px;padding:8px 10px;border-radius:6px;font-size:11.5px;background:#fff3e0;color:#b8860b;';
+        napomena.textContent='Sačuvaj ponudu (☁ Sačuvaj) — osoba sa pravom će je pregledati i usvojiti u radni nalog.';
+        btnUsvoji.parentNode.insertBefore(napomena, btnUsvoji);
+      }
+    }
     _currentUser = u;
     const hdrWho = document.getElementById('hdr-who');
     if(hdrWho) hdrWho.textContent = '👤 '+u.ime_prezime;

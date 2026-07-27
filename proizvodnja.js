@@ -141,6 +141,18 @@ router.post('/', async (req, res) => {
   if (!zadatak?.trim())
     return res.status(400).json({ error: '"zadatak" je obavezno polje.' });
 
+  // KRITIČNO: "Usvoji ponudu → Nalog" (Generator) smije da ZAVRŠI SAMO admin ili "Ponude
+  // sve" (moze_ugovarati). Osoba sa "Unos naloga" (bez moze_ugovarati) smije da PRAVI i
+  // ČUVA ponudu (cloud/R2), ali NE smije sama da je usvoji u stvaran radni nalog — mora
+  // neko sa pravom da to pregleda i potvrdi. Frontend sakriva dugme za takve korisnike,
+  // ali to SAMO PO SEBI nije dovoljno (neko bi mogao pozvati API direktno) — zato je
+  // provjera i OVDJE, na backend-u, gdje se stvarno ne može zaobići.
+  if (iz_generatora_ponuda && user?.rola !== 'admin' && !user?.moze_ugovarati) {
+    return res.status(403).json({
+      error: 'Nemate pravo da usvojite ponudu u radni nalog. Sačuvajte je (☁ Sačuvaj) da je neko sa pravom pregleda i usvoji.',
+    });
+  }
+
   // Cijenu (ugovorena_suma/avans) smije upisati bilo ko ko kreira nalog — pošto je BAŠ ON
   // "Ugovorio" na ovom nalogu (vidi ispod), po istom principu kao vidljivost/uređivanje
   // kasnije (vidi filtrirajFinansije).
