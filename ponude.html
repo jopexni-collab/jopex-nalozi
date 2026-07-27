@@ -6514,22 +6514,33 @@ async function _cloudSaveCore(){
   if(!_currentUser) throw new Error('Niste prijavljeni.');
   const naziv = _generisiNazivPonude();
   const projekat = _getProjectData();
+  // Sigurno citanje odgovora: ako server vrati HTML (404/500 stranicu) umjesto
+  // JSON-a, r.json() bi bacio nejasan "Unexpected token <". Ovako korisnik
+  // dobija razumljivu poruku sa HTTP statusom.
+  async function _procitaj(r, korak){
+    let d=null;
+    try{ d = await r.json(); }catch(e){ d=null; }
+    if(!r.ok){
+      throw new Error((d&&d.error) ? d.error : (korak+' — server je vratio HTTP '+r.status));
+    }
+    if(!d) throw new Error(korak+' — neispravan odgovor servera.');
+    return d;
+  }
   // 1. Upload JSON na R2
   const jsonB64 = btoa(unescape(encodeURIComponent(JSON.stringify(projekat))));
   const r1 = await fetch(API_URL+'/api/upload/ponuda-json',{
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ naziv, json_b64: jsonB64 })
   });
-  const d1 = await r1.json();
-  if(!r1.ok) throw new Error(d1.error||'Greška pri uploadu');
+  const d1 = await _procitaj(r1,'Upload na R2');
+  if(!d1.link) throw new Error('Upload na R2 — server nije vratio link fajla.');
   // 2. Upis metapodataka u bazu
   const kupac = (document.getElementById('kl-ime')||{}).value.trim()||null;
   const r2 = await fetch(API_URL+'/api/ponude',{
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ naziv, kupac, link_json: d1.link })
   });
-  const d2 = await r2.json();
-  if(!r2.ok) throw new Error(d2.error||'Greška pri upisu');
+  await _procitaj(r2,'Upis ponude u bazu');
   return naziv;
 }
 
@@ -6775,20 +6786,38 @@ async function usvojiPonudu(){
 
   btn.disabled=true;btn.textContent='Priprema...';
 
-  // ── 0. ČUVANJE PONUDE (prvo na oblak, ako padne → lokalno) ──────────
-  // Ovo se radi PRIJE upisa naloga, da ponuda bude sačuvana i u slučaju
-  // da neki od kasnijih koraka (DXF/upload/baza) pukne.
+  // ── 0. ČUVANJE PONUDE NA OBLAK (obavezan korak, prije upisa naloga) ──
+  // Ponuda se MORA sačuvati prije nego se napravi nalog. Ako oblak ne radi,
+  // korisnik dobija jasnu poruku sa razlogom i sam bira: prekini (pa ručno
+  // sačuva), ili nastavi uz lokalnu rezervnu kopiju.
+  if(!_currentUser){
+    showMsg('✗ Niste prijavljeni — ponuda se ne može sačuvati. Osvježite stranicu i prijavite se.',false);
+    btn.disabled=false;btn.textContent='✅ Usvoji ponudu → Nalog';
+    return;
+  }
   showMsg('Čuvam ponudu na oblak...',true);
   var _sacuvanoKao=null, _sacuvanoGdje='';
   try{
     _sacuvanoKao=await _cloudSaveCore();
     _sacuvanoGdje='oblak';
+    showMsg('✓ Ponuda sačuvana na oblak: '+_sacuvanoKao,true);
   }catch(errCloud){
-    console.warn('Cloud čuvanje nije uspjelo, prebacujem na lokalno:',errCloud.message);
+    console.error('Cloud čuvanje ponude nije uspjelo:',errCloud);
+    var _nastavi=confirm(
+      'Ponuda NIJE sačuvana na oblak.\n\n'+
+      'Razlog: '+(errCloud.message||'nepoznata greška')+'\n\n'+
+      'OK  = sačuvaj lokalnu rezervnu kopiju (.json) i nastavi sa nalogom\n'+
+      'Otkaži = prekini, pa ručno klikni "☁ Sačuvaj" i pokušaj ponovo'
+    );
+    if(!_nastavi){
+      showMsg('✗ Prekinuto. Ponuda nije sačuvana — klikni "☁ Sačuvaj" pa ponovo usvoji.',false);
+      btn.disabled=false;btn.textContent='✅ Usvoji ponudu → Nalog';
+      return;
+    }
     _sacuvanoKao=_lokalniBackupPonude();
     _sacuvanoGdje=_sacuvanoKao?'lokalno (oblak nedostupan)':'';
     if(!_sacuvanoKao){
-      showMsg('⚠ Ponuda nije sačuvana ni na oblak ni lokalno — nastavljam sa nalogom.',false);
+      alert('⚠ Ni lokalna rezerva nije uspjela. Nalog će biti upisan, ali ponuda NIJE nigdje sačuvana.');
     }
   }
 
