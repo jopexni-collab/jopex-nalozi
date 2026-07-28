@@ -385,10 +385,10 @@ td.num{text-align:right;font-weight:700;}
       <thead>
         <tr>
           <th>Klijent</th><th>Duguje (stvarno)</th><th>Očekivano (obećano)</th><th>Duguje — preostalo</th>
-          <th>Pretplata</th><th>Uplaćeno u banku (istorijski)</th>
+          <th>Pretplata</th><th>Uplaćeno u banku (istorijski)</th><th>Verifikacija</th>
         </tr>
       </thead>
-      <tbody id="klijenti-tbody"><tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr></tbody>
+      <tbody id="klijenti-tbody"><tr><td colspan="7" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -867,7 +867,10 @@ function render(){
               ?`<a class="nalog-link" href="uplata-dokument.html?token=${encodeURIComponent(r.javni_token)}" target="_blank" rel="noopener">${esc(r.nalog_r_br)}</a>`
               :`<span class="nalog-link" style="cursor:default;">${esc(r.nalog_r_br)}</span>`
       ):''}</td>
-      <td>${esc(r.opis||'')}</td>
+      <td>
+        ${esc(r.opis||'')}
+        ${vpBankaKontrolaHtml(r)}
+      </td>
       <td>${r.predao_blagajniku
         ?`<span class="predano">✓ ${rijecPozitivno} ${r.datum_predaje?fd(r.datum_predaje)+' '+fvrijeme(r.datum_predaje):''}${r.preuzeo_ime?' — '+esc(r.preuzeo_ime):''}</span>`
         :`<span class="nepredano-txt">${rijecNegativno}</span>
@@ -876,6 +879,38 @@ function render(){
       <td>${isAdmin?`<button class="btn-del" onclick="obrisi(${r.id})">🗑</button>`:''}</td>
     </tr>
   `;}).join('');
+}
+
+// Prepoznaje redove koji potiču od prodaje na VP/dug ili banku (roba je OTIŠLA, ali
+// nije naplaćena gotovinom) — prepoznaje se po tekstu opisa koji otpremnice.js uvijek
+// stavlja za taj slučaj ("Prodaja (bruto) — ..." za pozitivan red, "Dug po otpremnici —
+// ..." za negativan). Blagajnik "pečatira" da je pregledao — čist kontrolni korak, NE
+// dira stanje robe niti dug kupca (to već rade otpremnice/PJ stanje).
+function jeVpBankaRed(r){
+  const o=r.opis||'';
+  return o.startsWith('Prodaja (bruto)') || o.startsWith('Dug po otpremnici');
+}
+function vpBankaKontrolaHtml(r){
+  if(!jeVpBankaRed(r)) return '';
+  const jePlus=parseFloat(r.iznos)>=0;
+  // kupac_naziv nije posebno polje na gotovina redu — otpremnice.js UVIJEK stavlja ime
+  // kupca poslije " — " u opisu za ove redove, pa se odatle izvlači.
+  const imeIzOpisa=(r.opis||'').split(' — ')[1]||'kupca';
+  const labela = jePlus ? `Oslobodi ${esc(r.komercijalista_ime||'komercijalistu')}` : `Zaduži ${esc(imeIzOpisa)}`;
+  if(r.blagajnik_kontrola){
+    return `<div style="margin-top:4px;font-size:10.5px;color:var(--green);font-weight:700;">🚚 ✓ ${jePlus?'Oslobođeno':'Zaduženo'} — ${esc(r.blagajnik_kontrola_ko_ime||'')} ${r.blagajnik_kontrola_kada?fd(r.blagajnik_kontrola_kada)+' '+fvrijeme(r.blagajnik_kontrola_kada):''}</div>`;
+  }
+  return `<div style="margin-top:4px;">
+    <span style="font-size:10.5px;color:var(--red);font-weight:700;">🚚 Odvezeno, nije naplaćeno</span>
+    <button class="btn-predaj" onclick="potvrdiKontrolu(${r.id})" style="margin-left:4px;">${labela}</button>
+  </div>`;
+}
+async function potvrdiKontrolu(id){
+  try{
+    const r=await fetch(`${API}/api/gotovina/${id}/kontrola`,{method:'POST'});
+    if(!r.ok){ const d=await r.json(); alert('✗ '+(d.error||'Greška.')); return; }
+    load();
+  }catch(e){ alert('✗ Greška.'); }
 }
 
 /* ── Pretraga komitenta (dijeljeno za obje forme, 'f'=naplata, 'i'=isplata) ── */
@@ -1425,11 +1460,11 @@ async function dodijeliBanku(id, banka){
 
 async function ucitajKlijentiListu(){
   const tbody=document.getElementById('klijenti-tbody');
-  tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr>';
+  tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr>';
   try{
     const r=await fetch(`${API}/api/finansije/klijenti`);
     const rows=await r.json();
-    if(!rows.length){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Nema klijenata sa dugom/pretplatom.</td></tr>'; return; }
+    if(!rows.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:#999">Nema klijenata sa dugom/pretplatom.</td></tr>'; return; }
     tbody.innerHTML=rows.map(k=>`
       <tr style="${k.kupac_id?'cursor:pointer;':''}" ${k.kupac_id?`ondblclick="otvoriDugKlijenta(${k.kupac_id},'${esc(k.kupac_naziv||'').replace(/'/g,"\\'")}')"  title="Dvoklik za detalje i naplatu"`:''}>
         <td>
@@ -1441,9 +1476,10 @@ async function ucitajKlijentiListu(){
         <td>${k.duguje_soft>0?fm(k.duguje_soft):'—'}</td>
         <td style="${k.pretplata>0?'color:var(--green);font-weight:700;':''}">${k.pretplata>0?'+ '+fm(k.pretplata):'—'}</td>
         <td>${k.uplaceno_banka_istorijski>0?fm(k.uplaceno_banka_istorijski):'—'}</td>
+        <td>${k.nije_verifikovano_broj>0?`<span style="color:var(--red);font-weight:700;font-size:11px;">🚚 ${k.nije_verifikovano_broj} neverifik.</span>`:'<span style="color:var(--green);font-size:11px;">✓ sve</span>'}</td>
       </tr>
     `).join('');
-  }catch(e){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>'; }
+  }catch(e){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>'; }
 }
 
 /* ── ISTORIJSKI UNOS ─────────────────────────────────────────────────── */

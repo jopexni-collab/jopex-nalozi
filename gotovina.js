@@ -244,4 +244,23 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// POST /api/gotovina/:id/kontrola - blagajnik potvrđuje da je pregledao VP/Banka red
+// (čist "pečat", ne mijenja stanje robe niti dug kupca — to već rade otpremnice).
+router.post('/:id/kontrola', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+  try {
+    const r = await pool.query(
+      `UPDATE gotovina SET blagajnik_kontrola=true, blagajnik_kontrola_ko_id=$1,
+         blagajnik_kontrola_ko_ime=$2, blagajnik_kontrola_kada=now()
+       WHERE id=$3 RETURNING *`,
+      [user.id, user.ime_prezime, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Nije pronađeno.' });
+    res.json(r.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -750,15 +750,18 @@ router.post('/potvrdi', async (req, res) => {
 router.get('/dugovanja/lista', async (req, res) => {
   try {
     const { objekt_id } = req.query;
-    let where = [`status_placanja != 'placeno'`, `status = 'potvrdjena'`];
+    let where = [`o.status_placanja != 'placeno'`, `o.status = 'potvrdjena'`];
     let vals = [];
     let i = 1;
-    if (objekt_id) { where.push(`objekt_id = $${i++}`); vals.push(objekt_id); }
+    if (objekt_id) { where.push(`o.objekt_id = $${i++}`); vals.push(objekt_id); }
     const r = await pool.query(
-      `SELECT id, broj, datum, kupac_id, kupac_naziv, kupac_telefon, objekt_naziv,
-              komercijalista_ime, ukupan_iznos, iznos_placeno, status_placanja,
-              (ukupan_iznos - iznos_placeno) AS duguje
-       FROM otpremnice WHERE ${where.join(' AND ')} ORDER BY datum ASC`,
+      `SELECT o.id, o.broj, o.datum, o.kupac_id, o.kupac_naziv, o.kupac_telefon, o.objekt_naziv,
+              o.komercijalista_ime, o.ukupan_iznos, o.iznos_placeno, o.status_placanja,
+              (o.ukupan_iznos - o.iznos_placeno) AS duguje,
+              g.blagajnik_kontrola, g.blagajnik_kontrola_ko_ime, g.blagajnik_kontrola_kada
+       FROM otpremnice o
+       LEFT JOIN gotovina g ON g.nalog_r_br = o.broj AND g.opis LIKE 'Dug po otpremnici%'
+       WHERE ${where.join(' AND ')} ORDER BY o.datum ASC`,
       vals
     );
     res.json(r.rows);

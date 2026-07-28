@@ -141,6 +141,20 @@ router.get('/klijenti', async (req, res) => {
       GROUP BY kljuc, kupac_id, kupac_naziv
     `);
 
+    // Koliko od tih dugovnih otpremnica JOŠ NIJE pregledao/potvrdio blagajnik ("kontrola")
+    // — brojač po klijentu, da "Klijenti finansije" pokaže i ovaj signal (bez otvaranja
+    // svake otpremnice pojedinačno).
+    const nijeVerifikovano = await pool.query(`
+      SELECT
+        COALESCE(o.kupac_id::text, 'ime:'||LOWER(TRIM(o.kupac_naziv))) AS kljuc,
+        o.kupac_id, o.kupac_naziv, COUNT(*) AS broj
+      FROM otpremnice o
+      LEFT JOIN gotovina g ON g.nalog_r_br = o.broj AND g.opis LIKE 'Dug po otpremnici%'
+      WHERE o.status_placanja != 'placeno' AND o.status = 'potvrdjena' AND o.kupac_naziv IS NOT NULL
+        AND (g.blagajnik_kontrola IS NULL OR g.blagajnik_kontrola = false)
+      GROUP BY kljuc, o.kupac_id, o.kupac_naziv
+    `);
+
     // Dug iz radnih naloga (proizvodnja_jopex) — po naručiocu (slobodan tekst).
     const dugNalozi = await pool.query(`
       SELECT
@@ -193,7 +207,7 @@ router.get('/klijenti', async (req, res) => {
           kupac_id: kupacId || null, kupac_naziv: naziv,
           registrovan: !!kupacId,
           duguje_banka: 0, duguje_gotovina: 0, duguje_nepoznato: 0,
-          uplaceno_banka_istorijski: 0, pretplata: 0, ocekivano: 0,
+          uplaceno_banka_istorijski: 0, pretplata: 0, ocekivano: 0, nije_verifikovano_broj: 0,
         };
       }
       return klijenti[kljuc];
@@ -217,6 +231,10 @@ router.get('/klijenti', async (req, res) => {
     for (const row of ocekivane.rows) {
       const k = osiguraj(row.kljuc, row.kupac_id, row.kupac_naziv);
       k.ocekivano += +row.iznos;
+    }
+    for (const row of nijeVerifikovano.rows) {
+      const k = osiguraj(row.kljuc, row.kupac_id, row.kupac_naziv);
+      k.nije_verifikovano_broj = +row.broj;
     }
 
     const lista = Object.values(klijenti)
