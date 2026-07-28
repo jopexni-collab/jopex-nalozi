@@ -93,6 +93,13 @@ td.num{text-align:right;font-weight:700;}
 </style>
 
 <div id="tab-gotovina">
+
+<!-- VP/BANKA — potvrda po otpremnici (jedan klik potvrđuje SVE povezane redove) -->
+<div id="vp-cekanje-panel" style="display:none;background:#fff8e6;border:1px solid #f0d78c;border-radius:10px;padding:14px;margin-bottom:16px;">
+  <h3 style="margin:0 0 10px;font-size:14px;">🚚 Otpremnice koje čekaju potvrdu (odvezeno, nije naplaćeno)</h3>
+  <div id="vp-cekanje-lista"></div>
+</div>
+
 <!-- SUME -->
 <div class="sume" id="sume-box">
   <div class="suma-box" id="card-danas"><div class="val" id="s-danas">—</div><div class="lbl">Danas</div></div>
@@ -878,8 +885,10 @@ function render(){
       <td>${esc(r.opis||'')}</td>
       <td>${r.predao_blagajniku
         ?`<span class="predano">${jeVp?'🚚 ✓':'✓'} ${rijecPozitivno} ${r.datum_predaje?fd(r.datum_predaje)+' '+fvrijeme(r.datum_predaje):''}${r.preuzeo_ime?' — '+esc(r.preuzeo_ime):''}</span>`
-        :`<span class="nepredano-txt">${rijecNegativno}</span>
-          <button class="btn-predaj" onclick="predajBlagajniku(${r.id})">${rijecPozitivno}</button>`
+        : jeVp
+          ? `<span class="nepredano-txt">${rijecNegativno}</span> <span style="font-size:10px;color:#8b96a5;">(potvrdi gore, u panelu "🚚 Otpremnice koje čekaju")</span>`
+          : `<span class="nepredano-txt">${rijecNegativno}</span>
+             <button class="btn-predaj" onclick="predajBlagajniku(${r.id})">${rijecPozitivno}</button>`
       }</td>
       <td>${isAdmin?`<button class="btn-del" onclick="obrisi(${r.id})">🗑</button>`:''}</td>
     </tr>
@@ -897,6 +906,38 @@ function jeVpBankaRed(r){
   const o=r.opis||'';
   return o.startsWith('Prodaja (bruto)') || o.startsWith('Dug po otpremnici');
 }
+
+/* ── VP/BANKA — potvrda po otpremnici (jedan klik, jedan događaj) ──────── */
+async function ucitajVpCekanje(){
+  const panel=document.getElementById('vp-cekanje-panel');
+  const cont=document.getElementById('vp-cekanje-lista');
+  try{
+    const r=await fetch(`${API}/api/finansije/vp-cekanje`);
+    const rows=await r.json();
+    if(!rows.length){ panel.style.display='none'; return; }
+    panel.style.display='block';
+    cont.innerHTML=rows.map(o=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+        <div style="font-size:12.5px;">
+          <b>${esc(o.broj)}</b> — ${esc(o.kupac_naziv||'—')}
+          <span style="color:#8b96a5;"> · ${esc(o.objekt_naziv||'')} · ${fd(o.datum)} · Komercijalista: ${esc(o.komercijalista_ime||'—')}</span>
+          <div style="margin-top:2px;">Ukupno: ${fm(o.ukupan_iznos)} · Duguje: <b style="color:var(--red);">${fm(o.duguje)}</b></div>
+        </div>
+        <button class="btn-predaj" onclick="potvrdiVpOtpremnicu('${esc(o.broj).replace(/'/g,"\\'")}')" style="white-space:nowrap;">✓ Potvrdi otpremnicu</button>
+      </div>
+    `).join('');
+  }catch(e){ panel.style.display='none'; }
+}
+
+async function potvrdiVpOtpremnicu(broj){
+  try{
+    const r=await fetch(`${API}/api/finansije/vp-cekanje/${encodeURIComponent(broj)}/potvrdi`,{method:'POST'});
+    if(!r.ok){ const d=await r.json(); alert('✗ '+(d.error||'Greška.')); return; }
+    ucitajVpCekanje();
+    load();
+  }catch(e){ alert('✗ Greška.'); }
+}
+
 
 /* ── Pretraga komitenta (dijeljeno za obje forme, 'f'=naplata, 'i'=isplata) ── */
 let komitentIzabran={f:null, i:null};
@@ -1291,6 +1332,7 @@ fetch(`${API}/api/auth/me`).then(r=>{
   load();
   loadSume();
   ucitajFilterPJ();
+  ucitajVpCekanje();
   azurirajNalogPoljeVidljivost();
 
   // Automatsko osvježavanje — bez ovoga, promjene iz drugih ekrana (npr. štikliranje

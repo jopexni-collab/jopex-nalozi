@@ -656,16 +656,18 @@ router.post('/potvrdi', async (req, res) => {
       // vrijednost kao PLUS (bruto prodaja), i nenaplaćeni dio kao MINUS (dug). Njihov
       // zbir = tačno svježa gotovina primljena sad, ali ostaju vidljiva DVA reda —
       // jedan pokazuje ukupnu prodaju, drugi šta konkretno nije naplaćeno.
-      // Kad je nacin='banka', PLUS red ide u banka_uplate umjesto u gotovinu — MINUS
-      // (dug) red ostaje u gotovini u oba slučaja (dug je uvijek isto, bez obzira gdje
-      // je uplaćeni dio otišao).
+      // Kad je nacin='banka', PLUS red ide u banka_uplate umjesto u gotovinu — ALI samo
+      // za iznosSada (stvarno uplaćeno preko banke SADA), NE za cijeli brutoZaBlagajnu
+      // (koji uključuje i nenaplaćeni dio) — banka ne smije biti "zadužena" za novac koji
+      // uopšte nije prošao kroz nju. MINUS (dug) red ostaje u gotovini u oba slučaja (dug
+      // je uvijek isto, bez obzira gdje je uplaćeni dio otišao).
       if (jeBanka) {
-        if (brutoZaBlagajnu > 0) {
+        if (iznosSada > 0) {
           const b = await client.query(
             `INSERT INTO banka_uplate (iznos, banka, izvor, nalog_r_br, kupac_id, kupac_naziv, objekt_naziv, komercijalista_ime, upisao_id, upisao_ime, napomena)
              VALUES ($1,$2,'Maloprodaja',$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-            [brutoZaBlagajnu, nacin_banka, broj, kupac_id || null, opisKupca, objektNaziv, user.ime_prezime,
-             user.id, user.ime_prezime, `Prodaja (bruto) — ${opisKupca}`]
+            [iznosSada, nacin_banka, broj, kupac_id || null, opisKupca, objektNaziv, user.ime_prezime,
+             user.id, user.ime_prezime, `Prodaja (djelimično, ostatak na dug) — ${opisKupca}`]
           );
           bankaUplataId = b.rows[0].id;
         }

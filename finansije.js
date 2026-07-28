@@ -431,4 +431,53 @@ router.post('/ocekivana-uplata/:id/otkazi', async (req, res) => {
   }
 });
 
+/* ═══ VP/BANKA — POTVRDA PO OTPREMNICI (Ideja 2) ══════════════════════════ */
+// Umjesto dva odvojena dugmeta (bruto/dug su knjigovodstveno dva reda, ali JEDAN
+// stvaran događaj), ovo grupiše sve gotovina redove jedne otpremnice i potvrđuje ih
+// SVE odjednom, jednim klikom, na jednom mjestu.
+
+// GET /api/finansije/vp-cekanje — otpremnice koje imaju bar jedan neverifikovan
+// gotovina red (bruto i/ili dug).
+router.get('/vp-cekanje', async (req, res) => {
+  const user = req.session?.user;
+  if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });
+  try {
+    const r = await pool.query(`
+      SELECT
+        o.broj, o.datum, o.kupac_naziv, o.komercijalista_ime, o.objekt_naziv,
+        o.ukupan_iznos, o.iznos_placeno, (o.ukupan_iznos - o.iznos_placeno) AS duguje,
+        COUNT(g.id) AS broj_zapisa
+      FROM otpremnice o
+      JOIN gotovina g ON g.nalog_r_br = o.broj
+        AND (g.opis LIKE 'Prodaja (bruto)%' OR g.opis LIKE 'Dug po otpremnici%')
+        AND g.predao_blagajniku = false
+      GROUP BY o.id, o.broj, o.datum, o.kupac_naziv, o.komercijalista_ime, o.objekt_naziv,
+               o.ukupan_iznos, o.iznos_placeno
+      ORDER BY o.datum DESC
+    `);
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/finansije/vp-cekanje/:broj/potvrdi — potvrđuje SVE gotovina redove te
+// otpremnice odjednom (bruto i dug, koliko god ih ima) — jedan klik, jedan događaj.
+router.post('/vp-cekanje/:broj/potvrdi', async (req, res) => {
+  const user = req.session?.user;
+  if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });
+  try {
+    const r = await pool.query(
+      `UPDATE gotovina SET predao_blagajniku=true, preuzeo_ime=$1, datum_predaje=now()
+       WHERE nalog_r_br=$2 AND (opis LIKE 'Prodaja (bruto)%' OR opis LIKE 'Dug po otpremnici%')
+         AND predao_blagajniku=false
+       RETURNING id`,
+      [user.ime_prezime, req.params.broj]
+    );
+    res.json({ ok: true, potvrdjeno_zapisa: r.rows.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
