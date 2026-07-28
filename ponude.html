@@ -325,6 +325,11 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
         <div class="fg"><label>Polu C</label><input type="text" inputmode="decimal" id="ivp-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
         <div class="fg"><label>Gerovanje</label><input type="text" inputmode="decimal" id="ivp-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
+            <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Cijene rezanja (KM/m)</div>
+      <div class="r2">
+        <div class="fg"><label>Pravolinijsko</label><input type="text" inputmode="decimal" id="ivp-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Pod uglom</label><input type="text" inputmode="decimal" id="ivp-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+      </div>
       <div id="iv-con"></div>
     </div>
     <div class="sec" id="sec-corner">
@@ -528,6 +533,11 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
         <div class="fg"><label>Polu C</label><input type="text" inputmode="decimal" id="ivp-kl-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
         <div class="fg"><label>Gerovanje</label><input type="text" inputmode="decimal" id="ivp-kl-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
+            <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Cijene rezanja (KM/m)</div>
+      <div class="r2">
+        <div class="fg"><label>Pravolinijsko</label><input type="text" inputmode="decimal" id="ivp-kl-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Pod uglom</label><input type="text" inputmode="decimal" id="ivp-kl-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+      </div>
       <div id="iv-con-kl"></div>
     </div></div>
 
@@ -580,6 +590,11 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
         <div class="fg"><label>Polu C</label><input type="text" inputmode="decimal" id="ivp-st-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
         <div class="fg"><label>Gerovanje</label><input type="text" inputmode="decimal" id="ivp-st-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
+            <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Cijene rezanja (KM/m)</div>
+      <div class="r2">
+        <div class="fg"><label>Pravolinijsko</label><input type="text" inputmode="decimal" id="ivp-st-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Pod uglom</label><input type="text" inputmode="decimal" id="ivp-st-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+      </div>
       <div id="iv-con-st"></div>
     </div></div>
 
@@ -621,6 +636,11 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <div class="r2">
         <div class="fg"><label>Polu C</label><input type="text" inputmode="decimal" id="ivp-sto-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
         <div class="fg"><label>Gerovanje</label><input type="text" inputmode="decimal" id="ivp-sto-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
+      </div>
+            <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Cijene rezanja (KM/m)</div>
+      <div class="r2">
+        <div class="fg"><label>Pravolinijsko</label><input type="text" inputmode="decimal" id="ivp-sto-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Pod uglom</label><input type="text" inputmode="decimal" id="ivp-sto-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div id="iv-con-sto"></div>
     </div>
@@ -2651,20 +2671,21 @@ function _ivGet(segId){
 function updateIviceRez(segId,rez){
   var st=_ivGet(segId);
   st.rez=rez;
-  if(rez!=='none' && (st.rezC==null||isNaN(st.rezC))) st.rezC=0;
   if(rez==='ugao' && !st.ugao) st.ugao=45;
   buildIvice(); buildExtSection(); refresh();
-}
-function updateIviceRezCijena(segId,val){
-  var st=_ivGet(segId);
-  st.rezC=Math.max(0,parseFloat((val||'0').toString().replace(',','.'))||0);
-  refresh(); // NE rebuilda panel - da fokus ostane u polju dok se kuca
 }
 function updateIviceUgao(segId,val){
   var st=_ivGet(segId);
   var v=parseFloat((val||'0').toString().replace(',','.'))||0;
   st.ugao=Math.max(1,Math.min(89,v));
   refresh();
+}
+// Cijena rezanja je ZAJEDNICKA za tip (kao cijene profila) - jedna za
+// pravolinijsko, jedna za pod uglom. Ugao ostaje po strani jer je geometrija.
+function getRezPrice(rez){
+  var prefix=(tip==='kl')?'ivp-kl-':(tip==='st'?'ivp-st-':(tip==='sto'?'ivp-sto-':'ivp-'));
+  var el=ge(prefix+'rez'+rez);
+  return el?parseFloat((el.value||'0').replace(',','.'))||0:0;
 }
 function getRezData(){
   var ivShape=(tip==='kl')?'kl':(tip==='st'?'st':shape);
@@ -2674,7 +2695,7 @@ function getRezData(){
     var rez=st.rez||'none';
     if(rez==='none') return;
     var m=Math.max(0,s.len)/1000;
-    var c=parseFloat(st.rezC)||0;
+    var c=getRezPrice(rez);
     res.push({id:s.id,lbl:s.fullLbl||s.lbl,rez:rez,rezLbl:RezLbl[rez]||rez,
       ugao:st.ugao||45,m:m,ic:c,uk:Math.round(m*c*100)/100});
   });
@@ -2699,17 +2720,11 @@ function _ivRowHTML(s,bojaSlova,dodatniStil){
     +'<div class="iv-rez-line">'
       +'<span class="iv-rez-lbl">Rez</span>'
       +'<select onchange="updateIviceRez(\''+s.id+'\',this.value)">'+optsRez+'</select>';
-  if(curRez!=='none'){
-    h+='<input type="number" min="0" step="0.01" value="'+(st.rezC!=null?st.rezC:0)+'"'
-      +' title="Cijena rezanja za OVU stranu"'
-      +' oninput="fixComma(this);updateIviceRezCijena(\''+s.id+'\',this.value)">'
-      +'<span class="iv-rez-unit">KM/m</span>';
-    if(curRez==='ugao'){
-      h+='<input type="number" min="1" max="89" value="'+(st.ugao||45)+'"'
-        +' title="Ugao reza (ne utice na cijenu)"'
-        +' oninput="fixComma(this);updateIviceUgao(\''+s.id+'\',this.value)">'
-        +'<span class="iv-rez-unit">\u00b0</span>';
-    }
+  if(curRez==='ugao'){
+    h+='<input type="number" min="1" max="89" value="'+(st.ugao||45)+'"'
+      +' title="Ugao reza (ne utice na cijenu)"'
+      +' oninput="fixComma(this);updateIviceUgao(\''+s.id+'\',this.value)">'
+      +'<span class="iv-rez-unit">\u00b0</span>';
   }
   h+='</div></div>';
   return h;
@@ -3282,13 +3297,14 @@ function getIvData(){
 // kod klupice/stepenica/stolova mnozi i rezanje, isto kao obradu ivica.
 function _rezRedovi(kom){
   kom=kom||1;
+  var prefix=(tip==='kl')?'ivp-kl-':(tip==='st'?'ivp-st-':(tip==='sto'?'ivp-sto-':'ivp-'));
   var rd=getRezData(), rows='', uk=0;
   rd.forEach(function(r){
     var iznos=Math.round(r.uk*kom*100)/100;
     uk+=iznos;
     var opis=r.rezLbl+(r.rez==='ugao'?(' '+r.ugao+'\u00b0'):'')+' ('+r.lbl+')'+(kom>1?(' \u00d7'+kom):'');
     rows+=trow(opis, r.m.toFixed(2)+' m',
-      _editableUnitPrice(r.ic,'/m','setRezCijena',[activeIdx,r.id]), f(iznos));
+      _editableUnitPrice(r.ic,'/m','setRezPrice',[prefix,r.rez]), f(iznos));
   });
   return {rows:rows, uk:Math.round(uk*100)/100};
 }
@@ -4454,8 +4470,9 @@ function drawLegenda(ctx,W,H){
 
   var profs=Object.keys(PLbl);
   var symSz=13, rowH=13, padX=6, padY=4, txtSize=9;
-  var lW=138;
-  var lH=padY*2+10+profs.length*rowH;
+  var _rezLeg=[]; try{ _rezLeg=getRezData(); }catch(e){ _rezLeg=[]; }
+  var lW=_rezLeg.length?168:138;
+  var lH=padY*2+10+profs.length*rowH+(_rezLeg.length?(13+_rezLeg.length*10):0);
   var lX=W-lW-4, lY=4;
 
   // Pozadina
@@ -5506,21 +5523,12 @@ function setCelMatPrice(itemIdx,displayVal,currency){
   refresh();
   genPon(_lastPonCurrency);
 }
-// Postavlja cijenu rezanja ZA JEDNU STRANU odredjene stavke. Cijena rezanja
-// nije globalna (kao profili) nego po strani, pa mora kroz prebacivanje
-// aktivne stavke - isto kao ostale per-stavka vrijednosti.
-function setRezCijena(itemIdx,segId,displayVal,currency){
-  if(!items[itemIdx]) return;
+// Postavlja ZAJEDNICKU cijenu rezanja (pravolinijsko / pod uglom) za tip -
+// isti princip kao cijene profila, pa nije potrebno prebacivanje stavke.
+function setRezPrice(prefix,rez,displayVal,currency){
   var km=_toKM(displayVal,currency);
-  var savedIdx=activeIdx;
-  activeIdx=itemIdx;
-  syncFromActive();loadItemInputs();
-  var st=ivSt[segId]||{prof:'none'};
-  st.rezC=km; ivSt[segId]=st;
-  syncToActive();
-  activeIdx=savedIdx;
-  syncFromActive();loadItemInputs();
-  buildIvice();buildExtSection();
+  var el=ge(prefix+'rez'+rez);
+  if(el) el.value=km.toFixed(2);
   refresh();
   genPon(_lastPonCurrency);
 }
@@ -6363,7 +6371,12 @@ function genDXF(){
       // Broj komada desno
       txY(gi('kl-a')+80,gi('kl-b')/2,30,'x'+kk,'TEKST');
       txY(gi('kl-a')+80,gi('kl-b')/2-45,10,'kom','TEKST');
-      bbox_h=gi('kl-b');
+      var _rzKlD=getRezData();
+      _rzKlD.forEach(function(rz,ii){
+        txY(0,gi('kl-b')+50+ii*8,2,
+          'REZ '+rz.rezLbl+(rz.rez==='ugao'?(' '+rz.ugao+'st'):'')+': '+rz.lbl+' '+rz.m.toFixed(2)+'m','TEKST');
+      });
+      bbox_h=gi('kl-b')+(_rzKlD.length?50+_rzKlD.length*8:0);
     } else if(tip==='sto'){
       var stoAD=d.A||0, stoBD=(shape==='okrugao')?stoAD:(d.B||0);
       var rrD=getTableRadiusMM();
@@ -6451,6 +6464,12 @@ function genDXF(){
       } else {
         bbox_h=gi('st-b');
       }
+      var _rzStD=getRezData();
+      _rzStD.forEach(function(rz,ii){
+        txY(0,bbox_h+50+ii*8,2,
+          'REZ '+rz.rezLbl+(rz.rez==='ugao'?(' '+rz.ugao+'st'):'')+': '+rz.lbl+' '+rz.m.toFixed(2)+'m','TEKST');
+      });
+      if(_rzStD.length) bbox_h+=50+_rzStD.length*8;
     }
 
     yGlobalOffset += bbox_h + 200; // razmak između stavki
