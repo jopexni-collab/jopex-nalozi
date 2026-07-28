@@ -63,9 +63,12 @@ router.get('/banka/stanje', async (req, res) => {
   const user = req.session?.user;
   if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });
   try {
+    // Broje se SAMO potvrđeni I JOŠ NEVERIFIKOVANI (na_izvodu=false) zapisi — čim se
+    // neko potvrdi da je vidljivo na stvarnom izvodu, "nestaje" iz ovog zbira (nije više
+    // "očekivano", nego je poznato stanje na izvodu, ne treba ga pratiti dvostruko).
     const r = await pool.query(
       `SELECT COALESCE(banka,'nerasporedjeno') AS banka, COALESCE(SUM(iznos),0) AS zbir, COUNT(*) AS broj
-       FROM banka_uplate WHERE potvrdjeno=true GROUP BY banka`
+       FROM banka_uplate WHERE potvrdjeno=true AND na_izvodu=false GROUP BY banka`
     );
     const naCekanjuRes = await pool.query(`SELECT COUNT(*) AS broj FROM banka_uplate WHERE potvrdjeno=false`);
     const mapa = {};
@@ -73,6 +76,26 @@ router.get('/banka/stanje', async (req, res) => {
     mapa.nerasporedjeno = { banka: 'nerasporedjeno', zbir: 0, broj: 0 };
     r.rows.forEach(row => { mapa[row.banka] = { banka: row.banka, zbir: +row.zbir, broj: +row.broj }; });
     res.json({ banke: Object.values(mapa), na_cekanju: +naCekanjuRes.rows[0].broj });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/finansije/banka/:id/na-izvodu — čekira/otčekira "verifikovano na bankovnom
+// izvodu" (isti duh kao Predano/Nije predano za gotovinu). Ne mijenja iznos ni banku —
+// samo status verifikacije.
+router.post('/banka/:id/na-izvodu', async (req, res) => {
+  const user = req.session?.user;
+  if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });
+  const { na_izvodu } = req.body;
+  try {
+    const r = await pool.query(
+      `UPDATE banka_uplate SET na_izvodu=$1, na_izvodu_ko_id=$2, na_izvodu_ko_ime=$3, na_izvodu_kada=$4
+       WHERE id=$5 RETURNING *`,
+      [!!na_izvodu, na_izvodu ? user.id : null, na_izvodu ? user.ime_prezime : null, na_izvodu ? new Date() : null, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Nije pronađeno.' });
+    res.json(r.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
