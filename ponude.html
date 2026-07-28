@@ -5598,6 +5598,11 @@ function saveProject(){
       tel:   gs('ref-tel')||'',
       email: gs('ref-email')||''
     },
+    cjenovnik: _snimiCjenovnik(),
+    ostalo: _snimiOstalo(),
+    ukupno: _ukupnoSvihStavki(),
+    ponuda: _ponudaInfo,
+    nalog: _nalogInfo,
     items: JSON.parse(JSON.stringify(items)),
     activeIdx: activeIdx
   };
@@ -5659,6 +5664,11 @@ function loadProject(){
             }
           }
         }
+        // Cjenovnik i globalna polja prije stavki
+        _vratiCjenovnik(p.cjenovnik);
+        _vratiOstalo(p.ostalo);
+        if(p.ponuda!==undefined) _ponudaInfo=p.ponuda||null;
+        if(p.nalog!==undefined)  _nalogInfo=p.nalog||null;
         // Postavi stavke
         items=p.items;
         // Lokacija zida je uklonjena - osiguraj da stari (ili tuđi) projekat
@@ -5700,7 +5710,12 @@ function loadProject(){
         buildCornerR();buildCustomOtvoriUI();buildSlavinaUI();
         buildItemList();
         refresh();
-        alert('Projekat učitan: '+p.items.length+' stavki');
+        var _sadaL=_ukupnoSvihStavki();
+        var _porL='Projekat učitan: '+p.items.length+' stavki';
+        if(p.ukupno!=null && _sadaL!=null && Math.abs(p.ukupno-_sadaL)>0.01){
+          _porL+='\n\n⚠ Iznos se razlikuje od sacuvanog ('+p.ukupno.toFixed(2)+' → '+_sadaL.toFixed(2)+' KM).';
+        }
+        alert(_porL);
       }catch(err){
         alert('Greška pri učitavanju: '+err.message);
       }
@@ -7058,6 +7073,10 @@ async function _ucitajPonudu(linkJson, naziv, ponudaId){
       if(ge('kl-tel')) ge('kl-tel').value=p.klijent.tel||'';
       if(ge('kl-adr')) ge('kl-adr').value=p.klijent.adr||'';
     }
+    // Cjenovnik i ostala globalna polja MORAJU nazad prije preracuna,
+    // inace bi ponuda pokupila trenutno vazece cijene umjesto svojih.
+    _vratiCjenovnik(p.cjenovnik);
+    _vratiOstalo(p.ostalo);
     // Postavi stavke — ista logika kao loadProject
     items = p.items;
     items.forEach(function(it){
@@ -7088,7 +7107,18 @@ async function _ucitajPonudu(linkJson, naziv, ponudaId){
     buildItemList();
     refresh();
     document.getElementById('cloud-modal').remove();
-    alert('✓ Ponuda "'+naziv+'" učitana: '+p.items.length+' stavki');
+    // Kontrola: da li se iznos poklopio sa onim koji je bio pri cuvanju.
+    var _sada=_ukupnoSvihStavki();
+    var _por='✓ Ponuda "'+naziv+'" učitana: '+p.items.length+' stavki';
+    if(p.ukupno!=null && _sada!=null && Math.abs(p.ukupno-_sada)>0.01){
+      _por+='\n\n⚠ PAZNJA: iznos se razlikuje od sacuvanog.\n'
+        +'Sacuvano: '+p.ukupno.toFixed(2)+' KM\n'
+        +'Sada:     '+_sada.toFixed(2)+' KM\n'
+        +'Provjeri cijene prije slanja kupcu.';
+    } else if(p.ukupno!=null){
+      _por+='\nIznos: '+p.ukupno.toFixed(2)+' KM (poklapa se sa sacuvanim)';
+    }
+    alert(_por);
   }catch(e){ alert('Greška pri učitavanju: '+e.message); }
 }
 
@@ -7119,6 +7149,56 @@ function novaPonuda(){
   refresh();
 }
 
+// ── CJENOVNIK PONUDE ───────────────────────────────────────────────
+// Cijene profila i rezanja su GLOBALNA polja (nisu dio stavke), pa se moraju
+// posebno snimiti uz ponudu. Bez ovoga bi ucitana ponuda pokupila trenutno
+// vazece cijene i tiho promijenila ukupan iznos u odnosu na ono sto je kupac
+// dobio.
+function _cjenovnikPolja(){
+  var out=[];
+  ['','kl-','st-','sto-'].forEach(function(pref){
+    ['ravna','polukrug','bevel','ogee','mitered','rezravno','rezugao'].forEach(function(k){
+      out.push('ivp-'+pref+k);
+    });
+  });
+  return out;
+}
+function _snimiCjenovnik(){
+  var o={};
+  _cjenovnikPolja().forEach(function(id){ var e=ge(id); if(e) o[id]=e.value; });
+  return o;
+}
+function _vratiCjenovnik(c){
+  if(!c) return;
+  _cjenovnikPolja().forEach(function(id){
+    if(c[id]==null) return;
+    var e=ge(id); if(e) e.value=c[id];
+  });
+}
+// Ostala globalna polja koja uticu na iznos ili na sam dokument.
+function _snimiOstalo(){
+  return {
+    ref_tel: gs('ref-tel'), ref_email: gs('ref-email'),
+    popust: gs('pon-popust'),
+    kategorija_bonus: (ge('kategorija-bonus')||{}).value||''
+  };
+}
+function _vratiOstalo(o){
+  if(!o) return;
+  var m={'ref-tel':o.ref_tel,'ref-email':o.ref_email,
+         'pon-popust':o.popust,'kategorija-bonus':o.kategorija_bonus};
+  Object.keys(m).forEach(function(id){
+    if(m[id]==null) return;
+    var e=ge(id); if(e) e.value=m[id];
+  });
+}
+// Ukupan iznos u trenutku cuvanja - sluzi kao kontrola pri ucitavanju.
+function _ukupnoSvihStavki(){
+  try{
+    return Math.round(calcAllItems().reduce(function(a,r){return a+(r.uk||0);},0)*100)/100;
+  }catch(e){ return null; }
+}
+
 // Pomoćna — izvuci podatke projekta za cloud čuvanje
 function _getProjectData(){
   try{
@@ -7131,6 +7211,9 @@ function _getProjectData(){
       },
       items: typeof items!=='undefined'?items:[],
       activeIdx: typeof activeIdx!=='undefined'?activeIdx:0,
+      cjenovnik: _snimiCjenovnik(),  // cijene profila i rezanja (globalna polja)
+      ostalo: _snimiOstalo(),        // popust, kontakt referenta, kategorija
+      ukupno: _ukupnoSvihStavki(),   // kontrolni iznos u trenutku cuvanja
       ponuda: _ponudaInfo, // red u tabeli ponuda (da se pregazi, ne duplira)
       nalog: _nalogInfo,   // veza ponuda -> radni nalog (za revizije)
       timestamp: new Date().toISOString(),
