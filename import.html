@@ -86,6 +86,13 @@ tbody tr:nth-child(even) td{background:#f8f9fc;}
     <div id="preview-wrap-nalozi" style="display:none">
       <div id="msg-parse-nalozi"></div>
       <div class="preview" id="preview-nalozi"></div>
+
+      <div id="ugovorio-mapiranje-box" style="margin-top:16px;padding:12px;background:#fff8e6;border:1px solid #f0d78c;border-radius:8px;">
+        <div style="font-size:12.5px;font-weight:700;margin-bottom:6px;">Poveži imena iz kolone "Ugovorio" sa stvarnim korisnicima</div>
+        <div style="font-size:11px;color:#8b8060;margin-bottom:10px;">U fajlu su često skraćena imena (npr. "Nenad A.") — poveži svako sa tačnim korisnikom da bi nalog ispravno pokazivao ko ga je ugovorio. Neupareno ime ostaje bez "Ugovorio" (prazno).</div>
+        <div id="ugovorio-mapiranje-lista"></div>
+      </div>
+
       <div style="margin-top:14px;display:flex;gap:12px;align-items:center">
         <button class="btn btn-primary" id="btn-import-nalozi" onclick="startImportNalozi()">✅ Importuj sve naloge</button>
         <span id="stat-nalozi" style="font-size:12px;color:#6b7a8d;"></span>
@@ -168,6 +175,48 @@ tbody tr:nth-child(even) td{background:#f8f9fc;}
 <script>
 const API='';
 let parsedNalozi=[], kupciHeader=[], kupciUzorak=[], kupciSviRedovi=[];
+let sviZaposleni=[], ugovorioMapa={}; // {"sirovo ime iz fajla": zaposleni_id ili ''}
+
+async function ucitajZaposleneZaMapiranje(){
+  try{
+    const r=await fetch(`${API}/api/zaposleni`);
+    sviZaposleni=await r.json();
+  }catch(e){ sviZaposleni=[]; }
+}
+
+// Fuzzy predlog: ako se skraćeno ime iz fajla (npr. "Nenad A.") poklapa sa POČETKOM
+// punog imena zaposlenog, ili je puno ime SADRŽANO u skraćenom — ponudi kao predlog.
+// Nije savršeno (kratka imena mogu biti dvosmislena), zato uvijek ostaje ručno potvrdljivo.
+function predloziZaposlenog(sirovoIme){
+  if(!sirovoIme) return '';
+  const s=sirovoIme.toLowerCase().trim();
+  const prviDioS=s.split(/\s+/)[0];
+  const tacno=sviZaposleni.find(z=>z.ime_prezime.toLowerCase()===s);
+  if(tacno) return tacno.id;
+  const poPocetku=sviZaposleni.find(z=>z.ime_prezime.toLowerCase().startsWith(prviDioS)&&prviDioS.length>=3);
+  if(poPocetku) return poPocetku.id;
+  return '';
+}
+
+function renderUgovorioMapiranje(){
+  const jedinstvenaImena=[...new Set(parsedNalozi.map(r=>r.ugovorio).filter(Boolean))];
+  const cont=document.getElementById('ugovorio-mapiranje-lista');
+  if(!jedinstvenaImena.length){ cont.innerHTML='<div style="font-size:11.5px;color:#8b8060;">Nema imena u koloni Ugovorio.</div>'; return; }
+  cont.innerHTML=jedinstvenaImena.map(ime=>{
+    const predlog=predloziZaposlenog(ime);
+    ugovorioMapa[ime]=predlog;
+    return `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <div style="flex:1;font-size:12px;font-weight:600;">"${ime}"</div>
+        <div style="font-size:11px;color:#8b8060;">→</div>
+        <select style="flex:1;font-size:12px;padding:4px 6px;" onchange="ugovorioMapa['${ime.replace(/'/g,"\\'")}']=this.value">
+          <option value="">— ostavi prazno —</option>
+          ${sviZaposleni.map(z=>`<option value="${z.id}" ${String(predlog)===String(z.id)?'selected':''}>${esc2(z.ime_prezime)}</option>`).join('')}
+        </select>
+      </div>`;
+  }).join('');
+}
+function esc2(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
 function switchTab(tab, btn){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
@@ -205,7 +254,7 @@ function parseBool(val){
 }
 function mapRow(cols){
   const g=i=>(cols[i]!==undefined&&cols[i]!==null)?cols[i]:'';
-  return{_r_br:parseInt(g(0))||null,zadatak:String(g(1)||'').trim(),prioritet:String(g(2)||'Normal').trim()||'Normal',ugovorio:String(g(3)||'').trim(),narucilac:String(g(4)||'').trim(),materijal:String(g(5)||'').trim(),status:String(g(6)||'Nije Započeto').trim()||'Nije Započeto',pocetak:parseDate(g(7)),planirani_zavrsetak:parseDate(g(8)),gotovo:parseBool(g(10)),reklamacija_dodatni_rad:String(g(11)||'').trim(),napomena:String(g(12)||'').trim(),link_skica:String(g(13)||'').trim(),link_ponuda:String(g(14)||'').trim(),ugovorena_suma:parseNum(g(15)),avans:parseNum(g(16))};
+  return{_r_br:parseInt(g(0))||null,zadatak:String(g(1)||'').trim(),prioritet:String(g(2)||'Normal').trim()||'Normal',ugovorio:String(g(3)||'').trim(),narucilac:String(g(4)||'').trim(),materijal:String(g(5)||'').trim(),status:String(g(6)||'Nije Započeto').trim()||'Nije Započeto',pocetak:parseDate(g(7)),planirani_zavrsetak:parseDate(g(8)),gotovo:parseBool(g(10)),reklamacija_dodatni_rad:String(g(11)||'').trim(),napomena:String(g(12)||'').trim(),link_skica:String(g(13)||'').trim(),link_ponuda:String(g(14)||'').trim(),ugovorena_suma:parseNum(g(15)),avans:parseNum(g(16)),naplaceno_iznos:parseNum(g(18)),naplaceno_fakturisano:parseBool(g(19))};
 }
 
 function setupDropzone(dzId, fileId, onFile){
@@ -235,10 +284,11 @@ function processNalozi(aoa){
   for(let i=1;i<aoa.length;i++){const cols=aoa[i];const rbr=parseInt(cols[0]);if(isNaN(rbr)||rbr<=0)continue;rows.push(mapRow(cols));}
   parsedNalozi=rows.reverse();
   document.getElementById('stat-nalozi').textContent=`${parsedNalozi.length} naloga za import`;
-  const previewCols=[{l:'Zadatak',f:'zadatak'},{l:'Prioritet',f:'prioritet'},{l:'Naručilac',f:'narucilac'},{l:'Status',f:'status'},{l:'Ugovoreno',f:'pocetak'},{l:'Gotovo',f:'gotovo'},{l:'Iznos KM',f:'ugovorena_suma'}];
+  const previewCols=[{l:'Zadatak',f:'zadatak'},{l:'Ugovorio',f:'ugovorio'},{l:'Naručilac',f:'narucilac'},{l:'Status',f:'status'},{l:'Ugovoreno',f:'pocetak'},{l:'Gotovo',f:'gotovo'},{l:'Iznos KM',f:'ugovorena_suma'},{l:'Avans',f:'avans'},{l:'Naplata',f:'naplaceno_iznos'},{l:'Fakturisano',f:'naplaceno_fakturisano'}];
   document.getElementById('preview-nalozi').innerHTML=`<table><thead><tr>${previewCols.map(c=>`<th>${c.l}</th>`).join('')}</tr></thead><tbody>${parsedNalozi.slice(0,15).map(r=>`<tr>${previewCols.map(c=>`<td>${r[c.f]??''}</td>`).join('')}</tr>`).join('')}</tbody></table>${parsedNalozi.length>15?`<p style="color:#999;font-size:11px;padding:6px;text-align:center">... i još ${parsedNalozi.length-15} redova</p>`:''}`;
   document.getElementById('preview-wrap-nalozi').style.display='block';
   document.getElementById('msg-parse-nalozi').innerHTML=`<div class="msg info">✓ Učitano ${parsedNalozi.length} naloga.</div>`;
+  renderUgovorioMapiranje();
 }
 
 async function startImportNalozi(){
@@ -250,7 +300,9 @@ async function startImportNalozi(){
   let ok=0,err=0;
   for(let i=0;i<parsedNalozi.length;i++){
     pb.style.width=Math.round(((i+1)/parsedNalozi.length)*100)+'%';
-    try{const r=await fetch(`${API}/api/proizvodnja`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...parsedNalozi[i],r_br_import:parsedNalozi[i]._r_br})});if(r.ok)ok++;else err++;}catch(e){err++;}
+    const red=parsedNalozi[i];
+    const ugovorioId=red.ugovorio?(ugovorioMapa[red.ugovorio]||null):null;
+    try{const r=await fetch(`${API}/api/proizvodnja`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...red,ugovorio_id:ugovorioId,r_br_import:red._r_br})});if(r.ok)ok++;else err++;}catch(e){err++;}
   }
   mi.innerHTML=`<div class="msg ${err?'err':'ok'}">${err?'⚠':'✓'} Importovano: <b>${ok}</b>${err?` | Greška: <b>${err}</b>`:''}</div>`;
   btn.disabled=false;
@@ -328,7 +380,7 @@ async function startImportKupci(){
 
 document.getElementById('logout').onclick=async e=>{e.preventDefault();await fetch(API+'/api/auth/logout',{method:'POST'});location.href='login.html';};
 
-fetch(API+'/api/auth/me').then(r=>{if(!r.ok){location.href='login.html';return;}return r.json();}).then(u=>{if(!u||u.rola!=='admin'){location.href='home.html';return;}}).catch(()=>location.href='login.html');
+fetch(API+'/api/auth/me').then(r=>{if(!r.ok){location.href='login.html';return;}return r.json();}).then(u=>{if(!u||u.rola!=='admin'){location.href='home.html';return;}ucitajZaposleneZaMapiranje();}).catch(()=>location.href='login.html');
 </script>
 </body>
 </html>

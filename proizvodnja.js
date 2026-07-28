@@ -136,6 +136,7 @@ router.post('/', async (req, res) => {
     zadatak, prioritet, ugovorio_id, narucilac, materijal, status,
     pocetak, planirani_zavrsetak, napomena, link_skica, link_ponuda,
     gotovo, reklamacija_dodatni_rad, r_br_import, iz_generatora_ponuda, kategorija_bonus_id,
+    naplaceno_iznos, naplaceno_fakturisano,
   } = req.body || {};
 
   if (!zadatak?.trim())
@@ -159,13 +160,19 @@ router.post('/', async (req, res) => {
   const smijeCijenu = !!user;
   const ugovorena_suma = smijeCijenu ? req.body.ugovorena_suma : undefined;
   const avans = smijeCijenu ? req.body.avans : undefined;
+  const naplacenoIznosVal = smijeCijenu ? (naplaceno_iznos ?? 0) : 0;
+  const naplacenoFakturisanoVal = smijeCijenu ? !!naplaceno_fakturisano : false;
 
   // "Ugovorio" = "kreirao" (namjerno isti koncept, nema odvojenog polja). Admin i "Ponude"
   // dozvola smiju izabrati BILO KOGA kao Ugovorio (dogovaraju poslove i za druge). Obični
   // operater automatski POSTAJE Ugovorio na svom novom nalogu — ne bira se, ne može
   // dodijeliti tuđe ime (spriječava da neko "otključa" vidljivost tuđeg naloga).
+  // IZUZETAK — uvoz (r_br_import): NE smije tiho "postati" osoba koja pokreće uvoz kad
+  // ime iz fajla nije upareno — bolje prazno (istinito nepoznato) nego pogrešno ime.
   const smijeBiratiUgovorio = user?.rola === 'admin' || !!user?.moze_ugovarati;
-  const stvarniUgovorioId = smijeBiratiUgovorio ? (ugovorio_id || user?.id || null) : (user?.id || null);
+  const stvarniUgovorioId = r_br_import
+    ? (ugovorio_id || null)
+    : smijeBiratiUgovorio ? (ugovorio_id || user?.id || null) : (user?.id || null);
 
   // "Velika ponuda" = stiglo preko Generator ponuda alata. NE oslanjamo se na tip
   // autentifikacije (API ključ vs sesija) — ako je osoba koja koristi Generator ponuda
@@ -194,8 +201,9 @@ router.post('/', async (req, res) => {
       insertQuery = `INSERT INTO proizvodnja_jopex
         (r_br, zadatak, prioritet, ugovorio_id, ugovorio, narucilac, materijal,
          status, pocetak, planirani_zavrsetak, napomena, link_skica,
-         link_ponuda, ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad, izvor, kategorija_bonus_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+         link_ponuda, ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad, izvor, kategorija_bonus_id,
+         naplaceno_iznos, naplaceno_fakturisano, naplaceno)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
        ON CONFLICT (r_br) DO NOTHING
        RETURNING r_br, zadatak, narucilac, ugovorena_suma, status`;
       insertVals = [
@@ -209,13 +217,15 @@ router.post('/', async (req, res) => {
         ugovorena_suma ?? 0, avans ?? 0,
         gotovo || false, reklamacija_dodatni_rad || null,
         izvorNaloga, kategorija_bonus_id || null,
+        naplacenoIznosVal, naplacenoFakturisanoVal, naplacenoIznosVal > 0,
       ];
     } else {
       insertQuery = `INSERT INTO proizvodnja_jopex
         (zadatak, prioritet, ugovorio_id, ugovorio, narucilac, materijal,
          status, pocetak, planirani_zavrsetak, napomena, link_skica,
-         link_ponuda, ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad, izvor, kategorija_bonus_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         link_ponuda, ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad, izvor, kategorija_bonus_id,
+         naplaceno_iznos, naplaceno_fakturisano, naplaceno)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
        RETURNING r_br, zadatak, narucilac, ugovorena_suma, status`;
       insertVals = [
         zadatak, prioritet || 'Normal',
@@ -227,6 +237,7 @@ router.post('/', async (req, res) => {
         ugovorena_suma ?? 0, avans ?? 0,
         gotovo || false, reklamacija_dodatni_rad || null,
         izvorNaloga, kategorija_bonus_id || null,
+        naplacenoIznosVal, naplacenoFakturisanoVal, naplacenoIznosVal > 0,
       ];
     }
     const r = await pool.query(insertQuery, insertVals);
