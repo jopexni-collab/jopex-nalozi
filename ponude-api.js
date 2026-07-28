@@ -34,7 +34,8 @@ router.get('/', async (req, res) => {
   try {
     const vidiSve = u.rola === 'admin' || u.moze_ugovarati;
     const r = await pool.query(
-      `SELECT id, naziv, kupac, kreator_id, kreator_inicijali, datum, link_json, kreirano
+      `SELECT id, naziv, kupac, kreator_id, kreator_inicijali, datum, link_json, kreirano,
+              zadatak_sazetak, materijal_sazetak, broj_stavki, ukupna_cijena, valuta
        FROM ponude
        WHERE ($1 = true OR kreator_id = $2)
        ORDER BY kreirano DESC
@@ -51,14 +52,18 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   const u = req.session?.user;
   if (!u) return res.status(401).json({ error: 'Niste prijavljeni.' });
-  const { naziv, kupac, link_json } = req.body;
+  const { naziv, kupac, link_json, zadatak_sazetak, materijal_sazetak, broj_stavki, ukupna_cijena, valuta } = req.body;
   if (!naziv) return res.status(400).json({ error: 'naziv je obavezan.' });
   try {
     const inicijali = u.ime_prezime.split(' ').map(d => d[0]).join('').toUpperCase();
     const r = await pool.query(
-      `INSERT INTO ponude (naziv, kupac, kreator_id, kreator_inicijali, link_json)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [naziv, kupac || null, u.id, inicijali, link_json || null]
+      `INSERT INTO ponude
+         (naziv, kupac, kreator_id, kreator_inicijali, link_json,
+          zadatak_sazetak, materijal_sazetak, broj_stavki, ukupna_cijena, valuta)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      [naziv, kupac || null, u.id, inicijali, link_json || null,
+       zadatak_sazetak || null, materijal_sazetak || null, broj_stavki || null,
+       ukupna_cijena || null, valuta || null]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {

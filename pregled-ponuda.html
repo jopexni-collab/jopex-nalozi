@@ -31,6 +31,15 @@ h2.sekcija{font-size:15px;color:var(--dark);margin:22px 0 10px;}
 .btn-green{background:var(--green);color:#fff;}
 .btn-red{background:var(--red);color:#fff;}
 .empty-msg{text-align:center;color:#999;padding:24px;font-size:13px;}
+.tabela-wrap{overflow-x:auto;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+table.gusta{width:100%;border-collapse:collapse;font-size:12px;}
+table.gusta th{background:#f7f8fa;color:#6b7a8d;font-weight:700;text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;}
+table.gusta th:hover{color:var(--dark);}
+table.gusta th .arr{font-size:9px;opacity:.6;margin-left:2px;}
+table.gusta td{padding:7px 10px;border-bottom:1px solid #f0f2f5;white-space:nowrap;}
+table.gusta tr:hover td{background:#f7f8fa;}
+.pon-search{width:100%;max-width:340px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:12.5px;margin-bottom:10px;}
+.link-otvori{color:var(--blue);text-decoration:none;font-weight:700;}
 </style>
 </head>
 <body>
@@ -53,7 +62,28 @@ h2.sekcija{font-size:15px;color:var(--dark);margin:22px 0 10px;}
   </div>
   <div id="terenske-lista"><div class="empty-msg">Učitavanje...</div></div>
 
-  <h2 class="sekcija">📐 Ponude za proizvodnju (Generator)</h2>
+  <h2 class="sekcija">📐 Ponude iz Generatora — nacrti (čekaju usvajanje)</h2>
+  <div style="font-size:11.5px;color:#8b96a5;margin-bottom:10px;">Sačuvano preko "☁ Sačuvaj" u Generatoru — još NIJE usvojeno u radni nalog. Klikni zaglavlje kolone za sortiranje.</div>
+  <input type="text" class="pon-search" id="pon-search" placeholder="🔍 Pretraga po kupcu, materijalu, zadatku, kreatoru..." oninput="renderNacrtiTabela()">
+  <div class="tabela-wrap">
+    <table class="gusta">
+      <thead>
+        <tr>
+          <th onclick="sortirajNacrte('naziv')">Naziv<span class="arr" id="arr-naziv"></span></th>
+          <th onclick="sortirajNacrte('kupac')">Kupac<span class="arr" id="arr-kupac"></span></th>
+          <th onclick="sortirajNacrte('zadatak_sazetak')">Zadatak<span class="arr" id="arr-zadatak_sazetak"></span></th>
+          <th onclick="sortirajNacrte('materijal_sazetak')">Materijal<span class="arr" id="arr-materijal_sazetak"></span></th>
+          <th onclick="sortirajNacrte('broj_stavki')">Br. stavki<span class="arr" id="arr-broj_stavki"></span></th>
+          <th onclick="sortirajNacrte('kreator_inicijali')">Kreator<span class="arr" id="arr-kreator_inicijali"></span></th>
+          <th onclick="sortirajNacrte('kreirano')">Nastanak<span class="arr" id="arr-kreirano"></span></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="nacrti-tbody"><tr><td colspan="8" class="empty-msg">Učitavanje...</td></tr></tbody>
+    </table>
+  </div>
+
+  <h2 class="sekcija">✅ Ponude za proizvodnju — već usvojene (radni nalozi)</h2>
   <div id="proizvodnja-lista"><div class="empty-msg">Učitavanje...</div></div>
 </main>
 <script>
@@ -139,6 +169,74 @@ async function otkaziPonudu(id){
   }catch(e){ alert('✗ '+e.message); }
 }
 
+/* ── PONUDE IZ GENERATORA — NACRTI (tabela, sortiranje, pretraga) ────────── */
+let nacrtiSvi=[], nacrtiSort={kolona:'kreirano', smjer:-1};
+
+async function ucitajNacrte(){
+  const tbody=document.getElementById('nacrti-tbody');
+  tbody.innerHTML='<tr><td colspan="8" class="empty-msg">Učitavanje...</td></tr>';
+  try{
+    const r=await fetch(`${API}/api/ponude`);
+    nacrtiSvi=await r.json();
+    renderNacrtiTabela();
+  }catch(e){ tbody.innerHTML='<tr><td colspan="8" class="empty-msg">Greška pri učitavanju.</td></tr>'; }
+}
+
+function sortirajNacrte(kolona){
+  if(nacrtiSort.kolona===kolona) nacrtiSort.smjer*=-1;
+  else nacrtiSort={kolona, smjer:1};
+  renderNacrtiTabela();
+}
+
+function renderNacrtiTabela(){
+  document.querySelectorAll('table.gusta .arr').forEach(a=>a.textContent='');
+  const arrEl=document.getElementById('arr-'+nacrtiSort.kolona);
+  if(arrEl) arrEl.textContent=nacrtiSort.smjer===1?'▲':'▼';
+
+  const q=(document.getElementById('pon-search').value||'').toLowerCase().trim();
+  let lista=nacrtiSvi.filter(p=>{
+    if(!q) return true;
+    return [p.kupac, p.materijal_sazetak, p.zadatak_sazetak, p.kreator_inicijali, p.naziv]
+      .some(f=>f && String(f).toLowerCase().includes(q));
+  });
+  lista=[...lista].sort((a,b)=>{
+    let va=a[nacrtiSort.kolona], vb=b[nacrtiSort.kolona];
+    if(nacrtiSort.kolona==='kreirano'){ va=new Date(va).getTime(); vb=new Date(vb).getTime(); }
+    if(va==null) va=''; if(vb==null) vb='';
+    if(typeof va==='number' && typeof vb==='number') return (va-vb)*nacrtiSort.smjer;
+    return String(va).localeCompare(String(vb),'sr-Latn-BA')*nacrtiSort.smjer;
+  });
+
+  const tbody=document.getElementById('nacrti-tbody');
+  if(!lista.length){ tbody.innerHTML='<tr><td colspan="8" class="empty-msg">Nema nacrta.</td></tr>'; return; }
+  tbody.innerHTML=lista.map(p=>`
+    <tr>
+      <td>${esc(p.naziv)}</td>
+      <td>${esc(p.kupac||'—')}</td>
+      <td>${esc(p.zadatak_sazetak||'—')}</td>
+      <td>${esc(p.materijal_sazetak||'—')}</td>
+      <td>${p.broj_stavki??'—'}</td>
+      <td>${esc(p.kreator_inicijali||'—')}</td>
+      <td>${new Date(p.kreirano).toLocaleString('sr-Latn-BA')}</td>
+      <td>
+        <a class="link-otvori" href="ponude.html?ucitaj_link=${encodeURIComponent(p.link_json||'')}&naziv=${encodeURIComponent(p.naziv||'')}" target="_blank" rel="noopener">Otvori →</a>
+        &nbsp;·&nbsp;
+        <a class="link-otvori" href="#" style="color:var(--red);" onclick="obrisiNacrt(${p.id});return false;">Obriši</a>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function obrisiNacrt(id){
+  if(!confirm('Obrisati ovaj nacrt? Ne može se poništiti.')) return;
+  try{
+    const r=await fetch(`${API}/api/ponude/${id}`,{method:'DELETE'});
+    if(!r.ok){ const d=await r.json(); alert('✗ '+(d.error||'Greška.')); return; }
+    ucitajNacrte();
+  }catch(e){ alert('✗ Greška.'); }
+}
+
+
 async function ucitajProizvodnju(){
   const cont=document.getElementById('proizvodnja-lista');
   cont.innerHTML='<div class="empty-msg">Učitavanje...</div>';
@@ -175,6 +273,7 @@ document.getElementById('logout').onclick=async e=>{
 };
 
 checkAuth();
+ucitajNacrte();
 ucitajTerenske('poslato');
 ucitajProizvodnju();
 </script>

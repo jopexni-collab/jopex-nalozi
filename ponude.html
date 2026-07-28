@@ -57,12 +57,6 @@ header{background:#1a5fa8;color:#fff;height:48px;padding:0 12px 0 10px;display:f
 .ivrow.wall-side{opacity:.5;background:#f5f5f5;}
 .ivrow input[type=checkbox]{accent-color:#1a5fa8;width:12px;height:12px;flex-shrink:0;cursor:pointer;}
 .ivrow .ivlbl{font-size:11px;flex:1;}
-.ivrow{flex-wrap:wrap;}
-.iv-rez-line{display:flex;align-items:center;gap:5px;flex-basis:100%;margin-top:4px;padding-top:4px;border-top:1px dashed #e2e6ef;}
-.iv-rez-line select{width:126px;border:1px solid #dde2ea;border-radius:3px;padding:2px 4px;font-size:11px;font-family:inherit;}
-.iv-rez-line input{width:54px;border:1px solid #dde2ea;border-radius:3px;padding:2px 4px;font-size:11px;font-family:inherit;text-align:right;}
-.iv-rez-lbl{font-size:10px;color:#8e44ad;font-weight:700;min-width:24px;}
-.iv-rez-unit{font-size:10px;color:#8a93a3;}
 .ivrow select{width:110px;border:1px solid #dde2ea;border-radius:3px;padding:2px 4px;font-size:11px;font-family:inherit;}
 .cbrow{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid #dde2ea;border-radius:4px;margin-bottom:4px;background:#fafbfc;cursor:pointer;}
 .cbrow input[type=checkbox]{accent-color:#1a5fa8;width:13px;height:13px;cursor:pointer;flex-shrink:0;}
@@ -182,7 +176,6 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
     <button class="hdr-btn" onclick="loadProject()" title="Učitaj lokalno (Ctrl+O)">📂 Učitaj</button>
     <button class="hdr-btn" onclick="cloudSave()" title="Sačuvaj na server" style="background:rgba(100,200,120,0.25);border-color:rgba(100,200,120,0.6);">☁ Sačuvaj</button>
     <button class="hdr-btn" onclick="cloudLoad()" title="Učitaj sa servera" style="background:rgba(100,200,120,0.25);border-color:rgba(100,200,120,0.6);">☁ Učitaj</button>
-    <button class="hdr-btn" onclick="novaPonuda()" title="Počni ispočetka — prekida vezu sa učitanom ponudom">↻ Nova</button>
     <button class="hdr-btn" onclick="undo()" title="Poništi (Ctrl+Z)">↩ Undo</button>
     <button class="hdr-btn" onclick="genPon()" title="Generiši ponudu" style="background:rgba(255,255,255,0.25);border-color:rgba(255,255,255,0.5);">📄 Gen.Pon</button>
     <button class="hdr-btn" onclick="genRadniNalog()" title="Generiši radni nalog" style="background:rgba(255,255,255,0.25);border-color:rgba(255,255,255,0.5);">🔧 R.Nalog</button>
@@ -325,11 +318,6 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <div class="r2">
         <div class="fg"><label>Polu C</label><input type="text" inputmode="decimal" id="ivp-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
         <div class="fg"><label>Gerovanje</label><input type="text" inputmode="decimal" id="ivp-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
-      </div>
-            <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Cijene rezanja (KM/m)</div>
-      <div class="r2">
-        <div class="fg"><label>Pravolinijsko</label><input type="text" inputmode="decimal" id="ivp-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Pod uglom</label><input type="text" inputmode="decimal" id="ivp-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div id="iv-con"></div>
     </div>
@@ -534,11 +522,6 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
         <div class="fg"><label>Polu C</label><input type="text" inputmode="decimal" id="ivp-kl-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
         <div class="fg"><label>Gerovanje</label><input type="text" inputmode="decimal" id="ivp-kl-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
-            <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Cijene rezanja (KM/m)</div>
-      <div class="r2">
-        <div class="fg"><label>Pravolinijsko</label><input type="text" inputmode="decimal" id="ivp-kl-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Pod uglom</label><input type="text" inputmode="decimal" id="ivp-kl-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
-      </div>
       <div id="iv-con-kl"></div>
     </div></div>
 
@@ -591,11 +574,6 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
         <div class="fg"><label>Polu C</label><input type="text" inputmode="decimal" id="ivp-st-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
         <div class="fg"><label>Gerovanje</label><input type="text" inputmode="decimal" id="ivp-st-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
-            <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Cijene rezanja (KM/m)</div>
-      <div class="r2">
-        <div class="fg"><label>Pravolinijsko</label><input type="text" inputmode="decimal" id="ivp-st-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Pod uglom</label><input type="text" inputmode="decimal" id="ivp-st-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
-      </div>
       <div id="iv-con-st"></div>
     </div></div>
 
@@ -638,11 +616,6 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
         <div class="fg"><label>Polu C</label><input type="text" inputmode="decimal" id="ivp-sto-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
         <div class="fg"><label>Gerovanje</label><input type="text" inputmode="decimal" id="ivp-sto-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
-            <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Cijene rezanja (KM/m)</div>
-      <div class="r2">
-        <div class="fg"><label>Pravolinijsko</label><input type="text" inputmode="decimal" id="ivp-sto-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Pod uglom</label><input type="text" inputmode="decimal" id="ivp-sto-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
-      </div>
       <div id="iv-con-sto"></div>
     </div>
     <div class="sec">
@@ -680,7 +653,6 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
     <div class="br"><span>Površina</span><span id="b-pov">–</span></div>
     <div class="br"><span>Materijal</span><span id="b-mat">0.00 KM</span></div>
     <div class="br"><span>Ivice / profil</span><span id="b-iv">0.00 KM</span></div>
-    <div class="br"><span>Rezanje</span><span id="b-rez">0.00 KM</span></div>
     <div class="br"><span>Usluge</span><span id="b-usl">0.00 KM</span></div>
     <div class="bdiv"></div>
     <div class="blbl">Ukupno</div>
@@ -2548,7 +2520,16 @@ function buildExtSection(){
       // Obrada ivica ZA OVAJ produžetak (4 strane: U/V/B1/B2) - isti blok
       var mySegs=extSegs.filter(function(s){return s.id.indexOf('ext_'+end.id+'_')===0;});
       mySegs.forEach(function(s){
-        html+=_ivRowHTML(s,'#8e44ad','margin-left:20px;margin-top:3px');
+        var prevS=ivSt[s.id]||{prof:'none'};
+        var curProf=prevS.prof||'none';
+        var m=(Math.max(0,s.len)/1000).toFixed(2);
+        var opts=Object.keys(PLbl).map(function(p){
+          return '<option value="'+p+'"'+(p===curProf?' selected':'')+'>'+PSym[p]+' '+PLbl[p]+'</option>';
+        }).join('');
+        html+='<div class="ivrow" data-id="'+s.id+'" style="margin-left:20px;margin-top:3px">'
+          +'<b style="color:#8e44ad;margin-right:6px;min-width:20px;display:inline-block">'+s.lbl+'</b>'
+          +'<span class="ivlbl"><small style="color:var(--muted)">('+m+' m)</small></span>'
+          +'<select onchange="updateIviceProfile(\''+s.id+'\',this.value)">'+opts+'</select></div>';
       });
     }
     html+='</div>';
@@ -2654,86 +2635,22 @@ function buildIvice(){
   // PRETHODNU stavku u trenutku čitanja, pa bi se njena vrijednost pogrešno
   // upisala u NOVU stavku.
   var html='';
-  segs.forEach(function(s){ html+=_ivRowHTML(s,'#1a5fa8',''); });
+  segs.forEach(function(s){
+    var prev=ivSt[s.id]||{prof:'none'};
+    var curProf=prev.prof||'none';
+    var m=(Math.max(0,s.len)/1000).toFixed(2);
+    var opts=Object.keys(PLbl).map(function(p){
+      return '<option value="'+p+'"'+(p===curProf?' selected':'')+'>'+PSym[p]+' '+PLbl[p]+'</option>';
+    }).join('');
+    html+='<div class="ivrow" data-id="'+s.id+'">'
+      +'<b style="color:#1a5fa8;margin-right:6px;min-width:20px;display:inline-block">'+s.lbl+'</b>'
+      +'<span class="ivlbl"><small style="color:var(--muted)">('+m+' m)</small></span>'
+      +'<select onchange="updateIviceProfile(\''+s.id+'\',this.value)">'+opts+'</select></div>';
+  });
   ivcon.innerHTML=html;
 }
-// ── REZANJE STRANE ─────────────────────────────────────────────────
-// Nezavisno od obrade ivice: ista strana moze imati i obradu i rezanje.
-// Cijena se unosi ZA SVAKU STRANU posebno (rezC, KM/m). Ugao se upisuje u
-// ponudu/nalog/DXF kao podatak za pogon, ali NE utice na cijenu - cijena
-// rezanja pod uglom je jedna, bez obzira da li je 30 ili 60 stepeni.
-var RezLbl={none:'Bez rezanja',ravno:'Pravolinijsko rezanje',ugao:'Rezanje pod uglom'};
-var RezSym={none:'\u2013',ravno:'\u2016',ugao:'\u2571'};
-function _ivGet(segId){
-  var st=ivSt[segId];
-  if(!st){ st={prof:'none'}; ivSt[segId]=st; }
-  return st;
-}
-function updateIviceRez(segId,rez){
-  var st=_ivGet(segId);
-  st.rez=rez;
-  if(rez==='ugao' && !st.ugao) st.ugao=45;
-  buildIvice(); buildExtSection(); refresh();
-}
-function updateIviceUgao(segId,val){
-  var st=_ivGet(segId);
-  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
-  st.ugao=Math.max(1,Math.min(89,v));
-  refresh();
-}
-// Cijena rezanja je ZAJEDNICKA za tip (kao cijene profila) - jedna za
-// pravolinijsko, jedna za pod uglom. Ugao ostaje po strani jer je geometrija.
-function getRezPrice(rez){
-  var prefix=(tip==='kl')?'ivp-kl-':(tip==='st'?'ivp-st-':(tip==='sto'?'ivp-sto-':'ivp-'));
-  var el=ge(prefix+'rez'+rez);
-  return el?parseFloat((el.value||'0').replace(',','.'))||0:0;
-}
-function getRezData(){
-  var ivShape=(tip==='kl')?'kl':(tip==='st'?'st':shape);
-  var segs=getIvSegs(ivShape,dims).concat(getExtIvSegs()), res=[];
-  segs.forEach(function(s){
-    var st=ivSt[s.id]||{};
-    var rez=st.rez||'none';
-    if(rez==='none') return;
-    var m=Math.max(0,s.len)/1000;
-    var c=getRezPrice(rez);
-    res.push({id:s.id,lbl:s.fullLbl||s.lbl,rez:rez,rezLbl:RezLbl[rez]||rez,
-      ugao:st.ugao||45,m:m,ic:c,uk:Math.round(m*c*100)/100});
-  });
-  return res;
-}
-// Jedan red strane u panelu - obrada gore, rezanje u drugom redu.
-// Dijele ga i glavna ploca (buildIvice) i produzeci (buildExtSection).
-function _ivRowHTML(s,bojaSlova,dodatniStil){
-  var st=ivSt[s.id]||{prof:'none'};
-  var curProf=st.prof||'none', curRez=st.rez||'none';
-  var m=(Math.max(0,s.len)/1000).toFixed(2);
-  var optsProf=Object.keys(PLbl).map(function(p){
-    return '<option value="'+p+'"'+(p===curProf?' selected':'')+'>'+PSym[p]+' '+PLbl[p]+'</option>';
-  }).join('');
-  var optsRez=Object.keys(RezLbl).map(function(p){
-    return '<option value="'+p+'"'+(p===curRez?' selected':'')+'>'+RezSym[p]+' '+RezLbl[p]+'</option>';
-  }).join('');
-  var h='<div class="ivrow" data-id="'+s.id+'" style="'+(dodatniStil||'')+'">'
-    +'<b style="color:'+bojaSlova+';margin-right:6px;min-width:20px;display:inline-block">'+s.lbl+'</b>'
-    +'<span class="ivlbl"><small style="color:var(--muted)">('+m+' m)</small></span>'
-    +'<select onchange="updateIviceProfile(\''+s.id+'\',this.value)">'+optsProf+'</select>'
-    +'<div class="iv-rez-line">'
-      +'<span class="iv-rez-lbl">Rez</span>'
-      +'<select onchange="updateIviceRez(\''+s.id+'\',this.value)">'+optsRez+'</select>';
-  if(curRez==='ugao'){
-    h+='<input type="number" min="1" max="89" value="'+(st.ugao||45)+'"'
-      +' title="Ugao reza (ne utice na cijenu)"'
-      +' oninput="fixComma(this);updateIviceUgao(\''+s.id+'\',this.value)">'
-      +'<span class="iv-rez-unit">\u00b0</span>';
-  }
-  h+='</div></div>';
-  return h;
-}
-
 function updateIviceProfile(segId,prof){
-  var _st=_ivGet(segId);
-  _st.chk=prof!=='none'; _st.prof=prof;   // NE brise rez/rezC/ugao te strane
+  ivSt[segId]={chk:prof!=='none',prof:prof};
   // KRITIČNO: refresh() SAMO preračunava cijene i ponovo crta canvas - NE
   // regeneriše HTML padajućih menija u lijevom panelu (#iv-con/#iv-con-kl/
   // #iv-con-st/#iv-con-sto/#ext-con). Bez ovoga, select element bi ostao s
@@ -3294,27 +3211,11 @@ function getIvData(){
   return res;
 }
 
-// Redovi rezanja u ponudi + ukupan iznos. kom = mnozilac (broj komada), koji
-// kod klupice/stepenica/stolova mnozi i rezanje, isto kao obradu ivica.
-function _rezRedovi(kom){
-  kom=kom||1;
-  var prefix=(tip==='kl')?'ivp-kl-':(tip==='st'?'ivp-st-':(tip==='sto'?'ivp-sto-':'ivp-'));
-  var rd=getRezData(), rows='', uk=0;
-  rd.forEach(function(r){
-    var iznos=Math.round(r.uk*kom*100)/100;
-    uk+=iznos;
-    var opis=r.rezLbl+(r.rez==='ugao'?(' '+r.ugao+'\u00b0'):'')+' ('+r.lbl+')'+(kom>1?(' \u00d7'+kom):'');
-    rows+=trow(opis, r.m.toFixed(2)+' m',
-      _editableUnitPrice(r.ic,'/m','setRezPrice',[prefix,r.rez]), f(iznos));
-  });
-  return {rows:rows, uk:Math.round(uk*100)/100};
-}
-
 // ── Centralna funkcija za cijenu stavke ─────────────────
 function calcItemCost(){
   // Poziva se kada su globalne varijable (tip,shape,dims,itd) i HTML inputi
   // postavljeni na AKTIVNU stavku
-  var mat=0,iv=0,usl=0,uk=0,rez=0,rows='';
+  var mat=0,iv=0,usl=0,uk=0,rows='';
   var mv=getMatV(),md=getMatD();
   var mn=gs('mat-naziv')||'';
   var ms=mv+(mn?' – '+mn:'')+', '+md+' mm';
@@ -3351,7 +3252,6 @@ function calcItemCost(){
       rows+=trow((c.name||'Dodatni otvor')+' '+dimTxt+obrTxt,'1 kom',_editableUnitPrice(parseFloat(c.cost)||0,'','setCustomOtvorCostPon',[activeIdx,ci]),f(parseFloat(c.cost)||0));
     });
     ivd.forEach(function(iv2){rows+=trow('Obrada ivice – '+iv2.profLbl+' ('+iv2.lbl+')',iv2.m.toFixed(2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-',iv2.prof]),f(iv2.uk));});
-    var _rzK=_rezRedovi(1); rows+=_rzK.rows; rez=_rzK.uk; uk+=rez;
     segsE=getIvSegs(shape,dims);
     getFreeEndSides(shape).forEach(function(end){
       if(extState[end.id]!=='on'||wallSides[end.id]) return;
@@ -3376,7 +3276,6 @@ function calcItemCost(){
     var klnap=gs('kl-n')?(' ('+gs('kl-n')+')'):'';
     rows+=trow('Prozorska klupica'+klnap+' '+gi('kl-a')+'×'+gi('kl-b')+' mm ('+ms+')',kk+' kom',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
     ivdKl.forEach(function(iv2){rows+=trow('Ivica '+iv2.lbl+' – '+iv2.profLbl,iv2.m.toFixed(2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-kl-',iv2.prof]),f(iv2.uk));});
-    var _rzKl=_rezRedovi(kk); rows+=_rzKl.rows; rez=_rzKl.uk; uk+=rez;
     rows+=trow('Ugradnja',kk+' kom',_editableUnitPrice(gi('kl-u'),'','setItemFieldPrice',[activeIdx,'kl-u']),f(gi('kl-u')*kk));
     rows+=trow('Mjerenje','1',_editableUnitPrice(gi('kl-m'),'','setItemFieldPrice',[activeIdx,'kl-m']),f(gi('kl-m')));
   } else if(tip==='sto'){
@@ -3394,7 +3293,6 @@ function calcItemCost(){
     var stoDimTxt=shape==='okrugao'?('ø'+stoA2+' mm'):(stoA2+'×'+stoB2+' mm');
     rows+=trow('Stol – '+stoShLbl+stonap+' '+stoDimTxt+' ('+ms+')',stoBr2+' kom ('+m3o.toFixed(4)+' m²)',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
     ivdSto2.forEach(function(iv2){rows+=trow('Ivica '+iv2.lbl+' – '+iv2.profLbl+' (×'+stoBr2+')',iv2.m.toFixed(2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-sto-',iv2.prof]),f(iv2.uk*stoBr2));});
-    var _rzSto=_rezRedovi(stoBr2); rows+=_rzSto.rows; rez=_rzSto.uk; uk+=rez;
     (tableHoles||[]).forEach(function(h,hi){
       var hDim=(h.shape==='round')?('ø'+(h.fi||35)+' mm'):((h.w||0)+'×'+(h.h||0)+' mm');
       rows+=trow((h.name||'Otvor')+' '+hDim+(stoBr2>1?' (×'+stoBr2+')':''),stoBr2+' kom',_editableUnitPrice(parseFloat(h.cost)||0,'','setTableHoleCostPon',[activeIdx,hi]),f((parseFloat(h.cost)||0)*stoBr2));
@@ -3411,7 +3309,6 @@ function calcItemCost(){
     var stnap=gs('st-n')?(' ('+gs('st-n')+')'):'';
     rows+=trow('Gazište stepenica'+stnap+' '+gi('st-a')+'×'+gi('st-b')+' mm ('+ms+')',gm.toFixed(4)+' m²',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
     ivdSt.forEach(function(iv2){rows+=trow('Ivica '+iv2.lbl+' – '+iv2.profLbl,iv2.m.toFixed(2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-st-',iv2.prof]),f(iv2.uk));});
-    var _rzSt=_rezRedovi(br); rows+=_rzSt.rows; rez=_rzSt.uk; uk+=rez;
     if(gc('cb-cel')){
       var cm=gi('cel-a')*gi('cel-b')/1e6*br,celm=Math.round(cm*gi('cel-c')*100)/100;
       uk+=celm;
@@ -3421,7 +3318,7 @@ function calcItemCost(){
     rows+=trow('Ugradnja',br+' kom',_editableUnitPrice(gi('st-u'),'','setItemFieldPrice',[activeIdx,'st-u']),f(gi('st-u')*br));
     rows+=trow('Mjerenje','1',_editableUnitPrice(gi('st-m'),'','setItemFieldPrice',[activeIdx,'st-m']),f(gi('st-m')));
   }
-  return {mat:mat,iv:iv,usl:usl,rez:rez,uk:uk,rows:rows};
+  return {mat:mat,iv:iv,usl:usl,uk:uk,rows:rows};
 }
 
 function calcAllItems(){
@@ -3504,12 +3401,10 @@ function refresh(){
   var _allMat=_allRes.reduce(function(s,r){return s+(r.mat||0);},0);
   var _allIv=_allRes.reduce(function(s,r){return s+(r.iv||0);},0);
   var _allUsl=_allRes.reduce(function(s,r){return s+(r.usl||0);},0);
-  var _allRez=_allRes.reduce(function(s,r){return s+(r.rez||0);},0);
   ge('b-uk').textContent=_allTotal.toFixed(2)+' KM';
   if(ge('b-mat')) ge('b-mat').textContent=_allMat.toFixed(2)+' KM';
   if(ge('b-iv'))  ge('b-iv').textContent=_allIv.toFixed(2)+' KM';
   if(ge('b-usl')) ge('b-usl').textContent=_allUsl.toFixed(2)+' KM';
-  if(ge('b-rez')) ge('b-rez').textContent=_allRez.toFixed(2)+' KM';
   drawCanvas(); // uvijek osvjezi crtez
 }
 
@@ -3950,31 +3845,6 @@ function drawProfSymbol(ctx,cx,cy,prof){
   ctx.restore();
 }
 
-// Simbol rezanja strane - crta se PORED simbola obrade, jer strana moze
-// imati oboje. Pravolinijsko = dvije paralelne crte (rez), pod uglom =
-// kosa crta sa lukom ugla.
-function drawRezSymbol(ctx,cx,cy,rez,ugao){
-  if(!rez||rez==='none') return;
-  ctx.save();
-  ctx.fillStyle='rgba(255,255,255,0.92)';
-  ctx.fillRect(cx-8,cy-7,16,14);
-  ctx.strokeStyle='#8e44ad';ctx.lineWidth=0.7;
-  ctx.strokeRect(cx-8,cy-7,16,14);
-  ctx.strokeStyle='#8e44ad';ctx.lineWidth=1.3;ctx.lineCap='round';
-  ctx.beginPath();
-  if(rez==='ravno'){
-    ctx.moveTo(cx-5,cy-2.5);ctx.lineTo(cx+5,cy-2.5);
-    ctx.moveTo(cx-5,cy+2.5);ctx.lineTo(cx+5,cy+2.5);
-  } else {
-    ctx.moveTo(cx-5,cy+4);ctx.lineTo(cx+5,cy-4);
-    ctx.moveTo(cx-5,cy+4);ctx.lineTo(cx+2,cy+4);
-  }
-  ctx.stroke();
-  if(rez==='ugao'){
-    ctx.beginPath();ctx.arc(cx-5,cy+4,5,-Math.PI/4,0);ctx.stroke();
-  }
-  ctx.restore();
-}
 // Oznaka strane produžetka (U/V/B1/B2) + simbol obrade - isti vizuelni jezik
 // kao edgeLbl za kuhinju, ali NE upisuje u _edgeLabelLog (to je rezervisano
 // za prepoznavanje slova uglova OSNOVNOG oblika, produžetak tu ne učestvuje)
@@ -3987,9 +3857,8 @@ function extEdgeLbl(ctx,x,y,lbl,segId){
   ctx.fillRect(x-tw/2-10,y-8,tw+20,16);
   ctx.fillStyle='#8e44ad';
   ctx.fillText(lbl,x-8,y);
-  var _stX=ivSt[segId]||{};
-  drawProfSymbol(ctx,x+tw/2+5,y,_stX.prof||'none');
-  if(_stX.rez&&_stX.rez!=='none') drawRezSymbol(ctx,x+tw/2+23,y,_stX.rez,_stX.ugao);
+  var prof=ivSt[segId]?ivSt[segId].prof:'none';
+  drawProfSymbol(ctx,x+tw/2+5,y,prof);
   ctx.restore();
 }
 
@@ -4005,17 +3874,11 @@ function edgeLbl(ctx,x,y,lbl,segId,orient){
   ctx.fillStyle='#1a5fa8';
   ctx.fillText(lbl,x,y);
   if(segId){
-    var _stE=ivSt[segId]||{};
-    var prof=_stE.prof||'none';
+    var prof=ivSt[segId]?ivSt[segId].prof:'none';
     var sx,sy;
     if(orient==='v'){sx=x;sy=y+22;}
     else{sx=x+tw/2+12;sy=y;}
     drawProfSymbol(ctx,sx,sy,prof);
-    // Rezanje ide ODMAH DO simbola obrade - strana moze imati i jedno i drugo
-    if(_stE.rez&&_stE.rez!=='none'){
-      if(orient==='v') drawRezSymbol(ctx,sx,sy+17,_stE.rez,_stE.ugao);
-      else             drawRezSymbol(ctx,sx+18,sy,_stE.rez,_stE.ugao);
-    }
   }
   ctx.restore();
 }
@@ -4247,44 +4110,28 @@ function drawOtvor(ctx,x,y,w,h,col,lbl,dw,dh,radMM,stepPx,cornerSelArr,cornerEdi
 
 // Crta kote polozaja otvora OD IZABRANE REFERENTNE IVICE. r je rezultat
 // getOtvorRectMM (sadrzi left/right/front/back tog kraka, u mm).
-// Crta kote polozaja otvora OD IZABRANE REFERENTNE IVICE.
-// VAZNO: sama LINIJA kote ide uvijek IZVAN cijele ploce (ispod / desno), a
-// samo KRAJEVI kote sjede na stvarnoj referentnoj ivici kraka. Ranije je
-// linija isla na lokalnu ivicu, pa je kod srednjeg kraka U oblika zavrsavala
-// usred crteza i presijecala ga.
 function _kotePozicijeOtvora(ctx,sc,r,prefix,boja,offDolje,offDesno){
   var xref=_otvorRef(prefix,'x'), yref=_otvorRef(prefix,'y');
-  var bb=_getFbb(shape,dims,sc);            // bounding box cijele ploce, px
   var x1=r.x*sc, x2=(r.x+r.w)*sc, y1=r.y*sc, y2=(r.y+r.h)*sc;
   var L=r.left*sc, R=r.right*sc, F=r.front*sc, B=r.back*sc;
-  var kY=bb.h+offDolje;                     // vodoravna kota: ISPOD cijele ploce
-  var kX=bb.w+offDesno;                     // uspravna kota: DESNO od cijele ploce
-  // Vodoravna kota - od lijeve ili desne ivice TOG kraka do ruba otvora
-  var xa,xb;
-  if(xref==='desna'){ xa=x2; xb=R;
-    kota(ctx,xa,kY,xb,kY,gi(prefix+'-x')+' mm',_inputEditDesc(prefix+'-x','Udaljenost od desne ivice'),'#'+prefix+'-x');
-  } else { xa=L; xb=x1;
-    kota(ctx,xa,kY,xb,kY,gi(prefix+'-x')+' mm',_inputEditDesc(prefix+'-x','Udaljenost od lijeve ivice'),'#'+prefix+'-x');
-  }
-  // Uspravna kota - od zadnje ili prednje ivice TOG kraka do ruba otvora
-  var ya,yb;
-  if(yref==='zadnja'){ ya=B; yb=y1;
-    kota(ctx,kX,ya,kX,yb,gi(prefix+'-y')+' mm',_inputEditDesc(prefix+'-y','Udaljenost od zadnje ivice'),'#'+prefix+'-y');
-  } else { ya=y2; yb=F;
-    kota(ctx,kX,ya,kX,yb,gi(prefix+'-y')+' mm',_inputEditDesc(prefix+'-y','Udaljenost od prednje ivice'),'#'+prefix+'-y');
-  }
-  // Tanke pomocne linije od stvarne ivice do linije kote - da se vidi OD CEGA
-  // se mjeri, posto je sama kota izmjestena van ploce.
+  var kY=Math.max(F,B)+offDolje;          // linija vodoravne kote, ispod ploce
+  var kX=R+offDesno;                      // linija uspravne kote, desno od kraka
+  // Vodoravna kota
+  if(xref==='desna') kota(ctx,x2,kY,R,kY,gi(prefix+'-x')+' mm',_inputEditDesc(prefix+'-x','Udaljenost od desne ivice'),'#'+prefix+'-x');
+  else               kota(ctx,L,kY,x1,kY,gi(prefix+'-x')+' mm',_inputEditDesc(prefix+'-x','Udaljenost od lijeve ivice'),'#'+prefix+'-x');
+  // Uspravna kota
+  if(yref==='zadnja') kota(ctx,kX,B,kX,y1,gi(prefix+'-y')+' mm',_inputEditDesc(prefix+'-y','Udaljenost od zadnje ivice'),'#'+prefix+'-y');
+  else                kota(ctx,kX,y2,kX,F,gi(prefix+'-y')+' mm',_inputEditDesc(prefix+'-y','Udaljenost od prednje ivice'),'#'+prefix+'-y');
+  // Tanke pomocne linije do kota, da se vidi OD CEGA se mjeri
   ctx.save();ctx.strokeStyle=boja;ctx.lineWidth=0.6;ctx.setLineDash([4,3]);
-  [xa,xb].forEach(function(x){
-    ctx.beginPath();ctx.moveTo(x,Math.min(y2,bb.h));ctx.lineTo(x,kY);ctx.stroke();
-  });
-  [ya,yb].forEach(function(y){
-    ctx.beginPath();ctx.moveTo(Math.min(x2,bb.w),y);ctx.lineTo(kX,y);ctx.stroke();
-  });
+  var xa=(xref==='desna')?R:L, xb=(xref==='desna')?x2:x1;
+  ctx.beginPath();ctx.moveTo(xa,Math.min(y1,F));ctx.lineTo(xa,kY);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(xb,y2);ctx.lineTo(xb,kY);ctx.stroke();
+  var ya=(yref==='zadnja')?B:F, yb=(yref==='zadnja')?y1:y2;
+  ctx.beginPath();ctx.moveTo(x2,ya);ctx.lineTo(kX,ya);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x2,yb);ctx.lineTo(kX,yb);ctx.stroke();
   ctx.setLineDash([]);ctx.restore();
 }
-
 function drawOtvori(ctx,sc,aX,aY,aW,aH){
   // Helper za kotu polozaja (isprekidana referentna linija + kota)
   function kotaPos(x1,y1,x2,y2,lbl,clr){
@@ -4320,18 +4167,18 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
     // Kota od gornje ivice (Y) -> DESNO od ploce, pomjerena po indeksu
     var slavKotaX=_slBaseX+_slBaseW+32+si*16;
     // Horizontalna kota dolje: od lijeve ivice do slavine
-    kota(ctx,_pSl.left*sc,slavKotaY,slx,slavKotaY,slavX+' mm',_slavinaDimEditDesc(si,'x','Udaljenost slavine '+(si+1)+' od lijeve ivice'),'#slavina-list [data-sl-idx="'+si+'"]');
+    kota(ctx,_slBaseX,slavKotaY,slx,slavKotaY,slavX+' mm',_slavinaDimEditDesc(si,'x','Udaljenost slavine '+(si+1)+' od lijeve ivice'),'#slavina-list [data-sl-idx="'+si+'"]');
     // Vertikalna kota desno: od zadnje ivice do slavine
-    kota(ctx,slavKotaX,_pSl.back*sc,slavKotaX,sly,slavY+' mm',_slavinaDimEditDesc(si,'yz','Udaljenost slavine '+(si+1)+' od zadnje ivice'),'#slavina-list [data-sl-idx="'+si+'"]');
+    kota(ctx,slavKotaX,_slBaseY,slavKotaX,sly,slavY+' mm',_slavinaDimEditDesc(si,'yz','Udaljenost slavine '+(si+1)+' od zadnje ivice'),'#slavina-list [data-sl-idx="'+si+'"]');
     _regClickRect(slx-fi,sly-fi,fi*2,fi*2,'#slavina-list [data-sl-idx="'+si+'"]');
     // Referentne isprekidane linije
     ctx.save();ctx.strokeStyle='#e74c3c';ctx.lineWidth=0.6;ctx.setLineDash([3,3]);
     // Ref za X kotu: vertikalne linije gore od ploce
     ctx.beginPath();ctx.moveTo(slx,sly-fi);ctx.lineTo(slx,slavKotaY);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(_pSl.left*sc,_pSl.back*sc);ctx.lineTo(_pSl.left*sc,slavKotaY);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(_slBaseX,_slBaseY);ctx.lineTo(_slBaseX,slavKotaY);ctx.stroke();
     // Ref za Y kotu: horizontalne linije lijevo od ploce
     ctx.beginPath();ctx.moveTo(slx-fi,sly);ctx.lineTo(slavKotaX,sly);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(_pSl.left*sc,_pSl.back*sc);ctx.lineTo(slavKotaX,_pSl.back*sc);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(_slBaseX,_slBaseY);ctx.lineTo(slavKotaX,_slBaseY);ctx.stroke();
     ctx.setLineDash([]);ctx.restore();
     // Fi oznaka
     ctx.fillStyle='#e74c3c';ctx.font='11px Segoe UI,Arial';
@@ -4459,25 +4306,9 @@ function buildLegendaHTML(){
       +'<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:15px;border:1px solid #888;border-radius:2px;background:#fff;font-size:11px;flex-shrink:0">'+PSym[prof]+'</span>'
       +'<span style="font-size:11px">'+PLbl[prof]+'</span></div>';
   }).join('');
-  // Popis rezanja po stranama - CNC operateru je bitno i koja strana i ugao.
-  var rezRows='';
-  try{
-    var rd=(typeof getRezData!=='undefined')?getRezData():[];
-    if(rd.length){
-      rezRows='<div style="border:1px solid #e0d0ea;border-radius:4px;padding:7px 9px;margin-top:8px;background:#fbf7fd">'
-        +'<div style="font-size:10px;font-weight:700;color:#8e44ad;margin-bottom:4px;letter-spacing:.3px">REZANJE</div>'
-        +rd.map(function(r){
-          return '<div style="font-size:11px;padding:2px 0;color:#222">'
-            +'<b>'+r.lbl+'</b> \u2014 '+r.rezLbl
-            +(r.rez==='ugao'?(' <b>'+r.ugao+'\u00b0</b>'):'')
-            +' <span style="color:#6b7a8d">('+r.m.toFixed(2)+' m)</span></div>';
-        }).join('')
-        +'</div>';
-    }
-  }catch(e){}
   return '<div style="border:1px solid #c8d4e8;border-radius:4px;padding:7px 9px;margin-top:10px;background:#fafbfd">'
     +'<div style="font-size:10px;font-weight:700;color:#1a3f7a;margin-bottom:4px;letter-spacing:.3px">OBRADA IVICA</div>'
-    +rows+'</div>'+rezRows;
+    +rows+'</div>';
 }
 
 function drawLegenda(ctx,W,H){
@@ -4487,9 +4318,8 @@ function drawLegenda(ctx,W,H){
 
   var profs=Object.keys(PLbl);
   var symSz=13, rowH=13, padX=6, padY=4, txtSize=9;
-  var _rezLeg=[]; try{ _rezLeg=getRezData(); }catch(e){ _rezLeg=[]; }
-  var lW=_rezLeg.length?168:138;
-  var lH=padY*2+10+profs.length*rowH+(_rezLeg.length?(13+_rezLeg.length*10):0);
+  var lW=138;
+  var lH=padY*2+10+profs.length*rowH;
   var lX=W-lW-4, lY=4;
 
   // Pozadina
@@ -4556,18 +4386,6 @@ function drawLegenda(ctx,W,H){
     ctx.textAlign='left';ctx.textBaseline='middle';
     ctx.fillText(PLbl[prof]||prof, lX+padX+symSz+5, cy);
   });
-  // Rezanje - odvojen popis ispod obrade ivica, sa stranom i uglom
-  if(_rezLeg.length){
-    var ry0=lY+padY+11+profs.length*rowH+3;
-    ctx.textAlign='left';ctx.textBaseline='top';
-    ctx.fillStyle='#8e44ad';ctx.font='bold 8px Segoe UI,Arial';
-    ctx.fillText('REZANJE',lX+padX,ry0);
-    ctx.font='8px Segoe UI,Arial';ctx.fillStyle='#000';
-    _rezLeg.forEach(function(r,i){
-      ctx.fillText(r.lbl+': '+(r.rez==='ugao'?('pod uglom '+r.ugao+'\u00b0'):'pravolinijsko')
-        +'  '+r.m.toFixed(2)+' m', lX+padX, ry0+11+i*10);
-    });
-  }
 
   ctx.restore();
 }
@@ -5540,15 +5358,6 @@ function setCelMatPrice(itemIdx,displayVal,currency){
   refresh();
   genPon(_lastPonCurrency);
 }
-// Postavlja ZAJEDNICKU cijenu rezanja (pravolinijsko / pod uglom) za tip -
-// isti princip kao cijene profila, pa nije potrebno prebacivanje stavke.
-function setRezPrice(prefix,rez,displayVal,currency){
-  var km=_toKM(displayVal,currency);
-  var el=ge(prefix+'rez'+rez);
-  if(el) el.value=km.toFixed(2);
-  refresh();
-  genPon(_lastPonCurrency);
-}
 // Postavlja cijenu obrade ivice za dati profil (npr. "ravna") - GLOBALNO
 // polje (zajedničko za sve stavke istog tipa), pa nije potrebno prebacivanje
 // aktivne stavke.
@@ -5598,11 +5407,6 @@ function saveProject(){
       tel:   gs('ref-tel')||'',
       email: gs('ref-email')||''
     },
-    cjenovnik: _snimiCjenovnik(),
-    ostalo: _snimiOstalo(),
-    ukupno: _ukupnoSvihStavki(),
-    ponuda: _ponudaInfo,
-    nalog: _nalogInfo,
     items: JSON.parse(JSON.stringify(items)),
     activeIdx: activeIdx
   };
@@ -5664,11 +5468,6 @@ function loadProject(){
             }
           }
         }
-        // Cjenovnik i globalna polja prije stavki
-        _vratiCjenovnik(p.cjenovnik);
-        _vratiOstalo(p.ostalo);
-        if(p.ponuda!==undefined) _ponudaInfo=p.ponuda||null;
-        if(p.nalog!==undefined)  _nalogInfo=p.nalog||null;
         // Postavi stavke
         items=p.items;
         // Lokacija zida je uklonjena - osiguraj da stari (ili tuđi) projekat
@@ -5710,12 +5509,7 @@ function loadProject(){
         buildCornerR();buildCustomOtvoriUI();buildSlavinaUI();
         buildItemList();
         refresh();
-        var _sadaL=_ukupnoSvihStavki();
-        var _porL='Projekat učitan: '+p.items.length+' stavki';
-        if(p.ukupno!=null && _sadaL!=null && Math.abs(p.ukupno-_sadaL)>0.01){
-          _porL+='\n\n⚠ Iznos se razlikuje od sacuvanog ('+p.ukupno.toFixed(2)+' → '+_sadaL.toFixed(2)+' KM).';
-        }
-        alert(_porL);
+        alert('Projekat učitan: '+p.items.length+' stavki');
       }catch(err){
         alert('Greška pri učitavanju: '+err.message);
       }
@@ -6385,14 +6179,8 @@ function genDXF(){
           });
         }
       });
-      var _ivdD=getIvData();
-      _ivdD.forEach(function(iv,i){
+      getIvData().forEach(function(iv,i){
         txY(0,bbox_h+60+i*8,2,iv.profLbl+': '+iv.lbl+' '+iv.m.toFixed(2)+'m','TEKST');
-      });
-      // Rezanje po stranama - ide ispod popisa obrade ivica
-      getRezData().forEach(function(rz,i){
-        txY(0,bbox_h+60+(_ivdD.length+i)*8,2,
-          'REZ '+rz.rezLbl+(rz.rez==='ugao'?(' '+rz.ugao+'st'):'')+': '+rz.lbl+' '+rz.m.toFixed(2)+'m','TEKST');
       });
     } else if(tip==='kl'){
       // Jedan crtez klupice sa brojem komada
@@ -6403,12 +6191,7 @@ function genDXF(){
       // Broj komada desno
       txY(gi('kl-a')+80,gi('kl-b')/2,30,'x'+kk,'TEKST');
       txY(gi('kl-a')+80,gi('kl-b')/2-45,10,'kom','TEKST');
-      var _rzKlD=getRezData();
-      _rzKlD.forEach(function(rz,ii){
-        txY(0,gi('kl-b')+50+ii*8,2,
-          'REZ '+rz.rezLbl+(rz.rez==='ugao'?(' '+rz.ugao+'st'):'')+': '+rz.lbl+' '+rz.m.toFixed(2)+'m','TEKST');
-      });
-      bbox_h=gi('kl-b')+(_rzKlD.length?50+_rzKlD.length*8:0);
+      bbox_h=gi('kl-b');
     } else if(tip==='sto'){
       var stoAD=d.A||0, stoBD=(shape==='okrugao')?stoAD:(d.B||0);
       var rrD=getTableRadiusMM();
@@ -6462,15 +6245,11 @@ function genDXF(){
       });
       // Obrada ivica - tekstualni popis (kao kod klupice/stepenica - samo
       // kontura+kote se crtaju, obrada ide kao napomena u tekstu)
-      var ivdSto3=getIvData(), _rzSto3=getRezData();
+      var ivdSto3=getIvData();
       ivdSto3.forEach(function(iv2,ii){
         txY(0,stoBD+60+ii*8,2,iv2.profLbl+': '+iv2.lbl+' '+iv2.m.toFixed(2)+'m','TEKST');
       });
-      _rzSto3.forEach(function(rz,ii){
-        txY(0,stoBD+60+(ivdSto3.length+ii)*8,2,
-          'REZ '+rz.rezLbl+(rz.rez==='ugao'?(' '+rz.ugao+'st'):'')+': '+rz.lbl+' '+rz.m.toFixed(2)+'m','TEKST');
-      });
-      bbox_h=stoBD+60+(ivdSto3.length+_rzSto3.length)*8;
+      bbox_h=stoBD+60+ivdSto3.length*8;
     } else {
       // Jedan crtez gazista sa brojem komada
       var br2=Math.max(1,gi('st-br'));
@@ -6496,12 +6275,6 @@ function genDXF(){
       } else {
         bbox_h=gi('st-b');
       }
-      var _rzStD=getRezData();
-      _rzStD.forEach(function(rz,ii){
-        txY(0,bbox_h+50+ii*8,2,
-          'REZ '+rz.rezLbl+(rz.rez==='ugao'?(' '+rz.ugao+'st'):'')+': '+rz.lbl+' '+rz.m.toFixed(2)+'m','TEKST');
-      });
-      if(_rzStD.length) bbox_h+=50+_rzStD.length*8;
     }
 
     yGlobalOffset += bbox_h + 200; // razmak između stavki
@@ -6723,11 +6496,6 @@ let _sviKupci = [];
 // da svako sljedece usvajanje predstavlja IZMJENU, a ne novi posao.
 // {r_br, verzija, naziv_ponude}
 var _nalogInfo=null;
-// Red u tabeli "ponude" koji pripada OVOM projektu. Dok postoji, svako
-// sljedece cuvanje PREGAZI taj red i isti fajl na R2 (isti naziv = isti kljuc),
-// umjesto da pravi novu stavku u listi.
-// {id, naziv}
-var _ponudaInfo=null;
 
 // AUTH — provjeri login
 async function _checkAuth(){
@@ -6906,74 +6674,77 @@ async function noviKupacSacuvaj(){
 }
 
 // CLOUD ČUVANJE PONUDA
-function _generisiNazivPonude(){
-  // Jednom dodijeljen naziv se NE mijenja - to je kljuc pod kojim ponuda
-  // zivi i na R2 i u tabeli, pa ponovno cuvanje pregazi staru verziju.
-  if(_ponudaInfo && _ponudaInfo.naziv) return _ponudaInfo.naziv;
+function _generisiNazivPonude(verzija){
   const kupac = (document.getElementById('kl-ime')||{}).value.trim() || 'Nepoznat';
-  const kupacSlug = kupac.replace(/[^a-zA-Z\u010c\u0106\u017d\u0160\u0110\u010d\u0107\u017e\u0161\u01110-9]/g,'').slice(0,10);
+  const kupacSlug = kupac.replace(/[^a-zA-ZčćžšđČĆŽŠĐ0-9]/g,'').slice(0,10);
   const inicijali = _currentUser
     ? _currentUser.ime_prezime.split(' ').map(d=>d[0]).join('').toUpperCase()
     : 'XX';
   const sada = new Date();
   const datum = String(sada.getMonth()+1).padStart(2,'0') + String(sada.getDate()).padStart(2,'0');
   const god = String(sada.getFullYear()).slice(2);
-  const rb = String(Math.floor(Math.random()*900)+100);
-  return `${kupacSlug}_${inicijali}_${datum}_${rb}_${god}`;
+  const rb = String(Math.floor(Math.random()*900)+100); // privremeno — server dodjeljuje pravi RB
+  // Kod izmjene ZADRŽAVAMO originalni naziv ponude i dodajemo samo _vN, da se
+  // sve verzije istog posla lako prepoznaju i sortiraju jedna uz drugu.
+  let base = `${kupacSlug}_${inicijali}_${datum}_${rb}_${god}`;
+  if(_nalogInfo && _nalogInfo.naziv_ponude){
+    base = String(_nalogInfo.naziv_ponude).replace(/_v\d+$/,'');
+  }
+  return (verzija && verzija>0) ? (base+'_v'+verzija) : base;
 }
 
-async function _cloudSaveCore(){
+// Jezgro cloud čuvanja — BACA grešku ako ne uspije (bez alert-a), da ga
+// pozivalac može uhvatiti i odlučiti šta dalje (npr. usvojiPonudu pada nazad
+// na lokalno čuvanje). Vraća naziv pod kojim je ponuda sačuvana.
+async function _cloudSaveCore(verzija){
   if(!_currentUser) throw new Error('Niste prijavljeni.');
-  const naziv = _generisiNazivPonude();
+  const naziv = _generisiNazivPonude(verzija);
   const projekat = _getProjectData();
   // Sigurno citanje odgovora: ako server vrati HTML (404/500 stranicu) umjesto
-  // JSON-a, r.json() bi bacio nejasan "Unexpected token <".
+  // JSON-a, r.json() bi bacio nejasan "Unexpected token <". Ovako korisnik
+  // dobija razumljivu poruku sa HTTP statusom.
   async function _procitaj(r, korak){
     let d=null;
     try{ d = await r.json(); }catch(e){ d=null; }
-    if(!r.ok) throw new Error((d&&d.error) ? d.error : (korak+' \u2014 server je vratio HTTP '+r.status));
-    if(!d) throw new Error(korak+' \u2014 neispravan odgovor servera.');
+    if(!r.ok){
+      throw new Error((d&&d.error) ? d.error : (korak+' — server je vratio HTTP '+r.status));
+    }
+    if(!d) throw new Error(korak+' — neispravan odgovor servera.');
     return d;
   }
-  // 1. JSON na R2 pod ISTIM nazivom -> isti kljuc -> stari fajl se pregazi
+  // 1. Upload JSON na R2
   const jsonB64 = btoa(unescape(encodeURIComponent(JSON.stringify(projekat))));
   const r1 = await fetch(API_URL+'/api/upload/ponuda-json',{
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ naziv, json_b64: jsonB64 })
   });
   const d1 = await _procitaj(r1,'Upload na R2');
-  if(!d1.link) throw new Error('Upload na R2 \u2014 server nije vratio link fajla.');
-
-  // 2. Red u tabeli: ako vec postoji -> IZMIJENI ga, ne pravi novi
+  if(!d1.link) throw new Error('Upload na R2 — server nije vratio link fajla.');
+  // 2. Upis metapodataka u bazu
   const kupac = (document.getElementById('kl-ime')||{}).value.trim()||null;
-  const telo = { naziv, kupac, link_json: d1.link };
-  if(_ponudaInfo && _ponudaInfo.id){
-    const rp = await fetch(API_URL+'/api/ponude/'+_ponudaInfo.id,{
-      method:'PATCH', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(telo)
-    });
-    if(rp.status===404||rp.status===405){
-      // Stariji server bez izmjene: obrisi stari red pa upisi novi, da u
-      // listi i dalje ostane SAMO jedna stavka za ovu ponudu.
-      try{ await fetch(API_URL+'/api/ponude/'+_ponudaInfo.id,{method:'DELETE'}); }catch(e){}
-      const rn = await fetch(API_URL+'/api/ponude',{
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(telo)
-      });
-      const dn = await _procitaj(rn,'Upis ponude u bazu');
-      _ponudaInfo = { id: dn.id||null, naziv: naziv };
-    } else {
-      const dp = await _procitaj(rp,'Izmjena ponude');
-      _ponudaInfo = { id: (dp&&dp.id)||_ponudaInfo.id, naziv: naziv };
-    }
-  } else {
-    const r2 = await fetch(API_URL+'/api/ponude',{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(telo)
-    });
-    const d2 = await _procitaj(r2,'Upis ponude u bazu');
-    _ponudaInfo = { id: d2.id||null, naziv: naziv };
-  }
+  // Sažetak za "Pregled svih ponuda" (tabela) — čitanje je NAMJERNO odbrambeno
+  // (optional chaining, fallback na null) jer struktura items[] varira po tipu stavke;
+  // greška ovde NE SMIJE spriječiti sâmo čuvanje ponude. Cijena/valuta se NAMJERNO NE
+  // pokušava izvući ovde (nema pouzdanog elementa u DOM-u u ovom trenutku) — bolje
+  // prazno u tabeli nego pogrešan broj.
+  let zadatakSazetak=null, materijalSazetak=null, brojStavki=null;
+  try{
+    const it=typeof items!=='undefined'?items:[];
+    brojStavki=it.length;
+    const tipLbl={'k':'Kuhinjska ploča','kl':'Klupica, Step','st':'Gazište','sto':'Sto'};
+    zadatakSazetak=[...new Set(it.map(x=>tipLbl[x?.tip]||x?.tip).filter(Boolean))].join(' + ')||null;
+    materijalSazetak=[...new Set(it.map(x=>x?.materijal?.naziv).filter(Boolean))].join(', ')||
+                      (document.getElementById('mat-naziv')?.value||null);
+  }catch(e){ /* sažetak je "nice to have" — ne smije srušiti čuvanje */ }
+  const r2 = await fetch(API_URL+'/api/ponude',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      naziv, kupac, link_json: d1.link,
+      zadatak_sazetak: zadatakSazetak, materijal_sazetak: materijalSazetak,
+      broj_stavki: brojStavki,
+    })
+  });
+  await _procitaj(r2,'Upis ponude u bazu');
   return naziv;
 }
 
@@ -7023,11 +6794,7 @@ function _prikaziListuPonuda(lista){
     <div style="background:#fff;border-radius:10px;padding:20px;min-width:420px;max-width:90vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
         <b style="font-size:15px;color:#134a85;">☁ Ponude na serveru</b>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <button onclick="cloudLoad()" title="Ponovo učitaj listu sa servera"
-            style="font:inherit;font-size:11px;padding:5px 10px;background:#eef4fb;color:#1a5fa8;border:1px solid #1a5fa8;border-radius:5px;cursor:pointer;">⟳ Osvježi</button>
-          <button onclick="document.getElementById('cloud-modal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
-        </div>
+        <button onclick="document.getElementById('cloud-modal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
       </div>
       <div style="overflow-y:auto;flex:1;">
         ${lista.map(p=>`
@@ -7039,7 +6806,7 @@ function _prikaziListuPonuda(lista){
               </div>
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0;">
-              <button onclick="_ucitajPonudu('${p.link_json}','${p.naziv}',${p.id})"
+              <button onclick="_ucitajPonudu('${p.link_json}','${p.naziv}')"
                 style="font:inherit;font-size:11px;padding:5px 10px;background:#1a5fa8;color:#fff;border:none;border-radius:5px;cursor:pointer;">
                 📂 Učitaj
               </button>
@@ -7055,7 +6822,7 @@ function _prikaziListuPonuda(lista){
   document.body.appendChild(modal);
 }
 
-async function _ucitajPonudu(linkJson, naziv, ponudaId){
+async function _ucitajPonudu(linkJson, naziv){
   if(!linkJson){ alert('Nema linka za učitavanje.'); return; }
   try{
     const r = await fetch(API_URL+'/api/ponude/ucitaj?link='+encodeURIComponent(linkJson));
@@ -7063,20 +6830,12 @@ async function _ucitajPonudu(linkJson, naziv, ponudaId){
     const p = await r.json();
     if(!p.items) throw new Error('Nevažeći format ponude.');
     _nalogInfo = p.nalog || null;   // ako ponuda vec ima nalog, sljedece usvajanje je IZMJENA
-    // Zapamti KOJI red smo ucitali - da ga sljedece cuvanje pregazi umjesto
-    // da napravi jos jednu stavku u listi.
-    _ponudaInfo = { id: (ponudaId!=null?ponudaId:((p.ponuda&&p.ponuda.id)||null)),
-                    naziv: naziv || ((p.ponuda&&p.ponuda.naziv)||null) };
     // Postavi klijenta
     if(p.klijent){
       if(ge('kl-ime')) ge('kl-ime').value=p.klijent.ime||'';
       if(ge('kl-tel')) ge('kl-tel').value=p.klijent.tel||'';
       if(ge('kl-adr')) ge('kl-adr').value=p.klijent.adr||'';
     }
-    // Cjenovnik i ostala globalna polja MORAJU nazad prije preracuna,
-    // inace bi ponuda pokupila trenutno vazece cijene umjesto svojih.
-    _vratiCjenovnik(p.cjenovnik);
-    _vratiOstalo(p.ostalo);
     // Postavi stavke — ista logika kao loadProject
     items = p.items;
     items.forEach(function(it){
@@ -7107,18 +6866,7 @@ async function _ucitajPonudu(linkJson, naziv, ponudaId){
     buildItemList();
     refresh();
     document.getElementById('cloud-modal').remove();
-    // Kontrola: da li se iznos poklopio sa onim koji je bio pri cuvanju.
-    var _sada=_ukupnoSvihStavki();
-    var _por='✓ Ponuda "'+naziv+'" učitana: '+p.items.length+' stavki';
-    if(p.ukupno!=null && _sada!=null && Math.abs(p.ukupno-_sada)>0.01){
-      _por+='\n\n⚠ PAZNJA: iznos se razlikuje od sacuvanog.\n'
-        +'Sacuvano: '+p.ukupno.toFixed(2)+' KM\n'
-        +'Sada:     '+_sada.toFixed(2)+' KM\n'
-        +'Provjeri cijene prije slanja kupcu.';
-    } else if(p.ukupno!=null){
-      _por+='\nIznos: '+p.ukupno.toFixed(2)+' KM (poklapa se sa sacuvanim)';
-    }
-    alert(_por);
+    alert('✓ Ponuda "'+naziv+'" učitana: '+p.items.length+' stavki');
   }catch(e){ alert('Greška pri učitavanju: '+e.message); }
 }
 
@@ -7129,74 +6877,6 @@ async function _obrisiPonudu(id, btn){
     if(!r.ok) throw new Error();
     btn.closest('div[style]').remove();
   }catch(e){ alert('Greška pri brisanju.'); }
-}
-
-// Pocinje ispocetka: brise stavke i PREKIDA vezu sa ucitanom ponudom/nalogom.
-// Bez ovoga bi cuvanje poslije "ucitaj pa mi ne odgovara" pregazilo tudju
-// ponudu, jer bi _ponudaInfo jos uvijek pokazivao na ucitani red.
-function novaPonuda(){
-  var vez='';
-  if(_ponudaInfo&&_ponudaInfo.naziv) vez+='\n\nTrenutno je otvorena ponuda: '+_ponudaInfo.naziv;
-  if(_nalogInfo&&_nalogInfo.r_br)   vez+='\nVezana za radni nalog #'+_nalogInfo.r_br;
-  if(!confirm('Početi NOVU ponudu?'+vez+'\n\nSve stavke se brisu, a veza sa gornjim se prekida\n(postojeci zapis na serveru OSTAJE netaknut).')) return;
-  _saveUndo();
-  items=[]; activeIdx=0;
-  _ponudaInfo=null; _nalogInfo=null;
-  ['kl-ime','kl-tel','kl-adr','pon-popust'].forEach(function(id){ var e=ge(id); if(e) e.value=''; });
-  var pd=ge('pon-doc');
-  if(pd) pd.innerHTML='<div style="text-align:center;padding:60px 0;color:#6b7a8d">Popunite podatke i kliknite <strong>Generiši ponudu</strong></div>';
-  buildItemList();
-  refresh();
-}
-
-// ── CJENOVNIK PONUDE ───────────────────────────────────────────────
-// Cijene profila i rezanja su GLOBALNA polja (nisu dio stavke), pa se moraju
-// posebno snimiti uz ponudu. Bez ovoga bi ucitana ponuda pokupila trenutno
-// vazece cijene i tiho promijenila ukupan iznos u odnosu na ono sto je kupac
-// dobio.
-function _cjenovnikPolja(){
-  var out=[];
-  ['','kl-','st-','sto-'].forEach(function(pref){
-    ['ravna','polukrug','bevel','ogee','mitered','rezravno','rezugao'].forEach(function(k){
-      out.push('ivp-'+pref+k);
-    });
-  });
-  return out;
-}
-function _snimiCjenovnik(){
-  var o={};
-  _cjenovnikPolja().forEach(function(id){ var e=ge(id); if(e) o[id]=e.value; });
-  return o;
-}
-function _vratiCjenovnik(c){
-  if(!c) return;
-  _cjenovnikPolja().forEach(function(id){
-    if(c[id]==null) return;
-    var e=ge(id); if(e) e.value=c[id];
-  });
-}
-// Ostala globalna polja koja uticu na iznos ili na sam dokument.
-function _snimiOstalo(){
-  return {
-    ref_tel: gs('ref-tel'), ref_email: gs('ref-email'),
-    popust: gs('pon-popust'),
-    kategorija_bonus: (ge('kategorija-bonus')||{}).value||''
-  };
-}
-function _vratiOstalo(o){
-  if(!o) return;
-  var m={'ref-tel':o.ref_tel,'ref-email':o.ref_email,
-         'pon-popust':o.popust,'kategorija-bonus':o.kategorija_bonus};
-  Object.keys(m).forEach(function(id){
-    if(m[id]==null) return;
-    var e=ge(id); if(e) e.value=m[id];
-  });
-}
-// Ukupan iznos u trenutku cuvanja - sluzi kao kontrola pri ucitavanju.
-function _ukupnoSvihStavki(){
-  try{
-    return Math.round(calcAllItems().reduce(function(a,r){return a+(r.uk||0);},0)*100)/100;
-  }catch(e){ return null; }
 }
 
 // Pomoćna — izvuci podatke projekta za cloud čuvanje
@@ -7211,10 +6891,6 @@ function _getProjectData(){
       },
       items: typeof items!=='undefined'?items:[],
       activeIdx: typeof activeIdx!=='undefined'?activeIdx:0,
-      cjenovnik: _snimiCjenovnik(),  // cijene profila i rezanja (globalna polja)
-      ostalo: _snimiOstalo(),        // popust, kontakt referenta, kategorija
-      ukupno: _ukupnoSvihStavki(),   // kontrolni iznos u trenutku cuvanja
-      ponuda: _ponudaInfo, // red u tabeli ponuda (da se pregazi, ne duplira)
       nalog: _nalogInfo,   // veza ponuda -> radni nalog (za revizije)
       timestamp: new Date().toISOString(),
     };
@@ -7226,6 +6902,15 @@ function _apiUrl(){ return API_URL; }
 
 // Pokreni auth provjeru
 _checkAuth();
+
+// Ako je otvoreno iz "Pregled svih ponuda" sa linkom (Otvori →), automatski učitaj tu
+// konkretnu ponudu — bez ovoga korisnik bi morao ručno da klikne "☁ Učitaj" i traži je.
+(function _autoUcitajIzUrl(){
+  const params=new URLSearchParams(location.search);
+  const link=params.get('ucitaj_link');
+  if(!link) return;
+  setTimeout(()=>{ _ucitajPonudu(link, params.get('naziv')||''); history.replaceState(null,'',location.pathname); }, 400);
+})();
 
 async function usvojiPonudu(){
   var url=_apiUrl();
@@ -7346,7 +7031,7 @@ async function usvojiPonudu(){
   showMsg(_jeIzmjena?('Čuvam izmjenu (v'+_novaVerzija+') na oblak...'):'Čuvam ponudu na oblak...',true);
   var _sacuvanoKao=null, _sacuvanoGdje='';
   try{
-    _sacuvanoKao=await _cloudSaveCore();
+    _sacuvanoKao=await _cloudSaveCore(_novaVerzija);
     _sacuvanoGdje='oblak';
     showMsg('✓ Ponuda sačuvana na oblak: '+_sacuvanoKao,true);
   }catch(errCloud){
@@ -7415,9 +7100,8 @@ async function usvojiPonudu(){
     if(_jeIzmjena){
       showMsg('Upisujem izmjenu na nalog #'+_nalogInfo.r_br+'...',true);
       var _danas=new Date().toLocaleDateString('hr',{day:'2-digit',month:'2-digit',year:'numeric'});
-      var _upoz='⚠ UPDATE v'+_novaVerzija+' — '+_danas+', '+
-        ((_currentUser&&_currentUser.ime_prezime)||'nepoznat')+
-        '. Ponuda je izmijenjena i pregazila prethodnu. POTREBNA POTVRDA. Ponuda: '+(_sacuvanoKao||'');
+      var _upoz='⚠ IZMJENA v'+_novaVerzija+' ('+_danas+', '+
+        ((_currentUser&&_currentUser.ime_prezime)||'nepoznat')+') — POTREBNA POTVRDA. Ponuda: '+(_sacuvanoKao||'');
       var patchBody=Object.assign({},body,{
         napomena:_upoz,
         verzija:_novaVerzija,
