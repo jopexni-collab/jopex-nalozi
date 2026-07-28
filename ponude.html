@@ -6865,7 +6865,10 @@ async function _ucitajPonudu(linkJson, naziv){
     buildSlavinaUI();
     buildItemList();
     refresh();
-    document.getElementById('cloud-modal').remove();
+    // Modal možda NE postoji (npr. kad se ponuda učitava direktno preko URL linka iz
+    // "Pregled svih ponuda", bez prethodnog otvaranja "☁ Učitaj" liste) — provjeri prije brisanja.
+    const modalEl=document.getElementById('cloud-modal');
+    if(modalEl) modalEl.remove();
     alert('✓ Ponuda "'+naziv+'" učitana: '+p.items.length+' stavki');
   }catch(e){ alert('Greška pri učitavanju: '+e.message); }
 }
