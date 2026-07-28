@@ -84,6 +84,7 @@ td.num{text-align:right;font-weight:700;}
 
 <div class="glavni-tabovi" style="display:flex;gap:8px;padding:12px 20px 0;">
   <button class="glavni-tab-btn active" data-tab="gotovina" onclick="prebaciGlavniTab('gotovina')">💰 Gotovina</button>
+  <button class="glavni-tab-btn" data-tab="vp" onclick="prebaciGlavniTab('vp')">VP</button>
   <button class="glavni-tab-btn" data-tab="banka" onclick="prebaciGlavniTab('banka')">🏦 Banka</button>
   <button class="glavni-tab-btn" data-tab="klijenti" onclick="prebaciGlavniTab('klijenti')">👥 Klijenti finansije</button>
 </div>
@@ -93,12 +94,6 @@ td.num{text-align:right;font-weight:700;}
 </style>
 
 <div id="tab-gotovina">
-
-<!-- VP/BANKA — potvrda po otpremnici (jedan klik potvrđuje SVE povezane redove) -->
-<div id="vp-cekanje-panel" style="display:none;background:#fff8e6;border:1px solid #f0d78c;border-radius:10px;padding:14px;margin-bottom:16px;">
-  <h3 style="margin:0 0 10px;font-size:14px;">🚚 Otpremnice koje čekaju potvrdu (odvezeno, nije naplaćeno)</h3>
-  <div id="vp-cekanje-lista"></div>
-</div>
 
 <!-- SUME -->
 <div class="sume" id="sume-box">
@@ -290,6 +285,14 @@ td.num{text-align:right;font-weight:700;}
 </div><!-- /tab-gotovina -->
 
 <!-- ═══ TAB: BANKA ═══════════════════════════════════════════════════════ -->
+<!-- ═══ TAB: VP — potvrda po otpremnici (jedan klik potvrđuje SVE povezane redove) ══ -->
+<div id="tab-vp" style="display:none;padding:16px 20px;">
+  <div style="font-size:11.5px;color:#8b96a5;margin-bottom:12px;line-height:1.5;">
+    Otpremnice sa robom koja je odvezena, ali nije naplaćena (na VP ili djelimično na banku) — čekaju da blagajnik/admin potvrdi da je pregledao.
+  </div>
+  <div id="vp-cekanje-lista"></div>
+</div>
+
 <div id="tab-banka" style="display:none;padding:16px 20px;">
   <div class="sume" id="banka-sume-box" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
 
@@ -907,17 +910,16 @@ function jeVpBankaRed(r){
   return o.startsWith('Prodaja (bruto)') || o.startsWith('Dug po otpremnici');
 }
 
-/* ── VP/BANKA — potvrda po otpremnici (jedan klik, jedan događaj) ──────── */
+/* ── VP — potvrda po otpremnici (jedan klik, jedan događaj) ────────────── */
 async function ucitajVpCekanje(){
-  const panel=document.getElementById('vp-cekanje-panel');
   const cont=document.getElementById('vp-cekanje-lista');
+  cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Učitavanje...</div>';
   try{
     const r=await fetch(`${API}/api/finansije/vp-cekanje`);
     const rows=await r.json();
-    if(!rows.length){ panel.style.display='none'; return; }
-    panel.style.display='block';
+    if(!rows.length){ cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Nema otpremnica koje čekaju potvrdu. 🎉</div>'; return; }
     cont.innerHTML=rows.map(o=>`
-      <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;background:#fff8e6;border:1px solid #f0d78c;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
         <div style="font-size:12.5px;">
           <b>${esc(o.broj)}</b> — ${esc(o.kupac_naziv||'—')}
           <span style="color:#8b96a5;"> · ${esc(o.objekt_naziv||'')} · ${fd(o.datum)} · Komercijalista: ${esc(o.komercijalista_ime||'—')}</span>
@@ -926,7 +928,7 @@ async function ucitajVpCekanje(){
         <button class="btn-predaj" onclick="potvrdiVpOtpremnicu('${esc(o.broj).replace(/'/g,"\\'")}')" style="white-space:nowrap;">✓ Potvrdi otpremnicu</button>
       </div>
     `).join('');
-  }catch(e){ panel.style.display='none'; }
+  }catch(e){ cont.innerHTML='<div style="text-align:center;color:red;padding:20px;">Greška pri učitavanju.</div>'; }
 }
 
 async function potvrdiVpOtpremnicu(broj){
@@ -1332,7 +1334,6 @@ fetch(`${API}/api/auth/me`).then(r=>{
   load();
   loadSume();
   ucitajFilterPJ();
-  ucitajVpCekanje();
   azurirajNalogPoljeVidljivost();
 
   // Automatsko osvježavanje — bez ovoga, promjene iz drugih ekrana (npr. štikliranje
@@ -1352,8 +1353,10 @@ fetch(`${API}/api/auth/me`).then(r=>{
 function prebaciGlavniTab(tab){
   document.querySelectorAll('.glavni-tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   document.getElementById('tab-gotovina').style.display = tab==='gotovina' ? 'block' : 'none';
+  document.getElementById('tab-vp').style.display = tab==='vp' ? 'block' : 'none';
   document.getElementById('tab-banka').style.display = tab==='banka' ? 'block' : 'none';
   document.getElementById('tab-klijenti').style.display = tab==='klijenti' ? 'block' : 'none';
+  if(tab==='vp'){ ucitajVpCekanje(); }
   if(tab==='banka'){ ucitajBankaSume(); ucitajBankaListu(); ucitajOcekivaneUplate(); }
   if(tab==='klijenti'){ ucitajKlijentiListu(); }
 }
