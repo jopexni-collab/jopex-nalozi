@@ -52,9 +52,11 @@ const FINANSIJSKA_POLJA = ['ugovorena_suma', 'avans', 'avans_opis', 'naplaceno_i
 function filtrirajFinansije(rows, user) {
   return rows.map(row => {
     if (user?.rola === 'admin' || user?.moze_ugovarati) return row; // vidi sve, uvijek
-    const jeMalaPonuda = row.izvor === 'mala_ponuda';
-    const smijeCitati = jeMalaPonuda && !!(user?.unos_naloga || user?.izmjena_statusa || user?.izmjena_naloga);
-    if (smijeCitati) return row;
+    // "Kreirao vidi svoje" — SAMO ako je BAŠ ON ugovorio (kreirao) TAJ KONKRETAN nalog.
+    // Ranija verzija je pogrešno davala pristup SVIM mala_ponuda nalozima svakome ko ima
+    // unos_naloga/izmjena_statusa/izmjena_naloga, bez provjere vlasništva — ozbiljan
+    // propust u privatnosti (Rade je vidio tuđe cifre nakon uvoza 341 naloga).
+    if (user?.id && row.ugovorio_id === user.id) return row;
     const kopija = { ...row };
     for (const polje of FINANSIJSKA_POLJA) delete kopija[polje];
     return kopija;
