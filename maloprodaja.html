@@ -685,8 +685,26 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       </div>
 
       <div id="das-kom-blok" style="display:none">
-        <label>Količina (kom)</label>
-        <input type="number" id="das-kom" step="0.001" min="0.001" placeholder="npr. 2 ili 2.5">
+        <div style="display:flex;gap:8px;align-items:flex-end;">
+          <div style="flex:1;">
+            <label>Količina (kom)</label>
+            <input type="number" id="das-kom" step="0.001" min="0.001" placeholder="npr. 2 ili 2.5" oninput="dasAzurirajCijenuPreview()">
+          </div>
+          <div style="padding-bottom:9px;font-weight:700;color:#8b96a5;">×</div>
+          <div style="flex:1;">
+            <label>Cijena (po jed.)</label>
+            <input type="number" id="das-kom-cijena" step="0.01" min="0" oninput="dasAzurirajCijenuPreview()">
+          </div>
+          <button type="button" class="btn-cijena" id="das-kom-odstupi-btn" onclick="dasToggleOdstupanje()" style="margin-bottom:1px;white-space:nowrap;">✎ Odstupi</button>
+        </div>
+        <div id="das-kom-odstupanje-blok" style="display:none;margin-top:8px;padding:10px;background:#f7f8fa;border-radius:8px;">
+          <select id="das-kom-razlog" style="width:100%;margin-bottom:6px;">
+            <option value="">— izaberi razlog —</option>
+            <!-- popunjava se JS-om iz RAZLOG_LABEL, isti spisak kao u korpi -->
+          </select>
+          <input type="text" id="das-kom-napomena" placeholder="Napomena (opciono)..." style="width:100%;">
+        </div>
+        <div id="das-kom-cijena-preview" style="font-size:11.5px;color:#8b96a5;margin-top:4px;"></div>
       </div>
 
       <div id="das-m2-blok" style="display:none">
@@ -1997,6 +2015,14 @@ function dodajUKosaricu(artikal){
   document.getElementById('das-naziv').textContent=artikal.naziv;
   document.getElementById('das-sifra').textContent='Šifra: '+artikal.sifra+' · Zadana cijena: '+fmMoney(artikal.cijena)+' po '+esc(artikal.jed_mjera)+' · Stanje: '+artikal.stanje+' '+esc(artikal.jed_mjera);
   document.getElementById('das-kom').value='';
+  document.getElementById('das-kom-cijena').value=artikal.cijena;
+  document.getElementById('das-kom-odstupanje-blok').style.display='none';
+  document.getElementById('das-kom-razlog').innerHTML='<option value="">— izaberi razlog —</option>'+
+    Object.entries(RAZLOG_LABEL).filter(([v])=>v!=='jedinica').map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
+  document.getElementById('das-kom-razlog').value='';
+  document.getElementById('das-kom-napomena').value='';
+  document.getElementById('das-kom-cijena-preview').textContent='';
+  document.getElementById('das-kom-odstupi-btn').textContent='✎ Odstupi';
   document.getElementById('das-m2-vr').value='';
   document.getElementById('das-m2-duzina').value='';
   document.getElementById('das-m2-visina').value='';
@@ -2014,6 +2040,40 @@ function dodajUKosaricu(artikal){
   dasIzaberiJedinicu(jedinica);
   azurirajBrojacDodatihDimenzija();
   document.getElementById('ov-dodaj-stavka').classList.add('on');
+}
+
+// Otvaranje/zatvaranje inline bloka za razlog odstupanja pri dodavanju stavke (isti
+// koncept kao "Odstupi od cijene" u korpi, samo ODMAH pri unosu, ne naknadno).
+function dasToggleOdstupanje(){
+  const blok=document.getElementById('das-kom-odstupanje-blok');
+  const otvoren=blok.style.display==='block';
+  blok.style.display=otvoren?'none':'block';
+  document.getElementById('das-kom-odstupi-btn').textContent=otvoren?'✎ Odstupi':'✕ Otkaži odstupanje';
+  if(otvoren){
+    // Zatvaranje bez razloga — vrati cijenu na zadanu (odustao od odstupanja).
+    document.getElementById('das-kom-cijena').value=dasArtikal?.cijena??'';
+    document.getElementById('das-kom-razlog').value='';
+    document.getElementById('das-kom-napomena').value='';
+  }
+  dasAzurirajCijenuPreview();
+}
+
+function dasAzurirajCijenuPreview(){
+  const prev=document.getElementById('das-kom-cijena-preview');
+  if(!dasArtikal){ prev.textContent=''; return; }
+  const cij=parseFloat(document.getElementById('das-kom-cijena').value);
+  const zadana=parseFloat(dasArtikal.cijena);
+  if(isNaN(cij) || Math.abs(cij-zadana)<0.005){ prev.textContent=''; return; }
+  const razlika=cij-zadana;
+  prev.innerHTML = razlika>0
+    ? `<span style="color:var(--green);">▲ Iznad zadane cijene (${fmMoney(zadana)}) za ${fmMoney(razlika)}</span>`
+    : `<span style="color:var(--red);">▼ Ispod zadane cijene (${fmMoney(zadana)}) za ${fmMoney(-razlika)} — treba razlog</span>`;
+  // Ako se cijena promijeni ručno bez klika na "Odstupi", ipak otvori blok za razlog —
+  // ne smije proći tiho, mora imati obrazloženje kao i svako odstupanje u korpi.
+  if(document.getElementById('das-kom-odstupanje-blok').style.display==='none'){
+    document.getElementById('das-kom-odstupanje-blok').style.display='block';
+    document.getElementById('das-kom-odstupi-btn').textContent='✕ Otkaži odstupanje';
+  }
 }
 
 function dasIzaberiJedinicu(u){
@@ -2118,6 +2178,23 @@ function izgradiIDodajStavku(){
 
   if(!kolicina||isNaN(kolicina)||kolicina<=0){alert('Unesite ispravnu količinu.');return false;}
 
+  // Odstupanje od cijene ODMAH pri dodavanju (samo za "kom" mod, za sad — test) — ista
+  // struktura kao override koji se inače unosi naknadno u korpi (tip uvijek 'iznos' ovdje,
+  // pošto se unosi direktno nova cijena, ne procenat).
+  let overrideNovi=null;
+  if(dasJedinica==='kom'){
+    const unesenaCijena=parseFloat(document.getElementById('das-kom-cijena').value);
+    const zadanaCijena=parseFloat(dasArtikal.cijena);
+    if(!isNaN(unesenaCijena) && Math.abs(unesenaCijena-zadanaCijena)>=0.005){
+      const razlog=document.getElementById('das-kom-razlog').value;
+      if(!razlog){ alert('Izabrali ste drugačiju cijenu — izaberite razlog odstupanja.'); return false; }
+      overrideNovi={
+        tip:'iznos', vrijednost:unesenaCijena, razlog,
+        napomena:document.getElementById('das-kom-napomena').value.trim()||null,
+      };
+    }
+  }
+
   // Stanje ne blokira prodaju (dozvoljeno je da ode u minus — npr. kamen, prirodan
   // materijal, stvarna količina se često razlikuje od upisane u šifrarniku) — samo
   // upozoravamo komercijalistu da nastavi svjesno.
@@ -2130,13 +2207,14 @@ function izgradiIDodajStavku(){
   const postojeciIdx=kosarica.findIndex(k=>k.roba_id===dasArtikal.id && k.jed_mjera===dasJedinica && !duzina_cm && !k.duzina_cm);
   if(postojeciIdx>=0){
     kosarica[postojeciIdx].kolicina=+(kosarica[postojeciIdx].kolicina+kolicina).toFixed(4);
+    if(overrideNovi) kosarica[postojeciIdx].override=overrideNovi;
   }else{
     kosarica.push({
       roba_id:dasArtikal.id, sifra:dasArtikal.sifra, naziv:dasArtikal.naziv,
       jed_mjera:dasJedinica, jed_mjera_zadana:dasArtikal.jed_mjera, cijena:parseFloat(dasArtikal.cijena),
       kolicina, stanje_max:parseFloat(dasArtikal.stanje),
       duzina_cm, visina_cm, debljina_cm, broj_komada,
-      override:null, // { tip:'posto'|'iznos', vrijednost, razlog, napomena } kad trgovac odstupi od zadane cijene
+      override:overrideNovi, // { tip:'posto'|'iznos', vrijednost, razlog, napomena } kad trgovac odstupi od zadane cijene
     });
   }
 
@@ -2314,6 +2392,16 @@ function azurirajPreview(idx){
 // Boja odstupanja: viša cijena od komercijaliste = zeleno (dobro za firmu), promjena
 // jedinice mjere = plavo (samo signal za provjeru, ne greška), niža cijena = crveno/
 // narandžasto (stvarno upozorenje — popust/gubitak koji treba obrazložiti).
+// Prikaz vrijednosti odstupanja u chip-u — procenat sivom bojom (npr. "10%"), iznos sa
+// valutom te PJ (npr. "10 KM" ili "10 €") — da se odmah vidi TIP odstupanja bez otvaranja.
+function formatirajVrijednostOdstupanja(override){
+  if(!override) return '';
+  if(override.tip==='posto') return `<span style="color:#8b96a5;font-weight:600;">${fm(override.vrijednost)}%</span>`;
+  const valuta=(typeof trenutniObjekat!=='undefined' && trenutniObjekat?.valuta)||'KM';
+  const oznaka=valuta==='EUR'?'€':'KM';
+  return `${fm(override.vrijednost)} ${oznaka}`;
+}
+
 function bojaOdstupanja(efektivna, zadana){
   if(efektivna>zadana) return 'var(--green)';
   if(efektivna<zadana) return 'var(--red)';
@@ -2363,7 +2451,7 @@ function renderKosarica(){
       ${jedinicaOdstupa?`<div style="font-size:10.5px;color:var(--blue);margin-top:2px;">⚙ Prodaje se po "${esc(k.jed_mjera)}" umjesto zadane "${esc(k.jed_mjera_zadana)}" — biće automatski prijavljeno kao odstupanje (plavo, samo signal za provjeru).</div>`:''}
       <div class="kos-item-bottom">
         ${odstupa
-          ? `<span class="chip-odstupanje" style="background:${efCij>k.cijena?'#e6f4ea':'#fce8e6'};color:${bojaCij};">${efCij>k.cijena?'▲':'▼'} ${esc(RAZLOG_LABEL[k.override.razlog]||k.override.razlog)}<button onclick="ukloniOdstupanje(${idx})">✕</button></span>
+          ? `<span class="chip-odstupanje" style="background:${efCij>k.cijena?'#e6f4ea':'#fce8e6'};color:${bojaCij};">${efCij>k.cijena?'▲':'▼'} ${formatirajVrijednostOdstupanja(k.override)} — ${esc(RAZLOG_LABEL[k.override.razlog]||k.override.razlog)}<button onclick="ukloniOdstupanje(${idx})">✕</button></span>
              <button class="btn-cijena" onclick="otvoriUredjivanjeCijene(${idx})">✎ Izmijeni</button>`
           : `<button class="btn-cijena" onclick="otvoriUredjivanjeCijene(${idx})">✎ Odstupi od cijene</button>`
         }
