@@ -57,6 +57,12 @@ header{background:#1a5fa8;color:#fff;height:48px;padding:0 12px 0 10px;display:f
 .ivrow.wall-side{opacity:.5;background:#f5f5f5;}
 .ivrow input[type=checkbox]{accent-color:#1a5fa8;width:12px;height:12px;flex-shrink:0;cursor:pointer;}
 .ivrow .ivlbl{font-size:11px;flex:1;}
+.ivrow{flex-wrap:wrap;}
+.iv-rez-line{display:flex;align-items:center;gap:5px;flex-basis:100%;margin-top:4px;padding-top:4px;border-top:1px dashed #e2e6ef;}
+.iv-rez-line select{width:126px;border:1px solid #dde2ea;border-radius:3px;padding:2px 4px;font-size:11px;font-family:inherit;}
+.iv-rez-line input{width:54px;border:1px solid #dde2ea;border-radius:3px;padding:2px 4px;font-size:11px;font-family:inherit;text-align:right;}
+.iv-rez-lbl{font-size:10px;color:#8e44ad;font-weight:700;min-width:24px;}
+.iv-rez-unit{font-size:10px;color:#8a93a3;}
 .ivrow select{width:110px;border:1px solid #dde2ea;border-radius:3px;padding:2px 4px;font-size:11px;font-family:inherit;}
 .cbrow{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid #dde2ea;border-radius:4px;margin-bottom:4px;background:#fafbfc;cursor:pointer;}
 .cbrow input[type=checkbox]{accent-color:#1a5fa8;width:13px;height:13px;cursor:pointer;flex-shrink:0;}
@@ -653,6 +659,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
     <div class="br"><span>Površina</span><span id="b-pov">–</span></div>
     <div class="br"><span>Materijal</span><span id="b-mat">0.00 KM</span></div>
     <div class="br"><span>Ivice / profil</span><span id="b-iv">0.00 KM</span></div>
+    <div class="br"><span>Rezanje</span><span id="b-rez">0.00 KM</span></div>
     <div class="br"><span>Usluge</span><span id="b-usl">0.00 KM</span></div>
     <div class="bdiv"></div>
     <div class="blbl">Ukupno</div>
@@ -2520,16 +2527,7 @@ function buildExtSection(){
       // Obrada ivica ZA OVAJ produžetak (4 strane: U/V/B1/B2) - isti blok
       var mySegs=extSegs.filter(function(s){return s.id.indexOf('ext_'+end.id+'_')===0;});
       mySegs.forEach(function(s){
-        var prevS=ivSt[s.id]||{prof:'none'};
-        var curProf=prevS.prof||'none';
-        var m=(Math.max(0,s.len)/1000).toFixed(2);
-        var opts=Object.keys(PLbl).map(function(p){
-          return '<option value="'+p+'"'+(p===curProf?' selected':'')+'>'+PSym[p]+' '+PLbl[p]+'</option>';
-        }).join('');
-        html+='<div class="ivrow" data-id="'+s.id+'" style="margin-left:20px;margin-top:3px">'
-          +'<b style="color:#8e44ad;margin-right:6px;min-width:20px;display:inline-block">'+s.lbl+'</b>'
-          +'<span class="ivlbl"><small style="color:var(--muted)">('+m+' m)</small></span>'
-          +'<select onchange="updateIviceProfile(\''+s.id+'\',this.value)">'+opts+'</select></div>';
+        html+=_ivRowHTML(s,'#8e44ad','margin-left:20px;margin-top:3px');
       });
     }
     html+='</div>';
@@ -2635,22 +2633,91 @@ function buildIvice(){
   // PRETHODNU stavku u trenutku čitanja, pa bi se njena vrijednost pogrešno
   // upisala u NOVU stavku.
   var html='';
-  segs.forEach(function(s){
-    var prev=ivSt[s.id]||{prof:'none'};
-    var curProf=prev.prof||'none';
-    var m=(Math.max(0,s.len)/1000).toFixed(2);
-    var opts=Object.keys(PLbl).map(function(p){
-      return '<option value="'+p+'"'+(p===curProf?' selected':'')+'>'+PSym[p]+' '+PLbl[p]+'</option>';
-    }).join('');
-    html+='<div class="ivrow" data-id="'+s.id+'">'
-      +'<b style="color:#1a5fa8;margin-right:6px;min-width:20px;display:inline-block">'+s.lbl+'</b>'
-      +'<span class="ivlbl"><small style="color:var(--muted)">('+m+' m)</small></span>'
-      +'<select onchange="updateIviceProfile(\''+s.id+'\',this.value)">'+opts+'</select></div>';
-  });
+  segs.forEach(function(s){ html+=_ivRowHTML(s,'#1a5fa8',''); });
   ivcon.innerHTML=html;
 }
+// ── REZANJE STRANE ─────────────────────────────────────────────────
+// Nezavisno od obrade ivice: ista strana moze imati i obradu i rezanje.
+// Cijena se unosi ZA SVAKU STRANU posebno (rezC, KM/m). Ugao se upisuje u
+// ponudu/nalog/DXF kao podatak za pogon, ali NE utice na cijenu - cijena
+// rezanja pod uglom je jedna, bez obzira da li je 30 ili 60 stepeni.
+var RezLbl={none:'Bez rezanja',ravno:'Pravolinijsko rezanje',ugao:'Rezanje pod uglom'};
+var RezSym={none:'\u2013',ravno:'\u2016',ugao:'\u2571'};
+function _ivGet(segId){
+  var st=ivSt[segId];
+  if(!st){ st={prof:'none'}; ivSt[segId]=st; }
+  return st;
+}
+function updateIviceRez(segId,rez){
+  var st=_ivGet(segId);
+  st.rez=rez;
+  if(rez!=='none' && (st.rezC==null||isNaN(st.rezC))) st.rezC=0;
+  if(rez==='ugao' && !st.ugao) st.ugao=45;
+  buildIvice(); buildExtSection(); refresh();
+}
+function updateIviceRezCijena(segId,val){
+  var st=_ivGet(segId);
+  st.rezC=Math.max(0,parseFloat((val||'0').toString().replace(',','.'))||0);
+  refresh(); // NE rebuilda panel - da fokus ostane u polju dok se kuca
+}
+function updateIviceUgao(segId,val){
+  var st=_ivGet(segId);
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
+  st.ugao=Math.max(1,Math.min(89,v));
+  refresh();
+}
+function getRezData(){
+  var ivShape=(tip==='kl')?'kl':(tip==='st'?'st':shape);
+  var segs=getIvSegs(ivShape,dims).concat(getExtIvSegs()), res=[];
+  segs.forEach(function(s){
+    var st=ivSt[s.id]||{};
+    var rez=st.rez||'none';
+    if(rez==='none') return;
+    var m=Math.max(0,s.len)/1000;
+    var c=parseFloat(st.rezC)||0;
+    res.push({id:s.id,lbl:s.fullLbl||s.lbl,rez:rez,rezLbl:RezLbl[rez]||rez,
+      ugao:st.ugao||45,m:m,ic:c,uk:Math.round(m*c*100)/100});
+  });
+  return res;
+}
+// Jedan red strane u panelu - obrada gore, rezanje u drugom redu.
+// Dijele ga i glavna ploca (buildIvice) i produzeci (buildExtSection).
+function _ivRowHTML(s,bojaSlova,dodatniStil){
+  var st=ivSt[s.id]||{prof:'none'};
+  var curProf=st.prof||'none', curRez=st.rez||'none';
+  var m=(Math.max(0,s.len)/1000).toFixed(2);
+  var optsProf=Object.keys(PLbl).map(function(p){
+    return '<option value="'+p+'"'+(p===curProf?' selected':'')+'>'+PSym[p]+' '+PLbl[p]+'</option>';
+  }).join('');
+  var optsRez=Object.keys(RezLbl).map(function(p){
+    return '<option value="'+p+'"'+(p===curRez?' selected':'')+'>'+RezSym[p]+' '+RezLbl[p]+'</option>';
+  }).join('');
+  var h='<div class="ivrow" data-id="'+s.id+'" style="'+(dodatniStil||'')+'">'
+    +'<b style="color:'+bojaSlova+';margin-right:6px;min-width:20px;display:inline-block">'+s.lbl+'</b>'
+    +'<span class="ivlbl"><small style="color:var(--muted)">('+m+' m)</small></span>'
+    +'<select onchange="updateIviceProfile(\''+s.id+'\',this.value)">'+optsProf+'</select>'
+    +'<div class="iv-rez-line">'
+      +'<span class="iv-rez-lbl">Rez</span>'
+      +'<select onchange="updateIviceRez(\''+s.id+'\',this.value)">'+optsRez+'</select>';
+  if(curRez!=='none'){
+    h+='<input type="number" min="0" step="0.01" value="'+(st.rezC!=null?st.rezC:0)+'"'
+      +' title="Cijena rezanja za OVU stranu"'
+      +' oninput="fixComma(this);updateIviceRezCijena(\''+s.id+'\',this.value)">'
+      +'<span class="iv-rez-unit">KM/m</span>';
+    if(curRez==='ugao'){
+      h+='<input type="number" min="1" max="89" value="'+(st.ugao||45)+'"'
+        +' title="Ugao reza (ne utice na cijenu)"'
+        +' oninput="fixComma(this);updateIviceUgao(\''+s.id+'\',this.value)">'
+        +'<span class="iv-rez-unit">\u00b0</span>';
+    }
+  }
+  h+='</div></div>';
+  return h;
+}
+
 function updateIviceProfile(segId,prof){
-  ivSt[segId]={chk:prof!=='none',prof:prof};
+  var _st=_ivGet(segId);
+  _st.chk=prof!=='none'; _st.prof=prof;   // NE brise rez/rezC/ugao te strane
   // KRITIČNO: refresh() SAMO preračunava cijene i ponovo crta canvas - NE
   // regeneriše HTML padajućih menija u lijevom panelu (#iv-con/#iv-con-kl/
   // #iv-con-st/#iv-con-sto/#ext-con). Bez ovoga, select element bi ostao s
@@ -3211,11 +3278,26 @@ function getIvData(){
   return res;
 }
 
+// Redovi rezanja u ponudi + ukupan iznos. kom = mnozilac (broj komada), koji
+// kod klupice/stepenica/stolova mnozi i rezanje, isto kao obradu ivica.
+function _rezRedovi(kom){
+  kom=kom||1;
+  var rd=getRezData(), rows='', uk=0;
+  rd.forEach(function(r){
+    var iznos=Math.round(r.uk*kom*100)/100;
+    uk+=iznos;
+    var opis=r.rezLbl+(r.rez==='ugao'?(' '+r.ugao+'\u00b0'):'')+' ('+r.lbl+')'+(kom>1?(' \u00d7'+kom):'');
+    rows+=trow(opis, r.m.toFixed(2)+' m',
+      _editableUnitPrice(r.ic,'/m','setRezCijena',[activeIdx,r.id]), f(iznos));
+  });
+  return {rows:rows, uk:Math.round(uk*100)/100};
+}
+
 // ── Centralna funkcija za cijenu stavke ─────────────────
 function calcItemCost(){
   // Poziva se kada su globalne varijable (tip,shape,dims,itd) i HTML inputi
   // postavljeni na AKTIVNU stavku
-  var mat=0,iv=0,usl=0,uk=0,rows='';
+  var mat=0,iv=0,usl=0,uk=0,rez=0,rows='';
   var mv=getMatV(),md=getMatD();
   var mn=gs('mat-naziv')||'';
   var ms=mv+(mn?' – '+mn:'')+', '+md+' mm';
@@ -3252,6 +3334,7 @@ function calcItemCost(){
       rows+=trow((c.name||'Dodatni otvor')+' '+dimTxt+obrTxt,'1 kom',_editableUnitPrice(parseFloat(c.cost)||0,'','setCustomOtvorCostPon',[activeIdx,ci]),f(parseFloat(c.cost)||0));
     });
     ivd.forEach(function(iv2){rows+=trow('Obrada ivice – '+iv2.profLbl+' ('+iv2.lbl+')',iv2.m.toFixed(2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-',iv2.prof]),f(iv2.uk));});
+    var _rzK=_rezRedovi(1); rows+=_rzK.rows; rez=_rzK.uk; uk+=rez;
     segsE=getIvSegs(shape,dims);
     getFreeEndSides(shape).forEach(function(end){
       if(extState[end.id]!=='on'||wallSides[end.id]) return;
@@ -3276,6 +3359,7 @@ function calcItemCost(){
     var klnap=gs('kl-n')?(' ('+gs('kl-n')+')'):'';
     rows+=trow('Prozorska klupica'+klnap+' '+gi('kl-a')+'×'+gi('kl-b')+' mm ('+ms+')',kk+' kom',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
     ivdKl.forEach(function(iv2){rows+=trow('Ivica '+iv2.lbl+' – '+iv2.profLbl,iv2.m.toFixed(2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-kl-',iv2.prof]),f(iv2.uk));});
+    var _rzKl=_rezRedovi(kk); rows+=_rzKl.rows; rez=_rzKl.uk; uk+=rez;
     rows+=trow('Ugradnja',kk+' kom',_editableUnitPrice(gi('kl-u'),'','setItemFieldPrice',[activeIdx,'kl-u']),f(gi('kl-u')*kk));
     rows+=trow('Mjerenje','1',_editableUnitPrice(gi('kl-m'),'','setItemFieldPrice',[activeIdx,'kl-m']),f(gi('kl-m')));
   } else if(tip==='sto'){
@@ -3293,6 +3377,7 @@ function calcItemCost(){
     var stoDimTxt=shape==='okrugao'?('ø'+stoA2+' mm'):(stoA2+'×'+stoB2+' mm');
     rows+=trow('Stol – '+stoShLbl+stonap+' '+stoDimTxt+' ('+ms+')',stoBr2+' kom ('+m3o.toFixed(4)+' m²)',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
     ivdSto2.forEach(function(iv2){rows+=trow('Ivica '+iv2.lbl+' – '+iv2.profLbl+' (×'+stoBr2+')',iv2.m.toFixed(2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-sto-',iv2.prof]),f(iv2.uk*stoBr2));});
+    var _rzSto=_rezRedovi(stoBr2); rows+=_rzSto.rows; rez=_rzSto.uk; uk+=rez;
     (tableHoles||[]).forEach(function(h,hi){
       var hDim=(h.shape==='round')?('ø'+(h.fi||35)+' mm'):((h.w||0)+'×'+(h.h||0)+' mm');
       rows+=trow((h.name||'Otvor')+' '+hDim+(stoBr2>1?' (×'+stoBr2+')':''),stoBr2+' kom',_editableUnitPrice(parseFloat(h.cost)||0,'','setTableHoleCostPon',[activeIdx,hi]),f((parseFloat(h.cost)||0)*stoBr2));
@@ -3309,6 +3394,7 @@ function calcItemCost(){
     var stnap=gs('st-n')?(' ('+gs('st-n')+')'):'';
     rows+=trow('Gazište stepenica'+stnap+' '+gi('st-a')+'×'+gi('st-b')+' mm ('+ms+')',gm.toFixed(4)+' m²',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
     ivdSt.forEach(function(iv2){rows+=trow('Ivica '+iv2.lbl+' – '+iv2.profLbl,iv2.m.toFixed(2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-st-',iv2.prof]),f(iv2.uk));});
+    var _rzSt=_rezRedovi(br); rows+=_rzSt.rows; rez=_rzSt.uk; uk+=rez;
     if(gc('cb-cel')){
       var cm=gi('cel-a')*gi('cel-b')/1e6*br,celm=Math.round(cm*gi('cel-c')*100)/100;
       uk+=celm;
@@ -3318,7 +3404,7 @@ function calcItemCost(){
     rows+=trow('Ugradnja',br+' kom',_editableUnitPrice(gi('st-u'),'','setItemFieldPrice',[activeIdx,'st-u']),f(gi('st-u')*br));
     rows+=trow('Mjerenje','1',_editableUnitPrice(gi('st-m'),'','setItemFieldPrice',[activeIdx,'st-m']),f(gi('st-m')));
   }
-  return {mat:mat,iv:iv,usl:usl,uk:uk,rows:rows};
+  return {mat:mat,iv:iv,usl:usl,rez:rez,uk:uk,rows:rows};
 }
 
 function calcAllItems(){
@@ -3401,10 +3487,12 @@ function refresh(){
   var _allMat=_allRes.reduce(function(s,r){return s+(r.mat||0);},0);
   var _allIv=_allRes.reduce(function(s,r){return s+(r.iv||0);},0);
   var _allUsl=_allRes.reduce(function(s,r){return s+(r.usl||0);},0);
+  var _allRez=_allRes.reduce(function(s,r){return s+(r.rez||0);},0);
   ge('b-uk').textContent=_allTotal.toFixed(2)+' KM';
   if(ge('b-mat')) ge('b-mat').textContent=_allMat.toFixed(2)+' KM';
   if(ge('b-iv'))  ge('b-iv').textContent=_allIv.toFixed(2)+' KM';
   if(ge('b-usl')) ge('b-usl').textContent=_allUsl.toFixed(2)+' KM';
+  if(ge('b-rez')) ge('b-rez').textContent=_allRez.toFixed(2)+' KM';
   drawCanvas(); // uvijek osvjezi crtez
 }
 
@@ -3845,6 +3933,31 @@ function drawProfSymbol(ctx,cx,cy,prof){
   ctx.restore();
 }
 
+// Simbol rezanja strane - crta se PORED simbola obrade, jer strana moze
+// imati oboje. Pravolinijsko = dvije paralelne crte (rez), pod uglom =
+// kosa crta sa lukom ugla.
+function drawRezSymbol(ctx,cx,cy,rez,ugao){
+  if(!rez||rez==='none') return;
+  ctx.save();
+  ctx.fillStyle='rgba(255,255,255,0.92)';
+  ctx.fillRect(cx-8,cy-7,16,14);
+  ctx.strokeStyle='#8e44ad';ctx.lineWidth=0.7;
+  ctx.strokeRect(cx-8,cy-7,16,14);
+  ctx.strokeStyle='#8e44ad';ctx.lineWidth=1.3;ctx.lineCap='round';
+  ctx.beginPath();
+  if(rez==='ravno'){
+    ctx.moveTo(cx-5,cy-2.5);ctx.lineTo(cx+5,cy-2.5);
+    ctx.moveTo(cx-5,cy+2.5);ctx.lineTo(cx+5,cy+2.5);
+  } else {
+    ctx.moveTo(cx-5,cy+4);ctx.lineTo(cx+5,cy-4);
+    ctx.moveTo(cx-5,cy+4);ctx.lineTo(cx+2,cy+4);
+  }
+  ctx.stroke();
+  if(rez==='ugao'){
+    ctx.beginPath();ctx.arc(cx-5,cy+4,5,-Math.PI/4,0);ctx.stroke();
+  }
+  ctx.restore();
+}
 // Oznaka strane produžetka (U/V/B1/B2) + simbol obrade - isti vizuelni jezik
 // kao edgeLbl za kuhinju, ali NE upisuje u _edgeLabelLog (to je rezervisano
 // za prepoznavanje slova uglova OSNOVNOG oblika, produžetak tu ne učestvuje)
@@ -3857,8 +3970,9 @@ function extEdgeLbl(ctx,x,y,lbl,segId){
   ctx.fillRect(x-tw/2-10,y-8,tw+20,16);
   ctx.fillStyle='#8e44ad';
   ctx.fillText(lbl,x-8,y);
-  var prof=ivSt[segId]?ivSt[segId].prof:'none';
-  drawProfSymbol(ctx,x+tw/2+5,y,prof);
+  var _stX=ivSt[segId]||{};
+  drawProfSymbol(ctx,x+tw/2+5,y,_stX.prof||'none');
+  if(_stX.rez&&_stX.rez!=='none') drawRezSymbol(ctx,x+tw/2+23,y,_stX.rez,_stX.ugao);
   ctx.restore();
 }
 
@@ -3874,11 +3988,17 @@ function edgeLbl(ctx,x,y,lbl,segId,orient){
   ctx.fillStyle='#1a5fa8';
   ctx.fillText(lbl,x,y);
   if(segId){
-    var prof=ivSt[segId]?ivSt[segId].prof:'none';
+    var _stE=ivSt[segId]||{};
+    var prof=_stE.prof||'none';
     var sx,sy;
     if(orient==='v'){sx=x;sy=y+22;}
     else{sx=x+tw/2+12;sy=y;}
     drawProfSymbol(ctx,sx,sy,prof);
+    // Rezanje ide ODMAH DO simbola obrade - strana moze imati i jedno i drugo
+    if(_stE.rez&&_stE.rez!=='none'){
+      if(orient==='v') drawRezSymbol(ctx,sx,sy+17,_stE.rez,_stE.ugao);
+      else             drawRezSymbol(ctx,sx+18,sy,_stE.rez,_stE.ugao);
+    }
   }
   ctx.restore();
 }
@@ -4306,9 +4426,25 @@ function buildLegendaHTML(){
       +'<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:15px;border:1px solid #888;border-radius:2px;background:#fff;font-size:11px;flex-shrink:0">'+PSym[prof]+'</span>'
       +'<span style="font-size:11px">'+PLbl[prof]+'</span></div>';
   }).join('');
+  // Popis rezanja po stranama - CNC operateru je bitno i koja strana i ugao.
+  var rezRows='';
+  try{
+    var rd=(typeof getRezData!=='undefined')?getRezData():[];
+    if(rd.length){
+      rezRows='<div style="border:1px solid #e0d0ea;border-radius:4px;padding:7px 9px;margin-top:8px;background:#fbf7fd">'
+        +'<div style="font-size:10px;font-weight:700;color:#8e44ad;margin-bottom:4px;letter-spacing:.3px">REZANJE</div>'
+        +rd.map(function(r){
+          return '<div style="font-size:11px;padding:2px 0;color:#222">'
+            +'<b>'+r.lbl+'</b> \u2014 '+r.rezLbl
+            +(r.rez==='ugao'?(' <b>'+r.ugao+'\u00b0</b>'):'')
+            +' <span style="color:#6b7a8d">('+r.m.toFixed(2)+' m)</span></div>';
+        }).join('')
+        +'</div>';
+    }
+  }catch(e){}
   return '<div style="border:1px solid #c8d4e8;border-radius:4px;padding:7px 9px;margin-top:10px;background:#fafbfd">'
     +'<div style="font-size:10px;font-weight:700;color:#1a3f7a;margin-bottom:4px;letter-spacing:.3px">OBRADA IVICA</div>'
-    +rows+'</div>';
+    +rows+'</div>'+rezRows;
 }
 
 function drawLegenda(ctx,W,H){
@@ -4386,6 +4522,18 @@ function drawLegenda(ctx,W,H){
     ctx.textAlign='left';ctx.textBaseline='middle';
     ctx.fillText(PLbl[prof]||prof, lX+padX+symSz+5, cy);
   });
+  // Rezanje - odvojen popis ispod obrade ivica, sa stranom i uglom
+  if(_rezLeg.length){
+    var ry0=lY+padY+11+profs.length*rowH+3;
+    ctx.textAlign='left';ctx.textBaseline='top';
+    ctx.fillStyle='#8e44ad';ctx.font='bold 8px Segoe UI,Arial';
+    ctx.fillText('REZANJE',lX+padX,ry0);
+    ctx.font='8px Segoe UI,Arial';ctx.fillStyle='#000';
+    _rezLeg.forEach(function(r,i){
+      ctx.fillText(r.lbl+': '+(r.rez==='ugao'?('pod uglom '+r.ugao+'\u00b0'):'pravolinijsko')
+        +'  '+r.m.toFixed(2)+' m', lX+padX, ry0+11+i*10);
+    });
+  }
 
   ctx.restore();
 }
@@ -5358,6 +5506,24 @@ function setCelMatPrice(itemIdx,displayVal,currency){
   refresh();
   genPon(_lastPonCurrency);
 }
+// Postavlja cijenu rezanja ZA JEDNU STRANU odredjene stavke. Cijena rezanja
+// nije globalna (kao profili) nego po strani, pa mora kroz prebacivanje
+// aktivne stavke - isto kao ostale per-stavka vrijednosti.
+function setRezCijena(itemIdx,segId,displayVal,currency){
+  if(!items[itemIdx]) return;
+  var km=_toKM(displayVal,currency);
+  var savedIdx=activeIdx;
+  activeIdx=itemIdx;
+  syncFromActive();loadItemInputs();
+  var st=ivSt[segId]||{prof:'none'};
+  st.rezC=km; ivSt[segId]=st;
+  syncToActive();
+  activeIdx=savedIdx;
+  syncFromActive();loadItemInputs();
+  buildIvice();buildExtSection();
+  refresh();
+  genPon(_lastPonCurrency);
+}
 // Postavlja cijenu obrade ivice za dati profil (npr. "ravna") - GLOBALNO
 // polje (zajedničko za sve stavke istog tipa), pa nije potrebno prebacivanje
 // aktivne stavke.
@@ -6179,8 +6345,14 @@ function genDXF(){
           });
         }
       });
-      getIvData().forEach(function(iv,i){
+      var _ivdD=getIvData();
+      _ivdD.forEach(function(iv,i){
         txY(0,bbox_h+60+i*8,2,iv.profLbl+': '+iv.lbl+' '+iv.m.toFixed(2)+'m','TEKST');
+      });
+      // Rezanje po stranama - ide ispod popisa obrade ivica
+      getRezData().forEach(function(rz,i){
+        txY(0,bbox_h+60+(_ivdD.length+i)*8,2,
+          'REZ '+rz.rezLbl+(rz.rez==='ugao'?(' '+rz.ugao+'st'):'')+': '+rz.lbl+' '+rz.m.toFixed(2)+'m','TEKST');
       });
     } else if(tip==='kl'){
       // Jedan crtez klupice sa brojem komada
@@ -6245,11 +6417,15 @@ function genDXF(){
       });
       // Obrada ivica - tekstualni popis (kao kod klupice/stepenica - samo
       // kontura+kote se crtaju, obrada ide kao napomena u tekstu)
-      var ivdSto3=getIvData();
+      var ivdSto3=getIvData(), _rzSto3=getRezData();
       ivdSto3.forEach(function(iv2,ii){
         txY(0,stoBD+60+ii*8,2,iv2.profLbl+': '+iv2.lbl+' '+iv2.m.toFixed(2)+'m','TEKST');
       });
-      bbox_h=stoBD+60+ivdSto3.length*8;
+      _rzSto3.forEach(function(rz,ii){
+        txY(0,stoBD+60+(ivdSto3.length+ii)*8,2,
+          'REZ '+rz.rezLbl+(rz.rez==='ugao'?(' '+rz.ugao+'st'):'')+': '+rz.lbl+' '+rz.m.toFixed(2)+'m','TEKST');
+      });
+      bbox_h=stoBD+60+(ivdSto3.length+_rzSto3.length)*8;
     } else {
       // Jedan crtez gazista sa brojem komada
       var br2=Math.max(1,gi('st-br'));
