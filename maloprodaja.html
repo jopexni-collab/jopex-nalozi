@@ -1760,8 +1760,8 @@ async function ucitajDugovanja(tiho){
           <span>Plaćeno: ${fmMoneyZaObjekat(o.iznos_placeno, o.objekt_id)}</span>
         </div>
         <div class="otp-iznos" style="color:var(--red);">Duguje: ${fmMoneyZaObjekat(o.duguje, o.objekt_id)}</div>
-        ${o.blagajnik_kontrola
-          ?`<div style="font-size:10.5px;color:var(--green);font-weight:700;margin-top:4px;">🚚 ✓ Verifikovano — ${esc(o.blagajnik_kontrola_ko_ime||'')} ${o.blagajnik_kontrola_kada?fd(o.blagajnik_kontrola_kada):''}</div>`
+        ${o.predao_blagajniku
+          ?`<div style="font-size:10.5px;color:var(--green);font-weight:700;margin-top:4px;">🚚 ✓ Verifikovano — ${esc(o.blagajnik_ime||'')} ${o.blagajnik_kada?fd(o.blagajnik_kada):''}</div>`
           :`<div style="font-size:10.5px;color:var(--red);font-weight:700;margin-top:4px;">🚚 Nije verifikovano od blagajnika/admina</div>`
         }
       </div>

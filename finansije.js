@@ -151,7 +151,7 @@ router.get('/klijenti', async (req, res) => {
       FROM otpremnice o
       LEFT JOIN gotovina g ON g.nalog_r_br = o.broj AND g.opis LIKE 'Dug po otpremnici%'
       WHERE o.status_placanja != 'placeno' AND o.status = 'potvrdjena' AND o.kupac_naziv IS NOT NULL
-        AND (g.blagajnik_kontrola IS NULL OR g.blagajnik_kontrola = false)
+        AND (g.predao_blagajniku IS NULL OR g.predao_blagajniku = false)
       GROUP BY kljuc, o.kupac_id, o.kupac_naziv
     `);
 

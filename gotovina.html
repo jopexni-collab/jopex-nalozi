@@ -844,8 +844,16 @@ function render(){
   }
   document.getElementById('tbody').innerHTML=rows.map(r=>{
     const jeIsplata=parseFloat(r.iznos)<0;
-    const rijecPozitivno = jeIsplata ? 'Odobreno' : 'Predano';
-    const rijecNegativno = jeIsplata ? 'Nije odobreno' : 'Nije predano';
+    const jeVp=jeVpBankaRed(r);
+    const jePlus=parseFloat(r.iznos)>=0;
+    // Za VP/banka redove (roba odvezena, ali NEMA gotovine koju komercijalista predaje
+    // blagajniku — novac stiže kasnije, na banku ili gotovinom sa terena) — ista kolona
+    // "Predano blagajniku" mijenja tekst: blagajnik samo POTVRĐUJE da zna da je stanje
+    // magacina umanjeno, ne prima nikakav novac ODMAH.
+    const imeIzOpisa=(r.opis||'').split(' — ')[1]||'kupca';
+    const rijecPozitivno = jeVp ? (jePlus?`Oslobodi ${esc(r.komercijalista_ime||'komercijalistu')}`:`Zaduži ${esc(imeIzOpisa)}`)
+                          : jeIsplata ? 'Odobreno' : 'Predano';
+    const rijecNegativno = jeVp ? '🚚 Odvezeno, nije naplaćeno' : (jeIsplata ? 'Nije odobreno' : 'Nije predano');
     return `
     <tr>
       <td>${fd(r.datum)}${r.kreirano?` <span style="color:#8b96a5;font-size:10.5px;">${fvrijeme(r.kreirano)}</span>`:''}</td>
@@ -867,12 +875,9 @@ function render(){
               ?`<a class="nalog-link" href="uplata-dokument.html?token=${encodeURIComponent(r.javni_token)}" target="_blank" rel="noopener">${esc(r.nalog_r_br)}</a>`
               :`<span class="nalog-link" style="cursor:default;">${esc(r.nalog_r_br)}</span>`
       ):''}</td>
-      <td>
-        ${esc(r.opis||'')}
-        ${vpBankaKontrolaHtml(r)}
-      </td>
+      <td>${esc(r.opis||'')}</td>
       <td>${r.predao_blagajniku
-        ?`<span class="predano">✓ ${rijecPozitivno} ${r.datum_predaje?fd(r.datum_predaje)+' '+fvrijeme(r.datum_predaje):''}${r.preuzeo_ime?' — '+esc(r.preuzeo_ime):''}</span>`
+        ?`<span class="predano">${jeVp?'🚚 ✓':'✓'} ${rijecPozitivno} ${r.datum_predaje?fd(r.datum_predaje)+' '+fvrijeme(r.datum_predaje):''}${r.preuzeo_ime?' — '+esc(r.preuzeo_ime):''}</span>`
         :`<span class="nepredano-txt">${rijecNegativno}</span>
           <button class="btn-predaj" onclick="predajBlagajniku(${r.id})">${rijecPozitivno}</button>`
       }</td>
@@ -884,33 +889,13 @@ function render(){
 // Prepoznaje redove koji potiču od prodaje na VP/dug ili banku (roba je OTIŠLA, ali
 // nije naplaćena gotovinom) — prepoznaje se po tekstu opisa koji otpremnice.js uvijek
 // stavlja za taj slučaj ("Prodaja (bruto) — ..." za pozitivan red, "Dug po otpremnici —
-// ..." za negativan). Blagajnik "pečatira" da je pregledao — čist kontrolni korak, NE
-// dira stanje robe niti dug kupca (to već rade otpremnice/PJ stanje).
+// ..." za negativan). Koristi ISTI "Predano blagajniku" mehanizam kao obična gotovina —
+// samo je tekst prilagođen (nema fizičkog novca koji komercijalista predaje, blagajnik
+// samo potvrđuje da zna da je stanje magacina umanjeno; novac stiže kasnije, na banku
+// ili gotovinom sa terena).
 function jeVpBankaRed(r){
   const o=r.opis||'';
   return o.startsWith('Prodaja (bruto)') || o.startsWith('Dug po otpremnici');
-}
-function vpBankaKontrolaHtml(r){
-  if(!jeVpBankaRed(r)) return '';
-  const jePlus=parseFloat(r.iznos)>=0;
-  // kupac_naziv nije posebno polje na gotovina redu — otpremnice.js UVIJEK stavlja ime
-  // kupca poslije " — " u opisu za ove redove, pa se odatle izvlači.
-  const imeIzOpisa=(r.opis||'').split(' — ')[1]||'kupca';
-  const labela = jePlus ? `Oslobodi ${esc(r.komercijalista_ime||'komercijalistu')}` : `Zaduži ${esc(imeIzOpisa)}`;
-  if(r.blagajnik_kontrola){
-    return `<div style="margin-top:4px;font-size:10.5px;color:var(--green);font-weight:700;">🚚 ✓ ${jePlus?'Oslobođeno':'Zaduženo'} — ${esc(r.blagajnik_kontrola_ko_ime||'')} ${r.blagajnik_kontrola_kada?fd(r.blagajnik_kontrola_kada)+' '+fvrijeme(r.blagajnik_kontrola_kada):''}</div>`;
-  }
-  return `<div style="margin-top:4px;">
-    <span style="font-size:10.5px;color:var(--red);font-weight:700;">🚚 Odvezeno, nije naplaćeno</span>
-    <button class="btn-predaj" onclick="potvrdiKontrolu(${r.id})" style="margin-left:4px;">${labela}</button>
-  </div>`;
-}
-async function potvrdiKontrolu(id){
-  try{
-    const r=await fetch(`${API}/api/gotovina/${id}/kontrola`,{method:'POST'});
-    if(!r.ok){ const d=await r.json(); alert('✗ '+(d.error||'Greška.')); return; }
-    load();
-  }catch(e){ alert('✗ Greška.'); }
 }
 
 /* ── Pretraga komitenta (dijeljeno za obje forme, 'f'=naplata, 'i'=isplata) ── */

@@ -758,7 +758,7 @@ router.get('/dugovanja/lista', async (req, res) => {
       `SELECT o.id, o.broj, o.datum, o.kupac_id, o.kupac_naziv, o.kupac_telefon, o.objekt_naziv,
               o.komercijalista_ime, o.ukupan_iznos, o.iznos_placeno, o.status_placanja,
               (o.ukupan_iznos - o.iznos_placeno) AS duguje,
-              g.blagajnik_kontrola, g.blagajnik_kontrola_ko_ime, g.blagajnik_kontrola_kada
+              g.predao_blagajniku, g.preuzeo_ime AS blagajnik_ime, g.datum_predaje AS blagajnik_kada
        FROM otpremnice o
        LEFT JOIN gotovina g ON g.nalog_r_br = o.broj AND g.opis LIKE 'Dug po otpremnici%'
        WHERE ${where.join(' AND ')} ORDER BY o.datum ASC`,
