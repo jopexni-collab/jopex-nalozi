@@ -37,7 +37,8 @@ router.get('/stanje-sve', async (req, res) => {
     const rezultat = [];
     for (const obj of objekti.rows) {
       const predanoRes = await pool.query(
-        `SELECT COALESCE(SUM(iznos),0) AS ukupno FROM gotovina WHERE objekt_naziv=$1 AND predao_blagajniku=true`,
+        `SELECT COALESCE(SUM(iznos),0) AS ukupno FROM gotovina WHERE objekt_naziv=$1 AND predao_blagajniku=true
+         AND opis NOT LIKE 'Prodaja (bruto)%' AND opis NOT LIKE 'Dug po otpremnici%'`,
         [obj.naziv]
       );
       const razduzenoRes = await pool.query(
@@ -129,9 +130,14 @@ router.get('/stanje', async (req, res) => {
     if (!objRes.rows.length) return res.status(404).json({ error: 'Prodajni objekat nije pronađen.' });
     const { naziv: objektNaziv, valuta } = objRes.rows[0];
 
+    // VP/banka redovi ("Prodaja (bruto)"/"Dug po otpremnici") se NIKAD ne broje ovdje —
+    // nikad nisu bili fizička gotovina u blagajni (roba je otišla bez naplate, ili je
+    // naplata otišla na banku). Njihova "predao_blagajniku" potvrda (u VP tabu) je čisto
+    // kontrolni pečat, NE znači da je novac fizički stigao u ovu kasu.
     const predanoRes = await pool.query(
       `SELECT COALESCE(SUM(iznos),0) AS ukupno FROM gotovina
-       WHERE objekt_naziv = $1 AND predao_blagajniku = true`,
+       WHERE objekt_naziv = $1 AND predao_blagajniku = true
+         AND opis NOT LIKE 'Prodaja (bruto)%' AND opis NOT LIKE 'Dug po otpremnici%'`,
       [objektNaziv]
     );
     const razduzenoRes = await pool.query(
@@ -170,7 +176,8 @@ router.post('/', async (req, res) => {
 
     // Provjeri da ne razdužuje više nego što stvarno ima u blagajni.
     const predanoRes = await pool.query(
-      `SELECT COALESCE(SUM(iznos),0) AS ukupno FROM gotovina WHERE objekt_naziv=$1 AND predao_blagajniku=true`,
+      `SELECT COALESCE(SUM(iznos),0) AS ukupno FROM gotovina WHERE objekt_naziv=$1 AND predao_blagajniku=true
+       AND opis NOT LIKE 'Prodaja (bruto)%' AND opis NOT LIKE 'Dug po otpremnici%'`,
       [objektNaziv]
     );
     const razduzenoRes = await pool.query(

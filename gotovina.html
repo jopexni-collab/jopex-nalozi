@@ -580,7 +580,7 @@ async function ucitajBlagajnaBreakdown(tiho){
     // predani blagajniku (predao_blagajniku=true) — nepredani zapisi (npr. tek napravljena
     // otpremnica koja čeka potvrdu) fizički JOŠ NISU u blagajni, pa ne smiju ni ovdje da se
     // pojave, bez obzira što spadaju u isti PJ/period.
-    rows=rows.filter(x=>x.predao_blagajniku);
+    rows=rows.filter(x=>x.predao_blagajniku && !jeVpBankaRed(x));
     if(!rows.length){ cont.innerHTML='<div style="color:#8b96a5;">Nema zapisa za izabrani period.</div>'; return; }
     const ukupno=rows.reduce((s,x)=>s+parseFloat(x.iznos||0),0);
     cont.innerHTML=`<div style="font-weight:700;margin-bottom:6px;">${rows.length} zapisa &middot; Ukupno: ${fmValuta(ukupno, pj.valuta)}</div>
@@ -622,7 +622,7 @@ async function udioUBlagajniPoZapisu(pj){
     // Isti filter kao u prikazu — samo PREDANI zapisi ulaze u računicu (vidi napomenu
     // gore u ucitajBlagajnaBreakdown). Bez ovoga bi nepredani (npr. tek napravljena
     // otpremnica) "pojeo" dio granice u proračunu, pomjerajući sve ostalo pogrešno.
-    const sviRedovi=sviRedoviSirovo.filter(x=>x.predao_blagajniku); // već sortirano najnovije-prvo
+    const sviRedovi=sviRedoviSirovo.filter(x=>x.predao_blagajniku && !jeVpBankaRed(x)); // već sortirano najnovije-prvo
     const rStanje=await fetch(`${API}/api/blagajna-razduzenja/stanje?objekt_id=${blagajnaObjektId}`);
     const stanje=await rStanje.json();
     let granica=parseFloat(stanje.trenutno_u_blagajni||0);
@@ -845,7 +845,10 @@ async function ucitajFilterPJ(){
 }
 
 function render(){
-  const rows=all;
+  // VP/banka redovi (bruto+dug za neplaćenu prodaju) NE PRIPADAJU ovoj listi — nije bilo
+  // stvarne gotovine, imaju svoj poseban tab (VP). Ostaju u "all" (radi tačnosti drugih
+  // izračuna koji možda koriste all), samo se ne prikazuju kao redovi OVDJE.
+  const rows=all.filter(r=>!jeVpBankaRed(r));
   const ukupnoKM=rows.reduce((s,r)=>s+parseFloat(r.iznos||0)*(r.valuta==='EUR'?1.95:1),0);
   document.getElementById('stat').textContent=`${rows.length} zapisa | Ukupno: ${fm(ukupnoKM)} KM`;
   if(!rows.length){

@@ -92,7 +92,8 @@ router.get('/suma', async (req, res) => {
           CASE WHEN p.valuta = 'EUR' THEN g.iznos * ${KURS_EUR_KM} ELSE g.iznos END AS iznos_km
         FROM gotovina g
         LEFT JOIN prodajni_objekti p ON p.naziv = g.objekt_naziv
-        ${filterGlavni}
+        WHERE g.opis NOT LIKE 'Prodaja (bruto)%' AND g.opis NOT LIKE 'Dug po otpremnici%'
+        ${filterGlavni ? 'AND g.objekt_naziv = ANY($1::text[])' : ''}
       ) sub
     `, glavniVals);
 
@@ -113,7 +114,9 @@ router.get('/suma', async (req, res) => {
                SUM(g.iznos) AS iznos
         FROM gotovina g
         LEFT JOIN prodajni_objekti p ON p.naziv = g.objekt_naziv
-        WHERE g.predao_blagajniku = false ${filterPJ}
+        WHERE g.predao_blagajniku = false
+          AND g.opis NOT LIKE 'Prodaja (bruto)%' AND g.opis NOT LIKE 'Dug po otpremnici%'
+          ${filterPJ}
         GROUP BY COALESCE(g.objekt_naziv,'(bez PJ)'), g.izvor, COALESCE(p.valuta,'KM')
         HAVING SUM(g.iznos) != 0
         ORDER BY 1
