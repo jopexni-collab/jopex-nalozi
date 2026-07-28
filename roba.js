@@ -659,6 +659,9 @@ router.post('/import', upload.single('file'), async (req, res) => {
     let uneseno = 0, azurirano = 0, preskoceno = 0;
     const cijenaRazlike = []; // { sifra, naziv, stara, nova } — samo za 'nabavka' + interni
     const preskoceniDetalji = []; // { red, sifra, naziv } — da korisnik može tačno da locira u Excel-u ŠTA je preskočeno i ZAŠTO
+    const vidjeneSifre = new Map(); // sifra -> prvi excel_red gdje se pojavila (za otkrivanje duplikata)
+    const duplikati = []; // { sifra, naziv, prvi_red, drugi_red } — druga pojava TIHO PREPIŠE prvu (ON CONFLICT), ne sabira se
+    let ukupnaVrijednostFajla = 0; // suma (kolicina × cijena) SVIH validnih redova u fajlu — za poređenje sa stvarnim stanjem u bazi
 
     await pool.query('BEGIN');
     try {
@@ -684,6 +687,19 @@ router.post('/import', upload.single('file'), async (req, res) => {
             razlog: !sifra && !naziv ? 'Nema ni šifru ni naziv' : !sifra ? 'Nema šifru' : 'Nema naziv',
           });
           continue;
+        }
+
+        // Duplikat šifre UNUTAR ISTOG fajla — druga (i svaka sljedeća) pojava TIHO PREPIŠE
+        // prethodnu (ON CONFLICT DO UPDATE dolje), ne sabira količine. Ovo je čest uzrok
+        // "ne slaže mi se ukupna vrijednost" — bilježimo da korisnik odmah vidi gdje je nestalo.
+        if (vidjeneSifre.has(sifra)) {
+          duplikati.push({
+            sifra, naziv,
+            prvi_red: vidjeneSifre.get(sifra),
+            drugi_red: idx + 2,
+          });
+        } else {
+          vidjeneSifre.set(sifra, idx + 2);
         }
 
         const grupa = mapping.grupa ? (String(row[mapping.grupa] ?? '').trim() || null) : null;
@@ -717,6 +733,10 @@ router.post('/import', upload.single('file'), async (req, res) => {
 
         // Cijena iz fajla se uopšte NE ČITA za Bluesoft — ostaje null (znači "ne diraj").
         const cijenaFajl = cijenaSeDira && mapping.cijena ? parsirajBroj(row[mapping.cijena]) : null;
+        // Zbir SVIH validnih redova KAKO STOJE U FAJLU (uključujući duplikate, računati
+        // pojedinačno) — za poređenje "šta Excel sam pokazuje kao ukupno" naspram onoga
+        // što stvarno završi u bazi (koje je manje ako je bilo duplikata, jer se ne sabiraju).
+        if (cijenaFajl !== null) ukupnaVrijednostFajla += (stanjeFajl || 0) * cijenaFajl;
 
         // 2) Cijena/stanje ZA OVAJ PJ
         if (nacin === 'zamjena') {
@@ -792,11 +812,25 @@ router.post('/import', upload.single('file'), async (req, res) => {
       throw err;
     }
 
+    // Stvarna ukupna vrijednost u bazi za ovaj PJ NAKON uvoza (kolicina × cijena, sabrano
+    // preko svih artikala) — poređenje sa ukupnaVrijednostFajla otkriva razliku odmah.
+    let stvarnaVrijednostBaza = null;
+    if (nacin !== 'metapodaci' && objektId) {
+      const vr = await pool.query(
+        `SELECT COALESCE(SUM(stanje * cijena), 0) AS ukupno FROM roba_pj WHERE objekt_id=$1`,
+        [objektId]
+      );
+      stvarnaVrijednostBaza = +parseFloat(vr.rows[0].ukupno).toFixed(2);
+    }
+
     res.json({
       ok: true, uneseno, azurirano, preskoceno, ukupno_redova: rows.length, kolone: mapping,
       nacin, cijena_razlike: cijenaRazlike.slice(0, 50), broj_cijena_razlike: cijenaRazlike.length,
       cijena_azurirana: nacin === 'nabavka' ? azurirajCijenu : null,
       preskoceni_detalji: preskoceniDetalji.slice(0, 200),
+      duplikati_sifre: duplikati.slice(0, 200), broj_duplikata: duplikati.length,
+      ukupna_vrijednost_fajla: +ukupnaVrijednostFajla.toFixed(2),
+      stvarna_vrijednost_baza: stvarnaVrijednostBaza,
       // Dijagnostika (privremeno) — da vidimo tačno šta je server primio ako cijena
       // opet ne bude uvezena: izvor koji je stigao, da li se cijena uopšte dira, i
       // koja kolona je mapirana na cijenu.

@@ -679,6 +679,8 @@ async function potvrdiUvoz(){
   const msg=document.getElementById('import-msg');
   const staraLista=document.getElementById('preskoceni-lista-box');
   if(staraLista) staraLista.remove();
+  const staraDupLista=document.getElementById('duplikati-lista-box');
+  if(staraDupLista) staraDupLista.remove();
   const mapping={
     sifra:document.getElementById('map-sifra').value,
     naziv:document.getElementById('map-naziv').value,
@@ -716,6 +718,18 @@ async function potvrdiUvoz(){
     if(!r.ok) throw new Error(data.error||'Greška pri uvozu.');
     msg.style.color='var(--green)';
     let poruka=`✓ Uneseno: ${data.uneseno}, ažurirano: ${data.azurirano}, preskočeno (bez šifre/naziva): ${data.preskoceno}.`;
+    // Poređenje ukupne vrijednosti — čest uzrok "ne slaže mi se sa Excel-om" je razlika
+    // između zbira KOJI FAJL SAM POKAZUJE i onoga što je stvarno završilo u bazi (npr.
+    // duplikati šifre koji se tiho prepišu umjesto sabiraju).
+    if(data.ukupna_vrijednost_fajla!=null && data.stvarna_vrijednost_baza!=null){
+      const razlika=+(data.ukupna_vrijednost_fajla-data.stvarna_vrijednost_baza).toFixed(2);
+      poruka+=`\n\nZbir iz fajla (validni redovi): ${fm(data.ukupna_vrijednost_fajla)}\nStvarno u bazi za ovaj PJ (svi artikli): ${fm(data.stvarna_vrijednost_baza)}`;
+      if(Math.abs(razlika)>0.01) poruka+=`\n⚠ Razlika: ${fm(razlika)} — pogledaj duplikate šifre ispod (najčešći uzrok).`;
+      else poruka+=`\n✓ Zbir se poklapa.`;
+    }
+    if(data.broj_duplikata>0){
+      poruka+=`\n\n⚠ ${data.broj_duplikata} šifra se pojavljuje VIŠE PUTA u fajlu — samo POSLEDNJA pojava je zadržana, prethodne su tiho prepisane (ne sabiraju se).`;
+    }
     if(data.nacin==='nabavka' && data.broj_cijena_razlike>0){
       poruka+=` ⚠ ${data.broj_cijena_razlike} artikal(a) imalo je drugačiju cijenu u fajlu — `+
         (data.cijena_azurirana?'cijene su ažurirane na nove.':'STARE cijene su zadržane (nisi tražio ažuriranje).');
@@ -730,11 +744,29 @@ async function potvrdiUvoz(){
     // i nagađa gdje je razlika sa stvarnim stanjem u Excel tabeli. Svaki red ima i
     // inline formu da se odmah ručno dopuni i doda, bez povratka na Excel.
     const objektIdZaUvoz=document.getElementById('imp-objekat').value;
+    if(data.duplikati_sifre && data.duplikati_sifre.length){
+      const dupBox=document.createElement('div');
+      dupBox.id='duplikati-lista-box';
+      dupBox.style.cssText='margin-top:10px;background:#fce8e6;border:1px solid #e0b8b0;border-radius:8px;padding:10px;max-height:220px;overflow-y:auto;';
+      dupBox.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <div style="font-weight:700;font-size:12.5px;color:var(--red);">⚠ Duplirane šifre u fajlu (zadržana je samo poslednja pojava):</div>
+          <button type="button" onclick="document.getElementById('duplikati-lista-box').remove()" style="background:none;border:none;cursor:pointer;font-size:16px;color:#8b6060;">✕</button>
+        </div>` +
+        data.duplikati_sifre.map(d=>`
+          <div style="font-size:11.5px;padding:3px 0;">
+            Šifra <b>${esc(d.sifra)}</b> (${esc(d.naziv)}) — prvi put u redu <b>${d.prvi_red}</b>, ponovo u redu <b>${d.drugi_red}</b> (ovaj je zadržan)
+          </div>
+        `).join('');
+      msg.parentNode.insertBefore(dupBox, msg.nextSibling);
+    }
     if(data.preskoceni_detalji && data.preskoceni_detalji.length){
       const box=document.createElement('div');
       box.id='preskoceni-lista-box';
       box.style.cssText='margin-top:10px;background:#fff8e6;border:1px solid #f0d78c;border-radius:8px;padding:10px;max-height:400px;overflow-y:auto;';
-      box.innerHTML=`<div style="font-weight:700;font-size:12.5px;margin-bottom:8px;">⚠ Preskočeni redovi — dopuni i dodaj ručno:</div>` +
+      box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div style="font-weight:700;font-size:12.5px;">⚠ Preskočeni redovi — dopuni i dodaj ručno (opciono):</div>
+          <button type="button" onclick="document.getElementById('preskoceni-lista-box').remove()" style="background:none;border:none;cursor:pointer;font-size:16px;color:#8b8060;padding:0 4px;">✕</button>
+        </div>` +
         data.preskoceni_detalji.map((d,i)=>`
           <div id="preskoceni-red-${i}" style="display:flex;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid #f0e8cc;flex-wrap:wrap;">
             <span style="font-size:11px;color:#8b8060;min-width:70px;">Red ${d.excel_red}</span>
@@ -745,7 +777,8 @@ async function potvrdiUvoz(){
             <button type="button" class="btn-import" style="width:auto;padding:5px 12px;font-size:11px;" onclick="dodajPreskoceniRucno(${i},'${objektIdZaUvoz}')">+ Dodaj</button>
           </div>
         `).join('') +
-        (data.preskoceno>data.preskoceni_detalji.length?`<div style="font-size:11px;color:#8b8060;padding-top:6px;">... i još ${data.preskoceno-data.preskoceni_detalji.length} (prikazano prvih 200)</div>`:'');
+        (data.preskoceno>data.preskoceni_detalji.length?`<div style="font-size:11px;color:#8b8060;padding-top:6px;">... i još ${data.preskoceno-data.preskoceni_detalji.length} (prikazano prvih 200)</div>`:'') +
+        `<button type="button" class="btn-import sec" style="margin-top:10px;" onclick="document.getElementById('preskoceni-lista-box').remove()">Zatvori listu (ne moram sve da popunim)</button>`;
       msg.parentNode.insertBefore(box, msg.nextSibling);
     }
     otkaziUvoz();
