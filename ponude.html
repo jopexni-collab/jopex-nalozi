@@ -182,6 +182,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
     <button class="hdr-btn" onclick="loadProject()" title="Učitaj lokalno (Ctrl+O)">📂 Učitaj</button>
     <button class="hdr-btn" onclick="cloudSave()" title="Sačuvaj na server" style="background:rgba(100,200,120,0.25);border-color:rgba(100,200,120,0.6);">☁ Sačuvaj</button>
     <button class="hdr-btn" onclick="cloudLoad()" title="Učitaj sa servera" style="background:rgba(100,200,120,0.25);border-color:rgba(100,200,120,0.6);">☁ Učitaj</button>
+    <button class="hdr-btn" onclick="novaPonuda()" title="Počni ispočetka — prekida vezu sa učitanom ponudom">↻ Nova</button>
     <button class="hdr-btn" onclick="undo()" title="Poništi (Ctrl+Z)">↩ Undo</button>
     <button class="hdr-btn" onclick="genPon()" title="Generiši ponudu" style="background:rgba(255,255,255,0.25);border-color:rgba(255,255,255,0.5);">📄 Gen.Pon</button>
     <button class="hdr-btn" onclick="genRadniNalog()" title="Generiši radni nalog" style="background:rgba(255,255,255,0.25);border-color:rgba(255,255,255,0.5);">🔧 R.Nalog</button>
@@ -4246,28 +4247,44 @@ function drawOtvor(ctx,x,y,w,h,col,lbl,dw,dh,radMM,stepPx,cornerSelArr,cornerEdi
 
 // Crta kote polozaja otvora OD IZABRANE REFERENTNE IVICE. r je rezultat
 // getOtvorRectMM (sadrzi left/right/front/back tog kraka, u mm).
+// Crta kote polozaja otvora OD IZABRANE REFERENTNE IVICE.
+// VAZNO: sama LINIJA kote ide uvijek IZVAN cijele ploce (ispod / desno), a
+// samo KRAJEVI kote sjede na stvarnoj referentnoj ivici kraka. Ranije je
+// linija isla na lokalnu ivicu, pa je kod srednjeg kraka U oblika zavrsavala
+// usred crteza i presijecala ga.
 function _kotePozicijeOtvora(ctx,sc,r,prefix,boja,offDolje,offDesno){
   var xref=_otvorRef(prefix,'x'), yref=_otvorRef(prefix,'y');
+  var bb=_getFbb(shape,dims,sc);            // bounding box cijele ploce, px
   var x1=r.x*sc, x2=(r.x+r.w)*sc, y1=r.y*sc, y2=(r.y+r.h)*sc;
   var L=r.left*sc, R=r.right*sc, F=r.front*sc, B=r.back*sc;
-  var kY=Math.max(F,B)+offDolje;          // linija vodoravne kote, ispod ploce
-  var kX=R+offDesno;                      // linija uspravne kote, desno od kraka
-  // Vodoravna kota
-  if(xref==='desna') kota(ctx,x2,kY,R,kY,gi(prefix+'-x')+' mm',_inputEditDesc(prefix+'-x','Udaljenost od desne ivice'),'#'+prefix+'-x');
-  else               kota(ctx,L,kY,x1,kY,gi(prefix+'-x')+' mm',_inputEditDesc(prefix+'-x','Udaljenost od lijeve ivice'),'#'+prefix+'-x');
-  // Uspravna kota
-  if(yref==='zadnja') kota(ctx,kX,B,kX,y1,gi(prefix+'-y')+' mm',_inputEditDesc(prefix+'-y','Udaljenost od zadnje ivice'),'#'+prefix+'-y');
-  else                kota(ctx,kX,y2,kX,F,gi(prefix+'-y')+' mm',_inputEditDesc(prefix+'-y','Udaljenost od prednje ivice'),'#'+prefix+'-y');
-  // Tanke pomocne linije do kota, da se vidi OD CEGA se mjeri
+  var kY=bb.h+offDolje;                     // vodoravna kota: ISPOD cijele ploce
+  var kX=bb.w+offDesno;                     // uspravna kota: DESNO od cijele ploce
+  // Vodoravna kota - od lijeve ili desne ivice TOG kraka do ruba otvora
+  var xa,xb;
+  if(xref==='desna'){ xa=x2; xb=R;
+    kota(ctx,xa,kY,xb,kY,gi(prefix+'-x')+' mm',_inputEditDesc(prefix+'-x','Udaljenost od desne ivice'),'#'+prefix+'-x');
+  } else { xa=L; xb=x1;
+    kota(ctx,xa,kY,xb,kY,gi(prefix+'-x')+' mm',_inputEditDesc(prefix+'-x','Udaljenost od lijeve ivice'),'#'+prefix+'-x');
+  }
+  // Uspravna kota - od zadnje ili prednje ivice TOG kraka do ruba otvora
+  var ya,yb;
+  if(yref==='zadnja'){ ya=B; yb=y1;
+    kota(ctx,kX,ya,kX,yb,gi(prefix+'-y')+' mm',_inputEditDesc(prefix+'-y','Udaljenost od zadnje ivice'),'#'+prefix+'-y');
+  } else { ya=y2; yb=F;
+    kota(ctx,kX,ya,kX,yb,gi(prefix+'-y')+' mm',_inputEditDesc(prefix+'-y','Udaljenost od prednje ivice'),'#'+prefix+'-y');
+  }
+  // Tanke pomocne linije od stvarne ivice do linije kote - da se vidi OD CEGA
+  // se mjeri, posto je sama kota izmjestena van ploce.
   ctx.save();ctx.strokeStyle=boja;ctx.lineWidth=0.6;ctx.setLineDash([4,3]);
-  var xa=(xref==='desna')?R:L, xb=(xref==='desna')?x2:x1;
-  ctx.beginPath();ctx.moveTo(xa,Math.min(y1,F));ctx.lineTo(xa,kY);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(xb,y2);ctx.lineTo(xb,kY);ctx.stroke();
-  var ya=(yref==='zadnja')?B:F, yb=(yref==='zadnja')?y1:y2;
-  ctx.beginPath();ctx.moveTo(x2,ya);ctx.lineTo(kX,ya);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(x2,yb);ctx.lineTo(kX,yb);ctx.stroke();
+  [xa,xb].forEach(function(x){
+    ctx.beginPath();ctx.moveTo(x,Math.min(y2,bb.h));ctx.lineTo(x,kY);ctx.stroke();
+  });
+  [ya,yb].forEach(function(y){
+    ctx.beginPath();ctx.moveTo(Math.min(x2,bb.w),y);ctx.lineTo(kX,y);ctx.stroke();
+  });
   ctx.setLineDash([]);ctx.restore();
 }
+
 function drawOtvori(ctx,sc,aX,aY,aW,aH){
   // Helper za kotu polozaja (isprekidana referentna linija + kota)
   function kotaPos(x1,y1,x2,y2,lbl,clr){
@@ -4303,18 +4320,18 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
     // Kota od gornje ivice (Y) -> DESNO od ploce, pomjerena po indeksu
     var slavKotaX=_slBaseX+_slBaseW+32+si*16;
     // Horizontalna kota dolje: od lijeve ivice do slavine
-    kota(ctx,_slBaseX,slavKotaY,slx,slavKotaY,slavX+' mm',_slavinaDimEditDesc(si,'x','Udaljenost slavine '+(si+1)+' od lijeve ivice'),'#slavina-list [data-sl-idx="'+si+'"]');
+    kota(ctx,_pSl.left*sc,slavKotaY,slx,slavKotaY,slavX+' mm',_slavinaDimEditDesc(si,'x','Udaljenost slavine '+(si+1)+' od lijeve ivice'),'#slavina-list [data-sl-idx="'+si+'"]');
     // Vertikalna kota desno: od zadnje ivice do slavine
-    kota(ctx,slavKotaX,_slBaseY,slavKotaX,sly,slavY+' mm',_slavinaDimEditDesc(si,'yz','Udaljenost slavine '+(si+1)+' od zadnje ivice'),'#slavina-list [data-sl-idx="'+si+'"]');
+    kota(ctx,slavKotaX,_pSl.back*sc,slavKotaX,sly,slavY+' mm',_slavinaDimEditDesc(si,'yz','Udaljenost slavine '+(si+1)+' od zadnje ivice'),'#slavina-list [data-sl-idx="'+si+'"]');
     _regClickRect(slx-fi,sly-fi,fi*2,fi*2,'#slavina-list [data-sl-idx="'+si+'"]');
     // Referentne isprekidane linije
     ctx.save();ctx.strokeStyle='#e74c3c';ctx.lineWidth=0.6;ctx.setLineDash([3,3]);
     // Ref za X kotu: vertikalne linije gore od ploce
     ctx.beginPath();ctx.moveTo(slx,sly-fi);ctx.lineTo(slx,slavKotaY);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(_slBaseX,_slBaseY);ctx.lineTo(_slBaseX,slavKotaY);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(_pSl.left*sc,_pSl.back*sc);ctx.lineTo(_pSl.left*sc,slavKotaY);ctx.stroke();
     // Ref za Y kotu: horizontalne linije lijevo od ploce
     ctx.beginPath();ctx.moveTo(slx-fi,sly);ctx.lineTo(slavKotaX,sly);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(_slBaseX,_slBaseY);ctx.lineTo(slavKotaX,_slBaseY);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(_pSl.left*sc,_pSl.back*sc);ctx.lineTo(slavKotaX,_pSl.back*sc);ctx.stroke();
     ctx.setLineDash([]);ctx.restore();
     // Fi oznaka
     ctx.fillStyle='#e74c3c';ctx.font='11px Segoe UI,Arial';
@@ -6691,6 +6708,11 @@ let _sviKupci = [];
 // da svako sljedece usvajanje predstavlja IZMJENU, a ne novi posao.
 // {r_br, verzija, naziv_ponude}
 var _nalogInfo=null;
+// Red u tabeli "ponude" koji pripada OVOM projektu. Dok postoji, svako
+// sljedece cuvanje PREGAZI taj red i isti fajl na R2 (isti naziv = isti kljuc),
+// umjesto da pravi novu stavku u listi.
+// {id, naziv}
+var _ponudaInfo=null;
 
 // AUTH — provjeri login
 async function _checkAuth(){
@@ -6869,59 +6891,74 @@ async function noviKupacSacuvaj(){
 }
 
 // CLOUD ČUVANJE PONUDA
-function _generisiNazivPonude(verzija){
+function _generisiNazivPonude(){
+  // Jednom dodijeljen naziv se NE mijenja - to je kljuc pod kojim ponuda
+  // zivi i na R2 i u tabeli, pa ponovno cuvanje pregazi staru verziju.
+  if(_ponudaInfo && _ponudaInfo.naziv) return _ponudaInfo.naziv;
   const kupac = (document.getElementById('kl-ime')||{}).value.trim() || 'Nepoznat';
-  const kupacSlug = kupac.replace(/[^a-zA-ZčćžšđČĆŽŠĐ0-9]/g,'').slice(0,10);
+  const kupacSlug = kupac.replace(/[^a-zA-Z\u010c\u0106\u017d\u0160\u0110\u010d\u0107\u017e\u0161\u01110-9]/g,'').slice(0,10);
   const inicijali = _currentUser
     ? _currentUser.ime_prezime.split(' ').map(d=>d[0]).join('').toUpperCase()
     : 'XX';
   const sada = new Date();
   const datum = String(sada.getMonth()+1).padStart(2,'0') + String(sada.getDate()).padStart(2,'0');
   const god = String(sada.getFullYear()).slice(2);
-  const rb = String(Math.floor(Math.random()*900)+100); // privremeno — server dodjeljuje pravi RB
-  // Kod izmjene ZADRŽAVAMO originalni naziv ponude i dodajemo samo _vN, da se
-  // sve verzije istog posla lako prepoznaju i sortiraju jedna uz drugu.
-  let base = `${kupacSlug}_${inicijali}_${datum}_${rb}_${god}`;
-  if(_nalogInfo && _nalogInfo.naziv_ponude){
-    base = String(_nalogInfo.naziv_ponude).replace(/_v\d+$/,'');
-  }
-  return (verzija && verzija>0) ? (base+'_v'+verzija) : base;
+  const rb = String(Math.floor(Math.random()*900)+100);
+  return `${kupacSlug}_${inicijali}_${datum}_${rb}_${god}`;
 }
 
-// Jezgro cloud čuvanja — BACA grešku ako ne uspije (bez alert-a), da ga
-// pozivalac može uhvatiti i odlučiti šta dalje (npr. usvojiPonudu pada nazad
-// na lokalno čuvanje). Vraća naziv pod kojim je ponuda sačuvana.
-async function _cloudSaveCore(verzija){
+async function _cloudSaveCore(){
   if(!_currentUser) throw new Error('Niste prijavljeni.');
-  const naziv = _generisiNazivPonude(verzija);
+  const naziv = _generisiNazivPonude();
   const projekat = _getProjectData();
   // Sigurno citanje odgovora: ako server vrati HTML (404/500 stranicu) umjesto
-  // JSON-a, r.json() bi bacio nejasan "Unexpected token <". Ovako korisnik
-  // dobija razumljivu poruku sa HTTP statusom.
+  // JSON-a, r.json() bi bacio nejasan "Unexpected token <".
   async function _procitaj(r, korak){
     let d=null;
     try{ d = await r.json(); }catch(e){ d=null; }
-    if(!r.ok){
-      throw new Error((d&&d.error) ? d.error : (korak+' — server je vratio HTTP '+r.status));
-    }
-    if(!d) throw new Error(korak+' — neispravan odgovor servera.');
+    if(!r.ok) throw new Error((d&&d.error) ? d.error : (korak+' \u2014 server je vratio HTTP '+r.status));
+    if(!d) throw new Error(korak+' \u2014 neispravan odgovor servera.');
     return d;
   }
-  // 1. Upload JSON na R2
+  // 1. JSON na R2 pod ISTIM nazivom -> isti kljuc -> stari fajl se pregazi
   const jsonB64 = btoa(unescape(encodeURIComponent(JSON.stringify(projekat))));
   const r1 = await fetch(API_URL+'/api/upload/ponuda-json',{
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ naziv, json_b64: jsonB64 })
   });
   const d1 = await _procitaj(r1,'Upload na R2');
-  if(!d1.link) throw new Error('Upload na R2 — server nije vratio link fajla.');
-  // 2. Upis metapodataka u bazu
+  if(!d1.link) throw new Error('Upload na R2 \u2014 server nije vratio link fajla.');
+
+  // 2. Red u tabeli: ako vec postoji -> IZMIJENI ga, ne pravi novi
   const kupac = (document.getElementById('kl-ime')||{}).value.trim()||null;
-  const r2 = await fetch(API_URL+'/api/ponude',{
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ naziv, kupac, link_json: d1.link })
-  });
-  await _procitaj(r2,'Upis ponude u bazu');
+  const telo = { naziv, kupac, link_json: d1.link };
+  if(_ponudaInfo && _ponudaInfo.id){
+    const rp = await fetch(API_URL+'/api/ponude/'+_ponudaInfo.id,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(telo)
+    });
+    if(rp.status===404||rp.status===405){
+      // Stariji server bez izmjene: obrisi stari red pa upisi novi, da u
+      // listi i dalje ostane SAMO jedna stavka za ovu ponudu.
+      try{ await fetch(API_URL+'/api/ponude/'+_ponudaInfo.id,{method:'DELETE'}); }catch(e){}
+      const rn = await fetch(API_URL+'/api/ponude',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(telo)
+      });
+      const dn = await _procitaj(rn,'Upis ponude u bazu');
+      _ponudaInfo = { id: dn.id||null, naziv: naziv };
+    } else {
+      const dp = await _procitaj(rp,'Izmjena ponude');
+      _ponudaInfo = { id: (dp&&dp.id)||_ponudaInfo.id, naziv: naziv };
+    }
+  } else {
+    const r2 = await fetch(API_URL+'/api/ponude',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(telo)
+    });
+    const d2 = await _procitaj(r2,'Upis ponude u bazu');
+    _ponudaInfo = { id: d2.id||null, naziv: naziv };
+  }
   return naziv;
 }
 
@@ -6971,7 +7008,11 @@ function _prikaziListuPonuda(lista){
     <div style="background:#fff;border-radius:10px;padding:20px;min-width:420px;max-width:90vw;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
         <b style="font-size:15px;color:#134a85;">☁ Ponude na serveru</b>
-        <button onclick="document.getElementById('cloud-modal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button onclick="cloudLoad()" title="Ponovo učitaj listu sa servera"
+            style="font:inherit;font-size:11px;padding:5px 10px;background:#eef4fb;color:#1a5fa8;border:1px solid #1a5fa8;border-radius:5px;cursor:pointer;">⟳ Osvježi</button>
+          <button onclick="document.getElementById('cloud-modal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+        </div>
       </div>
       <div style="overflow-y:auto;flex:1;">
         ${lista.map(p=>`
@@ -6983,7 +7024,7 @@ function _prikaziListuPonuda(lista){
               </div>
             </div>
             <div style="display:flex;gap:6px;flex-shrink:0;">
-              <button onclick="_ucitajPonudu('${p.link_json}','${p.naziv}')"
+              <button onclick="_ucitajPonudu('${p.link_json}','${p.naziv}',${p.id})"
                 style="font:inherit;font-size:11px;padding:5px 10px;background:#1a5fa8;color:#fff;border:none;border-radius:5px;cursor:pointer;">
                 📂 Učitaj
               </button>
@@ -6999,7 +7040,7 @@ function _prikaziListuPonuda(lista){
   document.body.appendChild(modal);
 }
 
-async function _ucitajPonudu(linkJson, naziv){
+async function _ucitajPonudu(linkJson, naziv, ponudaId){
   if(!linkJson){ alert('Nema linka za učitavanje.'); return; }
   try{
     const r = await fetch(API_URL+'/api/ponude/ucitaj?link='+encodeURIComponent(linkJson));
@@ -7007,6 +7048,10 @@ async function _ucitajPonudu(linkJson, naziv){
     const p = await r.json();
     if(!p.items) throw new Error('Nevažeći format ponude.');
     _nalogInfo = p.nalog || null;   // ako ponuda vec ima nalog, sljedece usvajanje je IZMJENA
+    // Zapamti KOJI red smo ucitali - da ga sljedece cuvanje pregazi umjesto
+    // da napravi jos jednu stavku u listi.
+    _ponudaInfo = { id: (ponudaId!=null?ponudaId:((p.ponuda&&p.ponuda.id)||null)),
+                    naziv: naziv || ((p.ponuda&&p.ponuda.naziv)||null) };
     // Postavi klijenta
     if(p.klijent){
       if(ge('kl-ime')) ge('kl-ime').value=p.klijent.ime||'';
@@ -7056,6 +7101,24 @@ async function _obrisiPonudu(id, btn){
   }catch(e){ alert('Greška pri brisanju.'); }
 }
 
+// Pocinje ispocetka: brise stavke i PREKIDA vezu sa ucitanom ponudom/nalogom.
+// Bez ovoga bi cuvanje poslije "ucitaj pa mi ne odgovara" pregazilo tudju
+// ponudu, jer bi _ponudaInfo jos uvijek pokazivao na ucitani red.
+function novaPonuda(){
+  var vez='';
+  if(_ponudaInfo&&_ponudaInfo.naziv) vez+='\n\nTrenutno je otvorena ponuda: '+_ponudaInfo.naziv;
+  if(_nalogInfo&&_nalogInfo.r_br)   vez+='\nVezana za radni nalog #'+_nalogInfo.r_br;
+  if(!confirm('Početi NOVU ponudu?'+vez+'\n\nSve stavke se brisu, a veza sa gornjim se prekida\n(postojeci zapis na serveru OSTAJE netaknut).')) return;
+  _saveUndo();
+  items=[]; activeIdx=0;
+  _ponudaInfo=null; _nalogInfo=null;
+  ['kl-ime','kl-tel','kl-adr','pon-popust'].forEach(function(id){ var e=ge(id); if(e) e.value=''; });
+  var pd=ge('pon-doc');
+  if(pd) pd.innerHTML='<div style="text-align:center;padding:60px 0;color:#6b7a8d">Popunite podatke i kliknite <strong>Generiši ponudu</strong></div>';
+  buildItemList();
+  refresh();
+}
+
 // Pomoćna — izvuci podatke projekta za cloud čuvanje
 function _getProjectData(){
   try{
@@ -7068,6 +7131,7 @@ function _getProjectData(){
       },
       items: typeof items!=='undefined'?items:[],
       activeIdx: typeof activeIdx!=='undefined'?activeIdx:0,
+      ponuda: _ponudaInfo, // red u tabeli ponuda (da se pregazi, ne duplira)
       nalog: _nalogInfo,   // veza ponuda -> radni nalog (za revizije)
       timestamp: new Date().toISOString(),
     };
@@ -7199,7 +7263,7 @@ async function usvojiPonudu(){
   showMsg(_jeIzmjena?('Čuvam izmjenu (v'+_novaVerzija+') na oblak...'):'Čuvam ponudu na oblak...',true);
   var _sacuvanoKao=null, _sacuvanoGdje='';
   try{
-    _sacuvanoKao=await _cloudSaveCore(_novaVerzija);
+    _sacuvanoKao=await _cloudSaveCore();
     _sacuvanoGdje='oblak';
     showMsg('✓ Ponuda sačuvana na oblak: '+_sacuvanoKao,true);
   }catch(errCloud){
@@ -7268,8 +7332,9 @@ async function usvojiPonudu(){
     if(_jeIzmjena){
       showMsg('Upisujem izmjenu na nalog #'+_nalogInfo.r_br+'...',true);
       var _danas=new Date().toLocaleDateString('hr',{day:'2-digit',month:'2-digit',year:'numeric'});
-      var _upoz='⚠ IZMJENA v'+_novaVerzija+' ('+_danas+', '+
-        ((_currentUser&&_currentUser.ime_prezime)||'nepoznat')+') — POTREBNA POTVRDA. Ponuda: '+(_sacuvanoKao||'');
+      var _upoz='⚠ UPDATE v'+_novaVerzija+' — '+_danas+', '+
+        ((_currentUser&&_currentUser.ime_prezime)||'nepoznat')+
+        '. Ponuda je izmijenjena i pregazila prethodnu. POTREBNA POTVRDA. Ponuda: '+(_sacuvanoKao||'');
       var patchBody=Object.assign({},body,{
         napomena:_upoz,
         verzija:_novaVerzija,
