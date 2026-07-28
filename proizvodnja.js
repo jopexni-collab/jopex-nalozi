@@ -401,10 +401,10 @@ router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
       // nacin je bank kod (rfb/uni/mf/nlb/uni1) — strukturisan zapis, direktno u tu banku
       // (već je konkretno izabrana ovde).
       await pool.query(
-        `INSERT INTO banka_uplate (iznos, banka, izvor, nalog_r_br, kupac_naziv, upisao_id, upisao_ime, napomena)
-         VALUES ($1,$2,'Proizvodnja',$3,$4,$5,$6,$7)`,
-        [iznosNum, nacin, String(nalog.r_br), nalog.narucilac || null, user.id, user.ime_prezime,
-         `Avans (rata) - nalog #${nalog.r_br}`]
+        `INSERT INTO banka_uplate (iznos, banka, izvor, nalog_r_br, kupac_naziv, objekt_naziv, komercijalista_ime, upisao_id, upisao_ime, napomena)
+         VALUES ($1,$2,'Proizvodnja',$3,$4,$5,$6,$7,$8,$9)`,
+        [iznosNum, nacin, String(nalog.r_br), nalog.narucilac || null, PROIZVODNJA_PJ, nalog.ugovorio || null,
+         user.id, user.ime_prezime, `Avans (rata) - nalog #${nalog.r_br}`]
       );
     }
 
@@ -460,10 +460,10 @@ router.post('/:r_br/naplati-ostatak', async (req, res) => {
       // Strukturisan zapis (pored teksta iznad) — banka je VEĆ konkretno izabrana ovde,
       // pa ide DIREKTNO u tu banku (ne u "neraspoređeno").
       await pool.query(
-        `INSERT INTO banka_uplate (iznos, banka, izvor, nalog_r_br, kupac_naziv, upisao_id, upisao_ime, napomena)
-         VALUES ($1,$2,'Proizvodnja',$3,$4,$5,$6,$7)`,
-        [bankaNum, nacin_banka, String(nalog.r_br), nalog.narucilac || null, user.id, user.ime_prezime,
-         `Naplata ostatka - nalog #${nalog.r_br}`]
+        `INSERT INTO banka_uplate (iznos, banka, izvor, nalog_r_br, kupac_naziv, objekt_naziv, komercijalista_ime, upisao_id, upisao_ime, napomena)
+         VALUES ($1,$2,'Proizvodnja',$3,$4,$5,$6,$7,$8,$9)`,
+        [bankaNum, nacin_banka, String(nalog.r_br), nalog.narucilac || null, PROIZVODNJA_PJ, nalog.ugovorio || null,
+         user.id, user.ime_prezime, `Naplata ostatka - nalog #${nalog.r_br}`]
       );
     }
     if (gotovinaNum > 0) noviRedovi.push(`got ${ime_gotovina.trim()} ${danasKratko} - ${gotovinaNum.toFixed(2)}`);

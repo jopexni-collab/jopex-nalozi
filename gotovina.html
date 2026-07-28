@@ -61,6 +61,9 @@ td.num{text-align:right;font-weight:700;}
 .predano{color:var(--green);font-weight:700;}
 .nepredano-txt{color:var(--red);font-weight:700;}
 .btn-predaj{font:inherit;font-size:10.5px;padding:2px 8px;background:var(--green);color:#fff;border:none;border-radius:3px;cursor:pointer;}
+.btn-izvod{font:inherit;font-size:12px;padding:6px 14px;border-radius:5px;border:none;cursor:pointer;font-weight:600;}
+.btn-izvod.crveno{background:#fce8e6;color:var(--red);}
+.btn-izvod.zeleno{background:var(--green);color:#fff;}
 .btn-del{font:inherit;font-size:12px;background:none;border:none;cursor:pointer;color:var(--red);}
 .iznos-isplata{color:#e30613;font-weight:800;}
 .nalog-link{color:var(--blue);text-decoration:none;font-weight:600;}
@@ -1297,8 +1300,9 @@ async function ucitajBankaSume(){
   try{
     const r=await fetch(`${API}/api/finansije/banka/stanje`);
     const d=await r.json();
+    const trenutniFil=document.getElementById('banka-fil')?.value||'';
     cont.innerHTML=d.banke.map(x=>`
-      <div class="suma-box" style="${x.banka==='nerasporedjeno'&&x.zbir>0?'border:2px solid var(--red,#c0392b);':''}">
+      <div class="suma-box" style="cursor:pointer;${x.banka===trenutniFil?'border:2px solid var(--blue,#1a5fa8);background:#eef4fc;':(x.banka==='nerasporedjeno'&&x.zbir>0?'border:2px solid var(--red,#c0392b);':'')}" onclick="filtrirajPoBanci('${x.banka}')" title="Klikni da vidiš šta čini ovaj iznos">
         <div class="val">${fm(x.zbir)}</div>
         <div class="lbl">${BANKA_NAZIVI[x.banka]||x.banka} (${x.broj})</div>
       </div>
@@ -1308,6 +1312,15 @@ async function ucitajBankaSume(){
         <div class="lbl">⏳ Čeka potvrdu (istorijski)</div>
       </div>`:'');
   }catch(e){ cont.innerHTML='<div style="color:red;">Greška pri učitavanju.</div>'; }
+}
+
+// Klik na iznos banke gore → odmah filtrira listu ispod na TAČNO te zapise (da se vidi
+// šta čini taj iznos), umjesto da korisnik mora ručno da bira iz filter dropdown-a.
+function filtrirajPoBanci(banka){
+  document.getElementById('banka-fil').value = banka==='nerasporedjeno' ? 'nerasporedjeno' : banka;
+  ucitajBankaListu();
+  ucitajBankaSume();
+  document.getElementById('banka-tbody').scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
 async function ucitajBankaListuNaCekanju(){
@@ -1322,7 +1335,7 @@ async function ucitajBankaListuNaCekanju(){
         <td>${new Date(r.datum).toLocaleDateString('sr-Latn-BA')}</td>
         <td style="font-weight:700;">${fm(r.iznos)}</td>
         <td><span class="chip-izvor iz-malo">${esc(BANKA_NAZIVI[r.banka]||r.banka)}</span></td>
-        <td>${esc(r.izvor)}</td>
+        <td>${esc(r.izvor)}${r.objekt_naziv?`<div style="font-size:10px;color:#8b96a5;">${esc(r.objekt_naziv)}</div>`:''}${r.komercijalista_ime?`<div style="font-size:10px;color:#8b96a5;">👤 ${esc(r.komercijalista_ime)}</div>`:''}</td>
         <td>${esc(r.nalog_r_br||'—')}</td>
         <td>${esc(r.kupac_naziv||'—')}</td>
         <td>${esc(r.upisao_ime||'—')}</td>
@@ -1345,10 +1358,9 @@ async function potvrdiBankaIstorijski(id){
 }
 
 function naIzvoduToggleHtml(r){
-  return `<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:10.5px;font-weight:700;${r.na_izvodu?'color:var(--green);':'color:var(--red);'}">
-    <input type="checkbox" ${r.na_izvodu?'checked':''} onchange="postaviNaIzvodu(${r.id}, this.checked)">
-    ${r.na_izvodu?'✓ Na izvodu':'Nije na izvodu'}
-  </label>`;
+  return r.na_izvodu
+    ? `<button class="btn-izvod zeleno" onclick="postaviNaIzvodu(${r.id}, false)" title="${r.na_izvodu_ko_ime?'Označio: '+esc(r.na_izvodu_ko_ime):''}">✓ Na izvodu</button>`
+    : `<button class="btn-izvod crveno" onclick="postaviNaIzvodu(${r.id}, true)">Nije na izvodu</button>`;
 }
 
 async function postaviNaIzvodu(id, vrednost){
@@ -1378,7 +1390,7 @@ async function ucitajBankaListu(){
         <td>${new Date(r.datum).toLocaleDateString('sr-Latn-BA')}</td>
         <td style="font-weight:700;">${fm(r.iznos)}</td>
         <td>${r.banka?`<span class="chip-izvor iz-malo">${esc(BANKA_NAZIVI[r.banka]||r.banka)}</span>`:'<span class="chip-izvor iz-drugo" style="color:var(--red);">🔴 Neraspoređeno</span>'}</td>
-        <td>${esc(r.izvor)}</td>
+        <td>${esc(r.izvor)}${r.objekt_naziv?`<div style="font-size:10px;color:#8b96a5;">${esc(r.objekt_naziv)}</div>`:''}${r.komercijalista_ime?`<div style="font-size:10px;color:#8b96a5;">👤 ${esc(r.komercijalista_ime)}</div>`:''}</td>
         <td>${esc(r.nalog_r_br||'—')}</td>
         <td>${esc(r.kupac_naziv||'—')}</td>
         <td>${esc(r.upisao_ime||'—')}</td>

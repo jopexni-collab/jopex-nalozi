@@ -662,9 +662,9 @@ router.post('/potvrdi', async (req, res) => {
       if (jeBanka) {
         if (brutoZaBlagajnu > 0) {
           const b = await client.query(
-            `INSERT INTO banka_uplate (iznos, banka, izvor, nalog_r_br, kupac_id, kupac_naziv, objekt_naziv, upisao_id, upisao_ime, napomena)
-             VALUES ($1,$2,'Maloprodaja',$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-            [brutoZaBlagajnu, nacin_banka, broj, kupac_id || null, opisKupca, objektNaziv,
+            `INSERT INTO banka_uplate (iznos, banka, izvor, nalog_r_br, kupac_id, kupac_naziv, objekt_naziv, komercijalista_ime, upisao_id, upisao_ime, napomena)
+             VALUES ($1,$2,'Maloprodaja',$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+            [brutoZaBlagajnu, nacin_banka, broj, kupac_id || null, opisKupca, objektNaziv, user.ime_prezime,
              user.id, user.ime_prezime, `Prodaja (bruto) — ${opisKupca}`]
           );
           bankaUplataId = b.rows[0].id;
@@ -687,9 +687,9 @@ router.post('/potvrdi', async (req, res) => {
       // gotovinu ILI u banku_uplate, zavisno od "nacin".
       if (jeBanka) {
         const b = await client.query(
-          `INSERT INTO banka_uplate (iznos, banka, izvor, nalog_r_br, kupac_id, kupac_naziv, objekt_naziv, upisao_id, upisao_ime, napomena)
-           VALUES ($1,$2,'Maloprodaja',$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-          [iznosSada, nacin_banka, broj, kupac_id || null, opisKupca, objektNaziv, user.id, user.ime_prezime, opisKupca]
+          `INSERT INTO banka_uplate (iznos, banka, izvor, nalog_r_br, kupac_id, kupac_naziv, objekt_naziv, komercijalista_ime, upisao_id, upisao_ime, napomena)
+           VALUES ($1,$2,'Maloprodaja',$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+          [iznosSada, nacin_banka, broj, kupac_id || null, opisKupca, objektNaziv, user.ime_prezime, user.id, user.ime_prezime, opisKupca]
         );
         bankaUplataId = b.rows[0].id;
       } else {
