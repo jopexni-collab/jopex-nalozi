@@ -658,6 +658,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
     const jmDefault = (req.body.jed_mjera_default || 'kom').trim() || 'kom';
     let uneseno = 0, azurirano = 0, preskoceno = 0;
     const cijenaRazlike = []; // { sifra, naziv, stara, nova } — samo za 'nabavka' + interni
+    const preskoceniDetalji = []; // { red, sifra, naziv } — da korisnik može tačno da locira u Excel-u ŠTA je preskočeno i ZAŠTO
 
     await pool.query('BEGIN');
     try {
@@ -668,10 +669,22 @@ router.post('/import', upload.single('file'), async (req, res) => {
         await pool.query('UPDATE roba_pj SET stanje=0, azurirano=now() WHERE objekt_id=$1', [objektId]);
       }
 
-      for (const row of rows) {
+      for (let idx = 0; idx < rows.length; idx++) {
+        const row = rows[idx];
         const sifra = String(row[mapping.sifra] ?? '').trim();
         const naziv = String(row[mapping.naziv] ?? '').trim();
-        if (!sifra || !naziv) { preskoceno++; continue; }
+        if (!sifra || !naziv) {
+          preskoceno++;
+          // Red u Excel-u je idx+2 (header je red 1, rows[0] je Excel red 2) — tako korisnik
+          // može direktno da ga pronađe u svom fajlu, ne mora ručno da broji.
+          preskoceniDetalji.push({
+            excel_red: idx + 2,
+            sifra: sifra || '(prazno)',
+            naziv: naziv || '(prazno)',
+            razlog: !sifra && !naziv ? 'Nema ni šifru ni naziv' : !sifra ? 'Nema šifru' : 'Nema naziv',
+          });
+          continue;
+        }
 
         const grupa = mapping.grupa ? (String(row[mapping.grupa] ?? '').trim() || null) : null;
         const debljina = mapping.debljina ? (parsirajBroj(row[mapping.debljina]) || null) : null;
@@ -783,6 +796,7 @@ router.post('/import', upload.single('file'), async (req, res) => {
       ok: true, uneseno, azurirano, preskoceno, ukupno_redova: rows.length, kolone: mapping,
       nacin, cijena_razlike: cijenaRazlike.slice(0, 50), broj_cijena_razlike: cijenaRazlike.length,
       cijena_azurirana: nacin === 'nabavka' ? azurirajCijenu : null,
+      preskoceni_detalji: preskoceniDetalji.slice(0, 200),
       // Dijagnostika (privremeno) — da vidimo tačno šta je server primio ako cijena
       // opet ne bude uvezena: izvor koji je stigao, da li se cijena uopšte dira, i
       // koja kolona je mapirana na cijenu.

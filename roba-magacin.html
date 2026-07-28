@@ -655,8 +655,30 @@ function otkaziUvoz(){
   document.getElementById('imp-sheet-red').style.display='none';
 }
 
+async function dodajPreskoceniRucno(i, objektId){
+  const sifra=document.getElementById(`pr-sifra-${i}`).value.trim();
+  const naziv=document.getElementById(`pr-naziv-${i}`).value.trim();
+  const cijena=document.getElementById(`pr-cijena-${i}`).value;
+  const stanje=document.getElementById(`pr-stanje-${i}`).value;
+  if(!sifra||!naziv){ alert('Šifra i naziv su obavezni.'); return; }
+  if(!objektId){ alert('Nedostaje prodajni objekat — vrati se na korak 1 i izaberi ga ponovo.'); return; }
+  try{
+    const r=await fetch(`${API}/api/roba`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ sifra, naziv, jed_mjera:'kom', cijena:parseFloat(cijena)||0, stanje:parseFloat(stanje)||0, objekt_id:objektId }),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška.');
+    const red=document.getElementById(`preskoceni-red-${i}`);
+    red.style.opacity='.5';
+    red.innerHTML=`<span style="font-size:11.5px;color:var(--green);">✓ Dodato: ${esc(sifra)} — ${esc(naziv)}</span>`;
+  }catch(e){ alert('✗ '+e.message); }
+}
+
 async function potvrdiUvoz(){
   const msg=document.getElementById('import-msg');
+  const staraLista=document.getElementById('preskoceni-lista-box');
+  if(staraLista) staraLista.remove();
   const mapping={
     sifra:document.getElementById('map-sifra').value,
     naziv:document.getElementById('map-naziv').value,
@@ -703,6 +725,29 @@ async function potvrdiUvoz(){
     }
     msg.style.whiteSpace='pre-line';
     msg.textContent=poruka;
+    // Detaljna lista preskočenih redova — da se tačno vidi KOJI redovi iz Excel-a su
+    // preskočeni i ZAŠTO (nema šifru/naziv), umjesto da se korisnik samo osloni na broj
+    // i nagađa gdje je razlika sa stvarnim stanjem u Excel tabeli. Svaki red ima i
+    // inline formu da se odmah ručno dopuni i doda, bez povratka na Excel.
+    const objektIdZaUvoz=document.getElementById('imp-objekat').value;
+    if(data.preskoceni_detalji && data.preskoceni_detalji.length){
+      const box=document.createElement('div');
+      box.id='preskoceni-lista-box';
+      box.style.cssText='margin-top:10px;background:#fff8e6;border:1px solid #f0d78c;border-radius:8px;padding:10px;max-height:400px;overflow-y:auto;';
+      box.innerHTML=`<div style="font-weight:700;font-size:12.5px;margin-bottom:8px;">⚠ Preskočeni redovi — dopuni i dodaj ručno:</div>` +
+        data.preskoceni_detalji.map((d,i)=>`
+          <div id="preskoceni-red-${i}" style="display:flex;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid #f0e8cc;flex-wrap:wrap;">
+            <span style="font-size:11px;color:#8b8060;min-width:70px;">Red ${d.excel_red}</span>
+            <input type="text" id="pr-sifra-${i}" placeholder="Šifra" value="${d.sifra!=='(prazno)'?esc(d.sifra):''}" style="width:100px;font-size:11.5px;padding:5px 6px;border:1px solid var(--border);border-radius:4px;">
+            <input type="text" id="pr-naziv-${i}" placeholder="Naziv" value="${d.naziv!=='(prazno)'?esc(d.naziv):''}" style="flex:1;min-width:140px;font-size:11.5px;padding:5px 6px;border:1px solid var(--border);border-radius:4px;">
+            <input type="number" id="pr-cijena-${i}" placeholder="Cijena" step="0.01" style="width:75px;font-size:11.5px;padding:5px 6px;border:1px solid var(--border);border-radius:4px;">
+            <input type="number" id="pr-stanje-${i}" placeholder="Stanje" step="0.01" style="width:75px;font-size:11.5px;padding:5px 6px;border:1px solid var(--border);border-radius:4px;">
+            <button type="button" class="btn-import" style="width:auto;padding:5px 12px;font-size:11px;" onclick="dodajPreskoceniRucno(${i},'${objektIdZaUvoz}')">+ Dodaj</button>
+          </div>
+        `).join('') +
+        (data.preskoceno>data.preskoceni_detalji.length?`<div style="font-size:11px;color:#8b8060;padding-top:6px;">... i još ${data.preskoceno-data.preskoceni_detalji.length} (prikazano prvih 200)</div>`:'');
+      msg.parentNode.insertBefore(box, msg.nextSibling);
+    }
     otkaziUvoz();
   }catch(e){
     msg.style.color='red'; msg.textContent=e.message;
