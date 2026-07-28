@@ -302,6 +302,18 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <button class="ce-tip-btn" onclick="document.getElementById('ov-qr-nalepnice').style.display='none'">✕ Zatvori</button>
     </div>
   </div>
+  <div class="no-print" style="padding:12px 16px;border-bottom:1px solid #eee;background:#f7f8fa;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+      <button class="ce-tip-btn" onclick="qrFilterPrimijeni('sve')">Svi artikli</button>
+      <button class="ce-tip-btn" onclick="qrFilterPrimijeni('stanje')">Samo sa stanjem &gt; 0</button>
+      <button class="ce-tip-btn" onclick="document.getElementById('qr-rucni-izbor').style.display='block';qrPopuniRucniIzbor();">Ručno izaberi...</button>
+    </div>
+    <div id="qr-rucni-izbor" style="display:none;margin-top:8px;">
+      <input type="text" id="qr-rucna-pretraga" placeholder="🔍 Pretraga po šifri/nazivu..." oninput="qrPopuniRucniIzbor()" style="width:100%;max-width:340px;padding:7px 10px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12.5px;margin-bottom:8px;">
+      <div id="qr-rucna-lista" style="max-height:220px;overflow-y:auto;border:1px solid var(--border,#ddd);border-radius:6px;padding:6px;background:#fff;"></div>
+      <button class="ce-tip-btn" onclick="qrFilterPrimijeni('rucno')" style="margin-top:8px;background:var(--blue,#1a5fa8);color:#fff;">Generiši za izabrane (<span id="qr-rucni-broj">0</span>)</button>
+    </div>
+  </div>
   <div id="qr-nalepnice-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;padding:16px;"></div>
 </div>
 <style>
@@ -1131,6 +1143,23 @@ async function otvoriRobnuKarticu(robaId, naziv){
 }
 
 let nivelacijaRobaId=null;
+async function otvoriIzmjenuJedinice(robaId, naziv, trenutnaJedinica){
+  const nova=prompt(`Nova jedinica mjere za "${naziv}" (trenutno: ${trenutnaJedinica}):`, trenutnaJedinica);
+  if(nova===null) return; // otkazano
+  const novaTrim=nova.trim();
+  if(!novaTrim){ alert('Jedinica ne može biti prazna.'); return; }
+  if(novaTrim===trenutnaJedinica) return; // nema promjene
+  try{
+    const r=await fetch(`${API}/api/roba/bulk-jedinica`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ids:[robaId], jed_mjera:novaTrim}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška.');
+    ucitajLagerListu();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
 function otvoriNivelaciju(robaId, naziv, trenutnaCijena){
   nivelacijaRobaId=robaId;
   document.getElementById('nivelacija-naslov').textContent='✎ Nivelacija cijene — '+naziv;
@@ -1171,15 +1200,56 @@ function lagerFmMoney(n){
   return `${fm(n)} KM`;
 }
 
-async function otvoriQrNalepnice(){
+let qrRucniIzabrani=new Set();
+
+function otvoriQrNalepnice(){
   if(!lagerPodaci||!lagerPodaci.length){ alert('Prvo prikaži lager listu (dugme "Prikaži").'); return; }
-  document.getElementById('qr-nalepnice-naslov').textContent=`🏷️ QR nalepnice — ${lagerPodaci.length} artikala`;
+  document.getElementById('ov-qr-nalepnice').style.display='block';
+  document.getElementById('qr-rucni-izbor').style.display='none';
+  document.getElementById('qr-nalepnice-grid').innerHTML='';
+  document.getElementById('qr-nalepnice-naslov').textContent='🏷️ QR nalepnice — izaberi šta štampaš';
+  qrRucniIzabrani.clear();
+}
+
+function qrPopuniRucniIzbor(){
+  const q=(document.getElementById('qr-rucna-pretraga').value||'').toLowerCase().trim();
+  const cont=document.getElementById('qr-rucna-lista');
+  const filtrirano=lagerPodaci.filter(a=>!q || a.sifra.toLowerCase().includes(q) || a.naziv.toLowerCase().includes(q));
+  if(!filtrirano.length){ cont.innerHTML='<div style="padding:8px;color:#999;font-size:12px;">Nema rezultata.</div>'; return; }
+  cont.innerHTML=filtrirano.slice(0,200).map(a=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:5px 6px;font-size:12px;cursor:pointer;border-bottom:1px solid #f3f3f3;">
+      <input type="checkbox" data-sifra="${esc(a.sifra)}" ${qrRucniIzabrani.has(a.sifra)?'checked':''} onchange="qrRucniToggle('${esc(a.sifra).replace(/'/g,"\\'")}', this.checked)">
+      <span><b>${esc(a.sifra)}</b> — ${esc(a.naziv)} <span style="color:#8b96a5;">(stanje: ${a.stanje})</span></span>
+    </label>
+  `).join('');
+  document.getElementById('qr-rucni-broj').textContent=qrRucniIzabrani.size;
+}
+
+function qrRucniToggle(sifra, checked){
+  if(checked) qrRucniIzabrani.add(sifra); else qrRucniIzabrani.delete(sifra);
+  document.getElementById('qr-rucni-broj').textContent=qrRucniIzabrani.size;
+}
+
+async function qrFilterPrimijeni(tip){
+  let lista;
+  if(tip==='sve') lista=lagerPodaci;
+  else if(tip==='stanje') lista=lagerPodaci.filter(a=>parseFloat(a.stanje)>0);
+  else if(tip==='rucno'){
+    if(!qrRucniIzabrani.size){ alert('Izaberite bar jedan artikal.'); return; }
+    lista=lagerPodaci.filter(a=>qrRucniIzabrani.has(a.sifra));
+  }
+  if(!lista.length){ alert('Nema artikala koji odgovaraju ovom filteru.'); return; }
+  document.getElementById('qr-rucni-izbor').style.display='none';
+  await qrGenerisi(lista);
+}
+
+async function qrGenerisi(lista){
+  document.getElementById('qr-nalepnice-naslov').textContent=`🏷️ QR nalepnice — ${lista.length} artikala`;
   const grid=document.getElementById('qr-nalepnice-grid');
   grid.innerHTML='';
-  document.getElementById('ov-qr-nalepnice').style.display='block';
   // Generiše se postepeno (ne blokira UI ako ima puno artikala) — QR sadrži TAČNO šifru
   // artikla, ništa više, da skener u prodaji može direktno da je pročita.
-  for(const a of lagerPodaci){
+  for(const a of lista){
     const box=document.createElement('div');
     box.className='qr-nalepnica';
     const qrDiv=document.createElement('div');
@@ -1309,7 +1379,10 @@ function renderLagerRedovi(){
       <td style="padding:5px 8px;">${esc(s.naziv)}</td>
       <td style="padding:5px 8px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
       <td style="padding:5px 8px;text-align:center;color:#6b7a8d;">${s.debljina_cm??'—'}</td>
-      <td style="padding:5px 8px;text-align:center;">${esc(s.jed_mjera)}</td>
+      <td style="padding:5px 8px;text-align:center;">
+        ${esc(s.jed_mjera)}
+        ${currentUser?.rola==='admin'?`<button onclick="otvoriIzmjenuJedinice(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}','${esc(s.jed_mjera)}')" title="Promijeni jedinicu mjere" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:11px;margin-left:2px;">✎</button>`:''}
+      </td>
       <td style="padding:5px 8px;text-align:right;">
         ${lagerFmMoney(s.cijena)}
         ${currentUser?.rola==='admin'?`<button onclick="otvoriNivelaciju(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.cijena})" title="Promijeni cijenu (nivelacija)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:11px;margin-left:2px;">✎</button>`:''}
