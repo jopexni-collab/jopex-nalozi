@@ -684,12 +684,15 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         <button type="button" class="ce-tip-btn" data-u="m3" onclick="dasIzaberiJedinicu('m3')">m³</button>
       </div>
 
-      <!-- Cijena i odstupanje su ZAJEDNIČKI za sve jedinice (kom/m²/m³) — ne dupliraju se
-           po jedinici, samo se pozicioniraju odgovarajuće (ispod kom, ili ispod m2/m3
-           dimenzija, vidi dasIzaberiJedinicu). -->
+      <!-- Cijena i odstupanje su ZAJEDNIČKI za sve jedinice (kom/m²/m³) — polje cijene se
+           fizički premješta (JS) u istu liniju sa količinom kad god postoji JEDNO polje za
+           količinu (kom, m2/m3 direktan unos); kod "Dužina × Visina" moda ostaje u svom
+           default mjestu jer nema jedno polje za količinu sa kojim da se upari. -->
       <div id="das-cijena-blok">
-        <label>Cijena (po jed.)</label>
-        <input type="number" id="das-kom-cijena" step="0.01" min="0" oninput="dasCijenaPromijenjena()" style="font-weight:700;">
+        <div id="das-cijena-podrazumevano-mjesto">
+          <label>Cijena (po jed.)</label>
+          <input type="number" id="das-kom-cijena" step="0.01" min="0" oninput="dasCijenaPromijenjena()" style="font-weight:700;">
+        </div>
         <div class="cijena-edit" id="das-kom-cijena-edit" style="display:none;">
           <div class="ce-preview" id="das-ce-preview"></div>
           <select id="das-kom-razlog"></select>
@@ -701,8 +704,14 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       </div>
 
       <div id="das-kom-blok" style="display:none">
-        <label>Količina (kom)</label>
-        <input type="number" id="das-kom" step="0.001" min="0.001" placeholder="npr. 2 ili 2.5">
+        <div style="display:flex;gap:8px;align-items:flex-end;">
+          <div style="flex:1;">
+            <label>Količina (kom)</label>
+            <input type="number" id="das-kom" step="0.001" min="0.001" placeholder="npr. 2 ili 2.5">
+          </div>
+          <div style="padding-bottom:11px;font-weight:700;font-size:16px;color:#8b96a5;">×</div>
+          <div id="das-kom-cijena-slot" style="flex:1;"></div>
+        </div>
       </div>
 
       <div id="das-m2-blok" style="display:none">
@@ -711,8 +720,14 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
           <button type="button" class="ce-tip-btn" data-m2="racunaj" onclick="dasM2Mode('racunaj')">Dužina × Visina</button>
         </div>
         <div id="das-m2-direktno-blok">
-          <label>Površina (m²)</label>
-          <input type="number" id="das-m2-vr" step="0.01" min="0.01" placeholder="npr. 1.68">
+          <div style="display:flex;gap:8px;align-items:flex-end;">
+            <div style="flex:1;">
+              <label>Površina (m²)</label>
+              <input type="number" id="das-m2-vr" step="0.01" min="0.01" placeholder="npr. 1.68">
+            </div>
+            <div style="padding-bottom:11px;font-weight:700;font-size:16px;color:#8b96a5;">×</div>
+            <div id="das-m2-cijena-slot" style="flex:1;"></div>
+          </div>
         </div>
         <div id="das-m2-racunaj-blok" style="display:none">
           <label>Dužina (cm)</label>
@@ -732,8 +747,14 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
           <button type="button" class="ce-tip-btn" data-m3="racunaj" onclick="dasM3Mode('racunaj')">Dužina × Visina × Debljina</button>
         </div>
         <div id="das-m3-direktno-blok">
-          <label>Zapremina (m³)</label>
-          <input type="number" id="das-m3-vr" step="0.001" min="0.001" placeholder="npr. 0.084">
+          <div style="display:flex;gap:8px;align-items:flex-end;">
+            <div style="flex:1;">
+              <label>Zapremina (m³)</label>
+              <input type="number" id="das-m3-vr" step="0.001" min="0.001" placeholder="npr. 0.084">
+            </div>
+            <div style="padding-bottom:11px;font-weight:700;font-size:16px;color:#8b96a5;">×</div>
+            <div id="das-m3-cijena-slot" style="flex:1;"></div>
+          </div>
         </div>
         <div id="das-m3-racunaj-blok" style="display:none">
           <label>Dužina (cm)</label>
@@ -2092,8 +2113,20 @@ function dasIzaberiJedinicu(u){
   document.getElementById('das-kom-blok').style.display = u==='kom' ? 'block':'none';
   document.getElementById('das-m2-blok').style.display = u==='m2' ? 'block':'none';
   document.getElementById('das-m3-blok').style.display = u==='m3' ? 'block':'none';
+  if(u==='kom') pomjeriCijenuU('das-kom-cijena-slot');
   if(u==='m2') dasM2Mode(dasM2mode);
   if(u==='m3') dasM3Mode(dasM3mode);
+}
+
+// Fizički premješta polje "Cijena" (sa labelom) u istu liniju sa jedinim relevantnim
+// poljem za količinu — kod kom, i kod m2/m3 "Direktan unos". Kod "Dužina × Visina" moda
+// (više polja za dimenzije, nema JEDNO polje za količinu) vraća se u podrazumijevano
+// mjesto ispod dugmadi za jedinicu.
+function pomjeriCijenuU(slotId){
+  const el=document.getElementById('das-cijena-podrazumevano-mjesto');
+  const slot=document.getElementById(slotId);
+  if(slot){ slot.appendChild(el); }
+  else{ document.getElementById('das-cijena-blok').insertBefore(el, document.getElementById('das-kom-cijena-edit')); }
 }
 
 function dasM2Mode(mode){
@@ -2101,6 +2134,7 @@ function dasM2Mode(mode){
   document.querySelectorAll('.ce-tip-btn[data-m2]').forEach(b=>b.classList.toggle('active', b.dataset.m2===mode));
   document.getElementById('das-m2-direktno-blok').style.display = mode==='direktno' ? 'block':'none';
   document.getElementById('das-m2-racunaj-blok').style.display = mode==='racunaj' ? 'block':'none';
+  pomjeriCijenuU(mode==='direktno' ? 'das-m2-cijena-slot' : null);
   dasPreview();
 }
 
@@ -2109,6 +2143,7 @@ function dasM3Mode(mode){
   document.querySelectorAll('.ce-tip-btn[data-m3]').forEach(b=>b.classList.toggle('active', b.dataset.m3===mode));
   document.getElementById('das-m3-direktno-blok').style.display = mode==='direktno' ? 'block':'none';
   document.getElementById('das-m3-racunaj-blok').style.display = mode==='racunaj' ? 'block':'none';
+  pomjeriCijenuU(mode==='direktno' ? 'das-m3-cijena-slot' : null);
   dasPreview();
 }
 
