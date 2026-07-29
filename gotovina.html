@@ -447,9 +447,17 @@ td.num{text-align:right;font-weight:700;}
 <!-- ═══ MODAL: DUG KLIJENTA (dvoklik) ═══ -->
 <div class="modal" id="modal-klijent-dug" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;">
   <div class="modal-box" style="background:#fff;border-radius:12px;padding:20px;max-width:460px;width:92vw;max-height:80vh;overflow-y:auto;">
-    <h3 id="kd-naslov" style="margin:0 0 12px;">Otpremnice sa dugom</h3>
+    <h3 id="kd-naslov" style="margin:0 0 12px;">Odakle dolazi dug</h3>
     <div id="kd-lista"></div>
     <button class="btn-sm" onclick="document.getElementById('modal-klijent-dug').style.display='none'" style="width:100%;margin-top:14px;">Zatvori</button>
+  </div>
+</div>
+
+<div class="modal" id="modal-klijent-uplate" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;">
+  <div class="modal-box" style="background:#fff;border-radius:12px;padding:20px;max-width:460px;width:92vw;max-height:80vh;overflow-y:auto;">
+    <h3 id="ku-naslov" style="margin:0 0 12px;">Istorija uplata</h3>
+    <div id="ku-lista"></div>
+    <button class="btn-sm" onclick="document.getElementById('modal-klijent-uplate').style.display='none'" style="width:100%;margin-top:14px;">Zatvori</button>
   </div>
 </div>
 
@@ -1498,20 +1506,22 @@ async function ucitajKlijentiListu(){
     const r=await fetch(`${API}/api/finansije/klijenti`);
     const rows=await r.json();
     if(!rows.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:#999">Nema klijenata sa dugom/pretplatom.</td></tr>'; return; }
-    tbody.innerHTML=rows.map(k=>`
-      <tr style="${k.kupac_id?'cursor:pointer;':''}" ${k.kupac_id?`ondblclick="otvoriDugKlijenta(${k.kupac_id},'${esc(k.kupac_naziv||'').replace(/'/g,"\\'")}')"  title="Dvoklik za detalje i naplatu"`:''}>
+    tbody.innerHTML=rows.map(k=>{
+      const nazivEsc=esc(k.kupac_naziv||'').replace(/'/g,"\\'");
+      return `
+      <tr>
         <td>
           ${esc(k.kupac_naziv||'—')}
           ${!k.registrovan?'<div style="font-size:10px;color:var(--red);font-weight:700;">⚠ Preporučuje se registracija kupca</div>':''}
         </td>
-        <td style="font-weight:700;">${k.duguje_ukupno>0?fm(k.duguje_ukupno):'—'}</td>
+        <td style="font-weight:700;${k.duguje_ukupno>0?'cursor:pointer;color:var(--blue);text-decoration:underline;':''}" ${k.duguje_ukupno>0?`onclick="otvoriDugDetalji(${k.kupac_id||'null'},'${nazivEsc}')" title="Klikni da vidiš odakle dolazi dug"`:''}>${k.duguje_ukupno>0?fm(k.duguje_ukupno):'—'}</td>
         <td style="${k.ocekivano>0?'color:var(--orange,#b8860b);':''}">${k.ocekivano>0?fm(k.ocekivano):'—'}</td>
         <td>${k.duguje_soft>0?fm(k.duguje_soft):'—'}</td>
         <td style="${k.pretplata>0?'color:var(--green);font-weight:700;':''}">${k.pretplata>0?'+ '+fm(k.pretplata):'—'}</td>
-        <td>${k.uplaceno_banka_istorijski>0?fm(k.uplaceno_banka_istorijski):'—'}</td>
+        <td style="${k.uplaceno_banka_istorijski>0?'cursor:pointer;color:var(--blue);text-decoration:underline;':''}" ${k.uplaceno_banka_istorijski>0?`onclick="otvoriUplateIstorija(${k.kupac_id||'null'},'${nazivEsc}')" title="Klikni da vidiš kada su uplate stigle"`:''}>${k.uplaceno_banka_istorijski>0?fm(k.uplaceno_banka_istorijski):'—'}</td>
         <td>${k.nije_verifikovano_broj>0?`<span style="color:var(--red);font-weight:700;font-size:11px;">🚚 ${k.nije_verifikovano_broj} neverifik.</span>`:'<span style="color:var(--green);font-size:11px;">✓ sve</span>'}</td>
       </tr>
-    `).join('');
+    `;}).join('');
   }catch(e){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>'; }
 }
 
@@ -1587,23 +1597,53 @@ async function sacuvajIstorijskiUnos(){
   }
 }
 
-/* ── DVOKLIK NA KLIJENTA → NJEGOVE OTPREMNICE SA DUGOM ─────────────────── */
-async function otvoriDugKlijenta(kupacId, naziv){
-  document.getElementById('kd-naslov').textContent='Dug — '+naziv;
+/* ── KLIK NA "DUGUJE" → ODAKLE DOLAZI (otpremnice + radni nalozi) ──────── */
+async function otvoriDugDetalji(kupacId, naziv){
+  document.getElementById('kd-naslov').textContent='Odakle dolazi dug — '+naziv;
   document.getElementById('modal-klijent-dug').style.display='flex';
   const cont=document.getElementById('kd-lista');
   cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Učitavanje...</div>';
   try{
-    const r=await fetch(`${API}/api/finansije/klijent/${kupacId}/otpremnice-dug`);
+    const params=new URLSearchParams();
+    if(kupacId) params.set('kupac_id', kupacId);
+    params.set('naziv', naziv);
+    const r=await fetch(`${API}/api/finansije/klijent-dug-detalji?${params}`);
     const rows=await r.json();
-    if(!rows.length){ cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Nema otpremnica sa otvorenim dugom (dug je možda iz radnih naloga — naplati kroz lista.html).</div>'; return; }
-    cont.innerHTML=rows.map(o=>`
+    if(!rows.length){ cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Nema pronađenih stavki duga.</div>'; return; }
+    cont.innerHTML=rows.map(s=>`
       <div style="border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;">
-          <span>#${esc(o.broj)}</span><span style="color:var(--red);">${fm(o.duguje)}</span>
+          <span>${s.tip==='otpremnica'?'📦':'🔨'} ${s.tip==='otpremnica'?'#'+esc(s.broj):'Nalog #'+s.broj}</span>
+          <span style="color:var(--red);">${fm(s.iznos)}</span>
         </div>
-        <div style="font-size:11px;color:#8b96a5;margin-top:2px;">${new Date(o.datum).toLocaleDateString('sr-Latn-BA')} · ${esc(o.objekt_naziv||'')} · Ukupno: ${fm(o.ukupan_iznos)}, plaćeno: ${fm(o.iznos_placeno)}</div>
-        <button class="btn-sm" onclick="location.href='maloprodaja.html?naplati_otpremnicu=${o.id}'" style="width:100%;margin-top:8px;background:var(--blue,#1a5fa8);color:#fff;">Naplati ovu →</button>
+        <div style="font-size:11px;color:#8b96a5;margin-top:2px;">${s.datum?new Date(s.datum).toLocaleDateString('sr-Latn-BA'):'—'} · ${esc(s.opis||'')}</div>
+        ${s.tip==='otpremnica'?`<button class="btn-sm" onclick="location.href='maloprodaja.html?naplati_otpremnicu=${s.broj}'" style="width:100%;margin-top:8px;background:var(--blue,#1a5fa8);color:#fff;">Naplati ovu →</button>`:''}
+      </div>
+    `).join('');
+  }catch(e){ cont.innerHTML='<div style="text-align:center;color:red;padding:20px;">Greška pri učitavanju.</div>'; }
+}
+
+/* ── KLIK NA "UPLAĆENO" → ISTORIJA UPLATA (banka + gotovina), hronoloski ── */
+async function otvoriUplateIstorija(kupacId, naziv){
+  document.getElementById('ku-naslov').textContent='Istorija uplata — '+naziv;
+  document.getElementById('modal-klijent-uplate').style.display='flex';
+  const cont=document.getElementById('ku-lista');
+  cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Učitavanje...</div>';
+  try{
+    const params=new URLSearchParams();
+    if(kupacId) params.set('kupac_id', kupacId);
+    params.set('naziv', naziv);
+    const r=await fetch(`${API}/api/finansije/klijent-uplate-istorija?${params}`);
+    const rows=await r.json();
+    if(!rows.length){ cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Nema pronađenih uplata.</div>'; return; }
+    cont.innerHTML=rows.map(s=>`
+      <div style="border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;">
+          <span>${s.tip==='banka'?'🏦':'💰'} ${new Date(s.datum).toLocaleString('sr-Latn-BA')}</span>
+          <span style="color:var(--green);">${fm(s.iznos)}</span>
+        </div>
+        <div style="font-size:11px;color:#8b96a5;margin-top:2px;">${esc(s.opis||'')}</div>
+        ${s.tip==='banka' && s.potvrdjeno===false?`<div style="font-size:10.5px;color:var(--orange,#b8860b);font-weight:700;margin-top:4px;">⏳ Čeka potvrdu</div>`:''}
       </div>
     `).join('');
   }catch(e){ cont.innerHTML='<div style="text-align:center;color:red;padding:20px;">Greška pri učitavanju.</div>'; }

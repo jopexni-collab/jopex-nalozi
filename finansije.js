@@ -156,13 +156,18 @@ router.get('/klijenti', async (req, res) => {
     `);
 
     // Dug iz radnih naloga (proizvodnja_jopex) — po naručiocu (slobodan tekst).
+    // KRITIČNO: checkbox "Naplaćeno" je ODLUČUJUĆI signal (isti koji koristi i blagajna
+    // za "Naplaćeno (nalozi)"/"Očekivano od naloga") — ako je nalog čekiran kao plaćen,
+    // NE SMIJE se prikazati kao dug, čak i ako se brojevi (ugovoreno-avans-naplaćeno) ne
+    // poklapaju savršeno (npr. zbog podataka iz uvoza koji nisu bili 100% precizni).
     const dugNalozi = await pool.query(`
       SELECT
         'ime:'||LOWER(TRIM(narucilac)) AS kljuc,
         NULL::int AS kupac_id, narucilac AS kupac_naziv,
-        SUM(ugovorena_suma - avans - naplaceno_iznos) AS iznos
+        SUM(GREATEST(ugovorena_suma - avans - naplaceno_iznos, 0)) AS iznos
       FROM proizvodnja_jopex
       WHERE COALESCE(stornirano,false)=false
+        AND COALESCE(naplaceno,false)=false
         AND narucilac IS NOT NULL AND TRIM(narucilac) != ''
         AND (ugovorena_suma - avans - naplaceno_iznos) > 0.01
       GROUP BY kljuc, narucilac
@@ -475,6 +480,106 @@ router.post('/vp-cekanje/:broj/potvrdi', async (req, res) => {
       [user.ime_prezime, req.params.broj]
     );
     res.json({ ok: true, potvrdjeno_zapisa: r.rows.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/finansije/klijent-dug-detalji?kupac_id=X&naziv=Y — SVI izvori duga za jednog
+// klijenta (otpremnice maloprodaje + radni nalozi), sa datumom i opisom svake stavke —
+// da se klikom na "Duguje" vidi TAČNO odakle dolazi taj iznos.
+router.get('/klijent-dug-detalji', async (req, res) => {
+  const user = req.session?.user;
+  if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });
+  const { kupac_id, naziv } = req.query;
+  if (!kupac_id && !naziv) return res.status(400).json({ error: 'Nedostaje kupac_id ili naziv.' });
+  try {
+    const stavke = [];
+
+    if (kupac_id) {
+      const o = await pool.query(
+        `SELECT broj, datum, ukupan_iznos, iznos_placeno, (ukupan_iznos - iznos_placeno) AS duguje, objekt_naziv
+         FROM otpremnice
+         WHERE kupac_id=$1 AND status_placanja != 'placeno' AND status='potvrdjena'
+         ORDER BY datum ASC`,
+        [kupac_id]
+      );
+      o.rows.forEach(r => stavke.push({
+        tip: 'otpremnica', broj: r.broj, datum: r.datum, iznos: +parseFloat(r.duguje).toFixed(2),
+        opis: `Maloprodaja — ${r.objekt_naziv || ''} — ukupno ${r.ukupan_iznos}, plaćeno ${r.iznos_placeno}`,
+      }));
+    }
+
+    if (naziv) {
+      const n = await pool.query(
+        `SELECT r_br, pocetak, planirani_zavrsetak, zadatak, ugovorena_suma, avans, naplaceno_iznos,
+                (ugovorena_suma - avans - naplaceno_iznos) AS duguje
+         FROM proizvodnja_jopex
+         WHERE LOWER(TRIM(narucilac))=LOWER(TRIM($1))
+           AND COALESCE(stornirano,false)=false AND COALESCE(naplaceno,false)=false
+           AND (ugovorena_suma - avans - naplaceno_iznos) > 0.01
+         ORDER BY pocetak ASC NULLS LAST`,
+        [naziv]
+      );
+      n.rows.forEach(r => stavke.push({
+        tip: 'radni_nalog', broj: r.r_br, datum: r.pocetak, iznos: +parseFloat(Math.max(r.duguje,0)).toFixed(2),
+        opis: `${r.zadatak || 'Radni nalog'} — ugovoreno ${r.ugovorena_suma}, avans ${r.avans}, naplaćeno ${r.naplaceno_iznos}`,
+      }));
+    }
+
+    stavke.sort((a, b) => new Date(a.datum || 0) - new Date(b.datum || 0));
+    res.json(stavke);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/finansije/klijent-uplate-istorija?kupac_id=X&naziv=Y — istorija SVIH stvarnih
+// uplata (banka + gotovina) za klijenta, hronološki, da klik na "Uplaćeno" pokaže KADA se
+// tačno šta desilo.
+router.get('/klijent-uplate-istorija', async (req, res) => {
+  const user = req.session?.user;
+  if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });
+  const { kupac_id, naziv } = req.query;
+  if (!kupac_id && !naziv) return res.status(400).json({ error: 'Nedostaje kupac_id ili naziv.' });
+  try {
+    const stavke = [];
+
+    const bWhere = [];
+    const bVals = [];
+    let i = 1;
+    if (kupac_id) { bWhere.push(`kupac_id=$${i++}`); bVals.push(kupac_id); }
+    if (naziv) { bWhere.push(`LOWER(TRIM(kupac_naziv))=LOWER(TRIM($${i++}))`); bVals.push(naziv); }
+    const b = await pool.query(
+      `SELECT datum, iznos, banka, izvor, nalog_r_br, napomena, potvrdjeno
+       FROM banka_uplate WHERE (${bWhere.join(' OR ')}) ORDER BY datum DESC`,
+      bVals
+    );
+    b.rows.forEach(r => stavke.push({
+      tip: 'banka', datum: r.datum, iznos: +parseFloat(r.iznos).toFixed(2),
+      opis: `${(r.banka||'Banka').toUpperCase()} — ${r.izvor}${r.nalog_r_br ? ' — nalog/otp ' + r.nalog_r_br : ''}${r.napomena ? ' — ' + r.napomena : ''}`,
+      potvrdjeno: r.potvrdjeno,
+    }));
+
+    // Gotovina (naplata duga iz radnih naloga — avans/ostatak) povezana preko naziva
+    // narucioca kroz sam nalog (gotovina nema kupac_id, ali ima nalog_r_br).
+    if (naziv) {
+      const g = await pool.query(
+        `SELECT g.datum, g.iznos, g.opis, g.nalog_r_br
+         FROM gotovina g
+         JOIN proizvodnja_jopex p ON p.r_br::text = g.nalog_r_br
+         WHERE LOWER(TRIM(p.narucilac))=LOWER(TRIM($1)) AND g.iznos > 0
+         ORDER BY g.datum DESC`,
+        [naziv]
+      );
+      g.rows.forEach(r => stavke.push({
+        tip: 'gotovina', datum: r.datum, iznos: +parseFloat(r.iznos).toFixed(2),
+        opis: `Gotovina — nalog #${r.nalog_r_br} — ${r.opis || ''}`,
+      }));
+    }
+
+    stavke.sort((a, b) => new Date(b.datum || 0) - new Date(a.datum || 0));
+    res.json(stavke);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
