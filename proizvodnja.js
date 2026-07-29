@@ -712,4 +712,48 @@ router.delete('/:r_br', async (req, res) => {
   }
 });
 
+// PATCH /api/proizvodnja/:r_br/promijeni-broj — SAMO admin. Ručna izmjena broja naloga
+// (npr. dupli/pogrešan broj posle uvoza). Osetljivo — r_br je "ime" po kome se nalog
+// referencira u gotovini/banci (tekstualno, ne FK), pa se sve mora ažurirati zajedno u
+// jednoj transakciji, ili se ništa ne mijenja.
+router.patch('/:r_br/promijeni-broj', async (req, res) => {
+  const user = req.session?.user;
+  if (user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin može mijenjati broj naloga.' });
+  const stariBr = parseInt(req.params.r_br);
+  const noviBr = parseInt(req.body?.novi_r_br);
+  if (!noviBr || noviBr <= 0)
+    return res.status(400).json({ error: 'Unesite ispravan novi broj.' });
+  if (stariBr === noviBr)
+    return res.status(400).json({ error: 'Novi broj je isti kao stari.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const postoji = await client.query('SELECT r_br FROM proizvodnja_jopex WHERE r_br=$1', [noviBr]);
+    if (postoji.rows.length)
+      throw Object.assign(new Error(`Broj ${noviBr} je već zauzet — izaberite drugi.`), { status: 400 });
+
+    const r = await client.query(
+      'UPDATE proizvodnja_jopex SET r_br=$1 WHERE r_br=$2 RETURNING r_br, zadatak, narucilac',
+      [noviBr, stariBr]
+    );
+    if (!r.rows.length)
+      throw Object.assign(new Error('Nalog nije pronađen.'), { status: 404 });
+
+    // Sve TEKSTUALNE reference (nisu FK, ne ažuriraju se same) — moraju se ručno uskladiti,
+    // inače bi te uplate/redovi u blagajni i banci ostali "zalijepljeni" za stari broj.
+    await client.query('UPDATE gotovina SET nalog_r_br=$1 WHERE nalog_r_br=$2', [String(noviBr), String(stariBr)]);
+    await client.query('UPDATE banka_uplate SET nalog_r_br=$1 WHERE nalog_r_br=$2', [String(noviBr), String(stariBr)]);
+
+    await client.query('COMMIT');
+    res.json({ ok: true, stari_broj: stariBr, novi_broj: noviBr, nalog: r.rows[0] });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;

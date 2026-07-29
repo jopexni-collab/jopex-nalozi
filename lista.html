@@ -279,8 +279,8 @@ function gv(id){return(document.getElementById(id)||{}).value||'';}
 // ─── KOLONE ───────────────────────────────────────────────────────────────
 function getCols(){
   const base=[
-    {k:'r_br',l:'R.Br.',w:50,filter:'text',render:r=>`<td class="num">${r.stornirano?'⛔ ':''}${r.r_br}</td>`,edit:null},
-    {k:'zadatak',l:'Zadatak',w:130,filter:'sel',opts:ZADACI,render:r=>`<td>${esc(r.zadatak)}</td>`,edit:{type:'select',opts:ZADACI,field:'zadatak'}},
+    {k:'r_br',l:'R.Br.',w:50,filter:'text',render:r=>`<td class="num">${r.stornirano?'⛔ ':''}${r.r_br}${isAdmin?` <button onclick="event.stopPropagation();promijeniBrojNaloga(${r.r_br})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--blue);" title="Promijeni broj naloga">✎</button>`:''}</td>`,edit:null},
+    {k:'zadatak',l:'Zadatak',w:130,filter:'sel',opts:ZADACI,render:r=>`<td>${r.izvor==='terenska_ponuda'?'<span title="Terenska ponuda" style="background:#fff3e0;color:#b8860b;font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:6px;margin-right:5px;">🚐 TEREN</span>':''}${esc(r.zadatak)}</td>`,edit:{type:'select',opts:ZADACI,field:'zadatak'}},
     {k:'materijal',l:'Materijal',w:100,filter:'sel',opts:MATERIJALI,render:r=>`<td>${esc(r.materijal)}</td>`,edit:{type:'select',opts:MATERIJALI,field:'materijal'}},
     {k:'prioritet',l:'Prioritet',w:90,filter:'sel',opts:PRIORITETI,render:r=>`<td>${chipP(r.prioritet)}</td>`,edit:{type:'select',opts:PRIORITETI,field:'prioritet'}},
     {k:'ugovorio',l:'Ugovorio',w:110,filter:'text',render:r=>`<td>${esc(r.ugovorio)}</td>`,edit:{type:'ugovorio',field:'ugovorio_id',label:'Ugovorio'}},
@@ -300,6 +300,7 @@ function getCols(){
   // "Mala ponuda" (brza forma) — svako ko radi sa nalozima (unos/status/izmjena) vidi.
   const mozeVidjetiFin=r=>{
     if(isAdmin||!!(trenutniUser&&trenutniUser.moze_ugovarati)) return true;
+    if(trenutniUser&&r.ugovorio_id===trenutniUser.id) return true; // kreirao=ugovorio — uvijek vidi svoj nalog
     if(r.izvor==='mala_ponuda') return !!(trenutniUser&&(trenutniUser.unos_naloga||trenutniUser.izmjena_statusa||trenutniUser.izmjena_naloga));
     return false;
   };
@@ -988,6 +989,25 @@ document.getElementById('tbody').addEventListener('mousemove',function(e){
   noteTooltip.style.left=Math.min(e.clientX+12,window.innerWidth-290)+'px';
   noteTooltip.style.top=(e.clientY+14)+'px';
 });
+async function promijeniBrojNaloga(stariBr){
+  const noviBr=prompt(`Novi broj za nalog #${stariBr} (trenutno: ${stariBr}):`, stariBr);
+  if(noviBr===null) return; // otkazano
+  const noviBrNum=parseInt(noviBr);
+  if(!noviBrNum||noviBrNum<=0){ alert('Unesite ispravan broj.'); return; }
+  if(noviBrNum===stariBr) return;
+  if(!confirm(`Promijeniti broj naloga sa ${stariBr} na ${noviBrNum}?\n\nOvo mijenja i sve povezane zapise u blagajni/banci (nalog/broj se svuda usklađuje).`)) return;
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/${stariBr}/promijeni-broj`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({novi_r_br:noviBrNum}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error);
+    alert(`✓ Broj promijenjen: ${stariBr} → ${noviBrNum}`);
+    load();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
 async function obrisiNalog(rBr, e){
   e.stopPropagation();
   if(!confirm(`Stornirati nalog #${rBr}?\n\nNalog se NEĆE obrisati — ostaje vidljiv u listi (precrtan), a sve vezane gotovinske stavke (avans/naplata) se poništavaju.`)) return;
