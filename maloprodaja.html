@@ -684,19 +684,12 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         <button type="button" class="ce-tip-btn" data-u="m3" onclick="dasIzaberiJedinicu('m3')">m³</button>
       </div>
 
-      <div id="das-kom-blok" style="display:none">
-        <div style="display:flex;gap:8px;align-items:flex-end;">
-          <div style="flex:1;">
-            <label>Količina (kom)</label>
-            <input type="number" id="das-kom" step="0.001" min="0.001" placeholder="npr. 2 ili 2.5">
-          </div>
-          <div style="padding-bottom:9px;font-weight:700;color:#8b96a5;">×</div>
-          <div style="flex:1;">
-            <label>Cijena (po jed.)</label>
-            <input type="number" id="das-kom-cijena" step="0.01" min="0" oninput="dasCijenaPromijenjena()">
-          </div>
-        </div>
-
+      <!-- Cijena i odstupanje su ZAJEDNIČKI za sve jedinice (kom/m²/m³) — ne dupliraju se
+           po jedinici, samo se pozicioniraju odgovarajuće (ispod kom, ili ispod m2/m3
+           dimenzija, vidi dasIzaberiJedinicu). -->
+      <div id="das-cijena-blok">
+        <label>Cijena (po jed.)</label>
+        <input type="number" id="das-kom-cijena" step="0.01" min="0" oninput="dasCijenaPromijenjena()" style="font-weight:700;">
         <div class="cijena-edit" id="das-kom-cijena-edit" style="display:none;">
           <div class="ce-preview" id="das-ce-preview"></div>
           <select id="das-kom-razlog"></select>
@@ -705,6 +698,11 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
             <button type="button" class="ce-otkazi" onclick="dasOtkaziOdstupanje()" style="width:100%;">✕ Otkaži odstupanje</button>
           </div>
         </div>
+      </div>
+
+      <div id="das-kom-blok" style="display:none">
+        <label>Količina (kom)</label>
+        <input type="number" id="das-kom" step="0.001" min="0.001" placeholder="npr. 2 ili 2.5">
       </div>
 
       <div id="das-m2-blok" style="display:none">
@@ -2068,8 +2066,8 @@ function dasCijenaPromijenjena(){
   const prev=document.getElementById('das-ce-preview');
   const razlika=uneseno-zadana;
   prev.innerHTML = razlika>0
-    ? `<span style="color:var(--green);">▲ Iznad zadane cijene (${fmMoney(zadana)}) za ${fmMoney(razlika)}</span>`
-    : `<span style="color:var(--red);">▼ Ispod zadane cijene (${fmMoney(zadana)}) za ${fmMoney(-razlika)}</span>`;
+    ? `<span style="color:var(--green);">▲ Iznad zadane cijene (<b>${fmMoney(zadana)}</b>) za ${fmMoney(razlika)}</span>`
+    : `<span style="color:var(--red);">▼ Ispod zadane cijene (<b>${fmMoney(zadana)}</b>) za ${fmMoney(-razlika)}</span>`;
 }
 
 function dasOtkaziOdstupanje(){
@@ -2184,9 +2182,10 @@ function izgradiIDodajStavku(){
   // Odstupanje od cijene ODMAH pri dodavanju (samo za "kom" mod, za sad — test) — gradi
   // se iz TRENUTNOG stanja polja (cijena je direktno otkucana, razlog izabran ako je
   // blok otvoren), isti obrazac (tip/vrijednost/razlog/napomena) kao override koji se
-  // inače unosi naknadno u korpi.
+  // inače unosi naknadno u korpi. Zajedničko za SVE jedinice (kom/m²/m³) — cijena/
+  // odstupanje se ne dupliraju po jedinici.
   let overrideNovi=null;
-  if(dasJedinica==='kom'){
+  {
     const uneseno=parseFloat(document.getElementById('das-kom-cijena').value);
     const zadana=parseFloat(dasArtikal.cijena);
     if(!isNaN(uneseno) && Math.abs(uneseno-zadana)>=0.005){
