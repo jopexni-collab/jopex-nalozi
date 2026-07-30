@@ -113,6 +113,13 @@ a.lk{color:var(--blue);text-decoration:none;}
 #hist-list .hist-datum{font-weight:700;color:#e67e22;}
 #hist-list .hist-ko{color:#6b7a8d;}
 #hist-list .hist-kad{color:#aaa;font-size:10px;}
+.ima-komentar{position:relative;}
+.ima-komentar::after{content:'';position:absolute;top:0;right:0;border-width:0 7px 7px 0;border-style:solid;border-color:transparent #c0392b transparent transparent;}
+#kom-kontekst-meni{position:fixed;z-index:500;background:#fff;border:1px solid #d0d7de;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);padding:4px;display:none;min-width:170px;}
+#kom-kontekst-meni button{display:block;width:100%;text-align:left;background:none;border:none;padding:8px 10px;font:inherit;font-size:12.5px;cursor:pointer;border-radius:5px;}
+#kom-kontekst-meni button:hover{background:#f0f2f5;}
+#kom-kontekst-meni button.obrisi{color:#c0392b;}
+#kom-tooltip{position:fixed;z-index:499;background:#fff8e6;border:1px solid #f0d78c;border-radius:6px;padding:8px 10px;font-size:11.5px;max-width:260px;box-shadow:0 2px 8px rgba(0,0,0,.15);display:none;pointer-events:none;}
 </style>
 </head>
 <body>
@@ -144,6 +151,23 @@ a.lk{color:var(--blue);text-decoration:none;}
 </table>
 </div>
 
+<div id="kom-kontekst-meni">
+  <button onclick="otvoriKomentarEditor()" id="kom-btn-dodaj">💬 Dodaj komentar</button>
+  <button onclick="obrisiKomentar()" class="obrisi" id="kom-btn-obrisi" style="display:none;">🗑 Obriši komentar</button>
+</div>
+<div id="kom-tooltip"></div>
+
+<div id="kom-editor-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:600;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:18px;max-width:380px;width:92vw;">
+    <h3 id="kom-editor-naslov" style="margin:0 0 10px;font-size:14px;">Komentar</h3>
+    <textarea id="kom-editor-tekst" rows="4" style="width:100%;font:inherit;font-size:13px;padding:8px;border:1px solid var(--border,#ddd);border-radius:6px;resize:vertical;"></textarea>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button onclick="sacuvajKomentar()" style="flex:1;background:var(--blue,#1a5fa8);color:#fff;border:none;border-radius:6px;padding:9px;font:inherit;font-weight:600;cursor:pointer;">Sačuvaj</button>
+      <button onclick="document.getElementById('kom-editor-overlay').style.display='none'" style="flex:1;background:#eee;border:none;border-radius:6px;padding:9px;font:inherit;cursor:pointer;">Otkaži</button>
+    </div>
+  </div>
+</div>
+
 <!-- INLINE EDITOR POPUP -->
 <div id="inline-pop">
   <label id="pop-label">Vrijednost</label>
@@ -163,6 +187,7 @@ const ZADACI=['Kuhinjska ploča','Klupice, Step','Sto','Na Mjeru','Usluge WJ','U
 const MATERIJALI=['Granit','Mermer','Tašto','Kvarc','Vještački','Keramika','Kombinovano','Obrada na mašini'];
 const REKLAMACIJE=['','NE','DA'];
 let all=[], isAdmin=false, trenutniUser=null, stornoFilter='sakrij';
+let komentari={}, komentarMeta=null; // komentari: "rBr|kolona" -> {tekst,autor_ime,...}; komentarMeta: trenutno u meniju/editoru {rBr,kolona}
 let undoStack=[]; // {rBr, izmjene:[{field, oldVal}, ...]}
 
 // Prima ili (rBr, field, oldVal) za jedno polje, ili (rBr, {polje1:staraVr, polje2:staraVr})
@@ -537,15 +562,97 @@ function render(){
   document.getElementById('stat').textContent=`${rows.length} / ${all.length} naloga`;
   if(!rows.length){document.getElementById('tbody').innerHTML=`<tr><td colspan="${cols.length}" class="empty">Nema naloga.</td></tr>`;return;}
   document.getElementById('tbody').innerHTML=rows.map(r=>`<tr data-rbr="${r.r_br}"${r.stornirano?' style="text-decoration:line-through;text-decoration-color:#000;text-decoration-thickness:2px;color:#888;"':''}>${cols.map(c=>{
-    const cell=c.render(r);
+    let cell=c.render(r);
     if(c.edit&&!mozeEditovati(c.edit.field,r)){
-      return addTdClass(cell,'locked');
+      cell=addTdClass(cell,'locked');
+    }else if(c.edit&&mozeEditovati(c.edit.field,r)){
+      cell=addTdClass(cell,'editable');
     }
-    if(c.edit&&mozeEditovati(c.edit.field,r)){
-      return addTdClass(cell,'editable');
-    }
-    return cell;
+    return dodajKomentarAtribut(cell, r.r_br, c.k);
   }).join('')}</tr>`).join('');
+}
+
+// Dodaje desni-klik hendler na SVAKU ćeliju (za komentare, kao u Excel-u) i crveni
+// trougao u uglu ako komentar već postoji — bez potrebe da se svaka kolona pojedinačno
+// mijenja (isti obrazac kao addTdClass iznad).
+function dodajKomentarAtribut(html, rBr, kolona){
+  const kljuc=rBr+'|'+kolona;
+  const imaKom=!!komentari[kljuc];
+  let novi=html.replace('<td', `<td oncontextmenu="return otvoriKomentarMeni(event,${rBr},'${kolona}')"`);
+  if(imaKom){
+    novi=novi.replace('<td', `<td onmouseenter="prikaziKomentarTooltip(event,'${kljuc}')" onmouseleave="document.getElementById('kom-tooltip').style.display='none'"`);
+    novi=addTdClass(novi,'ima-komentar');
+  }
+  return novi;
+}
+
+async function ucitajKomentare(){
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/komentari`);
+    const rows=await r.json();
+    komentari={};
+    rows.forEach(k=>{ komentari[k.r_br+'|'+k.kolona]=k; });
+  }catch(e){}
+}
+
+function otvoriKomentarMeni(event, rBr, kolona){
+  event.preventDefault();
+  komentarMeta={rBr, kolona};
+  const meni=document.getElementById('kom-kontekst-meni');
+  const postoji=!!komentari[rBr+'|'+kolona];
+  document.getElementById('kom-btn-dodaj').textContent = postoji ? '💬 Uredi komentar' : '💬 Dodaj komentar';
+  document.getElementById('kom-btn-obrisi').style.display = postoji ? 'block' : 'none';
+  meni.style.left=event.clientX+'px';
+  meni.style.top=event.clientY+'px';
+  meni.style.display='block';
+  return false;
+}
+document.addEventListener('click', ()=>{ document.getElementById('kom-kontekst-meni').style.display='none'; });
+
+function otvoriKomentarEditor(){
+  document.getElementById('kom-kontekst-meni').style.display='none';
+  if(!komentarMeta) return;
+  const postojeci=komentari[komentarMeta.rBr+'|'+komentarMeta.kolona];
+  document.getElementById('kom-editor-naslov').textContent=`Komentar — nalog #${komentarMeta.rBr}, ${komentarMeta.kolona}`;
+  document.getElementById('kom-editor-tekst').value=postojeci?postojeci.tekst:'';
+  document.getElementById('kom-editor-overlay').style.display='flex';
+  document.getElementById('kom-editor-tekst').focus();
+}
+
+async function sacuvajKomentar(){
+  if(!komentarMeta) return;
+  const tekst=document.getElementById('kom-editor-tekst').value.trim();
+  if(!tekst){ alert('Komentar ne može biti prazan.'); return; }
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/${komentarMeta.rBr}/komentar/${komentarMeta.kolona}`,{
+      method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({tekst}),
+    });
+    if(!r.ok){ const d=await r.json(); alert('✗ '+(d.error||'Greška.')); return; }
+    document.getElementById('kom-editor-overlay').style.display='none';
+    await ucitajKomentare();
+    render();
+  }catch(e){ alert('✗ Greška.'); }
+}
+
+async function obrisiKomentar(){
+  document.getElementById('kom-kontekst-meni').style.display='none';
+  if(!komentarMeta) return;
+  if(!confirm('Obrisati ovaj komentar?')) return;
+  try{
+    await fetch(`${API}/api/proizvodnja/${komentarMeta.rBr}/komentar/${komentarMeta.kolona}`,{method:'DELETE'});
+    await ucitajKomentare();
+    render();
+  }catch(e){ alert('✗ Greška.'); }
+}
+
+function prikaziKomentarTooltip(event, kljuc){
+  const k=komentari[kljuc];
+  if(!k) return;
+  const tip=document.getElementById('kom-tooltip');
+  tip.innerHTML=`<b>${esc(k.autor_ime||'')}</b>: ${esc(k.tekst)}`;
+  tip.style.left=(event.clientX+12)+'px';
+  tip.style.top=(event.clientY+12)+'px';
+  tip.style.display='block';
 }
 
 // ─── INLINE EDIT POPUP ────────────────────────────────────────────────────
@@ -1040,6 +1147,7 @@ async function load(){
     if(!r.ok){if(r.status===401){location.href='login.html';return;}throw new Error();}
     all=await r.json();
     all.sort((a,b)=>b.r_br-a.r_br);
+    await ucitajKomentare();
     render();
   }catch{
     document.getElementById('tbody').innerHTML=`<tr><td colspan="20" class="empty">Greška pri učitavanju.</td></tr>`;

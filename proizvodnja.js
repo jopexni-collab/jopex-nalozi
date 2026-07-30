@@ -112,6 +112,20 @@ router.get('/za-naplatu', async (req, res) => {
   }
 });
 
+// GET /api/proizvodnja/komentari — SVI komentari odjednom (bulk, da lista.html ne mora
+// da pravi poziv po redu/koloni — jedan poziv za cijelu vidljivu tabelu). MORA biti
+// registrovano PRIJE '/:r_br' ispod, inače bi Express "komentari" protumačio kao r_br.
+router.get('/komentari', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+  try {
+    const r = await pool.query('SELECT r_br, kolona, tekst, autor_ime, kreirano, azurirano FROM celija_komentari');
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/proizvodnja/:r_br - jedan nalog
 router.get('/:r_br', async (req, res) => {
   const user = req.session?.user;
@@ -753,6 +767,40 @@ router.patch('/:r_br/promijeni-broj', async (req, res) => {
     res.status(err.status || 500).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+/* ═══ KOMENTARI NA ĆELIJAMA (kao u Excel-u) ═══════════════════════════════ */
+
+// PUT /api/proizvodnja/:r_br/komentar/:kolona — kreira ili ažurira komentar (upsert).
+router.put('/:r_br/komentar/:kolona', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+  const tekst = (req.body?.tekst || '').trim();
+  if (!tekst) return res.status(400).json({ error: 'Komentar ne može biti prazan.' });
+  try {
+    const r = await pool.query(
+      `INSERT INTO celija_komentari (r_br, kolona, tekst, autor_id, autor_ime, azurirano)
+       VALUES ($1,$2,$3,$4,$5,now())
+       ON CONFLICT (r_br, kolona) DO UPDATE SET tekst=$3, autor_id=$4, autor_ime=$5, azurirano=now()
+       RETURNING *`,
+      [req.params.r_br, req.params.kolona, tekst, user.id, user.ime_prezime]
+    );
+    res.json(r.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/proizvodnja/:r_br/komentar/:kolona
+router.delete('/:r_br/komentar/:kolona', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
+  try {
+    await pool.query('DELETE FROM celija_komentari WHERE r_br=$1 AND kolona=$2', [req.params.r_br, req.params.kolona]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
