@@ -530,6 +530,17 @@ function izaberiBlagajnaPJ(objektId){
   document.getElementById('blagajna-panel').style.display='block';
   azurirajValutaLabeleBlagajna();
   ucitajBlagajnaStanje();
+  // KLJUČNO: blagajnik radi SAMO sa svojim PJ — glavna lista dole (koja inače pokazuje
+  // SVE PJ pomiješano) mora se sinhronizovati sa izborom gore, inače blagajnik vidi tuđe
+  // PJ zapise pomiješane sa svojima, što je zbunjujuće i nema smisla (stanje se ionako
+  // vodi odvojeno po PJ).
+  const pj=mojiPJovi.find(p=>String(p.id)===String(objektId));
+  const filPj=document.getElementById('fil-pj');
+  if(pj && filPj){
+    if(![...filPj.options].some(o=>o.value===pj.naziv)) filPj.innerHTML+=`<option value="${esc(pj.naziv)}">${esc(pj.naziv)}</option>`;
+    filPj.value=pj.naziv;
+    load();
+  }
   // Difoltni period je "Danas" — postavlja i pokreće OBE liste (šta je u blagajni +
   // kako je razdužena) odjednom, isti zajednički period-birač za oba.
   const danasBtn=[...document.querySelectorAll('.btn-brzi-period')].find(b=>b.textContent.trim()==='Danas');
@@ -569,51 +580,79 @@ async function ucitajBlagajnaBreakdown(tiho){
   if(!pj) return;
   const cont=document.getElementById('blagajna-breakdown-lista');
   if(!tiho) cont.innerHTML='<div style="color:#8b96a5;">Učitavanje...</div>';
-  const params=new URLSearchParams();
-  params.set('objekt_naziv', pj.naziv);
-  const od=document.getElementById('bd-od').value;
-  const do_=document.getElementById('bd-do').value;
-  if(od) params.set('od', od);
-  if(do_) params.set('do', do_);
   try{
-    // Udio SVAKOG zapisa koji je JOŠ UVIJEK u blagajni (0 = potpuno razduženo, 1 = u
-    // potpunosti još u blagajni, između = granica pada USRED tog iznosa — dio je
-    // razdužen, dio nije). Računa se na OSNOVU CIJELE istorije (ne samo izabranog
-    // perioda), inače granica ne bi bila tačna ako je period sužen a novac stariji.
-    const udioUBlagajni=await udioUBlagajniPoZapisu(pj);
+    // Uzima se CIJELA istorija (gotovina + razduženja), ne samo izabrani period — potrebno
+    // da bi se tačno izračunao POČETNI saldo prvog prikazanog dana (prenos iz prošlosti).
+    // Period-filter (bd-od/bd-do) se primjenjuje SAMO na prikaz (koji dani se renderuju),
+    // ne na samu računicu — inače bi "prenos" bio pogrešan kad je period sužen.
+    const [gotovinaRes, razduzenjaRes] = await Promise.all([
+      fetch(`${API}/api/gotovina?objekt_naziv=${encodeURIComponent(pj.naziv)}`),
+      fetch(`${API}/api/blagajna-razduzenja?objekt_id=${blagajnaObjektId}`),
+    ]);
+    let gRows=await gotovinaRes.json();
+    const rzRows=await razduzenjaRes.json();
+    gRows=gRows.filter(x=>x.predao_blagajniku && !jeVpBankaRed(x));
 
-    const r=await fetch(`${API}/api/gotovina?${params}`);
-    let rows=await r.json();
-    // KLJUČNO: "Šta čini stanje u blagajni" smije prikazivati SAMO zapise koji su STVARNO
-    // predani blagajniku (predao_blagajniku=true) — nepredani zapisi (npr. tek napravljena
-    // otpremnica koja čeka potvrdu) fizički JOŠ NISU u blagajni, pa ne smiju ni ovdje da se
-    // pojave, bez obzira što spadaju u isti PJ/period.
-    rows=rows.filter(x=>x.predao_blagajniku && !jeVpBankaRed(x));
-    if(!rows.length){ cont.innerHTML='<div style="color:#8b96a5;">Nema zapisa za izabrani period.</div>'; return; }
-    const ukupno=rows.reduce((s,x)=>s+parseFloat(x.iznos||0),0);
-    cont.innerHTML=`<div style="font-weight:700;margin-bottom:6px;">${rows.length} zapisa &middot; Ukupno: ${fmValuta(ukupno, pj.valuta)}</div>
-      <div style="font-size:10px;color:#8b96a5;margin-bottom:6px;">🔴 gotovina — još u blagajni &middot; 🟢 razduženo — već predato (banka/sef)</div>` +
-      rows.map(x=>{
-        const udio=udioUBlagajni.get(x.id) ?? 0; // 0..1
-        const iznosUBlagajni=+(parseFloat(x.iznos||0)*udio).toFixed(2);
-        const iznosRazduzeno=+(parseFloat(x.iznos||0)-iznosUBlagajni).toFixed(2);
-        let iznosPrikaz;
-        if(udio>=0.999){
-          iznosPrikaz=`<span style="font-weight:700;color:var(--red);">${fmValuta(x.iznos, x.valuta)}</span>`;
-        }else if(udio<=0.001){
-          iznosPrikaz=`<span style="font-weight:700;color:var(--green);">${fmValuta(x.iznos, x.valuta)}</span>`;
-        }else{
-          // Granica pada usred ovog iznosa — prikaži OBA dijela, razdvojena.
-          const oznaka=x.valuta==='EUR'?'€':'KM';
-          iznosPrikaz=`<span style="font-weight:700;color:var(--red);">${fm(iznosUBlagajni)}</span><span style="color:#c8ccd2;"> / </span><span style="font-weight:700;color:var(--green);">${fm(iznosRazduzeno)} ${oznaka}</span>`;
-        }
-        const ikonica=udio>=0.999?'🔴':udio<=0.001?'🟢':'🔴🟢';
-        return `
-        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #e8eaed;">
-          <span>${ikonica} ${fd(x.datum)} &middot; ${esc(x.primio)} &middot; ${esc(x.opis||x.izvor||'')}${udio>0.001&&udio<0.999?' <span style="font-size:9.5px;color:#8b96a5;">(djelimično razduženo)</span>':''}</span>
-          <span>${iznosPrikaz}</span>
+    // Grupiši SVE stavke (uplate i isplate/razduženja) po danu.
+    const poDanu=new Map(); // 'YYYY-MM-DD' -> {uplate:[], isplate:[]}
+    function osiguraj(dan){ if(!poDanu.has(dan)) poDanu.set(dan, {uplate:[], isplate:[]}); return poDanu.get(dan); }
+    gRows.forEach(x=>{
+      const dan=String(x.datum).slice(0,10);
+      const d=osiguraj(dan);
+      const iznos=parseFloat(x.iznos||0);
+      if(iznos>=0) d.uplate.push({iznos, opis:`${esc(x.primio)} — ${esc(x.opis||x.izvor||'')}`, datum:x.datum});
+      else d.isplate.push({iznos:-iznos, opis:`Dug/isplata — ${esc(x.opis||x.izvor||'')}`, datum:x.datum});
+    });
+    rzRows.forEach(rz=>{
+      const dan=String(rz.kreirano).slice(0,10);
+      const d=osiguraj(dan);
+      d.isplate.push({iznos:parseFloat(rz.iznos||0), opis:`${rz.tip==='banka'?'🏦 Razduženo u banku':'🔒 Ostavljeno u sef'}${rz.napomena?' — '+esc(rz.napomena):''}${rz.status!=='potvrdjeno'?' (⏳ na čekanju potvrde)':''}`, datum:rz.kreirano});
+    });
+
+    const svidani=[...poDanu.keys()].sort(); // hronološki, najstariji prvo
+    if(!svidani.length){ cont.innerHTML='<div style="color:#8b96a5;">Nema zapisa.</div>'; return; }
+
+    // Period-filter — koji dani se STVARNO prikazuju (računica gore ostaje na CIJELOJ istoriji).
+    const odFil=document.getElementById('bd-od').value;
+    const doFil=document.getElementById('bd-do').value;
+
+    let saldo=0;
+    let html='';
+    svidani.forEach(dan=>{
+      const {uplate, isplate}=poDanu.get(dan);
+      const sumaUplate=uplate.reduce((s,x)=>s+x.iznos,0);
+      const sumaIsplate=isplate.reduce((s,x)=>s+x.iznos,0);
+      const otvaranje=saldo;
+      saldo=+(otvaranje+sumaUplate-sumaIsplate).toFixed(2);
+
+      const uPeriodu = (!odFil || dan>=odFil) && (!doFil || dan<=doFil);
+      if(!uPeriodu) return; // preskoči prikaz (računica gore je već obračunala saldo)
+
+      const redUplate=[...uplate];
+      if(Math.abs(otvaranje)>0.004 && otvaranje>0) redUplate.unshift({iznos:otvaranje, opis:'↩ Prenos iz prethodnog dana', prenos:true});
+      const redIsplate=[...isplate];
+      if(Math.abs(otvaranje)>0.004 && otvaranje<0) redIsplate.unshift({iznos:-otvaranje, opis:'↩ Prenos iz prethodnog dana (dug)', prenos:true});
+
+      html+=`
+        <div style="border:1px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:hidden;">
+          <div style="background:#eef2f7;padding:6px 10px;font-weight:700;font-size:11.5px;">${fd(dan)}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;">
+            <div style="padding:8px 10px;border-right:1px solid var(--border);">
+              <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;margin-bottom:4px;">↓ Uplate</div>
+              ${redUplate.length?redUplate.map(u=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;${u.prenos?'font-style:italic;color:#8b96a5;':''}"><span>${u.opis}</span><span style="font-weight:700;">${fmValuta(u.iznos,pj.valuta)}</span></div>`).join(''):'<div style="font-size:11px;color:#c8ccd2;">—</div>'}
+            </div>
+            <div style="padding:8px 10px;">
+              <div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;margin-bottom:4px;">↑ Isplate / Razduženja</div>
+              ${redIsplate.length?redIsplate.map(u=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;${u.prenos?'font-style:italic;color:#8b96a5;':''}"><span>${u.opis}</span><span style="font-weight:700;">${fmValuta(u.iznos,pj.valuta)}</span></div>`).join(''):'<div style="font-size:11px;color:#c8ccd2;">—</div>'}
+            </div>
+          </div>
+          <div style="background:#f8f9fc;padding:6px 10px;display:flex;justify-content:space-between;font-size:11.5px;font-weight:800;border-top:1px solid var(--border);">
+            <span>Presek dana</span>
+            <span style="color:${saldo>=0?'var(--dark)':'var(--red)'};">${fmValuta(saldo,pj.valuta)}${saldo>0.004?' → prenosi se sutra':''}</span>
+          </div>
         </div>`;
-      }).join('');
+    });
+    cont.innerHTML=html || '<div style="color:#8b96a5;">Nema zapisa za izabrani period.</div>';
   }catch(e){ cont.innerHTML='<div style="color:var(--red);">Greška pri učitavanju.</div>'; }
 }
 
