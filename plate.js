@@ -27,13 +27,15 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/plate — kreira ili ažurira jedan red (upsert po zaposleni_id+mesec, ako je
-// zaposleni_id poznat; inače uvijek kreira nov red po ime_slobodno).
+// POST /api/plate — kreira ili ažurira jedan red (ukupno se NE ČUVA direktno — uvijek se
+// računa iz gotovina+račun, na frontu i po potrebi ovdje, da nikad ne mogu da se raziđu).
 router.post('/', async (req, res) => {
   const user = req.session.user;
   const {
-    id, zaposleni_id, ime_slobodno, mesec, iznos_racun_eur, iznos_racun_km,
-    ukupno_km, bonus_km, bonus_razlog, kazna_km, kazna_razlog, napomena,
+    id, zaposleni_id, ime_slobodno, mesec,
+    iznos_gotovina_eur, iznos_gotovina_km, iznos_racun_km,
+    bonus_km, bonus_razlog, kazna_km, kazna_razlog,
+    tag_planiranje, tag_razlog, napomena,
   } = req.body || {};
   if (!mesec) return res.status(400).json({ error: 'Mesec je obavezan.' });
   if (!zaposleni_id && !ime_slobodno?.trim())
@@ -43,23 +45,25 @@ router.post('/', async (req, res) => {
     if (id) {
       r = await pool.query(
         `UPDATE plate SET
-           zaposleni_id=$1, ime_slobodno=$2, iznos_racun_eur=$3, iznos_racun_km=$4,
-           ukupno_km=$5, bonus_km=$6, bonus_razlog=$7, kazna_km=$8, kazna_razlog=$9,
-           napomena=$10, azurirano=now()
-         WHERE id=$11 RETURNING *`,
-        [zaposleni_id || null, ime_slobodno || null, iznos_racun_eur || 0, iznos_racun_km || 0,
-         ukupno_km || 0, bonus_km || 0, bonus_razlog || null, kazna_km || 0, kazna_razlog || null,
-         napomena || null, id]
+           zaposleni_id=$1, ime_slobodno=$2, iznos_gotovina_eur=$3, iznos_gotovina_km=$4,
+           iznos_racun_km=$5, bonus_km=$6, bonus_razlog=$7, kazna_km=$8, kazna_razlog=$9,
+           tag_planiranje=$10, tag_razlog=$11, napomena=$12, azurirano=now()
+         WHERE id=$13 RETURNING *`,
+        [zaposleni_id || null, ime_slobodno || null, iznos_gotovina_eur || 0, iznos_gotovina_km || 0,
+         iznos_racun_km || 0, bonus_km || 0, bonus_razlog || null, kazna_km || 0, kazna_razlog || null,
+         tag_planiranje || null, tag_razlog || null, napomena || null, id]
       );
     } else {
       r = await pool.query(
         `INSERT INTO plate
-           (zaposleni_id, ime_slobodno, mesec, iznos_racun_eur, iznos_racun_km, ukupno_km,
-            bonus_km, bonus_razlog, kazna_km, kazna_razlog, napomena, upisao_id, upisao_ime)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-        [zaposleni_id || null, ime_slobodno || null, mesec + '-01', iznos_racun_eur || 0,
-         iznos_racun_km || 0, ukupno_km || 0, bonus_km || 0, bonus_razlog || null,
-         kazna_km || 0, kazna_razlog || null, napomena || null, user.id, user.ime_prezime]
+           (zaposleni_id, ime_slobodno, mesec, iznos_gotovina_eur, iznos_gotovina_km,
+            iznos_racun_km, bonus_km, bonus_razlog, kazna_km, kazna_razlog,
+            tag_planiranje, tag_razlog, napomena, upisao_id, upisao_ime)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+        [zaposleni_id || null, ime_slobodno || null, mesec + '-01', iznos_gotovina_eur || 0,
+         iznos_gotovina_km || 0, iznos_racun_km || 0, bonus_km || 0, bonus_razlog || null,
+         kazna_km || 0, kazna_razlog || null, tag_planiranje || null, tag_razlog || null,
+         napomena || null, user.id, user.ime_prezime]
       );
     }
     res.json(r.rows[0]);
@@ -78,26 +82,68 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// POST /api/plate/kopiraj-sledeci-mjesec — PLANIRANJE: kopira sve redove iz mjeseca X u
+// mjesec X+1 kao polaznu tačku (isti gotovina/račun iznosi, isti tagovi vidljivi da se
+// ne zaboravi ko je bio označen za povećanje/smanjenje), BEZ bonusa/kazni (to je uvijek
+// specifično za taj mjesec, ne prenosi se automatski). Ne diraj ako ciljni mjesec već
+// ima redove — sigurnosna provjera da se slučajno ne prepiše nešto već uneseno.
+router.post('/kopiraj-sledeci-mjesec', async (req, res) => {
+  const user = req.session.user;
+  const { iz_mjeseca, u_mjesec } = req.body || {};
+  if (!iz_mjeseca || !u_mjesec) return res.status(400).json({ error: 'Nedostaju mjeseci.' });
+  try {
+    const postoje = await pool.query(
+      `SELECT COUNT(*) FROM plate WHERE to_char(mesec,'YYYY-MM')=$1`, [u_mjesec]
+    );
+    if (+postoje.rows[0].count > 0)
+      return res.status(400).json({ error: `Mjesec ${u_mjesec} već ima unesene redove — obriši ih prvo ako želiš da ponovo kopiraš, ili ih uredi ručno.` });
+
+    const stari = await pool.query(
+      `SELECT * FROM plate WHERE to_char(mesec,'YYYY-MM')=$1`, [iz_mjeseca]
+    );
+    if (!stari.rows.length) return res.status(400).json({ error: `Nema redova u ${iz_mjeseca} za kopiranje.` });
+
+    const novi = [];
+    for (const red of stari.rows) {
+      const r = await pool.query(
+        `INSERT INTO plate
+           (zaposleni_id, ime_slobodno, mesec, iznos_gotovina_eur, iznos_gotovina_km,
+            iznos_racun_km, tag_planiranje, tag_razlog, napomena, upisao_id, upisao_ime)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+        [red.zaposleni_id, red.ime_slobodno, u_mjesec + '-01', red.iznos_gotovina_eur,
+         red.iznos_gotovina_km, red.iznos_racun_km, red.tag_planiranje, red.tag_razlog,
+         'Kopirano iz ' + iz_mjeseca + ' (planiranje)', user.id, user.ime_prezime]
+      );
+      novi.push(r.rows[0]);
+    }
+    res.json({ ok: true, kopirano: novi.length, redovi: novi });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/plate/statistika — agregat po zaposlenom kroz vrijeme, i ukupno po mjesecu.
 router.get('/statistika', async (req, res) => {
   try {
     const poZaposlenom = await pool.query(`
       SELECT COALESCE(z.ime_prezime, p.ime_slobodno) AS ime,
              COUNT(*) AS broj_mjeseci,
-             SUM(p.ukupno_km) AS ukupno_bruto,
+             SUM(p.iznos_gotovina_km + p.iznos_racun_km) AS ukupno_bruto,
              SUM(p.bonus_km) AS ukupno_bonus,
              SUM(p.kazna_km) AS ukupno_kazna,
-             SUM(p.ukupno_km - p.kazna_km) AS ukupno_isplaceno
+             SUM(p.iznos_gotovina_km + p.iznos_racun_km - p.kazna_km) AS ukupno_isplaceno
       FROM plate p LEFT JOIN zaposleni z ON z.id = p.zaposleni_id
       GROUP BY COALESCE(z.ime_prezime, p.ime_slobodno)
       ORDER BY ukupno_isplaceno DESC
     `);
     const poMjesecu = await pool.query(`
       SELECT to_char(mesec,'YYYY-MM') AS mesec,
-             SUM(ukupno_km) AS ukupno_bruto,
+             SUM(iznos_gotovina_km + iznos_racun_km) AS ukupno_bruto,
              SUM(bonus_km) AS ukupno_bonus,
              SUM(kazna_km) AS ukupno_kazna,
-             SUM(ukupno_km - kazna_km) AS ukupno_isplaceno,
+             SUM(iznos_gotovina_km + iznos_racun_km - kazna_km) AS ukupno_isplaceno,
+             SUM(iznos_racun_km) AS ukupno_racun,
+             SUM(iznos_gotovina_km) AS ukupno_gotovina,
              COUNT(*) AS broj_zaposlenih
       FROM plate GROUP BY mesec ORDER BY mesec DESC
     `);
