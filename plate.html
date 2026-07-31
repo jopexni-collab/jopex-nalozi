@@ -42,6 +42,8 @@ tr:hover td{background:#fbfcfd;}
 .tag-up.off{background:#f0f2f5;color:#b8c0cb;}
 .tag-down{background:#fce8e6;color:var(--red);}
 .tag-down.off{background:#f0f2f5;color:#b8c0cb;}
+.btn-zaokruzi{flex:1;background:#eef0f3;border:1px solid var(--border);border-radius:4px;padding:2px 3px;font-size:9px;font-weight:700;cursor:pointer;color:#6b7a8d;}
+.btn-zaokruzi:hover{background:#e2e6ea;}
 .izvor-info{font-size:9.5px;color:#8b96a5;}
 .izvor-info a{color:var(--blue);}
 .ime-cell{min-width:150px;}
@@ -195,9 +197,16 @@ function azurirajStrelicSort(){
   });
 }
 
+function jeTekuciMesec(){
+  const sad=new Date();
+  const trenutni=`${sad.getFullYear()}-${String(sad.getMonth()+1).padStart(2,'0')}`;
+  return trenutniMesec()===trenutni;
+}
+
 function renderMjesecTabela(){
   const tbody=document.getElementById('mjesec-tbody');
   if(!trenutniRedovi.length){ tbody.innerHTML='<tr><td colspan="11" class="empty">Nema unesenih redova za ovaj mjesec.</td></tr>'; azurirajSume(); azurirajStrelicSort(); return; }
+  const tekuciMjesec=jeTekuciMesec();
   // Sortira se PRIKAZ, ali svako dugme/polje i dalje koristi ORIGINALNI indeks (i) iz
   // trenutniRedovi — inače bi klik posle sortiranja menjao pogrešan red.
   const saIndeksom=trenutniRedovi.map((row,i)=>({row,i}));
@@ -205,6 +214,26 @@ function renderMjesecTabela(){
   tbody.innerHTML=sortirano.map(({row,i})=>{
     const ukupno=izracunajUkupno(row);
     const isplaceno=ukupno-(parseFloat(row.kazna_km)||0);
+    // KLJUČNO: red koji je VEĆ SAČUVAN (ima id) i NE pripada tekućem mjesecu je ZAKLJUČAN —
+    // nema smisla da se prošli, već obračunati mjeseci mijenjaju naknadno. Tekući mjesec
+    // ostaje slobodan za rad dok se ne "zatvori" prelaskom u sledeći mjesec.
+    const zakljucano = row.id && !tekuciMjesec;
+    if(zakljucano){
+      return `
+      <tr data-i="${i}" style="opacity:.75;background:#fafbfc;">
+        <td class="ime-cell"><b>${esc(imeReda(row)||row.ime_slobodno)}</b> <span style="font-size:9px;color:#b8c0cb;" title="Prošli mjesec je zaključan">🔒</span></td>
+        <td style="text-align:right;">${fm(row.iznos_gotovina_eur)}</td>
+        <td style="text-align:right;">${fm(row.iznos_gotovina_km)}</td>
+        <td style="text-align:right;">${fm(row.iznos_racun_km)}</td>
+        <td style="font-weight:800;text-align:right;">${fm(ukupno)}</td>
+        <td style="text-align:right;color:var(--green);">${row.bonus_km>0?fm(row.bonus_km):'—'}</td>
+        <td style="text-align:right;color:var(--red);">${row.kazna_km>0?fm(row.kazna_km):'—'}</td>
+        <td style="font-weight:800;text-align:right;color:var(--dark);">${fm(isplaceno)}</td>
+        <td>${row.tag_planiranje==='povecanje'?'▲':row.tag_planiranje==='smanjenje'?'▼':'—'}</td>
+        <td style="font-size:10.5px;color:#8b96a5;">${esc(row.napomena||'')}</td>
+        <td></td>
+      </tr>`;
+    }
     return `
     <tr data-i="${i}">
       <td class="ime-cell">
@@ -214,8 +243,14 @@ function renderMjesecTabela(){
              <input type="text" value="${esc(row.ime_slobodno||'')}" placeholder="...ili slobodno ime ako nije na listi" onchange="azurirajRed(${i},'ime_slobodno',this.value)" style="margin-top:3px;">`
         }
       </td>
-      <td><input type="number" step="0.01" class="mali-broj" value="${row.iznos_gotovina_eur||0}" onchange="azurirajRed(${i},'iznos_gotovina_eur',this.value)"></td>
-      <td><input type="number" step="0.01" class="mali-broj" value="${row.iznos_gotovina_km||0}" onchange="azurirajRed(${i},'iznos_gotovina_km',this.value)"></td>
+      <td><input type="number" step="0.01" class="mali-broj" value="${row.iznos_gotovina_eur||0}" onchange="azurirajGotovinaEur(${i},this.value)"></td>
+      <td>
+        <input type="number" step="0.01" class="mali-broj" value="${row.iznos_gotovina_km||0}" onchange="azurirajGotovinaKm(${i},this.value)">
+        <div style="display:flex;gap:2px;margin-top:2px;">
+          <button class="btn-zaokruzi" onclick="zaokruziGotovinu(${i},-1)" title="Zaokruži na niže (5 KM)">▼5</button>
+          <button class="btn-zaokruzi" onclick="zaokruziGotovinu(${i},1)" title="Zaokruži na više (5 KM)">▲5</button>
+        </div>
+      </td>
       <td><input type="number" step="0.01" class="mali-broj" value="${row.iznos_racun_km||0}" onchange="azurirajRed(${i},'iznos_racun_km',this.value)" style="${row.tag_planiranje==='povecanje'?'background:#e6f4ea;color:var(--green);font-weight:700;':row.tag_planiranje==='smanjenje'?'background:#fce8e6;color:var(--red);font-weight:700;':''}" title="${row.tag_planiranje?(row.tag_planiranje==='povecanje'?'▲ +50 KM primijenjeno':'▼ -50 KM primijenjeno')+(row.tag_razlog?' — '+esc(row.tag_razlog):''):''}"></td>
       <td style="font-weight:800;text-align:right;${row.tag_planiranje==='povecanje'?'color:var(--green);':row.tag_planiranje==='smanjenje'?'color:var(--red);':''}">${fm(ukupno)}</td>
       <td>
@@ -241,6 +276,34 @@ function renderMjesecTabela(){
 }
 
 
+
+const KURS_EUR_KM=1.95;
+
+// EUR i KM (gotovina) su UVIJEK isti iznos u dvije valute — promjena jednog polja
+// odmah preračunava drugo, da nikad ne mogu da se raziđu.
+function azurirajGotovinaEur(i, eurVrijednost){
+  const eur=parseFloat(eurVrijednost)||0;
+  trenutniRedovi[i].iznos_gotovina_eur=eur;
+  trenutniRedovi[i].iznos_gotovina_km=+(eur*KURS_EUR_KM).toFixed(2);
+  renderMjesecTabela();
+}
+function azurirajGotovinaKm(i, kmVrijednost){
+  const km=parseFloat(kmVrijednost)||0;
+  trenutniRedovi[i].iznos_gotovina_km=km;
+  trenutniRedovi[i].iznos_gotovina_eur=+(km/KURS_EUR_KM).toFixed(2);
+  renderMjesecTabela();
+}
+
+// Zaokruživanje gotovine na najbliži iznos od 5 KM (na više ili na niže) — EUR se
+// automatski preračuna iz novog KM iznosa, isti kurs kao gore.
+function zaokruziGotovinu(i, smjer){
+  const trenutniKm=parseFloat(trenutniRedovi[i].iznos_gotovina_km)||0;
+  const noviKm = smjer>0 ? Math.ceil(trenutniKm/5)*5 : Math.floor(trenutniKm/5)*5;
+  // Ako je vec tacno na petici, pomjeri za jos jednu peticu u tom smjeru (da dugme
+  // uvijek nešto uradi, ne "zaglavi" na istoj vrijednosti).
+  const finalniKm = noviKm===trenutniKm ? noviKm+(smjer>0?5:-5) : noviKm;
+  azurirajGotovinaKm(i, Math.max(0,finalniKm));
+}
 
 function azurirajRed(i, polje, vrijednost){
   trenutniRedovi[i][polje]=vrijednost;
