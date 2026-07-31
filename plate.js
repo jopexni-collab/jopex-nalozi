@@ -105,14 +105,19 @@ router.post('/kopiraj-sledeci-mjesec', async (req, res) => {
 
     const novi = [];
     for (const red of stari.rows) {
+      // Bonus i tag_planiranje se NE prenose automatski (svaki mjesec je posebna odluka)
+      // — samo se pominju kao INFO u napomeni, da se zna šta se desilo prošli mjesec.
+      const infoDelovi = [];
+      if (+red.bonus_km > 0) infoDelovi.push(`prošli mjesec bio bonus ${red.bonus_km} KM`);
+      if (red.tag_planiranje) infoDelovi.push(`prošli mjesec označeno za ${red.tag_planiranje === 'povecanje' ? 'povećanje' : 'smanjenje'}${red.tag_razlog ? ' (' + red.tag_razlog + ')' : ''}`);
+      const napomenaNova = 'Kopirano iz ' + iz_mjeseca + (infoDelovi.length ? ' — ' + infoDelovi.join('; ') : '');
       const r = await pool.query(
         `INSERT INTO plate
            (zaposleni_id, ime_slobodno, mesec, iznos_gotovina_eur, iznos_gotovina_km,
-            iznos_racun_km, tag_planiranje, tag_razlog, napomena, upisao_id, upisao_ime)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+            iznos_racun_km, napomena, upisao_id, upisao_ime)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
         [red.zaposleni_id, red.ime_slobodno, u_mjesec + '-01', red.iznos_gotovina_eur,
-         red.iznos_gotovina_km, red.iznos_racun_km, red.tag_planiranje, red.tag_razlog,
-         'Kopirano iz ' + iz_mjeseca + ' (planiranje)', user.id, user.ime_prezime]
+         red.iznos_gotovina_km, red.iznos_racun_km, napomenaNova, user.id, user.ime_prezime]
       );
       novi.push(r.rows[0]);
     }
