@@ -77,6 +77,13 @@ main{max-width:700px;margin:32px auto;padding:0 16px;}
       <div class="card-arrow">→</div>
     </a>
 
+    <a href="plate.html" class="card violet hidden" id="card-plate">
+      <div class="card-icon">💰</div>
+      <div class="card-title">Plate, troškovi, investicije</div>
+      <div class="card-desc">Mesečno praćenje plata zaposlenih, bonusi, kazne, statistika.</div>
+      <div class="card-arrow">→</div>
+    </a>
+
     <a href="ponude-meni.html" class="card violet hidden" id="card-ponude">
       <div class="card-icon">📝</div>
       <div class="card-title">Ponude</div>
@@ -148,7 +155,7 @@ async function checkAuth(){
 
     // Admin only
     if(admin || u.moze_ugovarati || u.moze_prodavati) show('card-kupci');
-    if(admin){ show('card-korisnici'); show('card-import'); }
+    if(admin){ show('card-korisnici'); show('card-import'); show('card-plate'); }
 
   }catch{location.href='login.html';}
 }
