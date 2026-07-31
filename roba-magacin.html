@@ -425,16 +425,6 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <div id="objekti-msg" style="font-size:12px;margin-top:8px;"></div>
   </div>
 
-  <div class="import-box" id="knjig-kontakti-box">
-    <h3>📗 Knjigovodstveni kontakti</h3>
-    <div class="uzorak-hint">Brojevi telefona kojima se otpremnica šalje za knjigovodstvo (dugme "Pošalji knjigovodstvu" pri potvrdi prodaje u maloprodaji).</div>
-    <div id="knjig-kontakti-lista" style="margin-bottom:10px;"></div>
-    <input type="text" id="novi-knjig-naziv" placeholder="Naziv (npr. Knjigovođa Ana)">
-    <input type="text" id="novi-knjig-broj" placeholder="Broj telefona">
-    <button class="btn-import" onclick="dodajKnjigKontakt()">+ Dodaj kontakt</button>
-    <div id="knjig-kontakti-msg" style="font-size:12px;margin-top:8px;"></div>
-  </div>
-
   <div class="import-box" id="prenos-box">
     <h3>🔄 Prebacivanje robe između objekata</h3>
     <div class="uzorak-hint">Interni transfer stanja — ne prodaja. Cijena u odredišnom PJ se preuzima iz izvornog PJ ako artikal tamo još nema svoju cijenu (možeš je odmah izmijeniti nakon prenosa).</div>
@@ -857,48 +847,6 @@ async function blicPostavi(jm){
   }
 }
 
-async function ucitajKnjigKontakte(){
-  const cont=document.getElementById('knjig-kontakti-lista');
-  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
-  try{
-    const r=await fetch(`${API}/api/podesavanja/knjigovodstvo-kontakti`);
-    const rows=await r.json();
-    if(!rows.length){ cont.innerHTML='<div class="empty-msg">Nema unesenih kontakata.</div>'; return; }
-    cont.innerHTML=rows.map(k=>`
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#f7f8fa;border-radius:6px;margin-bottom:6px;">
-        <div><b>${esc(k.naziv)}</b> <span style="color:#8b96a5;font-size:12px;">${esc(k.broj)}</span></div>
-        <button onclick="obrisiKnjigKontakt(${k.id})" style="background:none;border:none;color:var(--red,#c0392b);cursor:pointer;font-size:15px;">🗑</button>
-      </div>
-    `).join('');
-  }catch(e){ cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>'; }
-}
-
-async function dodajKnjigKontakt(){
-  const naziv=document.getElementById('novi-knjig-naziv').value.trim();
-  const broj=document.getElementById('novi-knjig-broj').value.trim();
-  const msg=document.getElementById('knjig-kontakti-msg');
-  if(!naziv||!broj){ msg.style.color='red'; msg.textContent='Unesite naziv i broj.'; return; }
-  try{
-    const r=await fetch(`${API}/api/podesavanja/knjigovodstvo-kontakti`,{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({naziv, broj}),
-    });
-    if(!r.ok){ const d=await r.json(); msg.style.color='red'; msg.textContent='✗ '+(d.error||'Greška.'); return; }
-    document.getElementById('novi-knjig-naziv').value='';
-    document.getElementById('novi-knjig-broj').value='';
-    msg.style.color='green'; msg.textContent='✓ Dodato.';
-    ucitajKnjigKontakte();
-  }catch(e){ msg.style.color='red'; msg.textContent='✗ Greška.'; }
-}
-
-async function obrisiKnjigKontakt(id){
-  if(!confirm('Ukloniti ovaj kontakt?')) return;
-  try{
-    await fetch(`${API}/api/podesavanja/knjigovodstvo-kontakti/${id}`,{method:'DELETE'});
-    ucitajKnjigKontakte();
-  }catch(e){ alert('✗ Greška.'); }
-}
-
 async function ucitajObjektiListu(){
   const cont=document.getElementById('objekti-postojeci-lista');
   cont.innerHTML='<div class="spinner">Učitavanje...</div>';
@@ -939,8 +887,8 @@ function renderObjektiListu(){
         <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Email knjigovodstva (za ovaj PJ)</label>
         <input type="email" id="edit-objekat-email-${o.id}" value="${esc(o.email_knjigovodstvo||'')}" placeholder="knjigovodja@primjer.ba" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
         <div style="font-size:10.5px;color:#8b96a5;margin:-4px 0 7px;">Svaka potvrđena otpremnica sa ovog PJ automatski se šalje na ovu adresu, plus dnevni zbirni pregled uveče.</div>
-        <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Telefon knjigovodstva (Viber/WhatsApp)</label>
-        <input type="text" id="edit-objekat-telefon-${o.id}" value="${esc(o.telefon_knjigovodstvo||'')}" placeholder="+387 6X XXX XXX" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
+        <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Telefon knjigovodstva (Viber/WhatsApp) — jedan ili više, razdvojeni zarezom</label>
+        <input type="text" id="edit-objekat-telefon-${o.id}" value="${esc(o.telefon_knjigovodstvo||'')}" placeholder="+387 6X XXX XXX, +387 6Y YYY YYY" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
         <div style="font-size:10.5px;color:#8b96a5;margin:-4px 0 7px;">Da klik na Viber/WhatsApp ide direktno na ovaj broj, kao za kupca.</div>
         <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Valuta</label>
         <select id="edit-objekat-valuta-${o.id}" style="width:100%;font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;margin-bottom:7px;">
@@ -1649,7 +1597,6 @@ fetch(`${API}/api/auth/me`).then(r=>{
   postaviIzvorUvoza('bluesoft');
   popuniImportObjekat();
   ucitajObjektiListu();
-  ucitajKnjigKontakte();
   popuniPrenosObjekte();
   popuniLagerObjekat();
 }).catch(()=>location.href='login.html');

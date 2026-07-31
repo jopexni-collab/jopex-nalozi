@@ -1046,7 +1046,6 @@ function fd(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString(
    za sigurnost ili tačnost (server uvijek zahtijeva objekt_id eksplicitno). */
 const OBJEKAT_KEY='jopex_maloprodaja_objekat';
 let trenutniObjekat=null; // {id, naziv}
-let knjigovodstvoKontakti=[]; // ucitano jednom pri pokretanju (vidi ucitajKnjigovodstvoKontakte)
 
 function ucitajUpamceniObjekat(){
   try{
@@ -2766,13 +2765,6 @@ function linkDokumenta(token){
   return `${location.origin}/otpremnica-dokument.html?token=${encodeURIComponent(token)}`;
 }
 
-async function ucitajKnjigovodstvoKontakte(){
-  try{
-    const r=await fetch(`${API}/api/podesavanja/knjigovodstvo-kontakti`);
-    knjigovodstvoKontakti=await r.json();
-  }catch(e){ knjigovodstvoKontakti=[]; }
-}
-
 function renderPosaljiDugmad(token, broj, telefon, email){
   const link=linkDokumenta(token);
   const poruka=encodeURIComponent(`Otpremnica ${broj} — JoPeX\n${link}`);
@@ -2780,14 +2772,6 @@ function renderPosaljiDugmad(token, broj, telefon, email){
   const waHref = tel ? `https://wa.me/${tel.replace(/^\+/,'')}?text=${poruka}` : `https://wa.me/?text=${poruka}`;
   const viberHref = `viber://forward?text=${poruka}`;
   const mailHref = `mailto:${email||''}?subject=${encodeURIComponent('Otpremnica '+broj+' — JoPeX')}&body=${poruka}`;
-  // Jedno dugme "Pošalji knjigovodstvu" — ako je konfigurisan TAČNO jedan kontakt (Roba i
-  // magacini → Knjigovodstveni kontakti), klik odmah otvara WhatsApp ka njemu. Ako ih je
-  // više, klik prvo traži da se izabere KOJI (mala inline lista), pa tek onda šalje.
-  const knjigBtn = knjigovodstvoKontakti.length
-    ? `<div class="posalji-lbl" style="margin-top:10px;">Knjigovodstvo</div>
-       <div class="posalji-btns"><a class="btn-posalji whatsapp" href="#" onclick="posaljiKnjigovodstvu(event,'${poruka}')"><span class="ic">📗</span>Pošalji knjigovodstvu</a></div>
-       <div id="knjig-izbor-${token}" style="display:none;margin-top:6px;"></div>`
-    : '';
   return `
     <div class="posalji-lbl">Pošalji otpremnicu kupcu</div>
     <div class="posalji-btns">
@@ -2796,24 +2780,7 @@ function renderPosaljiDugmad(token, broj, telefon, email){
       <a class="btn-posalji email" href="${mailHref}"><span class="ic">✉️</span>Email</a>
     </div>
     <div class="posalji-link">${esc(link)}</div>
-    ${knjigBtn}
   `;
-}
-
-function posaljiKnjigovodstvu(event, poruka){
-  event.preventDefault();
-  if(knjigovodstvoKontakti.length===1){
-    const kTel=(knjigovodstvoKontakti[0].broj||'').replace(/[^0-9+]/g,'');
-    window.open(`https://wa.me/${kTel.replace(/^\+/,'')}?text=${poruka}`, '_blank');
-    return;
-  }
-  // Više kontakata — prikaži mali izbor odmah ispod dugmeta na koje se kliknulo.
-  const box=event.target.closest('.posalji-btns').nextElementSibling;
-  box.style.display='block';
-  box.innerHTML=knjigovodstvoKontakti.map(k=>{
-    const kTel=(k.broj||'').replace(/[^0-9+]/g,'');
-    return `<a href="https://wa.me/${kTel.replace(/^\+/,'')}?text=${poruka}" target="_blank" rel="noopener" style="display:block;padding:7px 10px;font-size:12px;background:#f7f8fa;border-radius:6px;margin-bottom:4px;text-decoration:none;color:#1a2733;">📗 ${esc(k.naziv)}</a>`;
-  }).join('');
 }
 
 // Isti obrazac kao renderPosaljiDugmad, ali za "Potvrdu o isplati" — nema unaprijed
@@ -3159,15 +3126,34 @@ function toggleKnjigovodstvo(id){
   if(!o||!o.javni_token){el.innerHTML='<div class="empty-msg">Nema dostupnog linka.</div>';el.classList.add('on');return;}
   const objekat=window.__objektiPoId?.[o.objekt_id];
   const emailKnjig=objekat?.email_knjigovodstvo||'';
-  const telKnjig=(objekat?.telefon_knjigovodstvo||'').replace(/[^0-9+]/g,'');
+  // Podržava VIŠE brojeva odjednom — upisani u istom polju, razdvojeni zarezom (npr.
+  // "065123456, 066234567") — svaki dobija svoju WhatsApp/Viber opciju u istom meniju,
+  // bez ikakve nove dugmadi ili ekrana. Ostaje TAČNO jedan broj = radi kao i do sad.
+  const telefoniKnjig=(objekat?.telefon_knjigovodstvo||'').split(',').map(t=>t.trim()).filter(Boolean);
   const link=linkDokumenta(o.javni_token);
   const poruka=encodeURIComponent(`Otpremnica ${o.broj} — ${o.objekt_naziv||''} — JoPeX\n${link}`);
-  const waHref = telKnjig ? `https://wa.me/${telKnjig.replace(/^\+/,'')}?text=${poruka}` : `https://wa.me/?text=${poruka}`;
-  const viberHref = `viber://forward?text=${poruka}`;
   const mailHref = `mailto:${emailKnjig}?subject=${encodeURIComponent('Otpremnica '+o.broj+' — JoPeX')}&body=${poruka}`;
+
+  let telefoniHtml='';
+  if(!telefoniKnjig.length){
+    const waHref=`https://wa.me/?text=${poruka}`;
+    const viberHref=`viber://forward?text=${poruka}`;
+    telefoniHtml=`
+      <a href="#" onclick="event.preventDefault();posaljiIMarkirajKnjigovodstvo(${id},'${viberHref}',false)">📱 Viber</a>
+      <a href="#" onclick="event.preventDefault();posaljiIMarkirajKnjigovodstvo(${id},'${waHref}',true)">💬 WhatsApp</a>`;
+  }else{
+    telefoniHtml=telefoniKnjig.map(tel=>{
+      const t=tel.replace(/[^0-9+]/g,'');
+      const waHref=`https://wa.me/${t.replace(/^\+/,'')}?text=${poruka}`;
+      const viberHref=`viber://forward?text=${poruka}`;
+      const nazivDio=telefoniKnjig.length>1?` (${esc(tel)})`:'';
+      return `
+        <a href="#" onclick="event.preventDefault();posaljiIMarkirajKnjigovodstvo(${id},'${viberHref}',false)">📱 Viber${nazivDio}</a>
+        <a href="#" onclick="event.preventDefault();posaljiIMarkirajKnjigovodstvo(${id},'${waHref}',true)">💬 WhatsApp${nazivDio}</a>`;
+    }).join('');
+  }
   el.innerHTML=`
-    <a href="#" onclick="event.preventDefault();posaljiIMarkirajKnjigovodstvo(${id},'${viberHref}',false)">📱 Viber</a>
-    <a href="#" onclick="event.preventDefault();posaljiIMarkirajKnjigovodstvo(${id},'${waHref}',true)">💬 WhatsApp</a>
+    ${telefoniHtml}
     <a href="#" onclick="event.preventDefault();posaljiIMarkirajKnjigovodstvo(${id},'${mailHref}',false)">✉️ Email${emailKnjig?'':' (nema podešen email za ovaj PJ)'}</a>
   `;
   el.classList.add('on');
@@ -3327,7 +3313,6 @@ fetch(`${API}/api/auth/me`).then(r=>{
   popuniFilterObjekata();
   ucitajKorpeLokalno();
   renderKosarica();
-  ucitajKnjigovodstvoKontakte();
 
   // Izbor PJ se UVIJEK traži eksplicitno pri ulasku — nikad se tiho ne preskače na osnovu
   // ranije upamćenog izbora. Da se promijeni PJ, mora se odjaviti i ponovo prijaviti.
