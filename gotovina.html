@@ -609,6 +609,15 @@ async function ucitajBlagajnaBreakdown(tiho){
       d.isplate.push({iznos:parseFloat(rz.iznos||0), opis:`${rz.tip==='banka'?'🏦 Razduženo u banku':'🔒 Ostavljeno u sef'}${rz.napomena?' — '+esc(rz.napomena):''}${rz.status!=='potvrdjeno'?' (⏳ na čekanju potvrde)':''}`, datum:rz.kreirano});
     });
 
+    // KRITIČNO: dan bez NIJEDNE stavke (ni uplate ni isplate) se inače NIKAD ne dodaje u
+    // mapu — pa se preskoči u prikazu, čak i kad postoji SALDO prenesen iz prethodnog dana
+    // (npr. blagajna nije prazna, ali danas se ništa novo nije desilo). Zato se poslednji
+    // prikazani dan (kraj izabranog perioda, ili danas ako period nema kraj) UVIJEK
+    // eksplicitno osigurava — prazan ako mora biti, samo da prenos ima gdje da se prikaže.
+    const doFilRani=document.getElementById('bd-do').value;
+    const zadnjiDanZaOsiguranje = doFilRani || new Date().toISOString().slice(0,10);
+    osiguraj(zadnjiDanZaOsiguranje);
+
     const svidani=[...poDanu.keys()].sort(); // hronološki, najstariji prvo
     if(!svidani.length){ cont.innerHTML='<div style="color:#8b96a5;">Nema zapisa.</div>'; return; }
 
