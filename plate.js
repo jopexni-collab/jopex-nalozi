@@ -29,6 +29,23 @@ router.get('/', async (req, res) => {
 
 // POST /api/plate — kreira ili ažurira jedan red (ukupno se NE ČUVA direktno — uvijek se
 // računa iz gotovina+račun, na frontu i po potrebi ovdje, da nikad ne mogu da se raziđu).
+// POST /api/plate/zakljucaj-mjesec — eksplicitno "zatvara" mjesec (nakon "Sačuvaj sve
+// odjednom") — od sad se mijenja SAMO ako neko svjesno otključa (nema takve rute za sad,
+// po dizajnu — otključavanje bi trebalo ići kroz direktan upit u bazi ako ikad zatreba).
+router.post('/zakljucaj-mjesec', async (req, res) => {
+  const { mesec } = req.body || {};
+  if (!mesec) return res.status(400).json({ error: 'Nedostaje mesec.' });
+  try {
+    const r = await pool.query(
+      `UPDATE plate SET zakljucano=true WHERE to_char(mesec,'YYYY-MM')=$1 RETURNING id`,
+      [mesec]
+    );
+    res.json({ ok: true, zakljucano_redova: r.rows.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/', async (req, res) => {
   const user = req.session.user;
   const {

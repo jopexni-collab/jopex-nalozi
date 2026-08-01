@@ -217,7 +217,7 @@ function jeTekuciMesec(){
 // (svaki ima id) — bilo pojedinačno (💾) ili "Sačuvaj sve odjednom". Ako se doda NOV,
 // još nesačuvan red, mjesec se automatski privremeno otključava dok se i taj ne sačuva.
 function jeMjesecZakljucan(){
-  return trenutniRedovi.length>0 && trenutniRedovi.every(r=>r.id);
+  return trenutniRedovi.length>0 && trenutniRedovi.every(r=>r.zakljucano);
 }
 
 function renderMjesecTabela(){
@@ -237,7 +237,7 @@ function renderMjesecTabela(){
     // KLJUČNO: red koji je VEĆ SAČUVAN (ima id) je ZAKLJUČAN čim je CIJELI mjesec potpuno
     // sačuvan (svi redovi imaju id) — nema smisla mijenjati nešto što je već obračunato
     // i "zatvoreno" preko "Sačuvaj sve odjednom".
-    const zakljucano = row.id && zakljucanCijeliMjesec;
+    const zakljucano = !!row.zakljucano;
     if(zakljucano){
       return `
       <tr data-i="${i}" style="opacity:.75;background:#fafbfc;">
@@ -399,6 +399,7 @@ async function sacuvajRed(i){
 // jer sam učitavanje samo puni prikaz na ekranu, ne snima ništa dok se ne potvrdi.
 async function sacuvajSve(){
   if(!trenutniRedovi.length){ alert('Nema redova za snimanje.'); return; }
+  if(!confirm('Ovo će sačuvati SVE redove i ZAKLJUČATI mesec (neće se moći dalje menjati). Nastaviti?')) return;
   const mesec=trenutniMesec();
   let ok=0, greska=0;
   for(let i=0;i<trenutniRedovi.length;i++){
@@ -415,8 +416,16 @@ async function sacuvajSve(){
       ok++;
     }catch(e){ greska++; }
   }
-  renderMjesecTabela();
-  alert(`✓ Sačuvano: ${ok}${greska?`, preskočeno (nepovezano ime): ${greska}`:''}`);
+  if(ok>0 && greska===0){
+    try{
+      await fetch(`${API}/api/plate/zakljucaj-mjesec`,{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({mesec}),
+      });
+    }catch(e){}
+  }
+  await ucitajMesec(); // ponovo učitaj da se povuče zakljucano polje sa servera
+  alert(`✓ Sačuvano: ${ok}${greska?`, preskočeno (nepovezano ime): ${greska}`:''}${greska===0?' — mesec je sad zaključan.':' — mesec NIJE zaključan zbog neuspjelih redova.'}`);
 }
 
 async function obrisiRed(i){
@@ -491,21 +500,25 @@ async function kopirajUSledeciMjesec(){
 function ucitajIstorijskiJul2026(){
   if(trenutniRedovi.length && !confirm('Ovo dodaje 15 redova sa slike. Nastaviti?')) return;
   const podaci=[
+    // NAPOMENA: vrednosti gotovine su ovde OČIŠĆENE od bonusa (bonus je u originalnoj
+    // slici bio VEĆ uračunat u ukupno H, ne dodat na njega) — da bi nova formula
+    // (gotovina+račun+bonus-kazna) ponovo dala tačan H sa slike, bonus se ovde vadi iz
+    // gotovine, pa se posle formulom vraća — krajnji rezultat = isti H kao na slici.
     ['Nenad Božić',656.12,1279.44,1220.56,0],
-    ['Željko Vranješ',583.93,1138.67,1161.33,150],
+    ['Željko Vranješ',507.01,988.67,1161.33,150],
     ['Dragan Božić',381.02,742.99,1157.01,0],
-    ['Nenad Alvirević',632.08,1232.56,1167.44,150],
+    ['Nenad Alvirević',555.16,1082.56,1167.44,150],
     ['Željko Bijelić',146.71,286.09,1013.91,0],
     ['Zlatko Kukrić',131.28,255.99,1044.01,0],
     ['Srđan Mrđa',146.71,286.09,1013.91,0],
     ['Marija Kuprešak',429.49,837.50,1112.50,0],
     ['Bojan Puzić',461.42,899.76,1000.24,0],
     ['Rade Erceg',877.67,1711.46,1115.54,0],
-    ['Bojan Maričić',315.19,614.63,1135.37,150],
+    ['Bojan Maričić',238.27,464.63,1135.37,150],
     ['Goran Pejić',666.67,1300.00,0,0],
-    ['Nikola Kragulj',408.73,797.03,1002.97,200],
+    ['Nikola Kragulj',306.17,597.03,1002.97,200],
     ['David Stanisic',408.73,797.03,1002.97,0],
-    ['Zlatan Zec',584.62,1140.00,0,160],
+    ['Zlatan Zec',502.57,980.00,0,160],
     // Ova trojica su imali SAMO gotovinski deo (nisu bili u "bruto" zbiru originalne
     // tabele — Boban i Ružica su vlasnici, Jovan rukovodilac IT — plaćeni odvojeno).
     ['Jovan Stoiljković',0,0,1112.50,0],
