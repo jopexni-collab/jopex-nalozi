@@ -128,6 +128,8 @@ router.post('/kopiraj-sledeci-mjesec', async (req, res) => {
 });
 
 // GET /api/plate/statistika — agregat po zaposlenom kroz vrijeme, i ukupno po mjesecu.
+// Bonus se DODAJE, kazna se ODUZIMA — obje stvarno utiču na konačan iznos za isplatu
+// (isti model kao "izracunajUkupno" na frontendu, mora ostati usklađeno).
 router.get('/statistika', async (req, res) => {
   try {
     const poZaposlenom = await pool.query(`
@@ -136,7 +138,7 @@ router.get('/statistika', async (req, res) => {
              SUM(p.iznos_gotovina_km + p.iznos_racun_km) AS ukupno_bruto,
              SUM(p.bonus_km) AS ukupno_bonus,
              SUM(p.kazna_km) AS ukupno_kazna,
-             SUM(p.iznos_gotovina_km + p.iznos_racun_km - p.kazna_km) AS ukupno_isplaceno
+             SUM(p.iznos_gotovina_km + p.iznos_racun_km + p.bonus_km - p.kazna_km) AS ukupno_isplaceno
       FROM plate p LEFT JOIN zaposleni z ON z.id = p.zaposleni_id
       GROUP BY COALESCE(z.ime_prezime, p.ime_slobodno)
       ORDER BY ukupno_isplaceno DESC
@@ -146,7 +148,7 @@ router.get('/statistika', async (req, res) => {
              SUM(iznos_gotovina_km + iznos_racun_km) AS ukupno_bruto,
              SUM(bonus_km) AS ukupno_bonus,
              SUM(kazna_km) AS ukupno_kazna,
-             SUM(iznos_gotovina_km + iznos_racun_km - kazna_km) AS ukupno_isplaceno,
+             SUM(iznos_gotovina_km + iznos_racun_km + bonus_km - kazna_km) AS ukupno_isplaceno,
              SUM(iznos_racun_km) AS ukupno_racun,
              SUM(iznos_gotovina_km) AS ukupno_gotovina,
              COUNT(*) AS broj_zaposlenih

@@ -83,10 +83,10 @@ tr:hover td{background:#fbfcfd;}
             <th class="sort-th" data-key="iznos_gotovina_eur" onclick="sortirajPo('iznos_gotovina_eur')">Gotovina € <span class="sort-ic"></span></th>
             <th class="sort-th" data-key="iznos_gotovina_km" onclick="sortirajPo('iznos_gotovina_km')">Gotovina KM <span class="sort-ic"></span></th>
             <th class="sort-th" data-key="iznos_racun_km" onclick="sortirajPo('iznos_racun_km')">Na račun KM <span class="sort-ic"></span></th>
-            <th class="sort-th" data-key="ukupno" onclick="sortirajPo('ukupno')">Ukupno KM <span class="sort-ic"></span></th>
             <th class="sort-th" data-key="bonus_km" onclick="sortirajPo('bonus_km')">Bonus <span class="sort-ic"></span></th>
             <th class="sort-th" data-key="kazna_km" onclick="sortirajPo('kazna_km')">Kazna <span class="sort-ic"></span></th>
-            <th class="sort-th" data-key="isplaceno" onclick="sortirajPo('isplaceno')">Isplaćeno <span class="sort-ic"></span></th>
+            <th class="sort-th" data-key="ukupno" onclick="sortirajPo('ukupno')">Ukupno (za isplatu) <span class="sort-ic"></span></th>
+            <th>Prošli mj.</th>
             <th class="sort-th" data-key="tag_planiranje" onclick="sortirajPo('tag_planiranje')">Plan <span class="sort-ic"></span></th>
             <th>Napomena</th>
             <th></th>
@@ -125,6 +125,7 @@ tr:hover td{background:#fbfcfd;}
 <script>
 const API='';
 let sviZaposleni=[];
+let prosliMjesecMap={}; // kljuc (zaposleni_id ili "ime:x") -> isplaceno prethodnog mjeseca
 let trenutniRedovi=[];
 
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -133,6 +134,12 @@ function trenutniMesec(){ return document.getElementById('mesec-izbor').value; }
 function sledeciMesec(m){
   const [g,mm]=m.split('-').map(Number);
   const d=new Date(g, mm, 1); // mm je 1-indeksiran ulaz, Date mjesec je 0-indeksiran -> vec sledeci
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+function prethodniMesec(m){
+  const [g,mm]=m.split('-').map(Number);
+  const d=new Date(g, mm-2, 1); // mm-1 bi bio isti mjesec (0-indeks), -2 = jedan unazad
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
 
@@ -155,8 +162,12 @@ function selektorZaposlenih(trenutniId){
     sviZaposleni.map(z=>`<option value="${z.id}" ${String(trenutniId)===String(z.id)?'selected':''}>${esc(z.ime_prezime)}</option>`).join('');
 }
 
+// Ukupno = osnovica (gotovina+račun) + bonus - kazna — bonus i kazna nisu odvojene,
+// "dekorativne" cifre, nego stvarno menjaju konačan iznos za taj mjesec (na osnovu
+// odluke ili postignutih rezultata te osobe tog mjeseca).
 function izracunajUkupno(row){
-  return (parseFloat(row.iznos_gotovina_km)||0) + (parseFloat(row.iznos_racun_km)||0);
+  return (parseFloat(row.iznos_gotovina_km)||0) + (parseFloat(row.iznos_racun_km)||0)
+       + (parseFloat(row.bonus_km)||0) - (parseFloat(row.kazna_km)||0);
 }
 
 let sortKolona=null, sortSmjer=1; // 1=rastuce, -1=opadajuce
@@ -168,7 +179,6 @@ function imeReda(row){
 function vrijednostZaSort(row, kljuc){
   if(kljuc==='ime') return imeReda(row).toLowerCase();
   if(kljuc==='ukupno') return izracunajUkupno(row);
-  if(kljuc==='isplaceno') return izracunajUkupno(row)-(parseFloat(row.kazna_km)||0);
   if(kljuc==='tag_planiranje') return row.tag_planiranje||'';
   return parseFloat(row[kljuc])||0;
 }
@@ -203,32 +213,42 @@ function jeTekuciMesec(){
   return trenutniMesec()===trenutni;
 }
 
+// Cijeli mjesec se smatra "zaključanim" čim su SVI trenutno učitani redovi sačuvani
+// (svaki ima id) — bilo pojedinačno (💾) ili "Sačuvaj sve odjednom". Ako se doda NOV,
+// još nesačuvan red, mjesec se automatski privremeno otključava dok se i taj ne sačuva.
+function jeMjesecZakljucan(){
+  return trenutniRedovi.length>0 && trenutniRedovi.every(r=>r.id);
+}
+
 function renderMjesecTabela(){
   const tbody=document.getElementById('mjesec-tbody');
   if(!trenutniRedovi.length){ tbody.innerHTML='<tr><td colspan="11" class="empty">Nema unesenih redova za ovaj mjesec.</td></tr>'; azurirajSume(); azurirajStrelicSort(); return; }
-  const tekuciMjesec=jeTekuciMesec();
+  const zakljucanCijeliMjesec=jeMjesecZakljucan();
   // Sortira se PRIKAZ, ali svako dugme/polje i dalje koristi ORIGINALNI indeks (i) iz
   // trenutniRedovi — inače bi klik posle sortiranja menjao pogrešan red.
   const saIndeksom=trenutniRedovi.map((row,i)=>({row,i}));
   const sortirano=primijeniSortiranje(saIndeksom.map(x=>x.row)).map(sortRow=>saIndeksom.find(x=>x.row===sortRow));
   tbody.innerHTML=sortirano.map(({row,i})=>{
     const ukupno=izracunajUkupno(row);
-    const isplaceno=ukupno-(parseFloat(row.kazna_km)||0);
-    // KLJUČNO: red koji je VEĆ SAČUVAN (ima id) i NE pripada tekućem mjesecu je ZAKLJUČAN —
-    // nema smisla da se prošli, već obračunati mjeseci mijenjaju naknadno. Tekući mjesec
-    // ostaje slobodan za rad dok se ne "zatvori" prelaskom u sledeći mjesec.
-    const zakljucano = row.id && !tekuciMjesec;
+    const kljucPoredjenja=row.zaposleni_id||('ime:'+(row.ime_slobodno||'').toLowerCase().trim());
+    const prosliUkupno=prosliMjesecMap[kljucPoredjenja];
+    const poredjenjeBoja = prosliUkupno==null ? '' : ukupno>prosliUkupno ? 'color:var(--green);' : ukupno<prosliUkupno ? 'color:var(--red);' : '';
+    const poredjenjeHtml = prosliUkupno==null ? '<span style="color:#c8ccd2;">—</span>' : `<span style="font-size:10.5px;color:#8b96a5;">${fm(prosliUkupno)}</span>`;
+    // KLJUČNO: red koji je VEĆ SAČUVAN (ima id) je ZAKLJUČAN čim je CIJELI mjesec potpuno
+    // sačuvan (svi redovi imaju id) — nema smisla mijenjati nešto što je već obračunato
+    // i "zatvoreno" preko "Sačuvaj sve odjednom".
+    const zakljucano = row.id && zakljucanCijeliMjesec;
     if(zakljucano){
       return `
       <tr data-i="${i}" style="opacity:.75;background:#fafbfc;">
-        <td class="ime-cell"><b>${esc(imeReda(row)||row.ime_slobodno)}</b> <span style="font-size:9px;color:#b8c0cb;" title="Prošli mjesec je zaključan">🔒</span></td>
+        <td class="ime-cell"><b>${esc(imeReda(row)||row.ime_slobodno)}</b> <span style="font-size:9px;color:#b8c0cb;" title="Mjesec je zaključan (sve sačuvano)">🔒</span></td>
         <td style="text-align:right;">${fm(row.iznos_gotovina_eur)}</td>
         <td style="text-align:right;">${fm(row.iznos_gotovina_km)}</td>
         <td style="text-align:right;">${fm(row.iznos_racun_km)}</td>
-        <td style="font-weight:800;text-align:right;">${fm(ukupno)}</td>
         <td style="text-align:right;color:var(--green);">${row.bonus_km>0?fm(row.bonus_km):'—'}</td>
         <td style="text-align:right;color:var(--red);">${row.kazna_km>0?fm(row.kazna_km):'—'}</td>
-        <td style="font-weight:800;text-align:right;color:var(--dark);">${fm(isplaceno)}</td>
+        <td style="font-weight:800;text-align:right;${poredjenjeBoja}">${fm(ukupno)}</td>
+        <td>${poredjenjeHtml}</td>
         <td>${row.tag_planiranje==='povecanje'?'▲':row.tag_planiranje==='smanjenje'?'▼':'—'}</td>
         <td style="font-size:10.5px;color:#8b96a5;">${esc(row.napomena||'')}</td>
         <td></td>
@@ -243,7 +263,13 @@ function renderMjesecTabela(){
              <input type="text" value="${esc(row.ime_slobodno||'')}" placeholder="...ili slobodno ime ako nije na listi" onchange="azurirajRed(${i},'ime_slobodno',this.value)" style="margin-top:3px;">`
         }
       </td>
-      <td><input type="number" step="0.01" class="mali-broj" value="${row.iznos_gotovina_eur||0}" onchange="azurirajGotovinaEur(${i},this.value)"></td>
+      <td>
+        <input type="number" step="0.01" class="mali-broj" value="${row.iznos_gotovina_eur||0}" onchange="azurirajGotovinaEur(${i},this.value)">
+        <div style="display:flex;gap:2px;margin-top:2px;">
+          <button class="btn-zaokruzi" onclick="zaokruziGotovinuEur(${i},-1)" title="Zaokruži na niže (5 €)">▼5</button>
+          <button class="btn-zaokruzi" onclick="zaokruziGotovinuEur(${i},1)" title="Zaokruži na više (5 €)">▲5</button>
+        </div>
+      </td>
       <td>
         <input type="number" step="0.01" class="mali-broj" value="${row.iznos_gotovina_km||0}" onchange="azurirajGotovinaKm(${i},this.value)">
         <div style="display:flex;gap:2px;margin-top:2px;">
@@ -251,18 +277,19 @@ function renderMjesecTabela(){
           <button class="btn-zaokruzi" onclick="zaokruziGotovinu(${i},1)" title="Zaokruži na više (5 KM)">▲5</button>
         </div>
       </td>
-      <td><input type="number" step="0.01" class="mali-broj" value="${row.iznos_racun_km||0}" onchange="azurirajRed(${i},'iznos_racun_km',this.value)" style="${row.tag_planiranje==='povecanje'?'background:#e6f4ea;color:var(--green);font-weight:700;':row.tag_planiranje==='smanjenje'?'background:#fce8e6;color:var(--red);font-weight:700;':''}" title="${row.tag_planiranje?(row.tag_planiranje==='povecanje'?'▲ +50 KM primijenjeno':'▼ -50 KM primijenjeno')+(row.tag_razlog?' — '+esc(row.tag_razlog):''):''}"></td>
-      <td style="font-weight:800;text-align:right;${row.tag_planiranje==='povecanje'?'color:var(--green);':row.tag_planiranje==='smanjenje'?'color:var(--red);':''}">${fm(ukupno)}</td>
+      <td><input type="number" step="0.01" class="mali-broj" value="${row.iznos_racun_km||0}" onchange="azurirajRed(${i},'iznos_racun_km',this.value)" style="${row.tag_planiranje==='povecanje'?'background:#e6f4ea;color:var(--green);font-weight:700;':row.tag_planiranje==='smanjenje'?'background:#fce8e6;color:var(--red);font-weight:700;':''}" title="${row.tag_planiranje?(row.tag_planiranje==='povecanje'?'▲ primijenjeno':'▼ primijenjeno')+(row.tag_razlog?' — '+esc(row.tag_razlog):''):''}"></td>
       <td>
         <input type="number" step="0.01" class="mali-broj" value="${row.bonus_km||0}" onchange="azurirajRed(${i},'bonus_km',this.value)" style="color:var(--green);" title="${esc(row.bonus_razlog||'')}">
       </td>
       <td>
         <input type="number" step="0.01" class="mali-broj" value="${row.kazna_km||0}" onchange="azurirajRed(${i},'kazna_km',this.value)" style="color:var(--red);" title="${esc(row.kazna_razlog||'')}">
       </td>
-      <td style="font-weight:800;text-align:right;color:var(--dark);">${fm(isplaceno)}</td>
+      <td style="font-weight:800;text-align:right;${poredjenjeBoja}">${fm(ukupno)}</td>
+      <td>${poredjenjeHtml}</td>
       <td style="white-space:nowrap;">
-        <button class="tag-btn tag-up ${row.tag_planiranje==='povecanje'?'':'off'}" onclick="postaviTag(${i},'povecanje')" title="Za povećanje sledećeg mjeseca">▲</button>
-        <button class="tag-btn tag-down ${row.tag_planiranje==='smanjenje'?'':'off'}" onclick="postaviTag(${i},'smanjenje')" title="Za smanjenje sledećeg mjeseca">▼</button>
+        <button class="tag-btn tag-up ${row.tag_planiranje==='povecanje'?'':'off'}" onclick="postaviTag(${i},'povecanje')" title="Za povećanje (svaki klik +50)">▲</button>
+        <button class="tag-btn tag-down ${row.tag_planiranje==='smanjenje'?'':'off'}" onclick="postaviTag(${i},'smanjenje')" title="Za smanjenje (svaki klik -50)">▼</button>
+        ${row.tag_planiranje?`<button class="tag-btn" style="background:#f0f2f5;color:#8b96a5;" onclick="ponistiTag(${i})" title="Poništi sve korekcije">✕</button>`:''}
       </td>
       <td><input type="text" value="${esc(row.napomena||'')}" onchange="azurirajRed(${i},'napomena',this.value)" style="min-width:100px;"></td>
       <td style="white-space:nowrap;">
@@ -305,6 +332,15 @@ function zaokruziGotovinu(i, smjer){
   azurirajGotovinaKm(i, Math.max(0,finalniKm));
 }
 
+// Isto, ali zaokruživanje polazi od EUR iznosa (za slučaj kad blagajnik razmišlja u
+// eurima) — KM se automatski preračuna iz novog EUR iznosa.
+function zaokruziGotovinuEur(i, smjer){
+  const trenutniEur=parseFloat(trenutniRedovi[i].iznos_gotovina_eur)||0;
+  const noviEur = smjer>0 ? Math.ceil(trenutniEur/5)*5 : Math.floor(trenutniEur/5)*5;
+  const finalniEur = noviEur===trenutniEur ? noviEur+(smjer>0?5:-5) : noviEur;
+  azurirajGotovinaEur(i, Math.max(0,finalniEur));
+}
+
 function azurirajRed(i, polje, vrijednost){
   trenutniRedovi[i][polje]=vrijednost;
   renderMjesecTabela();
@@ -314,23 +350,26 @@ const KORAK_PLATE=50; // koliko ▲/▼ mijenja iznos po kliku
 
 function postaviTag(i, tag){
   const row=trenutniRedovi[i];
-  const stariTag=row.tag_planiranje;
-  // Ako je vec bio primijenjen suprotan (ili isti) tag, prvo se ta korekcija POVLACI
-  // (vraca na staro), pa se tek onda primjenjuje nova - da se korekcije ne gomilaju.
-  if(stariTag){
-    row.iznos_racun_km=(parseFloat(row.iznos_racun_km)||0) - (stariTag==='povecanje'?KORAK_PLATE:-KORAK_PLATE);
+  // Svaki klik dodaje/oduzima 50 KM ODMAH i TRAJNO (kumulativno) — više klikova = veća
+  // promjena. Ne "toggle-uje" nazad na drugi klik (to je bio bug — klik dva puta je
+  // izgledao kao da se poništi umjesto da se udvostruči).
+  row.iznos_racun_km=(parseFloat(row.iznos_racun_km)||0) + (tag==='povecanje'?KORAK_PLATE:-KORAK_PLATE);
+  row.tag_planiranje=tag;
+  if(!row.tag_razlog){
+    const razlog=prompt(tag==='povecanje'?'Razlog za povećanje (opciono):':'Razlog za smanjenje (opciono):');
+    if(razlog) row.tag_razlog=razlog;
   }
-  if(stariTag===tag){
-    // Klik na isto dugme drugi put = otkazivanje (vec je vraceno gore).
-    row.tag_planiranje=null;
-  }else{
-    row.iznos_racun_km=(parseFloat(row.iznos_racun_km)||0) + (tag==='povecanje'?KORAK_PLATE:-KORAK_PLATE);
-    row.tag_planiranje=tag;
-    if(!row.tag_razlog){
-      const razlog=prompt(tag==='povecanje'?'Razlog za povećanje od 50 KM (opciono):':'Razlog za smanjenje od 50 KM (opciono):');
-      if(razlog) row.tag_razlog=razlog;
-    }
-  }
+  renderMjesecTabela();
+}
+
+// Poništava SVE dosadašnje ▲/▼ korekcije na ovom redu odjednom, vraća na iznos prije
+// bilo kakvog klika (koristi se ako je neko slučajno kliknuo previše puta).
+function ponistiTag(i){
+  const row=trenutniRedovi[i];
+  if(!row.tag_planiranje) return;
+  if(!confirm('Poništiti sve dosadašnje ▲/▼ korekcije na ovom redu?')) return;
+  row.tag_planiranje=null;
+  row.tag_razlog='';
   renderMjesecTabela();
 }
 
@@ -391,18 +430,17 @@ async function obrisiRed(i){
 }
 
 function azurirajSume(){
-  const bruto=trenutniRedovi.reduce((s,r)=>s+izracunajUkupno(r),0);
+  const ukupnoZaIsplatu=trenutniRedovi.reduce((s,r)=>s+izracunajUkupno(r),0);
   const bonus=trenutniRedovi.reduce((s,r)=>s+(parseFloat(r.bonus_km)||0),0);
   const kazna=trenutniRedovi.reduce((s,r)=>s+(parseFloat(r.kazna_km)||0),0);
   const gotovina=trenutniRedovi.reduce((s,r)=>s+(parseFloat(r.iznos_gotovina_km)||0),0);
   const racun=trenutniRedovi.reduce((s,r)=>s+(parseFloat(r.iznos_racun_km)||0),0);
-  const isplaceno=bruto-kazna;
   document.getElementById('mjesec-sume').innerHTML=`
     <div class="k"><div class="val">${fm(gotovina)}</div><div class="lbl">Gotovina</div></div>
     <div class="k"><div class="val">${fm(racun)}</div><div class="lbl">Na račun</div></div>
     <div class="k"><div class="val" style="color:var(--green);">${fm(bonus)}</div><div class="lbl">Bonusi</div></div>
     <div class="k"><div class="val" style="color:var(--red);">${fm(kazna)}</div><div class="lbl">Kazne</div></div>
-    <div class="k"><div class="val" style="color:var(--dark);">${fm(isplaceno)}</div><div class="lbl">Za isplatu</div></div>
+    <div class="k"><div class="val" style="color:var(--dark);">${fm(ukupnoZaIsplatu)}</div><div class="lbl">Za isplatu</div></div>
     <div class="k"><div class="val">${trenutniRedovi.length}</div><div class="lbl">Zaposlenih</div></div>
   `;
 }
@@ -412,9 +450,18 @@ async function ucitajMesec(){
   if(!mesec) return;
   document.getElementById('btn-uvoz-istorija').style.display = mesec==='2026-07' ? 'inline-block' : 'none';
   try{
-    const r=await fetch(`${API}/api/plate?mesec=${mesec}`);
-    const rows=await r.json();
-    trenutniRedovi=rows;
+    const [rTekuci, rProsli]=await Promise.all([
+      fetch(`${API}/api/plate?mesec=${mesec}`),
+      fetch(`${API}/api/plate?mesec=${prethodniMesec(mesec)}`),
+    ]);
+    trenutniRedovi=await rTekuci.json();
+    const prosliRedovi=rProsli.ok ? await rProsli.json() : [];
+    prosliMjesecMap={};
+    prosliRedovi.forEach(r=>{
+      const kljuc=r.zaposleni_id||('ime:'+(r.ime_slobodno||'').toLowerCase().trim());
+      const ukupnoProsli=(parseFloat(r.iznos_gotovina_km)||0)+(parseFloat(r.iznos_racun_km)||0)+(parseFloat(r.bonus_km)||0)-(parseFloat(r.kazna_km)||0);
+      prosliMjesecMap[kljuc]=ukupnoProsli;
+    });
     renderMjesecTabela();
   }catch(e){
     document.getElementById('mjesec-tbody').innerHTML='<tr><td colspan="11" class="empty">Greška pri učitavanju.</td></tr>';
