@@ -304,6 +304,126 @@ router.get('/najprodavaniji', zahtijevaProdaju, async (req, res) => {
   }
 });
 
+// GET /api/roba/kretanje-pregled?objekt_id=X&od=YYYY-MM-DD&do=YYYY-MM-DD — pregled
+// kretanja robe za taj PJ i period: ulaz (kalkulacije + prenosi u), izlaz (prodaja +
+// prenosi iz), neto, i početno stanje (trenutno − neto). ISKLJUČIVO za PJ (prodajna
+// mjesta), ne dotiče proizvodnju/radne naloge.
+router.get('/kretanje-pregled', zahtijevaRobaMagacin, async (req, res) => {
+  try {
+    const objektId = trebaObjekat(req.query.objekt_id);
+    if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat.' });
+    const od = req.query.od;
+    const do_ = req.query.do;
+    if (!od || !do_) return res.status(400).json({ error: 'Nedostaje period (od/do).' });
+
+    const r = await pool.query(
+      `SELECT
+         r.id, r.sifra, r.naziv, r.jed_mjera,
+         rp.stanje AS trenutno_stanje, rp.cijena,
+         COALESCE(ulk.kol, 0) AS ulaz_kalkulacija,
+         COALESCE(ulp.kol, 0) AS ulaz_prenos,
+         COALESCE(izp.kol, 0) AS izlaz_prodaja,
+         COALESCE(izpr.kol, 0) AS izlaz_prenos
+       FROM roba r
+       JOIN roba_pj rp ON rp.roba_id = r.id AND rp.objekt_id = $1
+       LEFT JOIN (
+         SELECT ks.roba_id, SUM(ks.kolicina) AS kol
+         FROM kalkulacija_stavke ks JOIN kalkulacije k ON k.id = ks.kalkulacija_id
+         WHERE k.objekt_id = $1 AND k.datum BETWEEN $2 AND $3
+         GROUP BY ks.roba_id
+       ) ulk ON ulk.roba_id = r.id
+       LEFT JOIN (
+         SELECT pr.roba_id, SUM(pr.kolicina) AS kol
+         FROM prenosi_robe pr
+         WHERE pr.u_objekat_id = $1 AND pr.kreiran::date BETWEEN $2 AND $3
+         GROUP BY pr.roba_id
+       ) ulp ON ulp.roba_id = r.id
+       LEFT JOIN (
+         SELECT os.roba_id, SUM(os.kolicina) AS kol
+         FROM otpremnica_stavke os JOIN otpremnice o ON o.id = os.otpremnica_id
+         WHERE o.objekt_id = $1 AND o.status = 'potvrdjena' AND o.datum BETWEEN $2 AND $3
+         GROUP BY os.roba_id
+       ) izp ON izp.roba_id = r.id
+       LEFT JOIN (
+         SELECT pr.roba_id, SUM(pr.kolicina) AS kol
+         FROM prenosi_robe pr
+         WHERE pr.iz_objekta_id = $1 AND pr.kreiran::date BETWEEN $2 AND $3
+         GROUP BY pr.roba_id
+       ) izpr ON izpr.roba_id = r.id
+       WHERE r.aktivan = true
+         AND (COALESCE(ulk.kol,0) + COALESCE(ulp.kol,0) + COALESCE(izp.kol,0) + COALESCE(izpr.kol,0)) > 0
+       ORDER BY r.naziv`,
+      [objektId, od, do_]
+    );
+
+    const stavke = r.rows.map(row => {
+      const ulaz = parseFloat(row.ulaz_kalkulacija) + parseFloat(row.ulaz_prenos);
+      const izlaz = parseFloat(row.izlaz_prodaja) + parseFloat(row.izlaz_prenos);
+      const neto = ulaz - izlaz;
+      const trenutno = parseFloat(row.trenutno_stanje);
+      const pocetno = trenutno - neto;
+      const cijena = parseFloat(row.cijena) || 0;
+      return {
+        roba_id: row.id, sifra: row.sifra, naziv: row.naziv, jed_mjera: row.jed_mjera,
+        pocetno_stanje: +pocetno.toFixed(3), ulaz: +ulaz.toFixed(3), izlaz: +izlaz.toFixed(3),
+        neto: +neto.toFixed(3), trenutno_stanje: +trenutno.toFixed(3),
+        vrijednost_promjene: +(neto * cijena).toFixed(2),
+      };
+    });
+
+    res.json(stavke);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/roba/kretanje-dnevno?objekt_id=X&roba_id=Y&dana=7 — dnevni razlaz za JEDAN
+// artikal, poslednjih N dana (za drill-down klikom na red u pregledu).
+router.get('/kretanje-dnevno', zahtijevaRobaMagacin, async (req, res) => {
+  try {
+    const objektId = trebaObjekat(req.query.objekt_id);
+    const robaId = req.query.roba_id;
+    const dana = Math.min(parseInt(req.query.dana) || 7, 60);
+    if (!objektId || !robaId) return res.status(400).json({ error: 'Nedostaje objekt_id ili roba_id.' });
+
+    const r = await pool.query(
+      `WITH dani AS (
+         SELECT generate_series(CURRENT_DATE - ($3::int - 1), CURRENT_DATE, '1 day')::date AS dan
+       ),
+       ulazi AS (
+         SELECT k.datum AS dan, SUM(ks.kolicina) AS kol
+         FROM kalkulacija_stavke ks JOIN kalkulacije k ON k.id = ks.kalkulacija_id
+         WHERE k.objekt_id = $1 AND ks.roba_id = $2 AND k.datum >= CURRENT_DATE - ($3::int - 1)
+         GROUP BY k.datum
+         UNION ALL
+         SELECT pr.kreiran::date, SUM(pr.kolicina)
+         FROM prenosi_robe pr
+         WHERE pr.u_objekat_id = $1 AND pr.roba_id = $2 AND pr.kreiran::date >= CURRENT_DATE - ($3::int - 1)
+         GROUP BY pr.kreiran::date
+       ),
+       izlazi AS (
+         SELECT o.datum AS dan, SUM(os.kolicina) AS kol
+         FROM otpremnica_stavke os JOIN otpremnice o ON o.id = os.otpremnica_id
+         WHERE o.objekt_id = $1 AND os.roba_id = $2 AND o.status = 'potvrdjena' AND o.datum >= CURRENT_DATE - ($3::int - 1)
+         GROUP BY o.datum
+         UNION ALL
+         SELECT pr.kreiran::date, SUM(pr.kolicina)
+         FROM prenosi_robe pr
+         WHERE pr.iz_objekta_id = $1 AND pr.roba_id = $2 AND pr.kreiran::date >= CURRENT_DATE - ($3::int - 1)
+         GROUP BY pr.kreiran::date
+       )
+       SELECT d.dan,
+              COALESCE((SELECT SUM(kol) FROM ulazi u WHERE u.dan = d.dan), 0) AS ulaz,
+              COALESCE((SELECT SUM(kol) FROM izlazi iz WHERE iz.dan = d.dan), 0) AS izlaz
+       FROM dani d ORDER BY d.dan`,
+      [objektId, robaId, dana]
+    );
+    res.json(r.rows.map(x => ({ dan: x.dan, ulaz: +parseFloat(x.ulaz).toFixed(3), izlaz: +parseFloat(x.izlaz).toFixed(3) })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/roba/:id?objekt_id=1
 router.get('/:id', zahtijevaProdaju, async (req, res) => {
   try {
@@ -732,7 +852,13 @@ router.post('/import', upload.single('file'), async (req, res) => {
         }
 
         // Cijena iz fajla se uopšte NE ČITA za Bluesoft — ostaje null (znači "ne diraj").
-        const cijenaFajl = cijenaSeDira && mapping.cijena ? parsirajBroj(row[mapping.cijena]) : null;
+        // KRITIČNO: prazna ćelija za cijenu MORA ostati null (= "nema podatak, ne diraj
+        // postojeću cijenu"), NE smije postati 0 (parsirajBroj('') vraća 0, što bi ovdje
+        // pogrešno izgledalo kao "stvarna nova cijena je 0" i PREPISALO ispravnu cijenu).
+        // Ovo je bio stvaran uzrok gubitka vrijednosti kod dupliranih šifri (prazan duplikat
+        // red bi obrisao cijenu unesenu u prvom redu).
+        const cijenaSirova = mapping.cijena ? String(row[mapping.cijena] ?? '').trim() : '';
+        const cijenaFajl = cijenaSeDira && mapping.cijena && cijenaSirova !== '' ? parsirajBroj(row[mapping.cijena]) : null;
         // Zbir SVIH validnih redova KAKO STOJE U FAJLU (uključujući duplikate, računati
         // pojedinačno) — za poređenje "šta Excel sam pokazuje kao ukupno" naspram onoga
         // što stvarno završi u bazi (koje je manje ako je bilo duplikata, jer se ne sabiraju).

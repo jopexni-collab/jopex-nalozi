@@ -301,6 +301,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <button type="button" class="glavni-tab-btn active" data-tab="kalkulacija" onclick="prebaciGlavniTabRM('kalkulacija')">📦 Kalkulacija</button>
   <button type="button" class="glavni-tab-btn" data-tab="lager" onclick="prebaciGlavniTabRM('lager')">📋 Lager lista</button>
   <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
+  <button type="button" class="glavni-tab-btn" data-tab="kretanje" onclick="prebaciGlavniTabRM('kretanje')">📈 Kretanje robe</button>
 </div>
 
 <div id="tab-kalkulacija">
@@ -529,6 +530,55 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
 
     <div id="prenos-msg" style="font-size:12px;margin-top:8px;"></div>
+  </div>
+</div>
+
+<div id="tab-kretanje" style="display:none;">
+  <div class="import-box" id="kretanje-box">
+    <h3>📈 Kretanje robe po PJ</h3>
+    <div class="uzorak-hint">Praćenje ulaza i izlaza robe (prodaja, prenosi, kalkulacije) kroz vrijeme — isključivo za prodajna mjesta, ne dotiče proizvodnju/radne naloge.</div>
+
+    <div class="ce-row">
+      <select id="kretanje-objekat" onchange="ucitajKretanjeRobe()"><option value="">— izaberi prodajni objekat —</option></select>
+    </div>
+    <div class="ce-row" style="margin-top:8px;">
+      <button type="button" class="ce-tip-btn active" data-kper="7" onclick="postaviKretanjePeriod(7,this)">7 dana</button>
+      <button type="button" class="ce-tip-btn" data-kper="30" onclick="postaviKretanjePeriod(30,this)">30 dana</button>
+      <button type="button" class="ce-tip-btn" data-kper="mjesec" onclick="postaviKretanjeMjesec(this)">Ovaj mjesec</button>
+    </div>
+    <div class="ce-row" style="margin-top:6px;">
+      <input type="date" id="kretanje-od" onchange="ucitajKretanjeRobe()">
+      <span style="align-self:center;color:#8b96a5;">—</span>
+      <input type="date" id="kretanje-do" onchange="ucitajKretanjeRobe()">
+    </div>
+
+    <div id="kretanje-sume" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;"></div>
+
+    <div style="overflow-x:auto;margin-top:10px;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr style="background:#f7f8fa;">
+            <th style="text-align:left;padding:6px 7px;border-bottom:2px solid var(--border);">Artikal</th>
+            <th style="text-align:right;padding:6px 7px;border-bottom:2px solid var(--border);">Početno stanje</th>
+            <th style="text-align:right;padding:6px 7px;border-bottom:2px solid var(--border);">Ušlo</th>
+            <th style="text-align:right;padding:6px 7px;border-bottom:2px solid var(--border);">Izašlo</th>
+            <th style="text-align:right;padding:6px 7px;border-bottom:2px solid var(--border);">Neto</th>
+            <th style="text-align:right;padding:6px 7px;border-bottom:2px solid var(--border);">Vrijednost promjene</th>
+            <th style="text-align:right;padding:6px 7px;border-bottom:2px solid var(--border);">Trenutno stanje</th>
+          </tr>
+        </thead>
+        <tbody id="kretanje-tbody"><tr><td colspan="7" style="text-align:center;color:#9aa5b1;padding:16px;">Izaberi prodajni objekat.</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Dnevni razlaz (drill-down) za klikuti artikal -->
+    <div id="kretanje-dnevno-box" style="display:none;margin-top:16px;padding:14px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <b id="kretanje-dnevno-naslov" style="font-size:12.5px;"></b>
+        <button type="button" class="ce-tip-btn" onclick="document.getElementById('kretanje-dnevno-box').style.display='none'">✕ Zatvori</button>
+      </div>
+      <div id="kretanje-dnevno-sadrzaj"></div>
+    </div>
   </div>
 </div>
 
@@ -1644,6 +1694,8 @@ function prebaciGlavniTabRM(tab){
   document.getElementById('tab-kalkulacija').style.display = tab==='kalkulacija' ? 'block' : 'none';
   document.getElementById('tab-lager').style.display = tab==='lager' ? 'block' : 'none';
   document.getElementById('tab-pj').style.display = tab==='pj' ? 'block' : 'none';
+  document.getElementById('tab-kretanje').style.display = tab==='kretanje' ? 'block' : 'none';
+  if(tab==='kretanje' && !kretanjeObjektiUcitani) kretanjeUcitajObjekte();
 }
 
 /* ═══ KALKULACIJA — prijem robe sa zavisnim troškovima (koristi esc/fm koji već postoje gore) ═══ */
@@ -1785,6 +1837,102 @@ document.addEventListener('click', e=>{
   const rez=document.getElementById('kalk-pretraga-rez');
   if(rez && !e.target.closest('div[style*="position:relative"]')) rez.style.display='none';
 });
+
+/* ═══ KRETANJE ROBE — ulaz/izlaz po PJ kroz vrijeme (koristi esc/fm koji vec postoje) ═══ */
+let kretanjeObjektiUcitani=false;
+
+async function kretanjeUcitajObjekte(){
+  kretanjeObjektiUcitani=true;
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`);
+    const objekti=await r.json();
+    document.getElementById('kretanje-objekat').innerHTML='<option value="">— izaberi prodajni objekat —</option>'+
+      objekti.map(p=>`<option value="${p.id}">${esc(p.naziv)}</option>`).join('');
+  }catch(e){}
+  postaviKretanjePeriod(7, document.querySelector('.ce-tip-btn[data-kper="7"]'));
+}
+
+function postaviKretanjePeriod(dana, btn){
+  document.querySelectorAll('.ce-tip-btn[data-kper]').forEach(b=>b.classList.toggle('active', b===btn));
+  const danas=new Date();
+  const od=new Date(danas); od.setDate(od.getDate()-(dana-1));
+  document.getElementById('kretanje-od').value=od.toISOString().split('T')[0];
+  document.getElementById('kretanje-do').value=danas.toISOString().split('T')[0];
+  ucitajKretanjeRobe();
+}
+
+function postaviKretanjeMjesec(btn){
+  document.querySelectorAll('.ce-tip-btn[data-kper]').forEach(b=>b.classList.toggle('active', b===btn));
+  const danas=new Date();
+  const prvi=new Date(danas.getFullYear(), danas.getMonth(), 1);
+  document.getElementById('kretanje-od').value=prvi.toISOString().split('T')[0];
+  document.getElementById('kretanje-do').value=danas.toISOString().split('T')[0];
+  ucitajKretanjeRobe();
+}
+
+async function ucitajKretanjeRobe(){
+  const objektId=document.getElementById('kretanje-objekat').value;
+  const od=document.getElementById('kretanje-od').value;
+  const do_=document.getElementById('kretanje-do').value;
+  const tbody=document.getElementById('kretanje-tbody');
+  if(!objektId){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#9aa5b1;padding:16px;">Izaberi prodajni objekat.</td></tr>'; return; }
+  if(!od||!do_) return;
+  tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#9aa5b1;padding:16px;">Učitavanje...</td></tr>';
+  try{
+    const r=await fetch(`${API}/api/roba/kretanje-pregled?objekt_id=${objektId}&od=${od}&do=${do_}`);
+    const stavke=await r.json();
+    if(!stavke.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#9aa5b1;padding:16px;">Nema kretanja u izabranom periodu.</td></tr>'; document.getElementById('kretanje-sume').innerHTML=''; return; }
+    tbody.innerHTML=stavke.map(s=>{
+      const strelica = s.neto>0 ? '<span style="color:var(--green,#1f8a4c);">▲</span>' : s.neto<0 ? '<span style="color:var(--red,#c0392b);">▼</span>' : '—';
+      const bojaVrijednost = s.vrijednost_promjene>0 ? 'color:var(--green,#1f8a4c);' : s.vrijednost_promjene<0 ? 'color:var(--red,#c0392b);' : '';
+      return `
+      <tr style="cursor:pointer;" onclick="prikaziKretanjeDnevno(${s.roba_id},'${esc(s.sifra+' — '+s.naziv).replace(/'/g,"\\'")}')">
+        <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;"><b>${esc(s.sifra)}</b><br><span style="font-size:10.5px;color:#8b96a5;">${esc(s.naziv)}</span></td>
+        <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;text-align:right;">${fm(s.pocetno_stanje)} ${esc(s.jed_mjera||'')}</td>
+        <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;text-align:right;color:var(--green,#1f8a4c);">+${fm(s.ulaz)}</td>
+        <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;text-align:right;color:var(--red,#c0392b);">−${fm(s.izlaz)}</td>
+        <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;text-align:right;font-weight:700;">${strelica} ${fm(Math.abs(s.neto))}</td>
+        <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;text-align:right;font-weight:700;${bojaVrijednost}">${fm(s.vrijednost_promjene)} KM</td>
+        <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;text-align:right;font-weight:800;">${fm(s.trenutno_stanje)} ${esc(s.jed_mjera||'')}</td>
+      </tr>`;
+    }).join('');
+    const ukUlaz=stavke.reduce((a,s)=>a+s.ulaz,0), ukIzlaz=stavke.reduce((a,s)=>a+s.izlaz,0), ukVrijednost=stavke.reduce((a,s)=>a+s.vrijednost_promjene,0);
+    document.getElementById('kretanje-sume').innerHTML=`
+      <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:var(--green,#1f8a4c);">+${fm(ukUlaz)}</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Ukupno ušlo</div></div>
+      <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:var(--red,#c0392b);">−${fm(ukIzlaz)}</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Ukupno izašlo</div></div>
+      <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:${ukVrijednost>=0?'var(--green,#1f8a4c)':'var(--red,#c0392b)'};">${fm(ukVrijednost)} KM</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Neto vrijednost</div></div>
+      <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:var(--dark,#134a85);">${stavke.length}</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Artikala u kretanju</div></div>
+    `;
+  }catch(e){
+    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:red;padding:16px;">Greška pri učitavanju.</td></tr>';
+  }
+}
+
+async function prikaziKretanjeDnevno(robaId, naslov){
+  const objektId=document.getElementById('kretanje-objekat').value;
+  const box=document.getElementById('kretanje-dnevno-box');
+  const sadrzaj=document.getElementById('kretanje-dnevno-sadrzaj');
+  document.getElementById('kretanje-dnevno-naslov').textContent='Poslednjih 7 dana — '+naslov;
+  sadrzaj.innerHTML='<div style="color:#9aa5b1;">Učitavanje...</div>';
+  box.style.display='block';
+  box.scrollIntoView({behavior:'smooth', block:'nearest'});
+  try{
+    const r=await fetch(`${API}/api/roba/kretanje-dnevno?objekt_id=${objektId}&roba_id=${robaId}&dana=7`);
+    const dani=await r.json();
+    sadrzaj.innerHTML=dani.map(d=>{
+      const neto=d.ulaz-d.izlaz;
+      const strelica = neto>0 ? '<span style="color:var(--green,#1f8a4c);">▲</span>' : neto<0 ? '<span style="color:var(--red,#c0392b);">▼</span>' : '—';
+      return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #eceef1;font-size:12px;">
+        <span>${new Date(d.dan).toLocaleDateString('sr-Latn-BA',{weekday:'short',day:'2-digit',month:'2-digit'})}</span>
+        <span style="color:var(--green,#1f8a4c);">+${fm(d.ulaz)}</span>
+        <span style="color:var(--red,#c0392b);">−${fm(d.izlaz)}</span>
+        <span style="font-weight:700;">${strelica} ${fm(Math.abs(neto))}</span>
+      </div>`;
+    }).join('');
+  }catch(e){
+    sadrzaj.innerHTML='<div style="color:red;">Greška pri učitavanju.</div>';
+  }
+}
 
 fetch(`${API}/api/auth/me`).then(r=>{
   if(!r.ok){location.href='login.html';return;}
