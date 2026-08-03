@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kalkulacija – JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f3f5f8;--border:#dde3ea;--red:#c0392b;--green:#1f8a4c;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:#1a2733;font-size:13px;}
+header{background:var(--blue);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;}
+header h1{font-size:16px;}
+header a{color:#fff;text-decoration:none;font-size:12px;background:rgba(255,255,255,.15);padding:6px 12px;border-radius:6px;}
+.wrap{max-width:1100px;margin:0 auto;padding:16px 20px;}
+.card{background:#fff;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:16px;}
+.card h2{font-size:14px;margin-bottom:12px;}
+.red2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;}
+.red3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;}
+label{font-size:11px;font-weight:700;color:#6b7a8d;display:block;margin-bottom:3px;}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font:inherit;font-size:13px;}
+.btn{background:var(--blue);color:#fff;border:none;border-radius:6px;padding:9px 16px;font:inherit;font-weight:600;cursor:pointer;font-size:12.5px;}
+.btn.green{background:var(--green);}
+.btn.sec{background:#eee;color:#333;}
+table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;}
+th{background:#f7f8fa;color:#6b7a8d;font-weight:700;text-align:left;padding:6px 7px;border-bottom:2px solid var(--border);}
+td{padding:5px 7px;border-bottom:1px solid #f0f2f5;}
+td input{padding:5px 6px;font-size:12px;}
+.pretraga-box{position:relative;}
+.pretraga-rez{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.15);max-height:220px;overflow-y:auto;z-index:50;display:none;}
+.pretraga-rez div{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f0f2f5;font-size:12.5px;}
+.pretraga-rez div:hover{background:#f0f4fa;}
+.suma-box{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;}
+.suma-box .k{flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;}
+.suma-box .k .val{font-size:15px;font-weight:800;color:var(--dark);}
+.suma-box .k .lbl{font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;}
+.empty{color:#9aa5b1;text-align:center;padding:16px;}
+.msg{margin-top:10px;padding:9px 12px;border-radius:6px;font-size:12.5px;display:none;}
+.msg.ok{display:block;background:#e6f4ea;color:var(--green);}
+.msg.err{display:block;background:#fce8e6;color:var(--red);}
+</style>
+</head>
+<body>
+<header>
+  <h1>📦 Kalkulacija — prijem robe</h1>
+  <a href="roba-magacin.html">← Roba i magacini</a>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <h2>Podaci o pošiljci</h2>
+    <div class="red3">
+      <div><label>Dobavljač *</label><input type="text" id="dobavljac" placeholder="Naziv dobavljača"></div>
+      <div><label>Broj dokumenta/fakture</label><input type="text" id="broj"></div>
+      <div><label>Datum *</label><input type="date" id="datum"></div>
+    </div>
+    <div class="red2">
+      <div><label>Prodajni objekat (gdje se prima roba) *</label><select id="objekt"></select></div>
+      <div><label>Napomena</label><input type="text" id="napomena"></div>
+    </div>
+    <div class="red3">
+      <div><label>Trošak prevoza (KM)</label><input type="number" step="0.01" id="trosak-prevoz" value="0" oninput="preracunaj()"></div>
+      <div><label>Trošak carine (KM)</label><input type="number" step="0.01" id="trosak-carina" value="0" oninput="preracunaj()"></div>
+      <div><label>Ostali troškovi (KM)</label><input type="number" step="0.01" id="trosak-ostalo" value="0" oninput="preracunaj()"></div>
+    </div>
+    <div style="font-size:11px;color:#8b96a5;">Zavisni troškovi se automatski raspoređuju na stavke proporcionalno njihovoj vrijednosti (skuplja stavka nosi veći udio).</div>
+  </div>
+
+  <div class="card">
+    <h2>Stavke</h2>
+    <div class="pretraga-box">
+      <input type="text" id="pretraga-artikal" placeholder="Pretraži artikal po šifri/nazivu da dodaš stavku..." oninput="pretraziArtikal()">
+      <div class="pretraga-rez" id="pretraga-rez"></div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Artikal</th><th>Količina</th><th>Nabavna cij./j.</th><th>Udio troškova</th><th>Prava nabavna cij.</th><th>Prodajna cij./j.</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="stavke-tbody"><tr><td colspan="7" class="empty">Nema dodanih stavki — pretraži artikal iznad.</td></tr></tbody>
+    </table>
+    <div class="suma-box" id="sume"></div>
+  </div>
+
+  <button class="btn green" onclick="sacuvajKalkulaciju()" style="width:100%;padding:12px;font-size:14px;">✓ Sačuvaj kalkulaciju (uvećava stanje robe)</button>
+  <div class="msg" id="msg"></div>
+</div>
+
+<script>
+const API='';
+let stavke=[]; // {roba_id, sifra, naziv, jed_mjera, kolicina, nabavna_cijena, prodajna_cijena}
+let mojiPJovi=[];
+
+function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+async function ucitajObjekte(){
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`);
+    mojiPJovi=await r.json();
+    document.getElementById('objekt').innerHTML=mojiPJovi.map(p=>`<option value="${p.id}">${esc(p.naziv)}</option>`).join('');
+  }catch(e){}
+}
+
+let pretragaTimer=null;
+function pretraziArtikal(){
+  clearTimeout(pretragaTimer);
+  const q=document.getElementById('pretraga-artikal').value.trim();
+  const rez=document.getElementById('pretraga-rez');
+  if(q.length<2){ rez.style.display='none'; return; }
+  pretragaTimer=setTimeout(async ()=>{
+    const objektId=document.getElementById('objekt').value;
+    if(!objektId){ alert('Prvo izaberi prodajni objekat.'); return; }
+    try{
+      const r=await fetch(`${API}/api/roba/lager?objekt_id=${objektId}`);
+      const data=await r.json();
+      const rezultati=(data.stavke||[]).filter(a=>
+        a.sifra?.toLowerCase().includes(q.toLowerCase()) || a.naziv?.toLowerCase().includes(q.toLowerCase())
+      ).slice(0,10);
+      if(!rezultati.length){ rez.innerHTML='<div style="color:#9aa5b1;">Nema rezultata.</div>'; rez.style.display='block'; return; }
+      rez.innerHTML=rezultati.map(a=>`<div onclick='dodajStavku(${JSON.stringify(a).replace(/'/g,"&apos;")})'>${esc(a.sifra)} — ${esc(a.naziv)} <span style="color:#8b96a5;">(trenutno stanje: ${a.stanje})</span></div>`).join('');
+      rez.style.display='block';
+    }catch(e){}
+  }, 250);
+}
+
+function dodajStavku(artikal){
+  document.getElementById('pretraga-artikal').value='';
+  document.getElementById('pretraga-rez').style.display='none';
+  if(stavke.some(s=>s.roba_id===artikal.id)){ alert('Artikal je već dodat.'); return; }
+  stavke.push({
+    roba_id:artikal.id, sifra:artikal.sifra, naziv:artikal.naziv, jed_mjera:artikal.jed_mjera,
+    kolicina:1, nabavna_cijena:parseFloat(artikal.cijena)||0, prodajna_cijena:parseFloat(artikal.cijena)||0,
+  });
+  renderStavke();
+}
+
+function azurirajStavku(i, polje, vrijednost){
+  stavke[i][polje]=parseFloat(vrijednost)||0;
+  renderStavke();
+}
+
+function obrisiStavku(i){
+  stavke.splice(i,1);
+  renderStavke();
+}
+
+// Preračunava udio_troskova i pravu_nabavnu_cijenu za SVE stavke — poziva se pri
+// izmjeni bilo kog troška ili bilo koje stavke.
+function preracunaj(){ renderStavke(); }
+
+function renderStavke(){
+  const tbody=document.getElementById('stavke-tbody');
+  if(!stavke.length){ tbody.innerHTML='<tr><td colspan="7" class="empty">Nema dodanih stavki — pretraži artikal iznad.</td></tr>'; azurirajSume(0); return; }
+
+  const trProm=parseFloat(document.getElementById('trosak-prevoz').value)||0;
+  const trCar=parseFloat(document.getElementById('trosak-carina').value)||0;
+  const trOst=parseFloat(document.getElementById('trosak-ostalo').value)||0;
+  const ukupniTroskovi=trProm+trCar+trOst;
+  const ukupnaVrijednost=stavke.reduce((s,x)=>s+x.kolicina*x.nabavna_cijena,0);
+
+  tbody.innerHTML=stavke.map((s,i)=>{
+    const vrijednostStavke=s.kolicina*s.nabavna_cijena;
+    const udio = ukupnaVrijednost>0 ? (vrijednostStavke/ukupnaVrijednost)*ukupniTroskovi : 0;
+    const pravaCijena = s.kolicina>0 ? (vrijednostStavke+udio)/s.kolicina : 0;
+    return `
+    <tr>
+      <td><b>${esc(s.sifra)}</b><br><span style="font-size:10.5px;color:#8b96a5;">${esc(s.naziv)}</span></td>
+      <td><input type="number" step="0.001" value="${s.kolicina}" style="width:75px;" onchange="azurirajStavku(${i},'kolicina',this.value)"></td>
+      <td><input type="number" step="0.01" value="${s.nabavna_cijena}" style="width:80px;" onchange="azurirajStavku(${i},'nabavna_cijena',this.value)"></td>
+      <td style="color:#8b96a5;">${fm(udio)} KM</td>
+      <td style="font-weight:700;">${fm(pravaCijena)} KM</td>
+      <td><input type="number" step="0.01" value="${s.prodajna_cijena}" style="width:80px;" onchange="azurirajStavku(${i},'prodajna_cijena',this.value)"></td>
+      <td><button class="btn sec" style="padding:4px 8px;" onclick="obrisiStavku(${i})">🗑</button></td>
+    </tr>`;
+  }).join('');
+  azurirajSume(ukupnaVrijednost+ukupniTroskovi);
+}
+
+function azurirajSume(ukupnaVrijednostSaTroskovima){
+  document.getElementById('sume').innerHTML=`
+    <div class="k"><div class="val">${stavke.length}</div><div class="lbl">Stavki</div></div>
+    <div class="k"><div class="val">${fm(stavke.reduce((s,x)=>s+x.kolicina,0))}</div><div class="lbl">Ukupna količina</div></div>
+    <div class="k"><div class="val">${fm(ukupnaVrijednostSaTroskovima)} KM</div><div class="lbl">Ukupna vrijednost (sa troškovima)</div></div>
+  `;
+}
+
+async function sacuvajKalkulaciju(){
+  const msg=document.getElementById('msg');
+  msg.className='msg';
+  const dobavljac=document.getElementById('dobavljac').value.trim();
+  const datum=document.getElementById('datum').value;
+  const objektId=document.getElementById('objekt').value;
+  if(!dobavljac){ msg.className='msg err'; msg.textContent='Unesite dobavljača.'; return; }
+  if(!datum){ msg.className='msg err'; msg.textContent='Unesite datum.'; return; }
+  if(!objektId){ msg.className='msg err'; msg.textContent='Izaberite prodajni objekat.'; return; }
+  if(!stavke.length){ msg.className='msg err'; msg.textContent='Dodajte bar jednu stavku.'; return; }
+  if(!confirm(`Sačuvati kalkulaciju sa ${stavke.length} stavki? Ovo će odmah uvećati stanje robe.`)) return;
+
+  try{
+    const r=await fetch(`${API}/api/kalkulacije`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        broj:document.getElementById('broj').value.trim()||null,
+        dobavljac, datum, objekt_id:objektId,
+        objekt_naziv:mojiPJovi.find(p=>String(p.id)===String(objektId))?.naziv,
+        trosak_prevoz:document.getElementById('trosak-prevoz').value,
+        trosak_carina:document.getElementById('trosak-carina').value,
+        trosak_ostalo:document.getElementById('trosak-ostalo').value,
+        napomena:document.getElementById('napomena').value.trim(),
+        stavke,
+      }),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error);
+    msg.className='msg ok';
+    msg.textContent=`✓ Kalkulacija #${data.id} sačuvana — stanje robe je uvećano.`;
+    stavke=[];
+    document.getElementById('dobavljac').value='';
+    document.getElementById('broj').value='';
+    document.getElementById('napomena').value='';
+    document.getElementById('trosak-prevoz').value='0';
+    document.getElementById('trosak-carina').value='0';
+    document.getElementById('trosak-ostalo').value='0';
+    renderStavke();
+  }catch(e){
+    msg.className='msg err';
+    msg.textContent='✗ '+e.message;
+  }
+}
+
+document.addEventListener('click', e=>{
+  if(!e.target.closest('.pretraga-box')) document.getElementById('pretraga-rez').style.display='none';
+});
+
+fetch(API+'/api/auth/me').then(r=>{
+  if(!r.ok){ location.href='login.html'; return; }
+  return r.json();
+}).then(async u=>{
+  if(!u) return;
+  document.getElementById('datum').value=new Date().toISOString().split('T')[0];
+  await ucitajObjekte();
+}).catch(()=>location.href='login.html');
+</script>
+</body>
+</html>

@@ -276,6 +276,9 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   min-height:48px;display:flex;align-items:center;justify-content:center;}
 .objekat-item:active{background:#eef4fc;border-color:var(--blue);}
 
+.glavni-tab-btn{padding:9px 18px;border-radius:8px;border:1px solid var(--border,#dde3ea);background:#eef0f3;font-weight:700;font-size:12.5px;cursor:pointer;color:#6b7a8d;}
+.glavni-tab-btn.active{background:var(--blue);color:#fff;border-color:var(--blue);}
+
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -293,6 +296,61 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 </header>
 
 <div id="roba-magacin-glavni-sadrzaj" style="padding:12px;padding-bottom:40px;">
+
+<div class="ce-row" style="margin-bottom:14px;">
+  <button type="button" class="glavni-tab-btn active" data-tab="kalkulacija" onclick="prebaciGlavniTabRM('kalkulacija')">📦 Kalkulacija</button>
+  <button type="button" class="glavni-tab-btn" data-tab="lager" onclick="prebaciGlavniTabRM('lager')">📋 Lager lista</button>
+  <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
+</div>
+
+<div id="tab-kalkulacija">
+  <div class="import-box" id="kalk-box">
+    <h3>📦 Kalkulacija — prijem robe od dobavljača</h3>
+    <div class="uzorak-hint">Unosi novu nabavku sa zavisnim troškovima (prevoz/carina/ostalo) — automatski obračunava pravu nabavnu cijenu po stavci (proporcionalno po vrijednosti) i postavlja novu prodajnu cijenu. Čuvanje odmah uvećava stanje robe.</div>
+
+    <div class="ce-row">
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Dobavljač *</label><input type="text" id="kalk-dobavljac" placeholder="Naziv dobavljača"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Broj dokumenta/fakture</label><input type="text" id="kalk-broj"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Datum *</label><input type="date" id="kalk-datum"></div>
+    </div>
+    <div class="ce-row">
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Prodajni objekat (gdje se prima roba) *</label><select id="kalk-objekt"></select></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Napomena</label><input type="text" id="kalk-napomena"></div>
+    </div>
+    <div class="ce-row">
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Trošak prevoza (KM)</label><input type="number" step="0.01" id="kalk-trosak-prevoz" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Trošak carine (KM)</label><input type="number" step="0.01" id="kalk-trosak-carina" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Ostali troškovi (KM)</label><input type="number" step="0.01" id="kalk-trosak-ostalo" value="0" oninput="kalkRenderStavke()"></div>
+    </div>
+
+    <h3 style="margin-top:16px;">Stavke</h3>
+    <div style="position:relative;">
+      <input type="text" id="kalk-pretraga-artikal" placeholder="Pretraži artikal po šifri/nazivu da dodaš stavku..." oninput="kalkPretraziArtikal()">
+      <div id="kalk-pretraga-rez" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.15);max-height:220px;overflow-y:auto;z-index:50;display:none;"></div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;">
+        <thead>
+          <tr style="background:#f7f8fa;">
+            <th style="text-align:left;padding:6px 7px;border-bottom:2px solid var(--border);">Artikal</th>
+            <th style="text-align:left;padding:6px 7px;border-bottom:2px solid var(--border);">Količina</th>
+            <th style="text-align:left;padding:6px 7px;border-bottom:2px solid var(--border);">Nabavna cij./j.</th>
+            <th style="text-align:left;padding:6px 7px;border-bottom:2px solid var(--border);">Udio troškova</th>
+            <th style="text-align:left;padding:6px 7px;border-bottom:2px solid var(--border);">Prava nabavna cij.</th>
+            <th style="text-align:left;padding:6px 7px;border-bottom:2px solid var(--border);">Prodajna cij./j.</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="kalk-stavke-tbody"><tr><td colspan="7" style="text-align:center;color:#9aa5b1;padding:16px;">Nema dodanih stavki — pretraži artikal iznad.</td></tr></tbody>
+      </table>
+    </div>
+    <div id="kalk-sume" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;"></div>
+
+    <button class="btn-import" onclick="kalkSacuvaj()" style="width:100%;padding:12px;font-size:14px;margin-top:14px;background:var(--green,#1f8a4c);">✓ Sačuvaj kalkulaciju (uvećava stanje robe)</button>
+    <div id="kalk-msg" style="font-size:12px;margin-top:8px;"></div>
+  </div>
+</div>
+
   <!-- ═══ OVERLAY: QR NALEPNICE (za štampu) ═══ -->
 <div id="ov-qr-nalepnice" style="display:none;position:fixed;inset:0;background:#fff;z-index:500;overflow-y:auto;">
   <div style="position:sticky;top:0;background:#fff;padding:12px 16px;border-bottom:1px solid #ddd;display:flex;justify-content:space-between;align-items:center;z-index:2;" class="no-print">
@@ -327,6 +385,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   .qr-nalepnica .naziv{font-size:10px;color:#666;margin-top:2px;line-height:1.3;}
 </style>
 
+<div id="tab-lager">
 <div class="import-box" id="lager-lista-box">
     <h3>📋 Kompletna lager lista</h3>
     <select id="lager-objekat"><option value="">— izaberi prodajni objekat —</option></select>
@@ -415,7 +474,9 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       </div>
     </div>
   </div>
+</div>
 
+<div id="tab-pj" style="display:none;">
   <div class="import-box" id="objekti-box">
     <h3>🏢 Prodajni objekti (PJ)</h3>
     <div id="objekti-postojeci-lista" style="margin-bottom:10px;"></div>
@@ -469,6 +530,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
     <div id="prenos-msg" style="font-size:12px;margin-top:8px;"></div>
   </div>
+</div>
 
 </div>
 
@@ -1577,6 +1639,153 @@ document.getElementById('logout').onclick=async e=>{
   location.href='login.html';
 };
 
+function prebaciGlavniTabRM(tab){
+  document.querySelectorAll('.glavni-tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  document.getElementById('tab-kalkulacija').style.display = tab==='kalkulacija' ? 'block' : 'none';
+  document.getElementById('tab-lager').style.display = tab==='lager' ? 'block' : 'none';
+  document.getElementById('tab-pj').style.display = tab==='pj' ? 'block' : 'none';
+}
+
+/* ═══ KALKULACIJA — prijem robe sa zavisnim troškovima (koristi esc/fm koji već postoje gore) ═══ */
+let kalkStavke=[]; // {roba_id, sifra, naziv, jed_mjera, kolicina, nabavna_cijena, prodajna_cijena}
+let kalkMojiPJovi=[];
+
+async function kalkUcitajObjekte(){
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`);
+    kalkMojiPJovi=await r.json();
+    document.getElementById('kalk-objekt').innerHTML=kalkMojiPJovi.map(p=>`<option value="${p.id}">${esc(p.naziv)}</option>`).join('');
+  }catch(e){}
+}
+
+let kalkPretragaTimer=null;
+function kalkPretraziArtikal(){
+  clearTimeout(kalkPretragaTimer);
+  const q=document.getElementById('kalk-pretraga-artikal').value.trim();
+  const rez=document.getElementById('kalk-pretraga-rez');
+  if(q.length<2){ rez.style.display='none'; return; }
+  kalkPretragaTimer=setTimeout(async ()=>{
+    const objektId=document.getElementById('kalk-objekt').value;
+    if(!objektId){ alert('Prvo izaberi prodajni objekat.'); return; }
+    try{
+      const r=await fetch(`${API}/api/roba/lager?objekt_id=${objektId}`);
+      const data=await r.json();
+      const rezultati=(data.stavke||[]).filter(a=>
+        a.sifra?.toLowerCase().includes(q.toLowerCase()) || a.naziv?.toLowerCase().includes(q.toLowerCase())
+      ).slice(0,10);
+      if(!rezultati.length){ rez.innerHTML='<div style="padding:8px 10px;color:#9aa5b1;">Nema rezultata.</div>'; rez.style.display='block'; return; }
+      rez.innerHTML=rezultati.map(a=>`<div style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #f0f2f5;font-size:12.5px;" onmouseover="this.style.background='#f0f4fa'" onmouseout="this.style.background=''" onclick='kalkDodajStavku(${JSON.stringify(a).replace(/'/g,"&apos;")})'>${esc(a.sifra)} — ${esc(a.naziv)} <span style="color:#8b96a5;">(trenutno stanje: ${a.stanje})</span></div>`).join('');
+      rez.style.display='block';
+    }catch(e){}
+  }, 250);
+}
+
+function kalkDodajStavku(artikal){
+  document.getElementById('kalk-pretraga-artikal').value='';
+  document.getElementById('kalk-pretraga-rez').style.display='none';
+  if(kalkStavke.some(s=>s.roba_id===artikal.id)){ alert('Artikal je već dodat.'); return; }
+  kalkStavke.push({
+    roba_id:artikal.id, sifra:artikal.sifra, naziv:artikal.naziv, jed_mjera:artikal.jed_mjera,
+    kolicina:1, nabavna_cijena:parseFloat(artikal.cijena)||0, prodajna_cijena:parseFloat(artikal.cijena)||0,
+  });
+  kalkRenderStavke();
+}
+
+function kalkAzurirajStavku(i, polje, vrijednost){
+  kalkStavke[i][polje]=parseFloat(vrijednost)||0;
+  kalkRenderStavke();
+}
+
+function kalkObrisiStavku(i){
+  kalkStavke.splice(i,1);
+  kalkRenderStavke();
+}
+
+function kalkRenderStavke(){
+  const tbody=document.getElementById('kalk-stavke-tbody');
+  if(!kalkStavke.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#9aa5b1;padding:16px;">Nema dodanih stavki — pretraži artikal iznad.</td></tr>'; kalkAzurirajSume(0); return; }
+
+  const trProm=parseFloat(document.getElementById('kalk-trosak-prevoz').value)||0;
+  const trCar=parseFloat(document.getElementById('kalk-trosak-carina').value)||0;
+  const trOst=parseFloat(document.getElementById('kalk-trosak-ostalo').value)||0;
+  const ukupniTroskovi=trProm+trCar+trOst;
+  const ukupnaVrijednost=kalkStavke.reduce((s,x)=>s+x.kolicina*x.nabavna_cijena,0);
+
+  tbody.innerHTML=kalkStavke.map((s,i)=>{
+    const vrijednostStavke=s.kolicina*s.nabavna_cijena;
+    const udio = ukupnaVrijednost>0 ? (vrijednostStavke/ukupnaVrijednost)*ukupniTroskovi : 0;
+    const pravaCijena = s.kolicina>0 ? (vrijednostStavke+udio)/s.kolicina : 0;
+    return `
+    <tr>
+      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><b>${esc(s.sifra)}</b><br><span style="font-size:10.5px;color:#8b96a5;">${esc(s.naziv)}</span></td>
+      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><input type="number" step="0.001" value="${s.kolicina}" style="width:75px;padding:5px 6px;font-size:12px;" onchange="kalkAzurirajStavku(${i},'kolicina',this.value)"></td>
+      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><input type="number" step="0.01" value="${s.nabavna_cijena}" style="width:80px;padding:5px 6px;font-size:12px;" onchange="kalkAzurirajStavku(${i},'nabavna_cijena',this.value)"></td>
+      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;color:#8b96a5;">${fm(udio)} KM</td>
+      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;font-weight:700;">${fm(pravaCijena)} KM</td>
+      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><input type="number" step="0.01" value="${s.prodajna_cijena}" style="width:80px;padding:5px 6px;font-size:12px;" onchange="kalkAzurirajStavku(${i},'prodajna_cijena',this.value)"></td>
+      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><button class="btn-import sec" style="padding:4px 8px;" onclick="kalkObrisiStavku(${i})">🗑</button></td>
+    </tr>`;
+  }).join('');
+  kalkAzurirajSume(ukupnaVrijednost+ukupniTroskovi);
+}
+
+function kalkAzurirajSume(ukupnaVrijednostSaTroskovima){
+  document.getElementById('kalk-sume').innerHTML=`
+    <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:var(--dark);">${kalkStavke.length}</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Stavki</div></div>
+    <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:var(--dark);">${fm(kalkStavke.reduce((s,x)=>s+x.kolicina,0))}</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Ukupna količina</div></div>
+    <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:var(--dark);">${fm(ukupnaVrijednostSaTroskovima)} KM</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Ukupna vrijednost (sa troškovima)</div></div>
+  `;
+}
+
+async function kalkSacuvaj(){
+  const msg=document.getElementById('kalk-msg');
+  msg.style.color='';
+  const dobavljac=document.getElementById('kalk-dobavljac').value.trim();
+  const datum=document.getElementById('kalk-datum').value;
+  const objektId=document.getElementById('kalk-objekt').value;
+  if(!dobavljac){ msg.style.color='red'; msg.textContent='Unesite dobavljača.'; return; }
+  if(!datum){ msg.style.color='red'; msg.textContent='Unesite datum.'; return; }
+  if(!objektId){ msg.style.color='red'; msg.textContent='Izaberite prodajni objekat.'; return; }
+  if(!kalkStavke.length){ msg.style.color='red'; msg.textContent='Dodajte bar jednu stavku.'; return; }
+  if(!confirm(`Sačuvati kalkulaciju sa ${kalkStavke.length} stavki? Ovo će odmah uvećati stanje robe.`)) return;
+
+  try{
+    const r=await fetch(`${API}/api/kalkulacije`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        broj:document.getElementById('kalk-broj').value.trim()||null,
+        dobavljac, datum, objekt_id:objektId,
+        objekt_naziv:kalkMojiPJovi.find(p=>String(p.id)===String(objektId))?.naziv,
+        trosak_prevoz:document.getElementById('kalk-trosak-prevoz').value,
+        trosak_carina:document.getElementById('kalk-trosak-carina').value,
+        trosak_ostalo:document.getElementById('kalk-trosak-ostalo').value,
+        napomena:document.getElementById('kalk-napomena').value.trim(),
+        stavke:kalkStavke,
+      }),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error);
+    msg.style.color='green';
+    msg.textContent=`✓ Kalkulacija #${data.id} sačuvana — stanje robe je uvećano.`;
+    kalkStavke=[];
+    document.getElementById('kalk-dobavljac').value='';
+    document.getElementById('kalk-broj').value='';
+    document.getElementById('kalk-napomena').value='';
+    document.getElementById('kalk-trosak-prevoz').value='0';
+    document.getElementById('kalk-trosak-carina').value='0';
+    document.getElementById('kalk-trosak-ostalo').value='0';
+    kalkRenderStavke();
+  }catch(e){
+    msg.style.color='red';
+    msg.textContent='✗ '+e.message;
+  }
+}
+
+document.addEventListener('click', e=>{
+  const rez=document.getElementById('kalk-pretraga-rez');
+  if(rez && !e.target.closest('div[style*="position:relative"]')) rez.style.display='none';
+});
+
 fetch(`${API}/api/auth/me`).then(r=>{
   if(!r.ok){location.href='login.html';return;}
   return r.json();
@@ -1599,6 +1808,8 @@ fetch(`${API}/api/auth/me`).then(r=>{
   ucitajObjektiListu();
   popuniPrenosObjekte();
   popuniLagerObjekat();
+  document.getElementById('kalk-datum').value=new Date().toISOString().split('T')[0];
+  kalkUcitajObjekte();
 }).catch(()=>location.href='login.html');
 
 </script>

@@ -58,6 +58,7 @@ app.use('/api/proizvodnja', requireLoginOrApiKey, require('./proizvodnja'));
 app.use('/api/gotovina',    requireLoginOrApiKey, require('./gotovina'));
 app.use('/api/finansije',   requireLoginOrApiKey, require('./finansije'));
 app.use('/api/plate',       requireLoginOrApiKey, require('./plate'));
+app.use('/api/kalkulacije', requireLoginOrApiKey, require('./kalkulacije'));
 app.use('/api/roba',        requireLoginOrApiKey, require('./roba'));
 const otpremniceRouter = require('./otpremnice');
 app.use('/api/otpremnice',  requireLoginOrApiKey, otpremniceRouter);
