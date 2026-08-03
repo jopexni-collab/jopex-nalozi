@@ -321,13 +321,15 @@ router.get('/kretanje-pregled', zahtijevaRobaMagacin, async (req, res) => {
          r.id, r.sifra, r.naziv, r.jed_mjera,
          rp.stanje AS trenutno_stanje, rp.cijena,
          COALESCE(ulk.kol, 0) AS ulaz_kalkulacija,
+         COALESCE(ulk.vr, 0) AS ulaz_kalkulacija_vrijednost,
          COALESCE(ulp.kol, 0) AS ulaz_prenos,
          COALESCE(izp.kol, 0) AS izlaz_prodaja,
+         COALESCE(izp.vr, 0) AS izlaz_prodaja_vrijednost,
          COALESCE(izpr.kol, 0) AS izlaz_prenos
        FROM roba r
        JOIN roba_pj rp ON rp.roba_id = r.id AND rp.objekt_id = $1
        LEFT JOIN (
-         SELECT ks.roba_id, SUM(ks.kolicina) AS kol
+         SELECT ks.roba_id, SUM(ks.kolicina) AS kol, SUM(ks.kolicina * ks.prava_nabavna_cijena) AS vr
          FROM kalkulacija_stavke ks JOIN kalkulacije k ON k.id = ks.kalkulacija_id
          WHERE k.objekt_id = $1 AND k.datum BETWEEN $2 AND $3
          GROUP BY ks.roba_id
@@ -339,7 +341,7 @@ router.get('/kretanje-pregled', zahtijevaRobaMagacin, async (req, res) => {
          GROUP BY pr.roba_id
        ) ulp ON ulp.roba_id = r.id
        LEFT JOIN (
-         SELECT os.roba_id, SUM(os.kolicina) AS kol
+         SELECT os.roba_id, SUM(os.kolicina) AS kol, SUM(os.iznos) AS vr
          FROM otpremnica_stavke os JOIN otpremnice o ON o.id = os.otpremnica_id
          WHERE o.objekt_id = $1 AND o.status = 'potvrdjena' AND o.datum BETWEEN $2 AND $3
          GROUP BY os.roba_id
@@ -356,6 +358,13 @@ router.get('/kretanje-pregled', zahtijevaRobaMagacin, async (req, res) => {
       [objektId, od, do_]
     );
 
+    // Vrijednost se računa iz STVARNIH transakcionih iznosa (ono što je zaista naplaćeno/
+    // koštalo — otpremnica_stavke.iznos, kalkulacija_stavke.prava_nabavna_cijena), NE iz
+    // trenutne kataloške cijene — inače se ne bi poklapalo sa stvarnim prometom u
+    // maloprodaji (npr. ako je cijena artikla promijenjena poslije prodaje, ili je bilo
+    // odstupanja od zadane cijene na samoj otpremnici). Prenosi između PJ nemaju svoju
+    // transakcionu vrijednost (interni su, ne mijenjaju novac) — za njih se i dalje
+    // koristi trenutna cijena, kao procjena.
     const stavke = r.rows.map(row => {
       const ulaz = parseFloat(row.ulaz_kalkulacija) + parseFloat(row.ulaz_prenos);
       const izlaz = parseFloat(row.izlaz_prodaja) + parseFloat(row.izlaz_prenos);
@@ -363,11 +372,13 @@ router.get('/kretanje-pregled', zahtijevaRobaMagacin, async (req, res) => {
       const trenutno = parseFloat(row.trenutno_stanje);
       const pocetno = trenutno - neto;
       const cijena = parseFloat(row.cijena) || 0;
+      const vrijednostUlaz = parseFloat(row.ulaz_kalkulacija_vrijednost) + parseFloat(row.ulaz_prenos) * cijena;
+      const vrijednostIzlaz = parseFloat(row.izlaz_prodaja_vrijednost) + parseFloat(row.izlaz_prenos) * cijena;
       return {
         roba_id: row.id, sifra: row.sifra, naziv: row.naziv, jed_mjera: row.jed_mjera,
         pocetno_stanje: +pocetno.toFixed(3), ulaz: +ulaz.toFixed(3), izlaz: +izlaz.toFixed(3),
         neto: +neto.toFixed(3), trenutno_stanje: +trenutno.toFixed(3),
-        vrijednost_promjene: +(neto * cijena).toFixed(2),
+        vrijednost_promjene: +(vrijednostUlaz - vrijednostIzlaz).toFixed(2),
       };
     });
 

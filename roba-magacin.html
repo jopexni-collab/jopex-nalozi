@@ -542,6 +542,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <select id="kretanje-objekat" onchange="ucitajKretanjeRobe()"><option value="">— izaberi prodajni objekat —</option></select>
     </div>
     <div class="ce-row" style="margin-top:8px;">
+      <button type="button" class="ce-tip-btn" data-kper="danas" onclick="postaviKretanjePeriod(1,this)">Danas</button>
       <button type="button" class="ce-tip-btn active" data-kper="7" onclick="postaviKretanjePeriod(7,this)">7 dana</button>
       <button type="button" class="ce-tip-btn" data-kper="30" onclick="postaviKretanjePeriod(30,this)">30 dana</button>
       <button type="button" class="ce-tip-btn" data-kper="mjesec" onclick="postaviKretanjeMjesec(this)">Ovaj mjesec</button>
