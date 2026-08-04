@@ -812,11 +812,26 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         <button type="button" class="ce-tip-btn active" data-nacin-pl="kompletno" onclick="postaviNacinPlacanja('kompletno')">Plaća sve odmah</button>
         <button type="button" class="ce-tip-btn" data-nacin-pl="djelimicno" onclick="postaviNacinPlacanja('djelimicno')">Plaća djelimično</button>
         <button type="button" class="ce-tip-btn" data-nacin-pl="banka" onclick="postaviNacinPlacanja('banka')">Banka / VP</button>
+        <button type="button" class="ce-tip-btn" data-nacin-pl="mesovito" onclick="postaviNacinPlacanja('mesovito')">Deo gotovina + deo banka</button>
       </div>
       <div id="ov-djelimicno-fld" style="display:none;margin-top:8px;">
         <label id="ov-djelimicno-lbl">Iznos koji kupac plaća SADA (KM)</label>
         <input type="number" id="ov-iznos-djelimicno" step="0.01" min="0.01" placeholder="0.00" oninput="azurirajPreostaliDug()">
         <div id="ov-preostali-dug" style="font-size:12px;color:var(--red);font-weight:700;margin-top:4px;"></div>
+      </div>
+      <div id="ov-mesovito-fld" style="display:none;margin-top:8px;background:#f7f8fa;border-radius:8px;padding:10px;">
+        <label>Iznos u gotovini SADA (KM)</label>
+        <input type="number" id="ov-iznos-gotovina-mes" step="0.01" min="0" placeholder="0.00" oninput="azurirajPreostaliDug()">
+        <label style="margin-top:8px;">Iznos na banku SADA (KM)</label>
+        <input type="number" id="ov-iznos-banka-mes" step="0.01" min="0" placeholder="0.00" oninput="azurirajPreostaliDug()">
+        <div class="ce-row" style="margin-top:6px;">
+          <button type="button" class="ce-tip-btn" data-banka-mes="rfb" onclick="postaviBankaMesovito('rfb')">rfb</button>
+          <button type="button" class="ce-tip-btn" data-banka-mes="uni" onclick="postaviBankaMesovito('uni')">uni</button>
+          <button type="button" class="ce-tip-btn" data-banka-mes="mf" onclick="postaviBankaMesovito('mf')">mf</button>
+          <button type="button" class="ce-tip-btn" data-banka-mes="nlb" onclick="postaviBankaMesovito('nlb')">nlb</button>
+          <button type="button" class="ce-tip-btn" data-banka-mes="uni1" onclick="postaviBankaMesovito('uni1')">uni1</button>
+        </div>
+        <div id="ov-preostali-dug-mes" style="font-size:12px;color:var(--red);font-weight:700;margin-top:8px;"></div>
       </div>
       <div id="ov-banka-vp-fld" style="display:none;margin-top:8px;background:#f7f8fa;border-radius:8px;padding:10px;">
         <div class="ce-row">
@@ -2658,6 +2673,7 @@ function postaviNacinPlacanja(nacin){
   document.querySelectorAll('.ce-tip-btn[data-nacin-pl]').forEach(b=>b.classList.toggle('active', b.dataset.nacinPl===nacin));
   document.getElementById('ov-djelimicno-fld').style.display = nacin==='djelimicno' ? 'block' : 'none';
   document.getElementById('ov-banka-vp-fld').style.display = nacin==='banka' ? 'block' : 'none';
+  document.getElementById('ov-mesovito-fld').style.display = nacin==='mesovito' ? 'block' : 'none';
   if(nacin!=='banka'){
     bankaVpTrenutno='';
     document.getElementById('ov-iznos-banka').value='';
@@ -2665,6 +2681,20 @@ function postaviNacinPlacanja(nacin){
     document.getElementById('ov-vp-napomena').style.display='none';
     document.querySelectorAll('.ce-tip-btn[data-banka-vp]').forEach(b=>b.classList.remove('active'));
   }
+  if(nacin!=='mesovito'){
+    bankaMesovitoTrenutno='';
+    document.getElementById('ov-iznos-gotovina-mes').value='';
+    document.getElementById('ov-iznos-banka-mes').value='';
+    document.querySelectorAll('.ce-tip-btn[data-banka-mes]').forEach(b=>b.classList.remove('active'));
+  }
+  azurirajPreostaliDug();
+}
+
+// Bira KOJA banka prima bankovni dio u "Mešovito" plaćanju.
+let bankaMesovitoTrenutno='';
+function postaviBankaMesovito(banka){
+  bankaMesovitoTrenutno=banka;
+  document.querySelectorAll('.ce-tip-btn[data-banka-mes]').forEach(b=>b.classList.toggle('active', b.dataset.bankaMes===banka));
   azurirajPreostaliDug();
 }
 
@@ -2684,11 +2714,14 @@ let kupacAvansSaldo=0;
 function azurirajPreostaliDug(){
   const jeBankaKonkretna = nacinPlacanjaTrenutni==='banka' && bankaVpTrenutno && bankaVpTrenutno!=='vp';
   const jeVp = nacinPlacanjaTrenutni==='banka' && bankaVpTrenutno==='vp';
-  const placeno = jeBankaKonkretna
+  const jeMesovito = nacinPlacanjaTrenutni==='mesovito';
+  const placeno = jeMesovito
+    ? (parseFloat(document.getElementById('ov-iznos-gotovina-mes').value)||0) + (parseFloat(document.getElementById('ov-iznos-banka-mes').value)||0)
+    : jeBankaKonkretna
     ? (parseFloat(document.getElementById('ov-iznos-banka').value)||0)
     : (parseFloat(document.getElementById('ov-iznos-djelimicno').value)||0);
   const koristiAvans=document.getElementById('ov-koristi-avans')?.checked;
-  const bazniOstatak = (nacinPlacanjaTrenutni==='djelimicno' || jeBankaKonkretna) ? (potvrdaUkupanIznos-placeno)
+  const bazniOstatak = (nacinPlacanjaTrenutni==='djelimicno' || jeBankaKonkretna || jeMesovito) ? (potvrdaUkupanIznos-placeno)
                       : jeVp ? potvrdaUkupanIznos
                       : potvrdaUkupanIznos; // 'kompletno' — avans se primjenjuje na cio iznos
   const avansPrimjenjen=koristiAvans?+Math.min(kupacAvansSaldo, bazniOstatak).toFixed(2):0;
@@ -2706,9 +2739,8 @@ function azurirajPreostaliDug(){
     efEl.textContent='';
   }
 
-  const el = jeBankaKonkretna ? document.getElementById('ov-preostali-dug-banka') : document.getElementById('ov-preostali-dug');
-  const drugiEl = jeBankaKonkretna ? document.getElementById('ov-preostali-dug') : document.getElementById('ov-preostali-dug-banka');
-  if(drugiEl) drugiEl.textContent='';
+  const el = jeMesovito ? document.getElementById('ov-preostali-dug-mes') : jeBankaKonkretna ? document.getElementById('ov-preostali-dug-banka') : document.getElementById('ov-preostali-dug');
+  [document.getElementById('ov-preostali-dug'), document.getElementById('ov-preostali-dug-banka'), document.getElementById('ov-preostali-dug-mes')].forEach(e=>{ if(e && e!==el) e.textContent=''; });
   let tekst;
   if(preostalo>0.004) tekst=`Ostatak na dug: ${fmMoney(preostalo)}`+(avansPrimjenjen>0?` (nakon ${fmMoney(avansPrimjenjen)} iz avansa)`:'');
   else if(preostalo<-0.004) tekst='⚠ Uneseno je više od ukupnog iznosa';
@@ -2725,6 +2757,7 @@ async function potvrdiOtpremnicu(){
   let nacinZaSlanje=nacinPlacanjaTrenutni;
   let iznosPlacenoSada=null;
   let nacinBankaZaSlanje=null;
+  let iznosGotovinaMesZaSlanje=null, iznosBankaMesZaSlanje=null;
 
   if(nacinPlacanjaTrenutni==='djelimicno'){
     iznosPlacenoSada=parseFloat(document.getElementById('ov-iznos-djelimicno').value);
@@ -2741,6 +2774,13 @@ async function potvrdiOtpremnicu(){
       if(!iznosPlacenoSada||iznosPlacenoSada<=0){alert('Unesite iznos koji ide na banku.');return;}
       if(iznosPlacenoSada>potvrdaUkupanIznos){alert('Iznos ne može biti veći od ukupnog iznosa otpremnice.');return;}
     }
+  }else if(nacinPlacanjaTrenutni==='mesovito'){
+    iznosGotovinaMesZaSlanje=parseFloat(document.getElementById('ov-iznos-gotovina-mes').value)||0;
+    iznosBankaMesZaSlanje=parseFloat(document.getElementById('ov-iznos-banka-mes').value)||0;
+    if(iznosGotovinaMesZaSlanje<=0 && iznosBankaMesZaSlanje<=0){alert('Unesite bar jedan iznos (gotovina ili banka).');return;}
+    if(iznosBankaMesZaSlanje>0 && !bankaMesovitoTrenutno){alert('Izaberite banku za bankovni dio.');return;}
+    if((iznosGotovinaMesZaSlanje+iznosBankaMesZaSlanje)>potvrdaUkupanIznos){alert('Zbir gotovine i banke ne može biti veći od ukupnog iznosa otpremnice.');return;}
+    nacinBankaZaSlanje=bankaMesovitoTrenutno||null;
   }
 
   const btn=document.getElementById('btn-potvrdi');
@@ -2761,6 +2801,8 @@ async function potvrdiOtpremnicu(){
         iznos_placeno_sada: iznosPlacenoSada,
         koristi_avans: document.getElementById('ov-koristi-avans').checked,
         nacin_banka: nacinBankaZaSlanje,
+        iznos_gotovina_sada: iznosGotovinaMesZaSlanje,
+        iznos_banka_sada: iznosBankaMesZaSlanje,
       }),
     });
     const data=await r.json();

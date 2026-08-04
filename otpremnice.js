@@ -539,12 +539,13 @@ router.post('/potvrdi', async (req, res) => {
   const {
     stavke, kupac_naziv, kupac_adresa, kupac_telefon, kupac_email, kupac_grad, kupac_id,
     potvrdio_kupac_ime, nacin_placanja, iznos_placeno_sada, nacin_banka,
+    iznos_gotovina_sada, iznos_banka_sada,
   } = req.body;
   if (!Array.isArray(stavke) || !stavke.length)
     return res.status(400).json({ error: 'Košarica je prazna.' });
   if (!potvrdio_kupac_ime || !potvrdio_kupac_ime.trim())
     return res.status(400).json({ error: 'Ime kupca je obavezno za potvrdu.' });
-  const nacin = ['kompletno', 'djelimicno', 'banka', 'dug'].includes(nacin_placanja) ? nacin_placanja : 'kompletno';
+  const nacin = ['kompletno', 'djelimicno', 'banka', 'dug', 'mesovito'].includes(nacin_placanja) ? nacin_placanja : 'kompletno';
 
   const client = await pool.connect();
   try {
@@ -590,9 +591,24 @@ router.post('/potvrdi', async (req, res) => {
     // Iznos koji se plaća SAD (gotovinom ili bankom, zavisi od "nacin") — odnosi se na
     // ono što je OSTALO nakon avansa, ne na cio ukupanIznos. "banka" i "djelimicno" imaju
     // IDENTIČNU matematiku — razlikuju se SAMO gdje se novac na kraju upisuje.
-    let iznosSada;
+    // "mesovito" je POSEBAN slučaj — DEO gotovina i DEO banka ISTOVREMENO, u istoj
+    // transakciji (npr. kupac da 7000 u gotovini i 4000 preko banke odjednom).
+    let iznosSada, iznosGotovinaSada = 0, iznosBankaSada = 0;
     if (nacin === 'kompletno') iznosSada = preostaloNakonAvansa;
     else if (nacin === 'dug') iznosSada = 0;
+    else if (nacin === 'mesovito') {
+      iznosGotovinaSada = +(parseFloat(iznos_gotovina_sada) || 0).toFixed(2);
+      iznosBankaSada = +(parseFloat(iznos_banka_sada) || 0).toFixed(2);
+      if (iznosGotovinaSada < 0 || iznosBankaSada < 0)
+        throw Object.assign(new Error('Iznosi ne mogu biti negativni.'), { status: 400 });
+      if (iznosGotovinaSada === 0 && iznosBankaSada === 0)
+        throw Object.assign(new Error('Unesite bar jedan iznos (gotovina ili banka).'), { status: 400 });
+      if (iznosBankaSada > 0 && !nacin_banka)
+        throw Object.assign(new Error('Izaberite banku za bankovni dio.'), { status: 400 });
+      iznosSada = +(iznosGotovinaSada + iznosBankaSada).toFixed(2);
+      if (iznosSada > preostaloNakonAvansa)
+        throw Object.assign(new Error('Zbir gotovine i banke ne može biti veći od preostalog iznosa (nakon avansa).'), { status: 400 });
+    }
     else { // djelimicno ILI banka
       iznosSada = parseFloat(iznos_placeno_sada);
       if (isNaN(iznosSada) || iznosSada <= 0)
@@ -649,9 +665,38 @@ router.post('/potvrdi', async (req, res) => {
     // prvobitno uplaćen — ne broji se ponovo ovdje).
     const brutoZaBlagajnu = +(ukupanIznos - iznosIzAvansa).toFixed(2);
     const jeBanka = nacin === 'banka';
+    const jeMesovito = nacin === 'mesovito';
 
     let gotovinaId = null, bankaUplataId = null;
-    if (preostaliDug > 0) {
+    if (jeMesovito) {
+      // MEŠOVITO: svaki red nosi SVOJ STVARNI iznos (ne "bruto koji se poklapa sa dug
+      // redom") — jasnije i bez rizika od zabune koju je pravio stari bruto/dug obrazac
+      // kad se on primjenjivao na djelimično plaćen iznos.
+      if (iznosGotovinaSada > 0) {
+        const g = await client.query(
+          `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
+           VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5) RETURNING id`,
+          [iznosGotovinaSada, user.ime_prezime, `Prodaja (mešovito, gotovina) — ${opisKupca}`, objektNaziv, broj]
+        );
+        gotovinaId = g.rows[0].id;
+      }
+      if (iznosBankaSada > 0) {
+        const b = await client.query(
+          `INSERT INTO banka_uplate (iznos, banka, izvor, nalog_r_br, kupac_id, kupac_naziv, objekt_naziv, komercijalista_ime, upisao_id, upisao_ime, napomena)
+           VALUES ($1,$2,'Maloprodaja',$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+          [iznosBankaSada, nacin_banka, broj, kupac_id || null, opisKupca, objektNaziv, user.ime_prezime,
+           user.id, user.ime_prezime, `Prodaja (mešovito, banka) — ${opisKupca}`]
+        );
+        bankaUplataId = b.rows[0].id;
+      }
+      if (preostaliDug > 0) {
+        await client.query(
+          `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
+           VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5)`,
+          [-preostaliDug, user.ime_prezime, `Dug po otpremnici — ${opisKupca}`, objektNaziv, broj]
+        );
+      }
+    } else if (preostaliDug > 0) {
       // Ima duga (djelimično ili ništa plaćeno) — upiši DVA reda: cijelu preostalu
       // vrijednost kao PLUS (bruto prodaja), i nenaplaćeni dio kao MINUS (dug). Njihov
       // zbir = tačno svježa gotovina primljena sad, ali ostaju vidljiva DVA reda —
