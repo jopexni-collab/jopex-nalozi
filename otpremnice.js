@@ -229,11 +229,13 @@ router.get('/', async (req, res) => {
     // knjiženje u Bluesoft). Komercijalista sa dodijeljenim PJ (prodavci_pj) vidi SVE
     // otpremnice iz TOG PJ — i svoje i kolega — jer kupac može doći bilo kom prodavcu u
     // toj PJ da plati/pita, nema smisla da ne vidi tuđu prodaju iz iste prodavnice.
+    let blagajnikPJevi = [];
     let dozvoljeniPJevi = [];
     if (user?.rola !== 'admin') {
       const bp = await pool.query('SELECT objekat_id FROM blagajnici_pj WHERE zaposleni_id=$1', [user.id]);
       const pp = await pool.query('SELECT objekat_id FROM prodavci_pj WHERE zaposleni_id=$1', [user.id]);
-      dozvoljeniPJevi = [...new Set([...bp.rows.map(r => r.objekat_id), ...pp.rows.map(r => r.objekat_id)])];
+      blagajnikPJevi = bp.rows.map(r => r.objekat_id);
+      dozvoljeniPJevi = [...new Set([...blagajnikPJevi, ...pp.rows.map(r => r.objekat_id)])];
     }
 
     // "broj" (deep-link iz blagajne, npr. klik na OTP broj) — admin vidi BILO KOJU
