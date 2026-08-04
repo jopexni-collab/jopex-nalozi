@@ -210,6 +210,33 @@ router.get('/klijenti', async (req, res) => {
     const kategMapaPoKljucu = {};
     kategorizacija.rows.forEach(k => { kategMapaPoKljucu[k.kljuc] = k; });
 
+    // Kategorizacija PO STAVCI (preciznija, po pojedinačnoj otpremnici/nalogu) — sabira se
+    // PO KLIJENTU i dodaje na ručnu (po klijentu) kategorizaciju iznad — oba mehanizma
+    // zajedno čine konačan prikaz (po dogovoru, oba ostaju aktivna).
+    const kategStavkeOtp = await pool.query(`
+      SELECT COALESCE(o.kupac_id::text, 'ime:'||LOWER(TRIM(o.kupac_naziv))) AS kljuc,
+             dks.kategorija, SUM(o.ukupan_iznos - o.iznos_placeno) AS iznos
+      FROM dug_kategorizacija_stavka dks
+      JOIN otpremnice o ON o.id::text = dks.stavka_id AND dks.tip='otpremnica'
+      WHERE o.status_placanja != 'placeno' AND o.status='potvrdjena'
+      GROUP BY kljuc, dks.kategorija
+    `);
+    const kategStavkeNal = await pool.query(`
+      SELECT 'ime:'||LOWER(TRIM(p.narucilac)) AS kljuc,
+             dks.kategorija, SUM(GREATEST(p.ugovorena_suma - p.avans - p.naplaceno_iznos, 0)) AS iznos
+      FROM dug_kategorizacija_stavka dks
+      JOIN proizvodnja_jopex p ON p.r_br::text = dks.stavka_id AND dks.tip='radni_nalog'
+      WHERE COALESCE(p.stornirano,false)=false AND COALESCE(p.naplaceno,false)=false
+      GROUP BY kljuc, dks.kategorija
+    `);
+    const kategStavkePoKljucu = {}; // kljuc -> {ocekivana_naplata, tesko_naplativo}
+    function dodajStavkuKateg(row) {
+      if (!kategStavkePoKljucu[row.kljuc]) kategStavkePoKljucu[row.kljuc] = { ocekivana_naplata: 0, tesko_naplativo: 0 };
+      kategStavkePoKljucu[row.kljuc][row.kategorija] += parseFloat(row.iznos);
+    }
+    kategStavkeOtp.rows.forEach(dodajStavkuKateg);
+    kategStavkeNal.rows.forEach(dodajStavkuKateg);
+
     // Sastavi jedinstvenu mapu po klijentu.
     const klijenti = {};
     function osiguraj(kljuc, kupacId, naziv) {
@@ -261,8 +288,11 @@ router.get('/klijenti', async (req, res) => {
         // stvarni ukupan dug (ako se dug u međuvremenu smanjio, kategorizacija se
         // automatski "skalira" da ne pokazuje više nego što stvarno postoji).
         const kateg = kategMapaPoKljucu[kljuc];
-        let iznosOcekivanaNaplata = kateg ? +parseFloat(kateg.iznos_ocekivana_naplata).toFixed(2) : 0;
-        let iznosTeskoNaplativo = kateg ? +parseFloat(kateg.iznos_tesko_naplativo).toFixed(2) : 0;
+        const kategStavke = kategStavkePoKljucu[kljuc] || { ocekivana_naplata: 0, tesko_naplativo: 0 };
+        let iznosOcekivanaNaplata = (kateg ? parseFloat(kateg.iznos_ocekivana_naplata) : 0) + kategStavke.ocekivana_naplata;
+        let iznosTeskoNaplativo = (kateg ? parseFloat(kateg.iznos_tesko_naplativo) : 0) + kategStavke.tesko_naplativo;
+        iznosOcekivanaNaplata = +iznosOcekivanaNaplata.toFixed(2);
+        iznosTeskoNaplativo = +iznosTeskoNaplativo.toFixed(2);
         if (iznosOcekivanaNaplata + iznosTeskoNaplativo > dugujeStvarno) {
           const razmjer = dugujeStvarno / (iznosOcekivanaNaplata + iznosTeskoNaplativo);
           iznosOcekivanaNaplata = +(iznosOcekivanaNaplata * razmjer).toFixed(2);
@@ -548,18 +578,24 @@ router.get('/klijent-dug-detalji', async (req, res) => {
   if (!kupac_id && !naziv) return res.status(400).json({ error: 'Nedostaje kupac_id ili naziv.' });
   try {
     const stavke = [];
+    // Trenutna kategorizacija po stavci — mapa (tip|stavka_id) -> kategorija, da bi svaka
+    // stavka odmah znala u kojoj je "korpi" (za prikaz značke i da dugme zna šta da nudi).
+    const kategRes = await pool.query(`SELECT tip, stavka_id, kategorija FROM dug_kategorizacija_stavka`);
+    const kategMapa = {};
+    kategRes.rows.forEach(k => { kategMapa[k.tip + '|' + k.stavka_id] = k.kategorija; });
 
     if (kupac_id) {
       const o = await pool.query(
-        `SELECT broj, datum, ukupan_iznos, iznos_placeno, (ukupan_iznos - iznos_placeno) AS duguje, objekt_naziv
+        `SELECT id, broj, datum, ukupan_iznos, iznos_placeno, (ukupan_iznos - iznos_placeno) AS duguje, objekt_naziv
          FROM otpremnice
          WHERE kupac_id=$1 AND status_placanja != 'placeno' AND status='potvrdjena'
          ORDER BY datum ASC`,
         [kupac_id]
       );
       o.rows.forEach(r => stavke.push({
-        tip: 'otpremnica', broj: r.broj, datum: r.datum, iznos: +parseFloat(r.duguje).toFixed(2),
+        tip: 'otpremnica', stavka_id: String(r.id), broj: r.broj, datum: r.datum, iznos: +parseFloat(r.duguje).toFixed(2),
         opis: `Maloprodaja — ${r.objekt_naziv || ''} — ukupno ${r.ukupan_iznos}, plaćeno ${r.iznos_placeno}`,
+        kategorija: kategMapa['otpremnica|' + r.id] || null,
       }));
     }
 
@@ -575,13 +611,41 @@ router.get('/klijent-dug-detalji', async (req, res) => {
         [naziv]
       );
       n.rows.forEach(r => stavke.push({
-        tip: 'radni_nalog', broj: r.r_br, datum: r.pocetak, iznos: +parseFloat(Math.max(r.duguje,0)).toFixed(2),
+        tip: 'radni_nalog', stavka_id: String(r.r_br), broj: r.r_br, datum: r.pocetak, iznos: +parseFloat(Math.max(r.duguje,0)).toFixed(2),
         opis: `${r.zadatak || 'Radni nalog'} — ugovoreno ${r.ugovorena_suma}, avans ${r.avans}, naplaćeno ${r.naplaceno_iznos}`,
+        kategorija: kategMapa['radni_nalog|' + r.r_br] || null,
       }));
     }
 
     stavke.sort((a, b) => new Date(a.datum || 0) - new Date(b.datum || 0));
     res.json(stavke);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/finansije/stavka-kategorija — postavlja/uklanja kategoriju za JEDNU konkretnu
+// stavku (otpremnicu ili radni nalog). kategorija=null uklanja (vraća u običan "Dug").
+router.post('/stavka-kategorija', async (req, res) => {
+  const user = req.session?.user;
+  if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });
+  const { tip, stavka_id, kategorija, napomena } = req.body || {};
+  if (!['otpremnica', 'radni_nalog'].includes(tip)) return res.status(400).json({ error: 'Neispravan tip.' });
+  if (!stavka_id) return res.status(400).json({ error: 'Nedostaje stavka_id.' });
+  try {
+    if (!kategorija) {
+      await pool.query(`DELETE FROM dug_kategorizacija_stavka WHERE tip=$1 AND stavka_id=$2`, [tip, String(stavka_id)]);
+      return res.json({ ok: true, kategorija: null });
+    }
+    if (!['ocekivana_naplata', 'tesko_naplativo'].includes(kategorija))
+      return res.status(400).json({ error: 'Neispravna kategorija.' });
+    await pool.query(
+      `INSERT INTO dug_kategorizacija_stavka (tip, stavka_id, kategorija, napomena, azurirao_id, azurirao_ime)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (tip, stavka_id) DO UPDATE SET kategorija=$3, napomena=$4, azurirao_id=$5, azurirao_ime=$6, azurirano=now()`,
+      [tip, String(stavka_id), kategorija, napomena || null, user.id, user.ime_prezime]
+    );
+    res.json({ ok: true, kategorija });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

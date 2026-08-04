@@ -1725,17 +1725,68 @@ async function otvoriDugDetalji(kupacId, naziv){
     const r=await fetch(`${API}/api/finansije/klijent-dug-detalji?${params}`);
     const rows=await r.json();
     if(!rows.length){ cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Nema pronađenih stavki duga.</div>'; return; }
-    cont.innerHTML=rows.map(s=>`
-      <div style="border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+    const imaRadneNaloge=rows.some(s=>s.tip==='radni_nalog');
+    cont.innerHTML=rows.map(s=>{
+      const kategBoja = s.kategorija==='ocekivana_naplata' ? 'border-color:var(--blue,#1a5fa8);' : s.kategorija==='tesko_naplativo' ? 'border-color:var(--red,#c0392b);' : '';
+      const kategZnacka = s.kategorija==='ocekivana_naplata' ? '<span style="background:#eef4fc;color:var(--blue,#1a5fa8);font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:6px;">OČEKIVANA NAPLATA</span>'
+                        : s.kategorija==='tesko_naplativo' ? '<span style="background:#fce8e6;color:var(--red,#c0392b);font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:6px;">TEŠKO NAPLATIVO</span>' : '';
+      return `
+      <div style="border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;margin-bottom:8px;${kategBoja}">
         <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;">
           <span>${s.tip==='otpremnica'?'📦':'🔨'} ${s.tip==='otpremnica'?'#'+esc(s.broj):'Nalog #'+s.broj}</span>
           <span style="color:var(--red);">${fm(s.iznos)}</span>
         </div>
         <div style="font-size:11px;color:#8b96a5;margin-top:2px;">${s.datum?new Date(s.datum).toLocaleDateString('sr-Latn-BA'):'—'} · ${esc(s.opis||'')}</div>
-        ${s.tip==='otpremnica'?`<button class="btn-sm" onclick="location.href='maloprodaja.html?naplati_otpremnicu=${s.broj}'" style="width:100%;margin-top:8px;background:var(--blue,#1a5fa8);color:#fff;">Naplati ovu →</button>`:''}
+        ${kategZnacka?`<div style="margin-top:4px;">${kategZnacka}</div>`:''}
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+          ${s.tip==='otpremnica'?`<button class="btn-sm" onclick="location.href='maloprodaja.html?naplati_otpremnicu=${s.broj}'" style="flex:1;min-width:110px;background:var(--blue,#1a5fa8);color:#fff;">Naplati ovu →</button>`:''}
+          ${s.tip==='radni_nalog'?`<button class="btn-sm" onclick="otvoriNaplataNaloga(${s.broj},'sve',${s.iznos})" style="flex:1;min-width:110px;background:var(--green,#1f8a4c);color:#fff;">✓ Naplati</button>`:''}
+          ${s.kategorija!=='ocekivana_naplata'?`<button class="btn-sm" onclick="postaviStavkaKategorija('${s.tip}','${s.stavka_id}','ocekivana_naplata','${kupacId||''}','${esc(naziv).replace(/'/g,"\\'")}')" style="flex:1;min-width:90px;background:#eef4fc;color:var(--blue,#1a5fa8);">→ Očekivana</button>`:''}
+          ${s.kategorija!=='tesko_naplativo'?`<button class="btn-sm" onclick="postaviStavkaKategorija('${s.tip}','${s.stavka_id}','tesko_naplativo','${kupacId||''}','${esc(naziv).replace(/'/g,"\\'")}')" style="flex:1;min-width:90px;background:#fce8e6;color:var(--red,#c0392b);">→ Teško napl.</button>`:''}
+          ${s.kategorija?`<button class="btn-sm" onclick="postaviStavkaKategorija('${s.tip}','${s.stavka_id}',null,'${kupacId||''}','${esc(naziv).replace(/'/g,"\\'")}')" style="flex:1;min-width:70px;">✕ Vrati u Dug</button>`:''}
+        </div>
+        ${s.tip==='radni_nalog'?`<div id="naplata-nalog-${s.broj}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px dashed #f0d896;"></div>`:''}
       </div>
-    `).join('');
+    `;}).join('');
+    if(imaRadneNaloge){
+      cont.innerHTML+=`<button class="btn-sm" onclick="naplatiSveRadneNaloge(${JSON.stringify(rows.filter(s=>s.tip==='radni_nalog').map(s=>({r_br:s.broj,iznos:s.iznos}))).replace(/"/g,'&quot;')})" style="width:100%;margin-top:6px;background:var(--green,#1f8a4c);color:#fff;font-weight:700;">✓ Naplati SVE radne naloge odjednom</button>`;
+    }
   }catch(e){ cont.innerHTML='<div style="text-align:center;color:red;padding:20px;">Greška pri učitavanju.</div>'; }
+}
+
+// Premjesti JEDNU stavku (otpremnicu ili radni nalog) u drugu kategoriju — ili vrati u
+// običan "Dug" ako se pošalje null. Osvježava ceo modal posle, da se odmah vidi promjena.
+async function postaviStavkaKategorija(tip, stavkaId, kategorija, kupacId, naziv){
+  try{
+    const r=await fetch(`${API}/api/finansije/stavka-kategorija`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({tip, stavka_id:stavkaId, kategorija}),
+    });
+    if(!r.ok){ const d=await r.json(); alert('✗ '+(d.error||'Greška.')); return; }
+    await otvoriDugDetalji(kupacId==='null'||!kupacId?null:kupacId, naziv);
+    ucitajKlijentiListu();
+  }catch(e){ alert('✗ Greška pri snimanju.'); }
+}
+
+// Naplaćuje SVE prikazane radne naloge odjednom (svaki poziva ISTI naplata-blagajna
+// mehanizam kao i pojedinačno — ista logika: blagajnik direktno, komercijalista čeka
+// potvrdu blagajnika). Ide redom, jedan po jedan, da se ne izgubi trag ako neki padne.
+async function naplatiSveRadneNaloge(nalozi){
+  if(!confirm(`Naplatiti SVE (${nalozi.length}) radne naloge odjednom, ukupno ${fm(nalozi.reduce((s,n)=>s+n.iznos,0))} KM?`)) return;
+  let ok=0, greska=0;
+  for(const n of nalozi){
+    try{
+      const r=await fetch(`${API}/api/proizvodnja/${n.r_br}/naplata-blagajna`,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({tip:'sve', iznos:n.iznos}),
+      });
+      if(r.ok) ok++; else greska++;
+    }catch(e){ greska++; }
+  }
+  alert(`✓ Naplaćeno: ${ok}${greska?`, greška: ${greska}`:''}`);
+  document.getElementById('modal-klijent-dug').style.display='none';
+  ucitajKlijentiListu();
+  await load(); await loadSume();
 }
 
 /* ── KLIK NA DUG (Dug/Očekivana naplata/Teško naplativo) → PREMEŠTANJE IZMEĐU KATEGORIJA ── */
