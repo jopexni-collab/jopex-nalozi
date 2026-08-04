@@ -3153,7 +3153,7 @@ async function loadOtpremnice(brojOverride, tiho){
         <div class="otp-iznos">
           ${o.ukupan_iznos==null?'<span style="font-size:11px;color:#8b96a5;font-weight:400;">🔒 starije od juče</span>'
             :o.status_placanja==='placeno'?fmMoneyZaObjekat(o.ukupan_iznos, o.objekt_id)
-            :`<div style="display:flex;justify-content:flex-end;gap:8px;">
+            :`<div style="display:flex;gap:8px;">
                 <span style="color:var(--green);">✓ ${fmMoneyZaObjekat(o.iznos_placeno, o.objekt_id)}</span>
                 <span style="color:var(--red);">⏳ dug ${fmMoneyZaObjekat(o.ukupan_iznos-o.iznos_placeno, o.objekt_id)}</span>
               </div>`}
