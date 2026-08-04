@@ -492,12 +492,13 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <div class="uzorak-hint">Interni transfer stanja — ne prodaja. Cijena u odredišnom PJ se preuzima iz izvornog PJ ako artikal tamo još nema svoju cijenu (možeš je odmah izmijeniti nakon prenosa).</div>
 
     <div class="ce-row">
-      <button type="button" class="ce-tip-btn active" data-pmode="rucno" onclick="postaviPrenosMode('rucno')">Ručno (1 artikal)</button>
+      <button type="button" class="ce-tip-btn active" data-pmode="rucno" onclick="postaviPrenosMode('rucno')">Ručno (dodaj više artikala)</button>
       <button type="button" class="ce-tip-btn" data-pmode="xlsx" onclick="postaviPrenosMode('xlsx')">Uvezi iz XLSX</button>
     </div>
 
     <!-- RUČNI UNOS -->
     <div id="prenos-rucno-blok">
+      <div class="uzorak-hint" style="margin-bottom:6px;">Pretraži i dodaj artikal, ponovi za svaki sledeći — svi dodani artikli idu u JEDAN prenos kad klikneš "Izvrši prenos".</div>
       <select id="prenos-iz" onchange="document.getElementById('prenos-search').value='';document.getElementById('prenos-rezultati').innerHTML='';"><option value="">— iz objekta —</option></select>
       <select id="prenos-u"><option value="">— u objekat —</option></select>
       <input type="text" id="prenos-search" placeholder="Pretraga artikla po šifri/nazivu...">
