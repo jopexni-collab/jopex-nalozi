@@ -143,6 +143,21 @@ router.get('/:r_br', async (req, res) => {
   }
 });
 
+// GET /api/proizvodnja/:r_br/status-log — audit trag za hover u lista.html (ko/kad/šta
+// je promijenio od status polja: status, gotovo, reklamacija_dodatni_rad, nova_procjena).
+router.get('/:r_br/status-log', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT kolona, stara_vrijednost, nova_vrijednost, korisnik_ime, kada
+       FROM status_promjene_log WHERE r_br=$1 ORDER BY kada DESC LIMIT 20`,
+      [req.params.r_br]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // POST /api/proizvodnja - novi nalog
 // Poziva se i iz web forme i iz JoPeX HTML (usvajanje ponude)
@@ -306,7 +321,11 @@ router.post('/:r_br/naplata-blagajna', async (req, res) => {
     );
     if (!n.rows.length) return res.status(404).json({ error: 'Nalog nije pronađen.' });
     const nalog = n.rows[0];
-    const opisMarker = `got ${user.ime_prezime}`;
+    // Isti format kao "naplati-ostatak" ruta (got Ime DD.MM) — ranije je ovdje nedostajao
+    // datum, pa se ponašalo drugačije zavisno od toga da li je naplata unesena direktno
+    // ovde (iz blagajne) ili preko "naplati-ostatak" (iz liste) — sad su usaglašene.
+    const danasKratko = new Date().toLocaleDateString('sr-Latn-BA', { day: '2-digit', month: '2-digit' });
+    const opisMarker = `got ${user.ime_prezime} ${danasKratko}`;
     const napomenaOpisa = tip === 'avans'
       ? `Avans - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''} — naplaćeno direktno u blagajni`
       : `Naplata - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''} — naplaćeno direktno u blagajni`;
@@ -537,9 +556,13 @@ router.patch('/:r_br', async (req, res) => {
   const user = req.session?.user;
   const isAdmin = user?.rola === 'admin';
 
-  const postojeciRes = await pool.query('SELECT ugovorio_id FROM proizvodnja_jopex WHERE r_br=$1', [req.params.r_br]);
+  const postojeciRes = await pool.query(
+    'SELECT ugovorio_id, status, gotovo, reklamacija_dodatni_rad, nova_procjena FROM proizvodnja_jopex WHERE r_br=$1',
+    [req.params.r_br]
+  );
   if (!postojeciRes.rows.length) return res.status(404).json({ error: 'Nalog nije pronađen.' });
   const jeSvoj = postojeciRes.rows[0].ugovorio_id === user?.id;
+  const staroStatusPolja = postojeciRes.rows[0];
 
   // "Ponude" dozvola (moze_ugovarati) — vidi/uređuje finansije SVIH naloga. Inače, samo
   // ako je osoba upisana kao "Ugovorio" ZA TAJ nalog (kreirao=ugovorio, isti koncept).
@@ -615,6 +638,24 @@ router.patch('/:r_br', async (req, res) => {
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Nalog nije pronađen.' });
     const novo = r.rows[0];
+
+    // Audit trag za status polja — beleži SVAKU stvarnu promjenu (ne piše red ako je
+    // vrijednost ostala ista), da hover u lista.html može pokazati ko/kad/šta je
+    // promijenio (npr. "EH · 04.08.2026 14:23 · Gotovo: Ne → Da").
+    for (const kolona of STATUS_POLJA) {
+      if (kolona in req.body) {
+        const staraVr = staroStatusPolja[kolona];
+        const novaVr = req.body[kolona];
+        // Poredi kao string da se izbjegnu lažne razlike tipa true vs 'true'.
+        if (String(staraVr) !== String(novaVr)) {
+          await pool.query(
+            `INSERT INTO status_promjene_log (r_br, kolona, stara_vrijednost, nova_vrijednost, korisnik_id, korisnik_ime)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [req.params.r_br, kolona, staraVr==null?null:String(staraVr), novaVr==null?null:String(novaVr), user?.id||null, user?.ime_prezime||null]
+          );
+        }
+      }
+    }
 
     if (trebaProvjeruGotovine) {
       // KLJUČNO: "Predano" ide automatski SAMO ako je ulogovana osoba (a) STVARNO

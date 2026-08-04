@@ -120,6 +120,7 @@ a.lk{color:var(--blue);text-decoration:none;}
 #kom-kontekst-meni button:hover{background:#f0f2f5;}
 #kom-kontekst-meni button.obrisi{color:#c0392b;}
 #kom-tooltip{position:fixed;z-index:499;background:#fff8e6;border:1px solid #f0d78c;border-radius:6px;padding:8px 10px;font-size:11.5px;max-width:260px;box-shadow:0 2px 8px rgba(0,0,0,.15);display:none;pointer-events:none;}
+#status-log-tooltip{position:fixed;z-index:499;background:#eef4fc;border:1px solid #b8d0f0;border-radius:6px;padding:8px 10px;font-size:11px;max-width:280px;box-shadow:0 2px 8px rgba(0,0,0,.15);display:none;pointer-events:none;line-height:1.5;}
 </style>
 </head>
 <body>
@@ -156,6 +157,7 @@ a.lk{color:var(--blue);text-decoration:none;}
   <button onclick="obrisiKomentar()" class="obrisi" id="kom-btn-obrisi" style="display:none;">🗑 Obriši komentar</button>
 </div>
 <div id="kom-tooltip"></div>
+<div id="status-log-tooltip"></div>
 
 <div id="kom-editor-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:600;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:12px;padding:18px;max-width:380px;width:92vw;">
@@ -310,12 +312,12 @@ function getCols(){
     {k:'prioritet',l:'Prioritet',w:90,filter:'sel',opts:PRIORITETI,render:r=>`<td>${chipP(r.prioritet)}</td>`,edit:{type:'select',opts:PRIORITETI,field:'prioritet'}},
     {k:'ugovorio',l:'Ugovorio',w:110,filter:'text',render:r=>`<td>${esc(r.ugovorio)}</td>`,edit:{type:'ugovorio',field:'ugovorio_id',label:'Ugovorio'}},
     {k:'narucilac',l:'Naručilac',w:130,filter:'text',render:r=>`<td>${esc(r.narucilac)}</td>`,edit:{type:'text',field:'narucilac',label:'Naručilac'}},
-    {k:'status',l:'Status',w:120,filter:'sel',opts:STATUSI,render:r=>`<td>${chipS(r.status,r.stornirano)}</td>`,edit:{type:'select',opts:STATUSI,field:'status'}},
+    {k:'status',l:'Status',w:120,filter:'sel',opts:STATUSI,render:r=>`<td onmouseenter="prikaziStatusLog(event,${r.r_br})" onmouseleave="sakrijStatusLog()">${chipS(r.status,r.stornirano)}</td>`,edit:{type:'select',opts:STATUSI,field:'status'}},
     {k:'pocetak',l:'Ugovoreno',w:90,filter:null,render:r=>`<td>${fd(r.pocetak)}</td>`,edit:{type:'date',field:'pocetak',label:'Ugovoreno (datum)'}},
     {k:'planirani_zavrsetak',l:'Plan. završetak',w:110,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>`<td class="${zavrsClass(r)}">${fd(r.planirani_zavrsetak)}</td>`,edit:{type:'date',field:'planirani_zavrsetak',label:'Plan. završetak'}},
     {k:'broj_dana',l:'Dana',w:70,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>daniC(r),edit:null},
     {k:'nova_procjena',l:'Razlog kašnjenja',w:180,filter:'text',render:r=>`<td class="note-cell${r.nova_procjena?' has-note':''}" data-note="${esc(r.nova_procjena)}">${esc(r.nova_procjena)||''}</td>`,edit:{type:'textarea',field:'nova_procjena',label:'Razlog kašnjenja'}},
-    {k:'gotovo',l:'Gotovo',w:65,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.gotovo?'<span style="color:#1f8a4c;font-size:18px;font-weight:900;line-height:1">✓</span>':''}</td>`,edit:{type:'check',field:'gotovo',label:'Gotovo'}},
+    {k:'gotovo',l:'Gotovo',w:65,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center" onmouseenter="prikaziStatusLog(event,${r.r_br})" onmouseleave="sakrijStatusLog()">${r.gotovo?'<span style="color:#1f8a4c;font-size:18px;font-weight:900;line-height:1">✓</span>':''}</td>`,edit:{type:'check',field:'gotovo',label:'Gotovo'}},
     {k:'reklamacija_dodatni_rad',l:'Rek.',w:60,filter:'sel',opts:['DA','NE'],render:r=>`<td class="center">${chipR(r.reklamacija_dodatni_rad)}</td>`,edit:{type:'select',opts:['','NE','DA'],field:'reklamacija_dodatni_rad',label:'Reklamacija'}},
     {k:'napomena',l:'Napomena',w:220,filter:'text',render:r=>`<td class="note-cell${r.napomena?' has-note':''}" data-note="${esc(r.napomena)}"><div class="clamp2-inner">${esc(r.napomena)}</div></td>`,edit:{type:'textarea',field:'napomena',label:'Napomena / upute operateru'}},
     {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center">${lk(r.link_skica)}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
@@ -653,6 +655,52 @@ function prikaziKomentarTooltip(event, kljuc){
   tip.style.left=(event.clientX+12)+'px';
   tip.style.top=(event.clientY+12)+'px';
   tip.style.display='block';
+}
+
+// Prevodi tehnički naziv kolone i vrijednosti u čitljiv tekst za hover prikaz.
+const STATUS_LOG_NAZIVI={status:'Status', gotovo:'Gotovo', reklamacija_dodatni_rad:'Reklamacija/dodatni rad', nova_procjena:'Nova procjena'};
+function statusLogVrijednostText(kolona, v){
+  if(kolona==='gotovo') return v==='true' ? 'Da' : v==='false' ? 'Ne' : (v||'—');
+  return v || '—';
+}
+
+// Keš po r_br — hover na isti red drugi put ne šalje ponovo isti upit.
+const statusLogKes={};
+let statusLogTimer=null;
+async function prikaziStatusLog(event, rBr){
+  const tip=document.getElementById('status-log-tooltip');
+  tip.style.left=(event.clientX+12)+'px';
+  tip.style.top=(event.clientY+12)+'px';
+  clearTimeout(statusLogTimer);
+  if(statusLogKes[rBr]){
+    renderStatusLogTooltip(statusLogKes[rBr]);
+    return;
+  }
+  // Malo odlaganje da se ne šalje upit za SVAKI prolaz miša preko reda (samo ako se
+  // zadrži bar 150ms) — izbjegava nepotrebne pozive pri brzom skrolovanju/prelasku.
+  statusLogTimer=setTimeout(async ()=>{
+    try{
+      const r=await fetch(`${API}/api/proizvodnja/${rBr}/status-log`);
+      const log=await r.json();
+      statusLogKes[rBr]=log;
+      renderStatusLogTooltip(log);
+    }catch(e){}
+  }, 150);
+}
+function renderStatusLogTooltip(log){
+  const tip=document.getElementById('status-log-tooltip');
+  if(!log.length){ tip.style.display='none'; return; }
+  tip.innerHTML=log.slice(0,5).map(l=>{
+    const inicijali=(l.korisnik_ime||'?').split(/\s+/).map(x=>x[0]).join('').toUpperCase().slice(0,2);
+    const datum=new Date(l.kada).toLocaleString('sr-Latn-BA',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const naziv=STATUS_LOG_NAZIVI[l.kolona]||l.kolona;
+    return `<div style="margin-bottom:4px;"><b>${esc(inicijali)}</b> · ${datum}<br>${esc(naziv)}: ${esc(statusLogVrijednostText(l.kolona,l.stara_vrijednost))} → <b>${esc(statusLogVrijednostText(l.kolona,l.nova_vrijednost))}</b></div>`;
+  }).join('');
+  tip.style.display='block';
+}
+function sakrijStatusLog(){
+  clearTimeout(statusLogTimer);
+  document.getElementById('status-log-tooltip').style.display='none';
 }
 
 // ─── INLINE EDIT POPUP ────────────────────────────────────────────────────
