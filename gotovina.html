@@ -856,7 +856,7 @@ async function ucitajAdminRazduzenja(){
     if(!rows.length){cont.innerHTML='<div style="color:#8b96a5;font-size:12px;padding:8px;">Nema razduženja na čekanju. 🎉</div>';return;}
     cont.innerHTML=rows.map(rz=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid #eee;font-size:12px;">
-        <span>${rz.tip==='banka'?'🏦 Banka':'🔒 Sef'} — <b>${esc(rz.objekt_naziv)}</b> — ${fm(rz.iznos)} KM
+        <span>${rz.tip==='banka'?'🏦 Banka':'🔒 Sef'} — <b>${esc(rz.objekt_naziv)}</b> — ${fmValuta(rz.iznos, rz.valuta)}
           ${rz.napomena?' · '+esc(rz.napomena):''} · blagajnik: ${esc(rz.blagajnik_ime||'—')} · ${fd(rz.kreirano)}</span>
         <button class="btn-add" style="padding:4px 10px;font-size:11px;" onclick="potvrdiRazduzenjeAdmin(${rz.id})">✓ Potvrdi</button>
       </div>

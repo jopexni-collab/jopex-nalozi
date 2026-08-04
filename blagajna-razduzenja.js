@@ -96,21 +96,23 @@ router.get('/', async (req, res) => {
       const dozvoljeni = mojiPJ.map(p => p.id);
       if (objekt_id) {
         if (!dozvoljeni.includes(parseInt(objekt_id))) return res.status(403).json({ error: 'Nemate pristup ovom PJ.' });
-        where.push(`objekt_id = $${i++}`); vals.push(objekt_id);
+        where.push(`br.objekt_id = $${i++}`); vals.push(objekt_id);
       } else {
-        where.push(`objekt_id = ANY($${i++}::int[])`); vals.push(dozvoljeni);
+        where.push(`br.objekt_id = ANY($${i++}::int[])`); vals.push(dozvoljeni);
       }
     } else if (objekt_id) {
-      where.push(`objekt_id = $${i++}`); vals.push(objekt_id);
+      where.push(`br.objekt_id = $${i++}`); vals.push(objekt_id);
     }
-    if (status) { where.push(`status = $${i++}`); vals.push(status); }
+    if (status) { where.push(`br.status = $${i++}`); vals.push(status); }
     const { od, do: do_ } = req.query;
-    if (od) { where.push(`kreirano >= $${i++}`); vals.push(od); }
-    if (do_) { where.push(`kreirano <= $${i++}::date + interval '1 day'`); vals.push(do_); }
+    if (od) { where.push(`br.kreirano >= $${i++}`); vals.push(od); }
+    if (do_) { where.push(`br.kreirano <= $${i++}::date + interval '1 day'`); vals.push(do_); }
 
-    const sql = `SELECT * FROM blagajna_razduzenja
+    const sql = `SELECT br.*, COALESCE(p.valuta,'KM') AS valuta
+      FROM blagajna_razduzenja br
+      LEFT JOIN prodajni_objekti p ON p.id = br.objekt_id
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-      ORDER BY kreirano DESC LIMIT 200`;
+      ORDER BY br.kreirano DESC LIMIT 200`;
     const r = await pool.query(sql, vals);
     res.json(r.rows);
   } catch (err) {
