@@ -71,18 +71,14 @@ router.get('/me', async (req, res) => {
     return res.status(401).json({ error: 'Niste prijavljeni.' });
   const user = req.session.user;
   // Da li korisnik SME uopšte da otvori Maloprodaju — provjerava se UŽIVO (ne iz sesije,
-  // koja je snimljena na login i ne prati promjene "Prodaja PJ" tokom sesije). Admin i
-  // blagajnik uvijek smiju; ostali moraju imati bar JEDAN dodijeljen PJ.
+  // koja je snimljena na login i ne prati promjene "Prodaja PJ" tokom sesije). Samo admin
+  // uvijek smije; "blagajnik" je ODVOJENA uloga (rukovanje gotovinom u blagajni) — NE
+  // povlači automatski pravo prodaje, mora imati SVOJU "Prodaja PJ" dodjelu.
   let imaProdajuPJ = user.rola === 'admin';
   if (!imaProdajuPJ && user.id) {
     try {
-      const blag = await pool.query('SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 LIMIT 1', [user.id]);
-      if (blag.rows.length) {
-        imaProdajuPJ = true;
-      } else {
-        const prod = await pool.query('SELECT 1 FROM prodavci_pj WHERE zaposleni_id=$1 LIMIT 1', [user.id]);
-        imaProdajuPJ = prod.rows.length > 0;
-      }
+      const prod = await pool.query('SELECT 1 FROM prodavci_pj WHERE zaposleni_id=$1 LIMIT 1', [user.id]);
+      imaProdajuPJ = prod.rows.length > 0;
     } catch (e) { imaProdajuPJ = false; }
   }
   res.json({ ...user, ima_prodaju_pj: imaProdajuPJ });

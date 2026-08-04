@@ -26,17 +26,13 @@ router.get('/kupci-grupe', async (req, res) => {
 // Ostali potrošači ove rute (Kalkulacija, Roba/magacin...) i dalje koriste GET / (svi PJ),
 // jer imaju SVOJU logiku pristupa (moze_roba_magacin itd.), ne vezanu za maloprodaju.
 // PRAVILO: ako korisnik NEMA nijedan zapis u prodavci_pj, vraća se PRAZNA lista (ne vidi/
-// ne može otvoriti NIJEDAN PJ) — osim ako je blagajnik (blagajnici_pj), koji uvijek vidi
-// sve, jer njemu treba pun pregled bez obzira na "Prodaja PJ" podešavanje.
+// ne može otvoriti NIJEDAN PJ). "Blagajnik" (blagajnici_pj) je ODVOJENA uloga (rukovanje
+// gotovinom) — NE povlači automatski pravo prodaje u maloprodaji, mora imati SVOJU
+// "Prodaja PJ" dodjelu kao i svako drugi.
 router.get('/za-maloprodaju', async (req, res) => {
   try {
     const u = req.session?.user;
     if (u?.rola === 'admin') {
-      const r = await pool.query('SELECT * FROM prodajni_objekti WHERE aktivan=true ORDER BY naziv');
-      return res.json(r.rows);
-    }
-    const blag = await pool.query('SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 LIMIT 1', [u.id]);
-    if (blag.rows.length) {
       const r = await pool.query('SELECT * FROM prodajni_objekti WHERE aktivan=true ORDER BY naziv');
       return res.json(r.rows);
     }
