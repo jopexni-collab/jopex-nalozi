@@ -557,12 +557,17 @@ router.patch('/:r_br', async (req, res) => {
   const isAdmin = user?.rola === 'admin';
 
   const postojeciRes = await pool.query(
-    'SELECT ugovorio_id, status, gotovo, reklamacija_dodatni_rad, nova_procjena FROM proizvodnja_jopex WHERE r_br=$1',
+    `SELECT ugovorio_id, ugovorio, status, gotovo, reklamacija_dodatni_rad, nova_procjena,
+            zadatak, prioritet, narucilac, materijal, pocetak, planirani_zavrsetak,
+            napomena, link_skica, link_ponuda,
+            ugovorena_suma, avans, naplata_detalji, naplaceno_fakturisano,
+            dodatni_rad_napomena, naplaceno
+     FROM proizvodnja_jopex WHERE r_br=$1`,
     [req.params.r_br]
   );
   if (!postojeciRes.rows.length) return res.status(404).json({ error: 'Nalog nije pronađen.' });
   const jeSvoj = postojeciRes.rows[0].ugovorio_id === user?.id;
-  const staroStatusPolja = postojeciRes.rows[0];
+  const staroSvaPolja = postojeciRes.rows[0];
 
   // "Ponude" dozvola (moze_ugovarati) — vidi/uređuje finansije SVIH naloga. Inače, samo
   // ako je osoba upisana kao "Ugovorio" ZA TAJ nalog (kreirao=ugovorio, isti koncept).
@@ -612,6 +617,13 @@ router.patch('/:r_br', async (req, res) => {
     }
     sets.push(`ugovorio_id = $${i++}`); vals.push(req.body.ugovorio_id || null);
     sets.push(`ugovorio = $${i++}`);    vals.push(ugovorioIme);
+    if (String(staroSvaPolja.ugovorio_id) !== String(req.body.ugovorio_id || null)) {
+      await pool.query(
+        `INSERT INTO status_promjene_log (r_br, kolona, stara_vrijednost, nova_vrijednost, korisnik_id, korisnik_ime)
+         VALUES ($1,'ugovorio',$2,$3,$4,$5)`,
+        [req.params.r_br, staroSvaPolja.ugovorio||null, ugovorioIme, user?.id||null, user?.ime_prezime||null]
+      );
+    }
   }
 
   if (!sets.length)
@@ -639,12 +651,20 @@ router.patch('/:r_br', async (req, res) => {
     if (!r.rows.length) return res.status(404).json({ error: 'Nalog nije pronađen.' });
     const novo = r.rows[0];
 
-    // Audit trag za status polja — beleži SVAKU stvarnu promjenu (ne piše red ako je
-    // vrijednost ostala ista), da hover u lista.html može pokazati ko/kad/šta je
-    // promijenio (npr. "EH · 04.08.2026 14:23 · Gotovo: Ne → Da").
-    for (const kolona of STATUS_POLJA) {
+    // Audit trag — beleži SVAKU stvarnu promjenu (ne piše red ako je vrijednost ostala
+    // ista), da hover u lista.html može pokazati ko/kad/šta je promijenio (npr.
+    // "EH · 04.08.2026 14:23 · Gotovo: Ne → Da"). Pokriva SVA editabilna polja u listi —
+    // OSIM avans_opis/naplaceno_opis, koja već imaju SVOJ tekući log (tekst se dopisuje
+    // pri svakoj uplati) — dupliranje bi ovde samo pravilo dugačke, nečitljive tekst-diff
+    // zapise bez dodatne vrijednosti.
+    const SVA_POLJA_ZA_LOG = [
+      ...STATUS_POLJA,
+      ...OPSTA_POLJA,
+      'ugovorena_suma','avans','naplata_detalji','naplaceno_fakturisano','dodatni_rad_napomena','naplaceno',
+    ];
+    for (const kolona of SVA_POLJA_ZA_LOG) {
       if (kolona in req.body) {
-        const staraVr = staroStatusPolja[kolona];
+        const staraVr = staroSvaPolja[kolona];
         const novaVr = req.body[kolona];
         // Poredi kao string da se izbjegnu lažne razlike tipa true vs 'true'.
         if (String(staraVr) !== String(novaVr)) {
