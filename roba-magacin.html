@@ -555,34 +555,34 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
     <div id="kretanje-sume" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;"></div>
 
-    <!-- Filteri — svaki sledeći radi SAMO na onom što je već propustio prethodni
-         (kaskadno) — npr. izaberi artikal, pa ćeš u filteru "partner" videti SAMO
-         dobavljače/kupce koji se JAVLJAJU za taj artikal, ne sve uopšte. -->
-    <div class="ce-row" style="margin-top:14px;flex-wrap:wrap;">
-      <select id="kf-artikal" onchange="primijeniKretanjeFiltere()" style="flex:1;min-width:160px;"><option value="">Svi artikli</option></select>
-      <select id="kf-partner" onchange="primijeniKretanjeFiltere()" style="flex:1;min-width:160px;"><option value="">Svi (od/kome)</option></select>
-      <select id="kf-tip" onchange="primijeniKretanjeFiltere()" style="flex:1;min-width:120px;">
-        <option value="">Ulaz i izlaz</option>
-        <option value="ulaz">Samo ulaz</option>
-        <option value="izlaz">Samo izlaz</option>
-      </select>
-      <input type="number" id="kf-iznos-od" placeholder="Iznos od" step="0.01" onchange="primijeniKretanjeFiltere()" style="flex:1;min-width:100px;">
-      <input type="number" id="kf-iznos-do" placeholder="Iznos do" step="0.01" onchange="primijeniKretanjeFiltere()" style="flex:1;min-width:100px;">
-      <button type="button" class="ce-tip-btn" onclick="ponistiKretanjeFiltere()">✕ Poništi filtere</button>
-    </div>
-
     <div style="overflow-x:auto;margin-top:10px;">
       <table style="width:100%;border-collapse:collapse;font-size:12px;">
         <thead>
           <tr style="background:#f7f8fa;">
-            <th style="text-align:left;padding:6px 7px;border-bottom:2px solid var(--border);">Datum</th>
-            <th style="text-align:left;padding:6px 7px;border-bottom:2px solid var(--border);">Artikal</th>
-            <th style="text-align:center;padding:6px 7px;border-bottom:2px solid var(--border);">Tip</th>
-            <th style="text-align:right;padding:6px 7px;border-bottom:2px solid var(--border);">Ušlo</th>
-            <th style="text-align:left;padding:6px 7px;border-bottom:2px solid var(--border);">Od koga</th>
-            <th style="text-align:right;padding:6px 7px;border-bottom:2px solid var(--border);">Izašlo</th>
-            <th style="text-align:left;padding:6px 7px;border-bottom:2px solid var(--border);">Kome</th>
-            <th style="text-align:right;padding:6px 7px;border-bottom:2px solid var(--border);">Vrijednost</th>
+            <th style="text-align:left;padding:6px 7px;border-bottom:1px solid var(--border);">Datum</th>
+            <th style="text-align:left;padding:6px 7px;border-bottom:1px solid var(--border);">Artikal</th>
+            <th style="text-align:center;padding:6px 7px;border-bottom:1px solid var(--border);">Tip</th>
+            <th style="text-align:right;padding:6px 7px;border-bottom:1px solid var(--border);">Ušlo</th>
+            <th style="text-align:left;padding:6px 7px;border-bottom:1px solid var(--border);">Od koga</th>
+            <th style="text-align:right;padding:6px 7px;border-bottom:1px solid var(--border);">Izašlo</th>
+            <th style="text-align:left;padding:6px 7px;border-bottom:1px solid var(--border);">Kome</th>
+            <th style="text-align:right;padding:6px 7px;border-bottom:1px solid var(--border);">Vrijednost</th>
+          </tr>
+          <tr style="background:#fff;">
+            <th style="padding:3px 5px;border-bottom:2px solid var(--border);"><input type="text" id="kf-datum" placeholder="npr. 04.08" oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:11px;padding:4px 5px;border:1px solid var(--border);border-radius:4px;"></th>
+            <th style="padding:3px 5px;border-bottom:2px solid var(--border);"><input type="text" id="kf-artikal" placeholder="šifra/naziv..." oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:11px;padding:4px 5px;border:1px solid var(--border);border-radius:4px;"></th>
+            <th style="padding:3px 5px;border-bottom:2px solid var(--border);">
+              <select id="kf-tip" onchange="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:11px;padding:4px 2px;border:1px solid var(--border);border-radius:4px;">
+                <option value="">Svi</option>
+                <option value="ulaz">Ulaz</option>
+                <option value="izlaz">Izlaz</option>
+              </select>
+            </th>
+            <th style="padding:3px 5px;border-bottom:2px solid var(--border);"><input type="number" id="kf-uslo-min" placeholder="min" step="0.01" oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:11px;padding:4px 5px;border:1px solid var(--border);border-radius:4px;"></th>
+            <th style="padding:3px 5px;border-bottom:2px solid var(--border);"><input type="text" id="kf-od-koga" placeholder="pretraga..." oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:11px;padding:4px 5px;border:1px solid var(--border);border-radius:4px;"></th>
+            <th style="padding:3px 5px;border-bottom:2px solid var(--border);"><input type="number" id="kf-izaslo-min" placeholder="min" step="0.01" oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:11px;padding:4px 5px;border:1px solid var(--border);border-radius:4px;"></th>
+            <th style="padding:3px 5px;border-bottom:2px solid var(--border);"><input type="text" id="kf-kome" placeholder="pretraga..." oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:11px;padding:4px 5px;border:1px solid var(--border);border-radius:4px;"></th>
+            <th style="padding:3px 5px;border-bottom:2px solid var(--border);"><input type="number" id="kf-vrijednost-min" placeholder="min KM" step="0.01" oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:11px;padding:4px 5px;border:1px solid var(--border);border-radius:4px;"></th>
           </tr>
         </thead>
         <tbody id="kretanje-tbody"><tr><td colspan="8" style="text-align:center;color:#9aa5b1;padding:16px;">Izaberi prodajni objekat.</td></tr></tbody>
@@ -1899,11 +1899,14 @@ async function ucitajKretanjeRobe(){
 }
 
 function ponistiKretanjeFiltere(){
+  document.getElementById('kf-datum').value='';
   document.getElementById('kf-artikal').value='';
-  document.getElementById('kf-partner').value='';
   document.getElementById('kf-tip').value='';
-  document.getElementById('kf-iznos-od').value='';
-  document.getElementById('kf-iznos-do').value='';
+  document.getElementById('kf-uslo-min').value='';
+  document.getElementById('kf-od-koga').value='';
+  document.getElementById('kf-izaslo-min').value='';
+  document.getElementById('kf-kome').value='';
+  document.getElementById('kf-vrijednost-min').value='';
   primijeniKretanjeFiltere();
 }
 
@@ -1911,37 +1914,28 @@ function ponistiKretanjeFiltere(){
 // dropdown opcije (artikal/partner) se ponovo grade SAMO od onoga što je preostalo, da
 // se ne nudi izbor koji bi svakako dao prazan rezultat.
 function primijeniKretanjeFiltere(){
-  const fArtikal=document.getElementById('kf-artikal').value;
-  const fPartner=document.getElementById('kf-partner').value;
+  const fDatum=document.getElementById('kf-datum').value.trim().toLowerCase();
+  const fArtikal=document.getElementById('kf-artikal').value.trim().toLowerCase();
   const fTip=document.getElementById('kf-tip').value;
-  const fIznosOd=parseFloat(document.getElementById('kf-iznos-od').value);
-  const fIznosDo=parseFloat(document.getElementById('kf-iznos-do').value);
+  const fUsloMin=parseFloat(document.getElementById('kf-uslo-min').value);
+  const fOdKoga=document.getElementById('kf-od-koga').value.trim().toLowerCase();
+  const fIzasloMin=parseFloat(document.getElementById('kf-izaslo-min').value);
+  const fKome=document.getElementById('kf-kome').value.trim().toLowerCase();
+  const fVrijednostMin=parseFloat(document.getElementById('kf-vrijednost-min').value);
 
-  let filtrirano=kretanjeSveStavke;
-  if(fArtikal) filtrirano=filtrirano.filter(s=>String(s.roba_id)===fArtikal);
-  if(fPartner) filtrirano=filtrirano.filter(s=>s.partner===fPartner);
-  if(fTip) filtrirano=filtrirano.filter(s=>s.tip===fTip);
-  if(!isNaN(fIznosOd)) filtrirano=filtrirano.filter(s=>s.iznos>=fIznosOd);
-  if(!isNaN(fIznosDo)) filtrirano=filtrirano.filter(s=>s.iznos<=fIznosDo);
-
-  // Dropdown opcije se grade iz podataka koji PROLAZE ostale (ne ovaj svoj) filtere —
-  // tako se npr. u "Partner" dropdown-u vide SAMO partneri koji se javljaju za trenutno
-  // izabrani artikal, ne svi partneri uopšte.
-  const zaArtikalDropdown=kretanjeSveStavke.filter(s=>
-    (!fPartner || s.partner===fPartner) && (!fTip || s.tip===fTip) &&
-    (isNaN(fIznosOd) || s.iznos>=fIznosOd) && (isNaN(fIznosDo) || s.iznos<=fIznosDo)
-  );
-  const zaPartnerDropdown=kretanjeSveStavke.filter(s=>
-    (!fArtikal || String(s.roba_id)===fArtikal) && (!fTip || s.tip===fTip) &&
-    (isNaN(fIznosOd) || s.iznos>=fIznosOd) && (isNaN(fIznosDo) || s.iznos<=fIznosDo)
-  );
-  const artikliJedinstveni=[...new Map(zaArtikalDropdown.map(s=>[s.roba_id,s])).values()].sort((a,b)=>a.naziv.localeCompare(b.naziv));
-  const partneriJedinstveni=[...new Set(zaPartnerDropdown.map(s=>s.partner))].sort((a,b)=>a.localeCompare(b));
-
-  const selArtikal=document.getElementById('kf-artikal');
-  selArtikal.innerHTML='<option value="">Svi artikli</option>'+artikliJedinstveni.map(s=>`<option value="${s.roba_id}" ${String(s.roba_id)===fArtikal?'selected':''}>${esc(s.sifra)} — ${esc(s.naziv)}</option>`).join('');
-  const selPartner=document.getElementById('kf-partner');
-  selPartner.innerHTML='<option value="">Svi (od/kome)</option>'+partneriJedinstveni.map(p=>`<option value="${esc(p)}" ${p===fPartner?'selected':''}>${esc(p)}</option>`).join('');
+  // Svi filteri se primjenjuju ZAJEDNO (AND) na isti niz — kombinovani efekat je isto
+  // što i "kaskadno sužavanje", samo bez dropdown-a koji bi trebalo ponovo graditi.
+  let filtrirano=kretanjeSveStavke.filter(s=>{
+    if(fDatum && !new Date(s.datum).toLocaleDateString('sr-Latn-BA').toLowerCase().includes(fDatum)) return false;
+    if(fArtikal && !((s.sifra||'').toLowerCase().includes(fArtikal) || (s.naziv||'').toLowerCase().includes(fArtikal))) return false;
+    if(fTip && s.tip!==fTip) return false;
+    if(!isNaN(fUsloMin) && !(s.tip==='ulaz' && s.kolicina>=fUsloMin)) return false;
+    if(fOdKoga && !(s.tip==='ulaz' && (s.partner||'').toLowerCase().includes(fOdKoga))) return false;
+    if(!isNaN(fIzasloMin) && !(s.tip==='izlaz' && s.kolicina>=fIzasloMin)) return false;
+    if(fKome && !(s.tip==='izlaz' && (s.partner||'').toLowerCase().includes(fKome))) return false;
+    if(!isNaN(fVrijednostMin) && s.iznos<fVrijednostMin) return false;
+    return true;
+  });
 
   renderKretanjeTabela(filtrirano);
 }
