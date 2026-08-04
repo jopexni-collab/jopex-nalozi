@@ -1616,6 +1616,7 @@ async function ucitajKlijentiListu(){
   try{
     const r=await fetch(`${API}/api/finansije/klijenti`);
     const rows=await r.json();
+    if(!r.ok){ tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--red);">✗ Greška: ${esc(rows.error||'nepoznata greška servera')}</td></tr>`; return; }
     if(!rows.length){ tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:20px;color:#999">Nema klijenata sa dugom/pretplatom.</td></tr>'; return; }
     tbody.innerHTML=rows.map(k=>{
       const nazivEsc=esc(k.kupac_naziv||'').replace(/'/g,"\\'");
