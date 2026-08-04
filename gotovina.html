@@ -591,7 +591,17 @@ async function ucitajBlagajnaBreakdown(tiho){
     ]);
     let gRows=await gotovinaRes.json();
     const rzRows=await razduzenjaRes.json();
-    gRows=gRows.filter(x=>x.predao_blagajniku && !jeVpBankaRed(x));
+    // Isti "pametni" filter kao na backendu (Trenutno u blagajni) — isključi SAMO
+    // osamljen "Dug po otpremnici" red (bruto otišao u banku, nema para u gotovini).
+    // Kad su OBA reda (bruto+dug) u gotovini zajedno (djelimično plaćanje u gotovom sa
+    // ostatkom duga), NE isključuju se — njihov zbir JE stvarno primljena gotovina.
+    // Bilo je neusklađeno sa gornjom cifrom prije ovog popravka (T-konto je koristio
+    // stariju, prešroku logiku koja bi izbacila i legitimnu gotovinu).
+    const brutoNalozi=new Set(gRows.filter(x=>(x.opis||'').startsWith('Prodaja (bruto)')).map(x=>x.nalog_r_br));
+    function jeOsamljenDug(x){
+      return (x.opis||'').startsWith('Dug po otpremnici') && !brutoNalozi.has(x.nalog_r_br);
+    }
+    gRows=gRows.filter(x=>x.predao_blagajniku && !jeOsamljenDug(x));
 
     // Grupiši SVE stavke (uplate i isplate/razduženja) po danu.
     const poDanu=new Map(); // 'YYYY-MM-DD' -> {uplate:[], isplate:[]}
