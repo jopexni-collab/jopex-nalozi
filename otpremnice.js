@@ -801,7 +801,10 @@ router.post('/:id/naplati-dug', async (req, res) => {
   if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
   const iznos = parseFloat(req.body.iznos);
   if (!iznos || iznos <= 0) return res.status(400).json({ error: 'Unesite ispravan iznos.' });
-  const izvor = req.body.izvor === 'avans' ? 'avans' : 'gotovina';
+  const izvor = ['avans', 'banka'].includes(req.body.izvor) ? req.body.izvor : 'gotovina';
+  const nacinBanka = req.body.nacin_banka;
+  if (izvor === 'banka' && !nacinBanka)
+    return res.status(400).json({ error: 'Izaberite banku.' });
 
   const client = await pool.connect();
   try {
@@ -830,8 +833,8 @@ router.post('/:id/naplati-dug', async (req, res) => {
       if (iznos > trenutnoDuguje)
         throw Object.assign(new Error(`Iznos ne može biti veći od trenutnog duga (${trenutnoDuguje} ${duguValuta}).`), { status: 400 });
     }
-    // Za gotovinu dozvoljavamo iznos > trenutnoDuguje (kupac daje više nego što duguje) —
-    // višak automatski postaje novi avans (vidi ispod), ne odbija se zahtjev.
+    // Za gotovinu/banku dozvoljavamo iznos > trenutnoDuguje (kupac daje više nego što
+    // duguje) — višak automatski postaje novi avans (vidi ispod), ne odbija se zahtjev.
 
     const iznosZaDug = Math.min(iznos, trenutnoDuguje);
     const visak = +(iznos - iznosZaDug).toFixed(2);
@@ -844,7 +847,7 @@ router.post('/:id/naplati-dug', async (req, res) => {
     );
 
     const opisKupca = otp.kupac_naziv ? otp.kupac_naziv.trim() : 'kupac nepoznat';
-    let gotovinaId = null;
+    let gotovinaId = null, bankaUplataId = null;
 
     if (izvor === 'gotovina') {
       // Sva gotovina (uključujući eventualni višak) STVARNO ulazi u kasu sada.
@@ -854,6 +857,17 @@ router.post('/:id/naplati-dug', async (req, res) => {
         [iznos, user.ime_prezime, `Naplata duga — ${opisKupca}${visak > 0 ? ' (uklj. višak u avans)' : ''}`, otp.objekt_naziv, otp.broj]
       );
       gotovinaId = g.rows[0].id;
+    } else if (izvor === 'banka') {
+      // Novac NIKAD nije fizički u kasi — ide direktno u banka_uplate, ne u gotovina.
+      // Bio je propust da ova ruta uopšte nije poznavala "banka" kao izvor — svaka
+      // naknadna naplata duga preko banke se do sad morala pogrešno biljžiti kao gotovina.
+      const b = await client.query(
+        `INSERT INTO banka_uplate (iznos, banka, izvor, nalog_r_br, kupac_id, kupac_naziv, objekt_naziv, komercijalista_ime, upisao_id, upisao_ime, napomena)
+         VALUES ($1,$2,'Maloprodaja',$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        [iznos, nacinBanka, otp.broj, otp.kupac_id || null, opisKupca, otp.objekt_naziv, user.ime_prezime,
+         user.id, user.ime_prezime, `Naplata duga — ${opisKupca}${visak > 0 ? ' (uklj. višak u avans)' : ''}`]
+      );
+      bankaUplataId = b.rows[0].id;
     }
 
     if (otp.kupac_id) {
@@ -883,10 +897,10 @@ router.post('/:id/naplati-dug', async (req, res) => {
     // pouzdano poništiti — npr. ako je neko greškom dva puta kliknuo naplatu).
     const logRes = await client.query(
       `INSERT INTO naplate_duga_log
-         (otpremnica_id, otpremnica_broj, iznos, izvor, iznos_za_dug, visak, gotovina_id,
+         (otpremnica_id, otpremnica_broj, iznos, izvor, iznos_za_dug, visak, gotovina_id, banka_uplata_id,
           kupac_id, upisao_id, upisao_ime)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-      [otp.id, otp.broj, iznos, izvor, iznosZaDug, visak, gotovinaId,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+      [otp.id, otp.broj, iznos, izvor, iznosZaDug, visak, gotovinaId, bankaUplataId,
        otp.kupac_id || null, user.id, user.ime_prezime]
     );
 
@@ -968,6 +982,12 @@ router.post('/naplate-log/:id/storniraj', async (req, res) => {
          VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5)`,
         [-parseFloat(log.iznos), user.ime_prezime, `STORNO naplate — ${log.otpremnica_broj}`, otp.objekt_naziv, otp.broj]
       );
+    }
+    // Ako je izvor bio banka, briše se sam bankovni upis (nikad nije bio fizička gotovina,
+    // pa nema smisla praviti reverzni "minus" red kao kod gotovine — jednostavno se
+    // uklanja, kao da naplata nikad nije ni stigla preko banke).
+    if (log.banka_uplata_id) {
+      await client.query('DELETE FROM banka_uplate WHERE id=$1', [log.banka_uplata_id]);
     }
 
     // Reverzni par u kartici kupca (ako je postojao kupac_id).

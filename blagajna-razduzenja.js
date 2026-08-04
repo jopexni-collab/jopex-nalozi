@@ -37,8 +37,12 @@ router.get('/stanje-sve', async (req, res) => {
     const rezultat = [];
     for (const obj of objekti.rows) {
       const predanoRes = await pool.query(
-        `SELECT COALESCE(SUM(iznos),0) AS ukupno FROM gotovina WHERE objekt_naziv=$1 AND predao_blagajniku=true
-         AND opis NOT LIKE 'Prodaja (bruto)%' AND opis NOT LIKE 'Dug po otpremnici%'`,
+        `SELECT COALESCE(SUM(g.iznos),0) AS ukupno FROM gotovina g
+         WHERE g.objekt_naziv=$1 AND g.predao_blagajniku=true
+           AND NOT (
+             g.opis LIKE 'Dug po otpremnici%'
+             AND NOT EXISTS (SELECT 1 FROM gotovina g2 WHERE g2.nalog_r_br=g.nalog_r_br AND g2.opis LIKE 'Prodaja (bruto)%')
+           )`,
         [obj.naziv]
       );
       const razduzenoRes = await pool.query(
@@ -130,14 +134,18 @@ router.get('/stanje', async (req, res) => {
     if (!objRes.rows.length) return res.status(404).json({ error: 'Prodajni objekat nije pronađen.' });
     const { naziv: objektNaziv, valuta } = objRes.rows[0];
 
-    // VP/banka redovi ("Prodaja (bruto)"/"Dug po otpremnici") se NIKAD ne broje ovdje —
-    // nikad nisu bili fizička gotovina u blagajni (roba je otišla bez naplate, ili je
-    // naplata otišla na banku). Njihova "predao_blagajniku" potvrda (u VP tabu) je čisto
-    // kontrolni pečat, NE znači da je novac fizički stigao u ovu kasu.
+    // Osamljen "Dug po otpremnici" red (bez para "Prodaja (bruto)" u gotovini) je znak da
+    // je bruto otišao u banku (nacin='banka') — tu STVARNO nema fizičke gotovine, taj red
+    // se isključuje. Ali kad su OBA reda (bruto+dug) u gotovini (djelimično plaćanje u
+    // gotovom + preostali dug), njihov ZBIR je STVARNA primljena gotovina — ne isključuje
+    // se, jer bi se inače legitiman novac pogrešno izbacio iz "Trenutno u blagajni".
     const predanoRes = await pool.query(
-      `SELECT COALESCE(SUM(iznos),0) AS ukupno FROM gotovina
-       WHERE objekt_naziv = $1 AND predao_blagajniku = true
-         AND opis NOT LIKE 'Prodaja (bruto)%' AND opis NOT LIKE 'Dug po otpremnici%'`,
+      `SELECT COALESCE(SUM(g.iznos),0) AS ukupno FROM gotovina g
+       WHERE g.objekt_naziv = $1 AND g.predao_blagajniku = true
+         AND NOT (
+           g.opis LIKE 'Dug po otpremnici%'
+           AND NOT EXISTS (SELECT 1 FROM gotovina g2 WHERE g2.nalog_r_br=g.nalog_r_br AND g2.opis LIKE 'Prodaja (bruto)%')
+         )`,
       [objektNaziv]
     );
     const razduzenoRes = await pool.query(
@@ -176,8 +184,12 @@ router.post('/', async (req, res) => {
 
     // Provjeri da ne razdužuje više nego što stvarno ima u blagajni.
     const predanoRes = await pool.query(
-      `SELECT COALESCE(SUM(iznos),0) AS ukupno FROM gotovina WHERE objekt_naziv=$1 AND predao_blagajniku=true
-       AND opis NOT LIKE 'Prodaja (bruto)%' AND opis NOT LIKE 'Dug po otpremnici%'`,
+      `SELECT COALESCE(SUM(g.iznos),0) AS ukupno FROM gotovina g
+       WHERE g.objekt_naziv=$1 AND g.predao_blagajniku=true
+         AND NOT (
+           g.opis LIKE 'Dug po otpremnici%'
+           AND NOT EXISTS (SELECT 1 FROM gotovina g2 WHERE g2.nalog_r_br=g.nalog_r_br AND g2.opis LIKE 'Prodaja (bruto)%')
+         )`,
       [objektNaziv]
     );
     const razduzenoRes = await pool.query(

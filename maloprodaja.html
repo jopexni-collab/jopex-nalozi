@@ -546,13 +546,24 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <label>Iznos koji SADA plaća</label>
       <input type="number" id="nd-iznos" step="0.01" min="0.01" placeholder="0.00">
     </div>
-    <div id="nd-izvor-avans-box" style="display:none;width:100%;max-width:420px;">
-      <div id="nd-avans-info" style="font-size:12px;color:var(--green);font-weight:700;margin-bottom:6px;"></div>
+    <div class="kupac-fld" style="width:100%;max-width:420px;">
+      <label>Izvor naplate</label>
+      <select id="nd-izvor" onchange="promijeniIzvorNaplateDuga()">
+        <option value="gotovina">Nova gotovina (fizički novac)</option>
+        <option value="banka">Banka / VP (na račun)</option>
+        <option value="avans" id="nd-opcija-avans" style="display:none;">Iz postojećeg avansa kupca</option>
+      </select>
+    </div>
+    <div id="nd-avans-info" style="font-size:12px;color:var(--green);font-weight:700;margin:6px 0;display:none;"></div>
+    <div id="nd-banka-box" style="display:none;width:100%;max-width:420px;margin-top:6px;">
       <div class="kupac-fld">
-        <label>Izvor naplate</label>
-        <select id="nd-izvor">
-          <option value="gotovina">Nova gotovina (fizički novac)</option>
-          <option value="avans">Iz postojećeg avansa kupca</option>
+        <label>Izaberi banku</label>
+        <select id="nd-nacin-banka">
+          <option value="rfb">RFB</option>
+          <option value="uni">UNI</option>
+          <option value="mf">MF</option>
+          <option value="nlb">NLB</option>
+          <option value="uni1">UNI1</option>
         </select>
       </div>
     </div>
@@ -1873,25 +1884,36 @@ function otvoriNaplatuDuga(otp){
   document.getElementById('nd-kupac').textContent=`${otp.kupac_naziv||'—'} · ${otp.objekt_naziv||''}`;
   document.getElementById('nd-duguje').innerHTML=fmMoneyHtml(otp.duguje);
   document.getElementById('nd-iznos').value='';
-  document.getElementById('nd-izvor-avans-box').style.display='none';
   document.getElementById('nd-izvor').value='gotovina';
+  document.getElementById('nd-banka-box').style.display='none';
+  document.getElementById('nd-avans-info').style.display='none';
+  document.getElementById('nd-opcija-avans').style.display='none';
   document.getElementById('ov-naplata-duga').classList.add('on');
-  // Provjeri da li kupac ima avans, ponudi kao opciju
+  // Provjeri da li kupac ima avans, ponudi kao opciju (ali gotovina/banka su UVIJEK
+  // dostupne, bez obzira na avans — to je bio propust, avans-provjera je ranije
+  // skrivala CIJELI izbor izvora, pa se banka nije mogla ni izabrati).
   if(otp.kupac_id){
     fetch(`${API}/api/otpremnice/kupac/${otp.kupac_id}/saldo`).then(r=>r.json()).then(d=>{
       if(d.saldo>0){
-        document.getElementById('nd-izvor-avans-box').style.display='block';
+        document.getElementById('nd-opcija-avans').style.display='block';
+        document.getElementById('nd-avans-info').style.display='block';
         document.getElementById('nd-avans-info').textContent=`Kupac ima avans: ${fmMoney(d.saldo)}`;
       }
     }).catch(()=>{});
   }
 }
 
+function promijeniIzvorNaplateDuga(){
+  const izvor=document.getElementById('nd-izvor').value;
+  document.getElementById('nd-banka-box').style.display = izvor==='banka' ? 'block' : 'none';
+}
+
 async function potvrdiNaplatuDuga(){
   const iznos=parseFloat(document.getElementById('nd-iznos').value);
   const izvor=document.getElementById('nd-izvor').value;
+  const nacinBanka=document.getElementById('nd-nacin-banka').value;
   if(!iznos||iznos<=0){alert('Unesite ispravan iznos.');return;}
-  if(izvor==='gotovina' && iznos>parseFloat(dugZaNaplatu.duguje)){
+  if(izvor!=='avans' && iznos>parseFloat(dugZaNaplatu.duguje)){
     if(!confirm(`Iznos (${fmMoney(iznos)}) je veći od trenutnog duga (${fmMoney(dugZaNaplatu.duguje)}). Višak će postati avans kupca. Nastaviti?`)) return;
   }
   const btn=document.getElementById('nd-btn-potvrdi');
@@ -1899,7 +1921,7 @@ async function potvrdiNaplatuDuga(){
   try{
     const r=await fetch(`${API}/api/otpremnice/${dugZaNaplatu.id}/naplati-dug`,{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({iznos, izvor}),
+      body:JSON.stringify({iznos, izvor, nacin_banka: izvor==='banka'?nacinBanka:undefined}),
     });
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška pri naplati.');
