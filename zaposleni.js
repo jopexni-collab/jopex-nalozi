@@ -61,7 +61,13 @@ router.get('/', async (req, res) => {
                  FROM blagajnici_pj b JOIN prodajni_objekti p ON p.id = b.objekat_id
                  WHERE b.zaposleni_id = z.id),
                 ''
-              ) AS blagajnik_pj_nazivi
+              ) AS blagajnik_pj_nazivi,
+              COALESCE(
+                (SELECT string_agg(p.naziv, ', ' ORDER BY p.naziv)
+                 FROM prodavci_pj pv JOIN prodajni_objekti p ON p.id = pv.objekat_id
+                 WHERE pv.zaposleni_id = z.id),
+                ''
+              ) AS prodavac_pj_nazivi
        FROM zaposleni z ORDER BY z.ime_prezime`
     );
     res.json(r.rows);
@@ -117,6 +123,45 @@ router.get('/:id/blagajnik-pj', async (req, res) => {
     res.json(r.rows.map(row => row.objekat_id));
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/zaposleni/:id/prodavac-pj - PJ za koje ovaj zaposleni smije prodavati u
+// maloprodaji (ograničava izbor objekta na SAMO ove — bez zapisa vidi/može SVE).
+router.get('/:id/prodavac-pj', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Nema pristupa.' });
+  try {
+    const r = await pool.query('SELECT objekat_id FROM prodavci_pj WHERE zaposleni_id=$1', [req.params.id]);
+    res.json(r.rows.map(row => row.objekat_id));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/zaposleni/:id/prodavac-pj - zamjenjuje kompletnu listu PJ za koje ovaj
+// zaposleni smije prodavati (šalje se cijela nova lista, stara se briše i zamjenjuje).
+router.put('/:id/prodavac-pj', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Nema pristupa.' });
+  const objekatIdjevi = Array.isArray(req.body.objekat_idjevi) ? req.body.objekat_idjevi : [];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM prodavci_pj WHERE zaposleni_id=$1', [req.params.id]);
+    for (const objId of objekatIdjevi) {
+      await client.query(
+        'INSERT INTO prodavci_pj (zaposleni_id, objekat_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+        [req.params.id, objId]
+      );
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true, objekat_idjevi: objekatIdjevi });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 

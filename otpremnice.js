@@ -83,6 +83,20 @@ function trebaObjekat(id) {
   return n > 0 ? n : null;
 }
 
+// Vraća listu PJ (objekat_id) na koje je korisnik ograničen za PREGLED dugovanja/
+// potraživanja — null znači "bez ograničenja, vidi sve" (admin ili blagajnik, jer njima
+// treba pun pregled bez obzira odakle dug/potraživanje dolazi). Za običnog komercijalistu
+// koji NEMA nijedan zapis u prodavci_pj, i dalje se vraća null (opt-in ograničenje — ne
+// zaključava postojeće korisnike dok ih admin svjesno ne ograniči preko "Prodaja PJ").
+async function dozvoljeniPJZaPregled(user) {
+  if (!user || user.rola === 'admin') return null;
+  const blag = await pool.query('SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 LIMIT 1', [user.id]);
+  if (blag.rows.length) return null; // blagajnik uvijek vidi sve
+  const dodijeljeni = await pool.query('SELECT objekat_id FROM prodavci_pj WHERE zaposleni_id=$1', [user.id]);
+  if (!dodijeljeni.rows.length) return null; // nikad eksplicitno ograničen — vidi sve
+  return dodijeljeni.rows.map(r => r.objekat_id);
+}
+
 // Generiše broj otpremnice: OTP-YYYY-000123
 async function noviBroj(client) {
   const godina = new Date().getFullYear();
@@ -316,19 +330,28 @@ router.post('/pregled', async (req, res) => {
 
 // GET /api/otpremnice/:id - zaglavlje + stavke
 // GET /api/otpremnice/saldo-po-kupcima?objekt_id=X - lista SVIH kupaca sa saldom != 0
-// (pozitivan = avans/zeleno, negativan = duguje/crveno) — za tab "Ne saldirano".
+// (pozitivan = avans/zeleno, negativan = duguje/crveno) — za tab "Ne saldirano". Admin i
+// blagajnik vide saldo kupca preko SVIH PJ. Ograničen komercijalista vidi saldo kupca
+// SAMO iz transakcija vezanih za NJEGOV/E PJ (isti kupac može imati različit saldo u
+// različitim PJ — svaki PJ se posmatra odvojeno za takvog korisnika).
 // MORA biti prije "/:id" ispod — inače Express tumači ovo kao vrijednost za :id.
 router.get('/saldo-po-kupcima', async (req, res) => {
   try {
+    const user = req.session?.user;
+    const dozvoljeniPJ = await dozvoljeniPJZaPregled(user);
+    const where = dozvoljeniPJ ? 'WHERE t.objekt_id = ANY($1::int[])' : '';
+    const vals = dozvoljeniPJ ? [dozvoljeniPJ] : [];
     const r = await pool.query(
       `SELECT k.id AS kupac_id, k.naziv, k.telefon, k.grad,
               COALESCE(SUM(CASE WHEN p.valuta='EUR' THEN t.iznos*1.95 ELSE t.iznos END),0) AS saldo
        FROM kupac_transakcije t
        JOIN kupci k ON k.id = t.kupac_id
        LEFT JOIN prodajni_objekti p ON p.id = t.objekt_id
+       ${where}
        GROUP BY k.id, k.naziv, k.telefon, k.grad
        HAVING COALESCE(SUM(CASE WHEN p.valuta='EUR' THEN t.iznos*1.95 ELSE t.iznos END),0) != 0
-       ORDER BY 5 ASC`
+       ORDER BY 5 ASC`,
+      vals
     );
     res.json(r.rows.map(row => ({ ...row, saldo: +parseFloat(row.saldo).toFixed(2) })));
   } catch (err) {
@@ -526,6 +549,22 @@ router.post('/potvrdi', async (req, res) => {
   if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
   const objektId = trebaObjekat(req.body.objekt_id);
   if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat.' });
+
+  // Provjera da komercijalista SME da prodaje za OVAJ PJ (prodavci_pj) — brani zaobilaženje
+  // frontend birača (npr. direktnim pozivom API-ja). Admin uvijek prolazi. Ako korisnik
+  // NEMA nijedan zapis u prodavci_pj (nikad eksplicitno ograničen), i dalje prolazi —
+  // isto opt-in ponašanje kao i birač PJ u maloprodaji (ne zaključava postojeće korisnike
+  // dok ih admin svjesno ne ograniči).
+  if (user.rola !== 'admin') {
+    const dodijeljeni = await pool.query('SELECT 1 FROM prodavci_pj WHERE zaposleni_id=$1', [user.id]);
+    if (dodijeljeni.rows.length) {
+      const smijeOvdje = await pool.query(
+        'SELECT 1 FROM prodavci_pj WHERE zaposleni_id=$1 AND objekat_id=$2', [user.id, objektId]
+      );
+      if (!smijeOvdje.rows.length)
+        return res.status(403).json({ error: 'Niste ovlašćeni za prodaju u ovom prodajnom objektu.' });
+    }
+  }
 
   // Ako je korisnik zaključao SVOJ dan, ne smije praviti nove prodaje dok se ne otključa.
   const danasDatum = new Date().toISOString().split('T')[0];
@@ -792,15 +831,19 @@ router.post('/potvrdi', async (req, res) => {
 });
 
 // GET /api/otpremnice/dugovanja?objekt_id=X - lista otpremnica koje nisu u potpunosti
-// plaćene. Vidljivo SVIM komercijalistima (ne samo onom ko je napravio prodaju) — kupac
-// može doći da plati bilo kom, bilo kad.
+// plaćene. Admin i blagajnik vide SVE (bilo ko od njih naplaćuje bilo gdje). Običan
+// komercijalista koji je ograničen na konkretne PJ (preko "Prodaja PJ") vidi SAMO dugovanja
+// iz SVOJIH PJ — nema potrebe da vidi tuđe.
 router.get('/dugovanja/lista', async (req, res) => {
   try {
+    const user = req.session?.user;
     const { objekt_id } = req.query;
     let where = [`o.status_placanja != 'placeno'`, `o.status = 'potvrdjena'`];
     let vals = [];
     let i = 1;
     if (objekt_id) { where.push(`o.objekt_id = $${i++}`); vals.push(objekt_id); }
+    const dozvoljeniPJ = await dozvoljeniPJZaPregled(user);
+    if (dozvoljeniPJ) { where.push(`o.objekt_id = ANY($${i++}::int[])`); vals.push(dozvoljeniPJ); }
     const r = await pool.query(
       `SELECT o.id, o.broj, o.datum, o.kupac_id, o.kupac_naziv, o.kupac_telefon, o.objekt_naziv,
               o.komercijalista_ime, o.ukupan_iznos, o.iznos_placeno, o.status_placanja,

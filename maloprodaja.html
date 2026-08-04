@@ -451,6 +451,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 <!-- ═══ TAB: DUGOVANJA ═══ -->
 <div class="view" id="view-dugovanja">
+  <div class="uzorak-hint" style="padding:10px 14px 0;">📌 Ova lista prikazuje dugovanja/potraživanja isključivo vezana za PJ za koje si ovlašćen/a — ako je dug ili potraživanje nastalo u drugom PJ, ne prikazuje se ovde (odnosi se samo na taj drugi PJ). Admin i blagajnik vide sve, bez ovog ograničenja.</div>
   <div class="import-box" id="rucni-dug-box" style="display:none;">
     <h3>📝 Ručni unos istorijskog duga</h3>
     <div class="uzorak-hint">Za dugove koji su nastali PRIJE ovog sistema (npr. iz Excel/papirne evidencije) — ne dira stanje robe, samo evidentira dug.</div>
@@ -1104,7 +1105,7 @@ async function otvoriIzborObjekta(){
   document.getElementById('ov-objekat').classList.add('on');
   const upamceni=ucitajUpamceniObjekat();
   try{
-    const r=await fetch(`${API}/api/prodajni-objekti`);
+    const r=await fetch(`${API}/api/prodajni-objekti/za-maloprodaju`);
     const rows=await r.json();
     if(!rows.length){
       cont.innerHTML='<div class="empty-msg">Nema definisanih prodajnih objekata. Obratite se administratoru.</div>';
@@ -1760,7 +1761,7 @@ function debounceUcitajDugovanja(){
 async function ucitajDugovanja(tiho){
   if(!dugFilterPopunjen){
     try{
-      const r=await fetch(`${API}/api/prodajni-objekti`);
+      const r=await fetch(`${API}/api/prodajni-objekti/za-maloprodaju`);
       const rows=await r.json();
       document.getElementById('dug-fil-objekat').innerHTML='<option value="">Svi objekti</option>'+
         rows.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');

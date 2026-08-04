@@ -86,7 +86,7 @@ input:checked+.slider:before{transform:translateX(16px);}
       <span id="akt-strelica">▼</span>
     </div>
     <div id="aktivnost-sadrzaj" style="display:none;margin-top:12px;">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">
         <div>
           <h4 style="font-size:12.5px;color:#6b7a8d;margin-bottom:6px;">Trenutno aktivni (važeća sesija)</h4>
           <div id="aktivni-lista" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;"></div>
@@ -94,6 +94,10 @@ input:checked+.slider:before{transform:translateX(16px);}
         <div>
           <h4 style="font-size:12.5px;color:#6b7a8d;margin-bottom:6px;">Istorija prijava (poslednjih 200)</h4>
           <div id="prijave-lista" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;"></div>
+        </div>
+        <div>
+          <h4 style="font-size:12.5px;color:#6b7a8d;margin-bottom:6px;">Šta su otvarali (poslednjih 300, svi) — klik na ime za punu istoriju</h4>
+          <div id="stranice-lista" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;"></div>
         </div>
       </div>
     </div>
@@ -113,6 +117,7 @@ input:checked+.slider:before{transform:translateX(16px);}
           <th style="text-align:center">Mijenja status</th>
           <th style="text-align:center">Mijenja nalog</th>
           <th style="text-align:center">Maloprodaja</th>
+          <th style="text-align:center">Prodaja PJ</th>
           <th style="text-align:center">Roba/Magacin</th>
           <th style="text-align:center">Teren</th>
           <th style="text-align:center">Blagajna (PJ)</th>
@@ -122,7 +127,7 @@ input:checked+.slider:before{transform:translateX(16px);}
         </tr>
       </thead>
       <tbody id="tbody">
-        <tr><td colspan="15" style="text-align:center;padding:30px;color:#999">Učitavanje...</td></tr>
+        <tr><td colspan="16" style="text-align:center;padding:30px;color:#999">Učitavanje...</td></tr>
       </tbody>
     </table>
     </div>
@@ -155,6 +160,29 @@ input:checked+.slider:before{transform:translateX(16px);}
   </div>
 </div>
 
+<div class="modal" id="prodavac-modal">
+  <div class="modal-box">
+    <h3 id="prodavac-ime">Prodaja za PJ</h3>
+    <div id="prodavac-lista" style="max-height:280px;overflow-y:auto;"></div>
+    <div id="prodavac-msg"></div>
+    <div class="modal-btns" style="margin-top:8px">
+      <button class="btn-primary" onclick="saveProdavacPopup()">Sačuvaj</button>
+      <button class="btn-sec" onclick="closeModal()">Otkaži</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="ist-modal">
+  <div class="modal-box" style="max-width:420px;width:92vw;max-height:80vh;overflow-y:auto;">
+    <h3 id="ist-naslov">Istorija otvaranja</h3>
+    <div id="ist-lista"></div>
+    <div class="modal-btns" style="margin-top:8px">
+      <button class="btn-sec" onclick="document.getElementById('ist-modal').classList.remove('on')" style="width:100%;">Zatvori</button>
+    </div>
+  </div>
+</div>
+
+
 <script>
 const API='';
 let korisnici=[], currentLozId=null;
@@ -169,6 +197,7 @@ function toggleAktivnostForma(){
     aktivnostUcitanoJednom=true;
     ucitajAktivne();
     ucitajPrijave();
+    ucitajStranice();
   }
 }
 
@@ -207,6 +236,42 @@ async function ucitajPrijave(){
       <div style="padding:7px 10px;border-bottom:1px solid #eee;font-size:12px;">
         <b>${esc(p.ime_prezime)}</b>
         <div style="color:#8b96a5;font-size:10.5px;">${fdVrijeme(p.prijavljen)}${p.ip?' · '+esc(p.ip):''}</div>
+      </div>
+    `).join('');
+  }catch(e){ cont.innerHTML=`<div style="padding:10px;color:red;font-size:12px;">${esc(e.message)}</div>`; }
+}
+
+async function ucitajStranice(){
+  const cont=document.getElementById('stranice-lista');
+  cont.innerHTML='<div style="padding:10px;color:#8b96a5;font-size:12px;">Učitavanje...</div>';
+  try{
+    const r=await fetch(API+'/api/auth/stranice');
+    const rows=await r.json();
+    if(!r.ok) throw new Error(rows.error||'Greška.');
+    if(!rows.length){cont.innerHTML='<div style="padding:10px;color:#8b96a5;font-size:12px;">Nema zabilježenih otvaranja.</div>';return;}
+    cont.innerHTML=rows.map(p=>`
+      <div style="padding:7px 10px;border-bottom:1px solid #eee;font-size:12px;cursor:pointer;" onclick="otvoriIstorijaStranica(${p.korisnik_id},'${esc(p.korisnik_ime).replace(/'/g,"\\'")}')">
+        <b style="color:var(--blue,#1a5fa8);text-decoration:underline;">${esc(p.korisnik_ime)}</b>
+        <div style="color:#8b96a5;font-size:10.5px;">${fdVrijeme(p.kada)} · ${esc(p.putanja)}</div>
+      </div>
+    `).join('');
+  }catch(e){ cont.innerHTML=`<div style="padding:10px;color:red;font-size:12px;">${esc(e.message)}</div>`; }
+}
+
+async function otvoriIstorijaStranica(korisnikId, ime){
+  document.getElementById('ist-naslov').textContent='Istorija otvaranja — '+ime;
+  document.getElementById('ist-modal').classList.add('on');
+  const cont=document.getElementById('ist-lista');
+  cont.innerHTML='<div style="padding:10px;color:#8b96a5;font-size:12px;">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/auth/stranice/${korisnikId}`);
+    const rows=await r.json();
+    if(!r.ok) throw new Error(rows.error||'Greška.');
+    if(!rows.length){cont.innerHTML='<div style="padding:10px;color:#8b96a5;font-size:12px;">Nema zabilježene istorije.</div>';return;}
+    cont.innerHTML=rows.map(p=>`
+      <div style="padding:6px 10px;border-bottom:1px solid #eee;font-size:12px;">
+        <b>${esc(p.putanja)}</b>
+        <div style="color:#8b96a5;font-size:10.5px;">${fdVrijeme(p.kada)}</div>
       </div>
     `).join('');
   }catch(e){ cont.innerHTML=`<div style="padding:10px;color:red;font-size:12px;">${esc(e.message)}</div>`; }
@@ -280,6 +345,11 @@ function render(){
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.izmjena_statusa?'checked':''} onchange="togglePravo(${k.id},'izmjena_statusa',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.izmjena_naloga?'checked':''} onchange="togglePravo(${k.id},'izmjena_naloga',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_prodavati?'checked':''} onchange="togglePravo(${k.id},'moze_prodavati',this.checked)"><span class="slider"></span></label></td>
+      <td>
+        <button class="btn-loz" style="font-size:10.5px;" onclick="openProdavacPopup(${k.id},'${esc(k.ime_prezime)}')">
+          🏪 ${k.prodavac_pj_nazivi ? esc(k.prodavac_pj_nazivi) : '— svi PJ —'}
+        </button>
+      </td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_roba_magacin?'checked':''} onchange="togglePravo(${k.id},'moze_roba_magacin',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.komercijalista_teren?'checked':''} onchange="togglePravo(${k.id},'komercijalista_teren',this.checked)"><span class="slider"></span></label></td>
       <td>
@@ -357,9 +427,52 @@ async function saveBlagajnikPopup(){
   }
 }
 
+let currentProdavacId=null;
+async function openProdavacPopup(id,ime){
+  currentProdavacId=id;
+  document.getElementById('prodavac-ime').textContent='Prodaja za PJ: '+ime;
+  document.getElementById('prodavac-msg').innerHTML='';
+  const lista=document.getElementById('prodavac-lista');
+  lista.innerHTML='Učitavanje...';
+  document.getElementById('prodavac-modal').classList.add('on');
+  try{
+    const [trenutni, sviPJ] = await Promise.all([
+      fetch(`${API}/api/zaposleni/${id}/prodavac-pj`).then(r=>r.json()),
+      window.__prodajniObjekti ? Promise.resolve(window.__prodajniObjekti) : fetch(`${API}/api/prodajni-objekti`).then(r=>r.json()),
+    ]);
+    if(!window.__prodajniObjekti) window.__prodajniObjekti = sviPJ;
+    lista.innerHTML = `<div style="font-size:11px;color:#8b96a5;margin-bottom:8px;">Ako ništa nije štiklirano, osoba vidi SVE PJ (bez ograničenja). Štikliraj da ograničiš na SAMO izabrane.</div>` +
+      (sviPJ.map(o=>`
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:13px;">
+        <input type="checkbox" value="${o.id}" ${trenutni.includes(o.id)?'checked':''} style="width:16px;height:16px;flex-shrink:0;margin-bottom:0;">
+        ${esc(o.naziv)}${o.valuta==='EUR'?' <span style="color:#8b96a5;font-size:11px;">(EUR)</span>':''}
+      </label>
+    `).join('') || '<div style="color:#8b96a5;">Nema definisanih prodajnih objekata.</div>');
+  }catch(e){
+    lista.innerHTML='<div style="color:red;">Greška pri učitavanju.</div>';
+  }
+}
+
+async function saveProdavacPopup(){
+  const checked=[...document.querySelectorAll('#prodavac-lista input[type="checkbox"]:checked')].map(c=>parseInt(c.value));
+  const msg=document.getElementById('prodavac-msg');
+  try{
+    const r=await fetch(`${API}/api/zaposleni/${currentProdavacId}/prodavac-pj`,{
+      method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({objekat_idjevi:checked}),
+    });
+    if(!r.ok) throw new Error();
+    closeModal();
+    load();
+  }catch(e){
+    msg.style.color='red'; msg.textContent='Greška pri čuvanju.';
+  }
+}
+
 function closeModal(){
   document.getElementById('loz-modal').classList.remove('on');
   document.getElementById('blagajnik-modal').classList.remove('on');
+  document.getElementById('prodavac-modal').classList.remove('on');
   currentLozId=null;
   currentBlagajnikId=null;
 }
