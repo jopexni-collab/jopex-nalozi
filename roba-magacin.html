@@ -315,7 +315,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Datum *</label><input type="date" id="kalk-datum"></div>
     </div>
     <div class="ce-row">
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Prodajni objekat (gdje se prima roba) *</label><select id="kalk-objekt"></select></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Prodajni objekat (gdje se prima roba) *</label><select id="kalk-objekt" onchange="kalkRenderStavke()"></select></div>
       <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Napomena</label><input type="text" id="kalk-napomena"></div>
     </div>
     <div class="ce-row">
@@ -559,14 +559,14 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <table style="width:100%;border-collapse:collapse;font-size:12px;">
         <thead>
           <tr style="background:#f7f8fa;">
-            <th style="text-align:left;padding:6px 7px;border-bottom:1px solid var(--border);">Datum</th>
-            <th style="text-align:left;padding:6px 7px;border-bottom:1px solid var(--border);">Artikal</th>
-            <th style="text-align:center;padding:6px 7px;border-bottom:1px solid var(--border);">Tip</th>
-            <th style="text-align:right;padding:6px 7px;border-bottom:1px solid var(--border);">Ušlo</th>
-            <th style="text-align:left;padding:6px 7px;border-bottom:1px solid var(--border);">Od koga</th>
-            <th style="text-align:right;padding:6px 7px;border-bottom:1px solid var(--border);">Izašlo</th>
-            <th style="text-align:left;padding:6px 7px;border-bottom:1px solid var(--border);">Kome</th>
-            <th style="text-align:right;padding:6px 7px;border-bottom:1px solid var(--border);">Vrijednost</th>
+            <th class="krt-sort-th" onclick="sortirajKretanje('datum')" style="cursor:pointer;user-select:none;text-align:left;padding:6px 7px;border-bottom:1px solid var(--border);">Datum <span class="krt-sort-ic" data-kljuc="datum"></span></th>
+            <th class="krt-sort-th" onclick="sortirajKretanje('naziv')" style="cursor:pointer;user-select:none;text-align:left;padding:6px 7px;border-bottom:1px solid var(--border);">Artikal <span class="krt-sort-ic" data-kljuc="naziv"></span></th>
+            <th class="krt-sort-th" onclick="sortirajKretanje('tip')" style="cursor:pointer;user-select:none;text-align:center;padding:6px 7px;border-bottom:1px solid var(--border);">Tip <span class="krt-sort-ic" data-kljuc="tip"></span></th>
+            <th class="krt-sort-th" onclick="sortirajKretanje('uslo')" style="cursor:pointer;user-select:none;text-align:right;padding:6px 7px;border-bottom:1px solid var(--border);">Ušlo <span class="krt-sort-ic" data-kljuc="uslo"></span></th>
+            <th class="krt-sort-th" onclick="sortirajKretanje('odKoga')" style="cursor:pointer;user-select:none;text-align:left;padding:6px 7px;border-bottom:1px solid var(--border);">Od koga <span class="krt-sort-ic" data-kljuc="odKoga"></span></th>
+            <th class="krt-sort-th" onclick="sortirajKretanje('izaslo')" style="cursor:pointer;user-select:none;text-align:right;padding:6px 7px;border-bottom:1px solid var(--border);">Izašlo <span class="krt-sort-ic" data-kljuc="izaslo"></span></th>
+            <th class="krt-sort-th" onclick="sortirajKretanje('kome')" style="cursor:pointer;user-select:none;text-align:left;padding:6px 7px;border-bottom:1px solid var(--border);">Kome <span class="krt-sort-ic" data-kljuc="kome"></span></th>
+            <th class="krt-sort-th" onclick="sortirajKretanje('iznos')" style="cursor:pointer;user-select:none;text-align:right;padding:6px 7px;border-bottom:1px solid var(--border);">Vrijednost <span class="krt-sort-ic" data-kljuc="iznos"></span></th>
           </tr>
           <tr style="background:#fff;">
             <th style="padding:3px 5px;border-bottom:2px solid var(--border);"><input type="text" id="kf-datum" placeholder="npr. 04.08" oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:11px;padding:4px 5px;border:1px solid var(--border);border-radius:4px;"></th>
@@ -1399,6 +1399,27 @@ function lagerFmMoney(n){
   return `${fm(n)} KM`;
 }
 
+// Generička verzija — radi za BILO KOJI izabrani objekt_id (Kalkulacija, Kretanje robe),
+// ne samo za "Lager lista" select. Koristi ISTU mapu (window.__lagerObjektiValute), ali
+// bez oslanjanja da je baš TA jedna funkcija (popuniLagerObjekat) stigla da je popuni
+// prva — svaki tab koji poziva /api/prodajni-objekti sam dopunjava istu mapu (vidi
+// kalkUcitajObjekte/kretanjeUcitajObjekte), pa je dostupna bez obzira koji se tab prvi učita.
+function valutaZaObjekat(objektId){
+  return (window.__lagerObjektiValute||{})[String(objektId)]||'KM';
+}
+function fmMoneyOpste(n, objektId){
+  const valuta=valutaZaObjekat(objektId);
+  if(valuta==='EUR') return `${fm(n)} € <span style="font-size:0.6em;color:#8b96a5;font-weight:600;">(${fm(n*1.95)} KM)</span>`;
+  return `${fm(n)} KM`;
+}
+// Kratka, tekstualna verzija (bez HTML-a) — za mesta gde ne sme ici innerHTML markup
+// (npr. u title atributu ili plain-text kontekstu).
+function fmMoneyOpsteTekst(n, objektId){
+  const valuta=valutaZaObjekat(objektId);
+  if(valuta==='EUR') return `${fm(n)} € (${fm(n*1.95)} KM)`;
+  return `${fm(n)} KM`;
+}
+
 let qrRucniIzabrani=new Set();
 
 function otvoriQrNalepnice(){
@@ -1716,6 +1737,8 @@ async function kalkUcitajObjekte(){
     const r=await fetch(`${API}/api/prodajni-objekti`);
     kalkMojiPJovi=await r.json();
     document.getElementById('kalk-objekt').innerHTML=kalkMojiPJovi.map(p=>`<option value="${p.id}">${esc(p.naziv)}</option>`).join('');
+    window.__lagerObjektiValute={...(window.__lagerObjektiValute||{}), ...Object.fromEntries(kalkMojiPJovi.map(p=>[String(p.id),p.valuta||'KM']))};
+    kalkRenderStavke(); // ponovo iscrtaj ako je vec bilo stavki, da se valuta odmah primijeni
   }catch(e){}
 }
 
@@ -1764,6 +1787,7 @@ function kalkObrisiStavku(i){
 
 function kalkRenderStavke(){
   const tbody=document.getElementById('kalk-stavke-tbody');
+  const objektId=document.getElementById('kalk-objekt').value;
   if(!kalkStavke.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#9aa5b1;padding:16px;">Nema dodanih stavki — pretraži artikal iznad.</td></tr>'; kalkAzurirajSume(0); return; }
 
   const trProm=parseFloat(document.getElementById('kalk-trosak-prevoz').value)||0;
@@ -1781,20 +1805,20 @@ function kalkRenderStavke(){
       <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><b>${esc(s.sifra)}</b><br><span style="font-size:10.5px;color:#8b96a5;">${esc(s.naziv)}</span></td>
       <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><input type="number" step="0.001" value="${s.kolicina}" style="width:75px;padding:5px 6px;font-size:12px;" onchange="kalkAzurirajStavku(${i},'kolicina',this.value)"></td>
       <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><input type="number" step="0.01" value="${s.nabavna_cijena}" style="width:80px;padding:5px 6px;font-size:12px;" onchange="kalkAzurirajStavku(${i},'nabavna_cijena',this.value)"></td>
-      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;color:#8b96a5;">${fm(udio)} KM</td>
-      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;font-weight:700;">${fm(pravaCijena)} KM</td>
+      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;color:#8b96a5;">${fmMoneyOpste(udio,objektId)}</td>
+      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;font-weight:700;">${fmMoneyOpste(pravaCijena,objektId)}</td>
       <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><input type="number" step="0.01" value="${s.prodajna_cijena}" style="width:80px;padding:5px 6px;font-size:12px;" onchange="kalkAzurirajStavku(${i},'prodajna_cijena',this.value)"></td>
       <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><button class="btn-import sec" style="padding:4px 8px;" onclick="kalkObrisiStavku(${i})">🗑</button></td>
     </tr>`;
   }).join('');
-  kalkAzurirajSume(ukupnaVrijednost+ukupniTroskovi);
+  kalkAzurirajSume(ukupnaVrijednost+ukupniTroskovi, objektId);
 }
 
-function kalkAzurirajSume(ukupnaVrijednostSaTroskovima){
+function kalkAzurirajSume(ukupnaVrijednostSaTroskovima, objektId){
   document.getElementById('kalk-sume').innerHTML=`
     <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:var(--dark);">${kalkStavke.length}</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Stavki</div></div>
     <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:var(--dark);">${fm(kalkStavke.reduce((s,x)=>s+x.kolicina,0))}</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Ukupna količina</div></div>
-    <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:var(--dark);">${fm(ukupnaVrijednostSaTroskovima)} KM</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Ukupna vrijednost (sa troškovima)</div></div>
+    <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:var(--dark);">${fmMoneyOpste(ukupnaVrijednostSaTroskovima,objektId)}</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Ukupna vrijednost (sa troškovima)</div></div>
   `;
 }
 
@@ -1857,6 +1881,7 @@ async function kretanjeUcitajObjekte(){
     const objekti=await r.json();
     document.getElementById('kretanje-objekat').innerHTML='<option value="">— izaberi prodajni objekat —</option>'+
       objekti.map(p=>`<option value="${p.id}">${esc(p.naziv)}</option>`).join('');
+    window.__lagerObjektiValute={...(window.__lagerObjektiValute||{}), ...Object.fromEntries(objekti.map(p=>[String(p.id),p.valuta||'KM']))};
   }catch(e){}
   postaviKretanjePeriod(7, document.querySelector('.ce-tip-btn[data-kper="7"]'));
 }
@@ -1880,6 +1905,34 @@ function postaviKretanjeMjesec(btn){
 }
 
 let kretanjeSveStavke=[]; // sirovi podaci sa servera (za trenutni PJ+period, prije filtera)
+let kretanjeSortKolona=null, kretanjeSortSmjer=1; // 1=rastuce, -1=opadajuce
+
+function kretanjeVrijednostZaSort(s, kljuc){
+  if(kljuc==='datum') return new Date(s.datum).getTime();
+  if(kljuc==='naziv') return (s.naziv||'').toLowerCase();
+  if(kljuc==='tip') return s.tip;
+  if(kljuc==='uslo') return s.tip==='ulaz' ? s.kolicina : -1;
+  if(kljuc==='izaslo') return s.tip==='izlaz' ? s.kolicina : -1;
+  if(kljuc==='odKoga') return s.tip==='ulaz' ? (s.partner||'').toLowerCase() : '';
+  if(kljuc==='kome') return s.tip==='izlaz' ? (s.partner||'').toLowerCase() : '';
+  if(kljuc==='iznos') return s.iznos;
+  return '';
+}
+
+function sortirajKretanje(kljuc){
+  if(kretanjeSortKolona===kljuc){ kretanjeSortSmjer*=-1; } else { kretanjeSortKolona=kljuc; kretanjeSortSmjer=1; }
+  document.querySelectorAll('.krt-sort-ic').forEach(el=>{
+    el.textContent = el.dataset.kljuc===kljuc ? (kretanjeSortSmjer===1?'▲':'▼') : '';
+  });
+  primijeniKretanjeFiltere();
+}
+
+// Klik na SAMU vrednost u tabeli (artikal, partner) — brzo filtrira po toj tačnoj
+// vrednosti, isto kao ručno kucanje u odgovarajuće polje filtera u zaglavlju.
+function filtrirajPoVrijednostiKretanje(poljeId, vrijednost){
+  document.getElementById(poljeId).value=vrijednost;
+  primijeniKretanjeFiltere();
+}
 
 async function ucitajKretanjeRobe(){
   const objektId=document.getElementById('kretanje-objekat').value;
@@ -1937,25 +1990,34 @@ function primijeniKretanjeFiltere(){
     return true;
   });
 
+  if(kretanjeSortKolona){
+    filtrirano=[...filtrirano].sort((a,b)=>{
+      const va=kretanjeVrijednostZaSort(a,kretanjeSortKolona), vb=kretanjeVrijednostZaSort(b,kretanjeSortKolona);
+      if(typeof va==='string') return va.localeCompare(vb)*kretanjeSortSmjer;
+      return (va-vb)*kretanjeSortSmjer;
+    });
+  }
+
   renderKretanjeTabela(filtrirano);
 }
 
 function renderKretanjeTabela(stavke){
   const tbody=document.getElementById('kretanje-tbody');
+  const objektId=document.getElementById('kretanje-objekat').value;
   if(!stavke.length){ tbody.innerHTML='<tr><td colspan="8" style="text-align:center;color:#9aa5b1;padding:16px;">Nema kretanja za izabrane filtere.</td></tr>'; document.getElementById('kretanje-sume').innerHTML=''; return; }
 
   tbody.innerHTML=stavke.map(s=>{
     const jeUlaz=s.tip==='ulaz';
     return `
     <tr>
-      <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;white-space:nowrap;">${new Date(s.datum).toLocaleDateString('sr-Latn-BA')}</td>
-      <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;"><b>${esc(s.sifra)}</b><br><span style="font-size:10.5px;color:#8b96a5;">${esc(s.naziv)}</span></td>
+      <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;white-space:nowrap;cursor:pointer;" onclick="filtrirajPoVrijednostiKretanje('kf-datum','${new Date(s.datum).toLocaleDateString('sr-Latn-BA')}')" title="Klik za filter po ovom datumu">${new Date(s.datum).toLocaleDateString('sr-Latn-BA')}</td>
+      <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;cursor:pointer;" onclick="filtrirajPoVrijednostiKretanje('kf-artikal','${esc(s.sifra).replace(/'/g,"\\'")}')" title="Klik za filter po ovom artiklu"><b>${esc(s.sifra)}</b><br><span style="font-size:10.5px;color:#8b96a5;">${esc(s.naziv)}</span></td>
       <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;text-align:center;font-size:10.5px;color:#8b96a5;">${s.izvor==='kalkulacija'?'📦 kalkulacija':s.izvor==='prodaja'?'🛒 prodaja':'🔄 prenos'}</td>
       <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;text-align:right;color:var(--green,#1f8a4c);font-weight:700;">${jeUlaz?'+'+fm(s.kolicina)+' '+esc(s.jed_mjera||''):''}</td>
-      <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;">${jeUlaz?esc(s.partner):''}</td>
+      <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;${jeUlaz?'cursor:pointer;':''}" ${jeUlaz?`onclick="filtrirajPoVrijednostiKretanje('kf-od-koga','${esc(s.partner).replace(/'/g,"\\'")}')" title="Klik za filter po ovom dobavljaču"`:''}>${jeUlaz?esc(s.partner):''}</td>
       <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;text-align:right;color:var(--red,#c0392b);font-weight:700;">${!jeUlaz?'−'+fm(s.kolicina)+' '+esc(s.jed_mjera||''):''}</td>
-      <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;">${!jeUlaz?esc(s.partner):''}</td>
-      <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;text-align:right;font-weight:700;">${fm(s.iznos)} KM</td>
+      <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;${!jeUlaz?'cursor:pointer;':''}" ${!jeUlaz?`onclick="filtrirajPoVrijednostiKretanje('kf-kome','${esc(s.partner).replace(/'/g,"\\'")}')" title="Klik za filter po ovom kupcu"`:''}>${!jeUlaz?esc(s.partner):''}</td>
+      <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;text-align:right;font-weight:700;">${fmMoneyOpste(s.iznos,objektId)}</td>
     </tr>`;
   }).join('');
 
@@ -1967,7 +2029,7 @@ function renderKretanjeTabela(stavke){
   document.getElementById('kretanje-sume').innerHTML=`
     <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:var(--green,#1f8a4c);">+${fm(ukUlaz)}</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Ukupno ušlo (kom/m²/m³)</div></div>
     <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:var(--red,#c0392b);">−${fm(ukIzlaz)}</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Ukupno izašlo</div></div>
-    <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:${ukVrijednost>=0?'var(--green,#1f8a4c)':'var(--red,#c0392b)'};">${fm(ukVrijednost)} KM</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Neto vrijednost</div></div>
+    <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:${ukVrijednost>=0?'var(--green,#1f8a4c)':'var(--red,#c0392b)'};">${fmMoneyOpste(ukVrijednost,objektId)}</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Neto vrijednost</div></div>
     <div style="flex:1;min-width:120px;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;text-align:center;"><div style="font-size:15px;font-weight:800;color:var(--dark,#134a85);">${stavke.length}</div><div style="font-size:9.5px;color:#8b96a5;text-transform:uppercase;margin-top:2px;">Transakcija</div></div>
   `;
 }
