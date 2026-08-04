@@ -606,12 +606,36 @@ async function ucitajBlagajnaBreakdown(tiho){
     // Grupiši SVE stavke (uplate i isplate/razduženja) po danu.
     const poDanu=new Map(); // 'YYYY-MM-DD' -> {uplate:[], isplate:[]}
     function osiguraj(dan){ if(!poDanu.has(dan)) poDanu.set(dan, {uplate:[], isplate:[]}); return poDanu.get(dan); }
+    // Bruto+dug PAROVI (djelimično plaćena otpremnica) se spajaju u JEDAN red na lijevoj
+    // (Uplate) strani — sa zelenim "uplaćeno" i crvenim "dug" dijelom ZAJEDNO. Iz ugla
+    // blagajnika, on NIKAD nije fizički uzeo cijeli bruto iznos ni isplatio dug — samo je
+    // primio NETO iznos, a ostatak nikad nije ni stigao. Prikazivanje duga na desnoj
+    // (Isplate) strani kao da je novac "izašao" bilo je zbunjujuće i knjigovodstveno
+    // netačno sa te tačke gledišta.
+    const dugPoNalogu=new Map(); // nalog_r_br -> dug red (iz gRows)
+    gRows.filter(x=>(x.opis||'').startsWith('Dug po otpremnici')).forEach(x=>dugPoNalogu.set(x.nalog_r_br, x));
+
     gRows.forEach(x=>{
+      const jeBruto=(x.opis||'').startsWith('Prodaja (bruto)');
+      if (jeBruto && dugPoNalogu.has(x.nalog_r_br)) return; // obradjuje se ispod, zajedno sa dugom
+      if ((x.opis||'').startsWith('Dug po otpremnici')) return; // isto - vec spojeno gore, ili osamljeno (vec filtrirano ranije)
       const dan=String(x.datum).slice(0,10);
       const d=osiguraj(dan);
       const iznos=parseFloat(x.iznos||0);
       if(iznos>=0) d.uplate.push({iznos, opis:`${esc(x.primio)} — ${esc(x.opis||x.izvor||'')}`, datum:x.datum});
       else d.isplate.push({iznos:-iznos, opis:`Dug/isplata — ${esc(x.opis||x.izvor||'')}`, datum:x.datum});
+    });
+    // Sad dodaj SPOJENE bruto+dug redove (jedan red, dva obojena dijela, na Uplate strani).
+    gRows.filter(x=>(x.opis||'').startsWith('Prodaja (bruto)') && dugPoNalogu.has(x.nalog_r_br)).forEach(bruto=>{
+      const dug=dugPoNalogu.get(bruto.nalog_r_br);
+      const dan=String(bruto.datum).slice(0,10);
+      const d=osiguraj(dan);
+      const uplaceno=+(parseFloat(bruto.iznos)-parseFloat(-dug.iznos)).toFixed(2);
+      const dugIznos=-parseFloat(dug.iznos);
+      d.uplate.push({
+        iznos: uplaceno, datum: bruto.datum, djelimicno: true, dugIznos,
+        opis: `${esc(bruto.primio)} — ${esc(bruto.opis||'')}`,
+      });
     });
     rzRows.forEach(rz=>{
       const dan=String(rz.kreirano).slice(0,10);
@@ -658,7 +682,16 @@ async function ucitajBlagajnaBreakdown(tiho){
           <div style="display:grid;grid-template-columns:1fr 1fr;">
             <div style="padding:8px 10px;border-right:1px solid var(--border);">
               <div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;margin-bottom:4px;">↓ Uplate</div>
-              ${redUplate.length?redUplate.map(u=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;${u.prenos?'font-style:italic;color:#8b96a5;':''}"><span>${u.opis}</span><span style="font-weight:700;">${fmValuta(u.iznos,pj.valuta)}</span></div>`).join(''):'<div style="font-size:11px;color:#c8ccd2;">—</div>'}
+              ${redUplate.length?redUplate.map(u=>u.djelimicno
+                ? `<div style="font-size:11px;padding:2px 0;">
+                     <div>${u.opis}</div>
+                     <div style="display:flex;justify-content:flex-end;gap:8px;font-weight:700;">
+                       <span style="color:var(--green);">✓ ${fmValuta(u.iznos,pj.valuta)}</span>
+                       <span style="color:var(--red);">⏳ dug ${fmValuta(u.dugIznos,pj.valuta)}</span>
+                     </div>
+                   </div>`
+                : `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;${u.prenos?'font-style:italic;color:#8b96a5;':''}"><span>${u.opis}</span><span style="font-weight:700;">${fmValuta(u.iznos,pj.valuta)}</span></div>`
+              ).join(''):'<div style="font-size:11px;color:#c8ccd2;">—</div>'}
             </div>
             <div style="padding:8px 10px;">
               <div style="font-size:10px;font-weight:700;color:var(--red);text-transform:uppercase;margin-bottom:4px;">↑ Isplate / Razduženja</div>
