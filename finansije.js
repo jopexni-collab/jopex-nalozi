@@ -204,6 +204,12 @@ router.get('/klijenti', async (req, res) => {
       GROUP BY kljuc, kupac_id, kupac_naziv
     `);
 
+    // Ručna kategorizacija duga (admin odlučuje šta je "Očekivana naplata" a šta "Teško
+    // naplativo" — nezavisno od izvora, može se premeštati u bilo kom trenutku).
+    const kategorizacija = await pool.query(`SELECT * FROM dug_kategorizacija`);
+    const kategMapaPoKljucu = {};
+    kategorizacija.rows.forEach(k => { kategMapaPoKljucu[k.kljuc] = k; });
+
     // Sastavi jedinstvenu mapu po klijentu.
     const klijenti = {};
     function osiguraj(kljuc, kupacId, naziv) {
@@ -242,15 +248,31 @@ router.get('/klijenti', async (req, res) => {
       k.nije_verifikovano_broj = +row.broj;
     }
 
-    const lista = Object.values(klijenti)
-      .map(k => {
+    const lista = Object.entries(klijenti)
+      .map(([kljuc, k]) => {
         const dugujeStvarno = +(k.duguje_banka + k.duguje_gotovina + k.duguje_nepoznato).toFixed(2);
         // "duguje_soft" = dug umanjen za AKTIVNE očekivane uplate (obećanje, još ne
         // stvarno stiglo) — informativno, da tim vidi "šta je stvarno još nerešeno" vs
         // "šta je obećano, čeka se na bankovni izvod".
         const dugujeSoft = +Math.max(0, dugujeStvarno - k.ocekivano).toFixed(2);
+
+        // Ručna kategorizacija — "Očekivana naplata" i "Teško naplativo" su iznosi koje
+        // je admin RUČNO premjestio iz podrazumjevanog "Dug" bucket-a. Ne mogu premašiti
+        // stvarni ukupan dug (ako se dug u međuvremenu smanjio, kategorizacija se
+        // automatski "skalira" da ne pokazuje više nego što stvarno postoji).
+        const kateg = kategMapaPoKljucu[kljuc];
+        let iznosOcekivanaNaplata = kateg ? +parseFloat(kateg.iznos_ocekivana_naplata).toFixed(2) : 0;
+        let iznosTeskoNaplativo = kateg ? +parseFloat(kateg.iznos_tesko_naplativo).toFixed(2) : 0;
+        if (iznosOcekivanaNaplata + iznosTeskoNaplativo > dugujeStvarno) {
+          const razmjer = dugujeStvarno / (iznosOcekivanaNaplata + iznosTeskoNaplativo);
+          iznosOcekivanaNaplata = +(iznosOcekivanaNaplata * razmjer).toFixed(2);
+          iznosTeskoNaplativo = +(iznosTeskoNaplativo * razmjer).toFixed(2);
+        }
+        const iznosDugObican = +Math.max(0, dugujeStvarno - iznosOcekivanaNaplata - iznosTeskoNaplativo).toFixed(2);
+
         return {
           ...k,
+          kljuc,
           duguje_ukupno: dugujeStvarno,
           duguje_soft: dugujeSoft,
           duguje_banka: +k.duguje_banka.toFixed(2),
@@ -259,6 +281,10 @@ router.get('/klijenti', async (req, res) => {
           uplaceno_banka_istorijski: +k.uplaceno_banka_istorijski.toFixed(2),
           pretplata: +k.pretplata.toFixed(2),
           ocekivano: +k.ocekivano.toFixed(2),
+          kateg_dug: iznosDugObican,
+          kateg_ocekivana_naplata: iznosOcekivanaNaplata,
+          kateg_tesko_naplativo: iznosTeskoNaplativo,
+          kateg_napomena: kateg?.napomena || null,
         };
       })
       .filter(k => k.duguje_ukupno > 0.01 || k.uplaceno_banka_istorijski > 0.01 || k.pretplata > 0.01)
@@ -488,6 +514,33 @@ router.post('/vp-cekanje/:broj/potvrdi', async (req, res) => {
 // GET /api/finansije/klijent-dug-detalji?kupac_id=X&naziv=Y — SVI izvori duga za jednog
 // klijenta (otpremnice maloprodaje + radni nalozi), sa datumom i opisom svake stavke —
 // da se klikom na "Duguje" vidi TAČNO odakle dolazi taj iznos.
+// POST /api/finansije/kategorizuj-dug — postavlja/premješta iznose između tri kategorije
+// duga za jednog klijenta (Dug/Očekivana naplata/Teško naplativo). Šalju se APSOLUTNI
+// iznosi za "očekivana naplata" i "tesko naplativo" (ne delta) — "Dug" je uvijek ostatak,
+// računa se automatski (nema svoju kolonu u bazi).
+router.post('/kategorizuj-dug', async (req, res) => {
+  const user = req.session?.user;
+  if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });
+  const { kljuc, kupac_id, kupac_naziv, iznos_ocekivana_naplata, iznos_tesko_naplativo, napomena } = req.body || {};
+  if (!kljuc) return res.status(400).json({ error: 'Nedostaje kljuc klijenta.' });
+  const ocek = parseFloat(iznos_ocekivana_naplata) || 0;
+  const tesko = parseFloat(iznos_tesko_naplativo) || 0;
+  if (ocek < 0 || tesko < 0) return res.status(400).json({ error: 'Iznosi ne mogu biti negativni.' });
+  try {
+    await pool.query(
+      `INSERT INTO dug_kategorizacija (kljuc, kupac_id, kupac_naziv, iznos_ocekivana_naplata, iznos_tesko_naplativo, napomena, azurirao_id, azurirao_ime)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (kljuc) DO UPDATE SET
+         iznos_ocekivana_naplata=$4, iznos_tesko_naplativo=$5, napomena=$6,
+         azurirao_id=$7, azurirao_ime=$8, azurirano=now()`,
+      [kljuc, kupac_id || null, kupac_naziv || null, ocek, tesko, napomena || null, user.id, user.ime_prezime]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/klijent-dug-detalji', async (req, res) => {
   const user = req.session?.user;
   if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });

@@ -394,11 +394,13 @@ td.num{text-align:right;font-weight:700;}
     <table>
       <thead>
         <tr>
-          <th>Klijent</th><th>Duguje (stvarno)</th><th>Očekivano (obećano)</th><th>Duguje — preostalo</th>
+          <th>Klijent</th><th>Duguje (stvarno)</th>
+          <th>Dug</th><th>Očekivana naplata</th><th>Teško naplativo</th>
+          <th>Očekivano (obećano)</th><th>Duguje — preostalo</th>
           <th>Pretplata</th><th>Uplaćeno u banku (istorijski)</th><th>Verifikacija</th>
         </tr>
       </thead>
-      <tbody id="klijenti-tbody"><tr><td colspan="7" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr></tbody>
+      <tbody id="klijenti-tbody"><tr><td colspan="10" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -458,6 +460,24 @@ td.num{text-align:right;font-weight:700;}
     <h3 id="ku-naslov" style="margin:0 0 12px;">Istorija uplata</h3>
     <div id="ku-lista"></div>
     <button class="btn-sm" onclick="document.getElementById('modal-klijent-uplate').style.display='none'" style="width:100%;margin-top:14px;">Zatvori</button>
+  </div>
+</div>
+
+<div class="modal" id="modal-kategorizacija-duga" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;">
+  <div class="modal-box" style="background:#fff;border-radius:12px;padding:20px;max-width:420px;width:92vw;">
+    <h3 id="kat-naslov" style="margin:0 0 6px;">Podela duga</h3>
+    <div id="kat-ukupno-info" style="font-size:12px;color:#8b96a5;margin-bottom:14px;"></div>
+    <label style="font-size:11px;font-weight:700;color:#1a2733;display:block;margin-bottom:4px;">Očekivana naplata (KM)</label>
+    <input type="number" id="kat-ocekivana" step="0.01" min="0" oninput="azurirajKategorizacijaOstatak()" style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:6px;margin-bottom:10px;">
+    <label style="font-size:11px;font-weight:700;color:#1a2733;display:block;margin-bottom:4px;">Teško naplativo (KM)</label>
+    <input type="number" id="kat-tesko" step="0.01" min="0" oninput="azurirajKategorizacijaOstatak()" style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:6px;margin-bottom:10px;">
+    <div id="kat-ostatak-info" style="font-size:12.5px;font-weight:700;margin-bottom:6px;"></div>
+    <label style="font-size:11px;font-weight:700;color:#1a2733;display:block;margin-bottom:4px;">Napomena (opciono)</label>
+    <input type="text" id="kat-napomena" placeholder="npr. dogovoren plan otplate na rate" style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:6px;margin-bottom:14px;">
+    <div style="display:flex;gap:8px;">
+      <button class="btn-sm" onclick="document.getElementById('modal-kategorizacija-duga').style.display='none'" style="flex:1;">Otkaži</button>
+      <button class="btn-sm" onclick="sacuvajKategorizacijaDuga()" style="flex:1;background:var(--blue,#1a5fa8);color:#fff;">Sačuvaj</button>
+    </div>
   </div>
 </div>
 
@@ -1592,11 +1612,11 @@ async function dodijeliBanku(id, banka){
 
 async function ucitajKlijentiListu(){
   const tbody=document.getElementById('klijenti-tbody');
-  tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr>';
+  tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr>';
   try{
     const r=await fetch(`${API}/api/finansije/klijenti`);
     const rows=await r.json();
-    if(!rows.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:#999">Nema klijenata sa dugom/pretplatom.</td></tr>'; return; }
+    if(!rows.length){ tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:20px;color:#999">Nema klijenata sa dugom/pretplatom.</td></tr>'; return; }
     tbody.innerHTML=rows.map(k=>{
       const nazivEsc=esc(k.kupac_naziv||'').replace(/'/g,"\\'");
       return `
@@ -1606,6 +1626,9 @@ async function ucitajKlijentiListu(){
           ${!k.registrovan?'<div style="font-size:10px;color:var(--red);font-weight:700;">⚠ Preporučuje se registracija kupca</div>':''}
         </td>
         <td style="font-weight:700;${k.duguje_ukupno>0?'cursor:pointer;color:var(--blue);text-decoration:underline;':''}" ${k.duguje_ukupno>0?`onclick="otvoriDugDetalji(${k.kupac_id||'null'},'${nazivEsc}')" title="Klikni da vidiš odakle dolazi dug"`:''}>${k.duguje_ukupno>0?fm(k.duguje_ukupno):'—'}</td>
+        <td style="${k.duguje_ukupno>0?'cursor:pointer;':''}" ${k.duguje_ukupno>0?`onclick="otvoriKategorizacijaDuga('${esc(k.kljuc)}',${k.kupac_id||'null'},'${nazivEsc}',${k.duguje_ukupno},${k.kateg_ocekivana_naplata},${k.kateg_tesko_naplativo})" title="Klikni da premjestiš dio u drugu kategoriju"`:''}>${k.duguje_ukupno>0?fm(k.kateg_dug):'—'}</td>
+        <td style="${k.kateg_ocekivana_naplata>0?'color:var(--blue);font-weight:700;cursor:pointer;':k.duguje_ukupno>0?'cursor:pointer;':''}" ${k.duguje_ukupno>0?`onclick="otvoriKategorizacijaDuga('${esc(k.kljuc)}',${k.kupac_id||'null'},'${nazivEsc}',${k.duguje_ukupno},${k.kateg_ocekivana_naplata},${k.kateg_tesko_naplativo})"`:''}>${k.kateg_ocekivana_naplata>0?fm(k.kateg_ocekivana_naplata):'—'}</td>
+        <td style="${k.kateg_tesko_naplativo>0?'color:var(--red);font-weight:700;cursor:pointer;':k.duguje_ukupno>0?'cursor:pointer;':''}" ${k.duguje_ukupno>0?`onclick="otvoriKategorizacijaDuga('${esc(k.kljuc)}',${k.kupac_id||'null'},'${nazivEsc}',${k.duguje_ukupno},${k.kateg_ocekivana_naplata},${k.kateg_tesko_naplativo})"`:''}>${k.kateg_tesko_naplativo>0?fm(k.kateg_tesko_naplativo):'—'}</td>
         <td style="${k.ocekivano>0?'color:var(--orange,#b8860b);':''}">${k.ocekivano>0?fm(k.ocekivano):'—'}</td>
         <td>${k.duguje_soft>0?fm(k.duguje_soft):'—'}</td>
         <td style="${k.pretplata>0?'color:var(--green);font-weight:700;':''}">${k.pretplata>0?'+ '+fm(k.pretplata):'—'}</td>
@@ -1613,7 +1636,7 @@ async function ucitajKlijentiListu(){
         <td>${k.nije_verifikovano_broj>0?`<span style="color:var(--red);font-weight:700;font-size:11px;">🚚 ${k.nije_verifikovano_broj} neverifik.</span>`:'<span style="color:var(--green);font-size:11px;">✓ sve</span>'}</td>
       </tr>
     `;}).join('');
-  }catch(e){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>'; }
+  }catch(e){ tbody.innerHTML='<tr><td colspan="10" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>'; }
 }
 
 /* ── ISTORIJSKI UNOS ─────────────────────────────────────────────────── */
@@ -1712,6 +1735,54 @@ async function otvoriDugDetalji(kupacId, naziv){
       </div>
     `).join('');
   }catch(e){ cont.innerHTML='<div style="text-align:center;color:red;padding:20px;">Greška pri učitavanju.</div>'; }
+}
+
+/* ── KLIK NA DUG (Dug/Očekivana naplata/Teško naplativo) → PREMEŠTANJE IZMEĐU KATEGORIJA ── */
+let katTrenutni=null;
+function otvoriKategorizacijaDuga(kljuc, kupacId, naziv, dugujeUkupno, ocekivana, tesko){
+  katTrenutni={kljuc, kupacId, naziv, dugujeUkupno};
+  document.getElementById('kat-naslov').textContent='Podela duga — '+naziv;
+  document.getElementById('kat-ukupno-info').textContent=`Ukupan dug: ${fm(dugujeUkupno)} KM — podeli na tri kategorije ispod (ostatak automatski ide u "Dug").`;
+  document.getElementById('kat-ocekivana').value=ocekivana||0;
+  document.getElementById('kat-ocekivana').max=dugujeUkupno;
+  document.getElementById('kat-tesko').value=tesko||0;
+  document.getElementById('kat-tesko').max=dugujeUkupno;
+  document.getElementById('kat-napomena').value='';
+  azurirajKategorizacijaOstatak();
+  document.getElementById('modal-kategorizacija-duga').style.display='flex';
+}
+function azurirajKategorizacijaOstatak(){
+  if(!katTrenutni) return;
+  const ocek=parseFloat(document.getElementById('kat-ocekivana').value)||0;
+  const tesko=parseFloat(document.getElementById('kat-tesko').value)||0;
+  const ostatak=+(katTrenutni.dugujeUkupno-ocek-tesko).toFixed(2);
+  const el=document.getElementById('kat-ostatak-info');
+  if(ostatak<0){
+    el.style.color='var(--red)';
+    el.textContent=`⚠ Zbir (${fm(ocek+tesko)}) premašuje ukupan dug (${fm(katTrenutni.dugujeUkupno)})`;
+  }else{
+    el.style.color='var(--dark,#134a85)';
+    el.textContent=`Ostaje kao običan "Dug": ${fm(ostatak)} KM`;
+  }
+}
+async function sacuvajKategorizacijaDuga(){
+  if(!katTrenutni) return;
+  const ocek=parseFloat(document.getElementById('kat-ocekivana').value)||0;
+  const tesko=parseFloat(document.getElementById('kat-tesko').value)||0;
+  if(ocek+tesko>katTrenutni.dugujeUkupno+0.01){ alert('Zbir ne može premašiti ukupan dug.'); return; }
+  try{
+    const r=await fetch(`${API}/api/finansije/kategorizuj-dug`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        kljuc:katTrenutni.kljuc, kupac_id:katTrenutni.kupacId, kupac_naziv:katTrenutni.naziv,
+        iznos_ocekivana_naplata:ocek, iznos_tesko_naplativo:tesko,
+        napomena:document.getElementById('kat-napomena').value.trim()||null,
+      }),
+    });
+    if(!r.ok){ const d=await r.json(); alert('✗ '+(d.error||'Greška.')); return; }
+    document.getElementById('modal-kategorizacija-duga').style.display='none';
+    ucitajKlijentiListu();
+  }catch(e){ alert('✗ Greška pri snimanju.'); }
 }
 
 /* ── KLIK NA "UPLAĆENO" → ISTORIJA UPLATA (banka + gotovina), hronoloski ── */
