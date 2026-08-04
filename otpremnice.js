@@ -226,31 +226,34 @@ router.get('/', async (req, res) => {
     let i = 1;
 
     // Blagajnik vidi SVE otpremnice za PJ za koji je zadužen (treba mu za dalje
-    // knjiženje u Bluesoft) — ne samo one koje je on lično prodao kao komercijalista.
-    let blagajnikPJevi = [];
+    // knjiženje u Bluesoft). Komercijalista sa dodijeljenim PJ (prodavci_pj) vidi SVE
+    // otpremnice iz TOG PJ — i svoje i kolega — jer kupac može doći bilo kom prodavcu u
+    // toj PJ da plati/pita, nema smisla da ne vidi tuđu prodaju iz iste prodavnice.
+    let dozvoljeniPJevi = [];
     if (user?.rola !== 'admin') {
       const bp = await pool.query('SELECT objekat_id FROM blagajnici_pj WHERE zaposleni_id=$1', [user.id]);
-      blagajnikPJevi = bp.rows.map(r => r.objekat_id);
+      const pp = await pool.query('SELECT objekat_id FROM prodavci_pj WHERE zaposleni_id=$1', [user.id]);
+      dozvoljeniPJevi = [...new Set([...bp.rows.map(r => r.objekat_id), ...pp.rows.map(r => r.objekat_id)])];
     }
 
     // "broj" (deep-link iz blagajne, npr. klik na OTP broj) — admin vidi BILO KOJU
     // otpremnicu po broju, bez obzira ko ju je napravio; ostali vide ako su komercijalista
-    // NA TOJ otpremnici ILI blagajnik za taj PJ; ostali ne vide ništa.
+    // NA TOJ otpremnici ILI imaju pristup TOM PJ (blagajnik ili prodavac); ostali ne vide ništa.
     if (broj) {
       where.push(`broj = $${i++}`);
       vals.push(broj);
       if (user?.rola !== 'admin') {
-        if (blagajnikPJevi.length) {
+        if (dozvoljeniPJevi.length) {
           where.push(`(komercijalista_id = $${i++} OR objekt_id = ANY($${i++}::int[]))`);
-          vals.push(user.id, blagajnikPJevi);
+          vals.push(user.id, dozvoljeniPJevi);
         } else {
           where.push(`komercijalista_id = $${i++}`); vals.push(user.id);
         }
       }
     } else if (user?.rola !== 'admin') {
-      if (blagajnikPJevi.length) {
+      if (dozvoljeniPJevi.length) {
         where.push(`(komercijalista_id = $${i++} OR objekt_id = ANY($${i++}::int[]))`);
-        vals.push(user.id, blagajnikPJevi);
+        vals.push(user.id, dozvoljeniPJevi);
       } else {
         where.push(`komercijalista_id = $${i++}`); vals.push(user.id);
       }

@@ -3372,7 +3372,7 @@ fetch(`${API}/api/auth/me`).then(r=>{
   }
   document.getElementById('who').textContent='👤 '+u.ime_prezime;
   document.getElementById('ov-who').textContent='👤 '+u.ime_prezime;
-  document.getElementById('tab-admin-btn').textContent = isAdmin ? '📋 Sve otpremnice' : '🧾 Moje otpremnice';
+  document.getElementById('tab-admin-btn').textContent = isAdmin ? '📋 Sve otpremnice' : '🧾 Otpremnice ove PJ';
   if(isAdmin || u.moze_roba_magacin) document.getElementById('link-roba-magacin').style.display='';
   if(isAdmin) document.getElementById('btn-toggle-rucni-dug').style.display='';
   popuniFilterObjekata();

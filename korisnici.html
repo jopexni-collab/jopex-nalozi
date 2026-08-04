@@ -14,18 +14,23 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 main{max-width:1200px;margin:20px auto;padding:0 14px;}
 .card{background:#fff;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.08);overflow:hidden;}
 table{width:100%;border-collapse:collapse;}
-thead th{background:#1f3864;color:#fff;font-size:11.5px;font-weight:600;padding:8px 10px;text-align:left;white-space:nowrap;}
+thead th{background:#1f3864;color:#fff;font-size:10.5px;font-weight:600;padding:6px 6px;text-align:left;white-space:normal;line-height:1.25;}
 tbody tr:hover td{background:#f0f4ff;}
 tbody tr:nth-child(even) td{background:#f8f9fc;}
-td{padding:7px 10px;border-bottom:1px solid #eee;vertical-align:middle;}
+td{padding:5px 6px;border-bottom:1px solid #eee;vertical-align:middle;font-size:11.5px;}
+#tabela-skrol{scrollbar-width:auto;scrollbar-color:#1a5fa8 #eee;}
+#tabela-skrol::-webkit-scrollbar{height:14px;}
+#tabela-skrol::-webkit-scrollbar-track{background:#eee;border-radius:7px;}
+#tabela-skrol::-webkit-scrollbar-thumb{background:#1a5fa8;border-radius:7px;border:2px solid #eee;}
+#tabela-skrol::-webkit-scrollbar-thumb:hover{background:#134a85;}
 td.ime{font-weight:600;}
 td.poz{font-size:11px;color:#6b7a8d;}
-.toggle{position:relative;display:inline-block;width:36px;height:20px;}
+.toggle{position:relative;display:inline-block;width:30px;height:17px;}
 .toggle input{opacity:0;width:0;height:0;}
 .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#ccc;border-radius:20px;transition:.3s;}
-.slider:before{position:absolute;content:"";height:14px;width:14px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s;}
+.slider:before{position:absolute;content:"";height:11px;width:11px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s;}
 input:checked+.slider{background:var(--green);}
-input:checked+.slider:before{transform:translateX(16px);}
+input:checked+.slider:before{transform:translateX(13px);}
 .toggle-cell{text-align:center;}
 .badge-admin{display:inline-block;background:#fce8e6;color:#c0392b;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;}
 .btn-loz{font:inherit;font-size:11px;padding:3px 8px;background:#eee;border:1px solid #ddd;border-radius:4px;cursor:pointer;}
@@ -104,8 +109,8 @@ input:checked+.slider:before{transform:translateX(16px);}
   </div>
 
   <div class="card">
-    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
-    <table style="min-width:1500px;">
+    <div id="tabela-skrol" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+    <table>
       <thead>
         <tr>
           <th>Ime i prezime</th>
@@ -346,14 +351,14 @@ function render(){
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.izmjena_naloga?'checked':''} onchange="togglePravo(${k.id},'izmjena_naloga',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_prodavati?'checked':''} onchange="togglePravo(${k.id},'moze_prodavati',this.checked)"><span class="slider"></span></label></td>
       <td>
-        <button class="btn-loz" style="font-size:10.5px;" onclick="openProdavacPopup(${k.id},'${esc(k.ime_prezime)}')">
+        <button class="btn-loz" style="font-size:10.5px;max-width:130px;white-space:normal;text-align:left;" onclick="openProdavacPopup(${k.id},'${esc(k.ime_prezime)}')">
           🏪 ${k.prodavac_pj_nazivi ? esc(k.prodavac_pj_nazivi) : '— svi PJ —'}
         </button>
       </td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_roba_magacin?'checked':''} onchange="togglePravo(${k.id},'moze_roba_magacin',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.komercijalista_teren?'checked':''} onchange="togglePravo(${k.id},'komercijalista_teren',this.checked)"><span class="slider"></span></label></td>
       <td>
-        <button class="btn-loz" style="font-size:10.5px;" onclick="openBlagajnikPopup(${k.id},'${esc(k.ime_prezime)}')">
+        <button class="btn-loz" style="font-size:10.5px;max-width:130px;white-space:normal;text-align:left;" onclick="openBlagajnikPopup(${k.id},'${esc(k.ime_prezime)}')">
           🏦 ${k.blagajnik_pj_nazivi ? esc(k.blagajnik_pj_nazivi) : '— nije blagajnik —'}
         </button>
       </td>
