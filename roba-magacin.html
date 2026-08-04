@@ -307,7 +307,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 <div id="tab-kalkulacija">
   <div class="import-box" id="kalk-box">
     <h3>📦 Kalkulacija — prijem robe od dobavljača</h3>
-    <div class="uzorak-hint">Unosi novu nabavku sa zavisnim troškovima (prevoz/carina/ostalo) — automatski obračunava pravu nabavnu cijenu po stavci (proporcionalno po vrijednosti) i postavlja novu prodajnu cijenu. Čuvanje odmah uvećava stanje robe.</div>
+    <div class="uzorak-hint">Unosi novu nabavku sa zavisnim troškovima — automatski obračunava pravu nabavnu cijenu po stavci (proporcionalno po vrijednosti), postavlja novu prodajnu cijenu, i obračunava carinu/PDV. Čuvanje odmah uvećava stanje robe.</div>
 
     <div class="ce-row">
       <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Dobavljač *</label><input type="text" id="kalk-dobavljac" placeholder="Naziv dobavljača"></div>
@@ -315,14 +315,48 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Datum *</label><input type="date" id="kalk-datum"></div>
     </div>
     <div class="ce-row">
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Prodajni objekat (gdje se prima roba) *</label><select id="kalk-objekt" onchange="kalkRenderStavke()"></select></div>
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Napomena</label><input type="text" id="kalk-napomena"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Broj kontejnera</label><input type="text" id="kalk-broj-kontejnera" placeholder="npr. MSCU1234567"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">ETA (očekivan dolazak)</label><input type="date" id="kalk-eta"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Broj fakture dobavljača</label><input type="text" id="kalk-broj-fakture-dobavljaca"></div>
     </div>
     <div class="ce-row">
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Trošak prevoza (KM)</label><input type="number" step="0.01" id="kalk-trosak-prevoz" value="0" oninput="kalkRenderStavke()"></div>
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Trošak carine (KM)</label><input type="number" step="0.01" id="kalk-trosak-carina" value="0" oninput="kalkRenderStavke()"></div>
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Ostali troškovi (KM)</label><input type="number" step="0.01" id="kalk-trosak-ostalo" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Prodajni objekat (gdje se prima roba) *</label><select id="kalk-objekt" onchange="kalkRenderStavke()"></select></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Kupac (opciono — ako ide direktno u tranzitu)</label><input type="text" id="kalk-kupac-direktno" placeholder="Ostavi prazno ako ide u magacin"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Napomena</label><input type="text" id="kalk-napomena"></div>
     </div>
+
+    <h3 style="margin-top:16px;">Nabavka i brodarina</h3>
+    <div class="ce-row">
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Valuta nabavke</label>
+        <select id="kalk-valuta-nabavke" onchange="kalkPredloziKurs()"><option value="EUR">EUR</option><option value="USD">USD</option></select>
+      </div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Vrijednost nabavke (u toj valuti)</label><input type="number" step="0.01" id="kalk-vrednost-nabavke" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Brodarina (u toj valuti)</label><input type="number" step="0.01" id="kalk-vrednost-brodarine" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Kurs → KM</label><input type="number" step="0.00001" id="kalk-kurs" value="1.95583" oninput="kalkRenderStavke()"></div>
+    </div>
+
+    <h3 style="margin-top:16px;">Troškovi u KM</h3>
+    <div class="ce-row">
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Trošak prevoza — interni (KM)</label><input type="number" step="0.01" id="kalk-trosak-prevoz" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Od luke do istovara (KM)</label><input type="number" step="0.01" id="kalk-trosak-luka" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Drugi troškovi (KM)</label><input type="number" step="0.01" id="kalk-drugi-troskovi" value="0" oninput="kalkRenderStavke()"></div>
+    </div>
+
+    <h3 style="margin-top:16px;">Carinski obračun</h3>
+    <div class="uzorak-hint">Osnovica služi ISKLJUČIVO za obračun carine/PDV-a ispod — sam taj iznos se nigdje dalje ne koristi. Izračunata carina se automatski uključuje u raspoređivanje troškova po stavci (utiče na nabavnu cijenu). PDV se NE uključuje u nabavnu cijenu (obično je odbitan/povratan).</div>
+    <div class="ce-row">
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Osnovica za carinjenje (KM)</label><input type="number" step="0.01" id="kalk-osnovica" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Stopa carine (%)</label><input type="number" step="0.01" id="kalk-stopa-carine" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Stopa PDV (%)</label><input type="number" step="0.01" id="kalk-stopa-pdv" value="17" oninput="kalkRenderStavke()"></div>
+    </div>
+    <div id="kalk-carina-pdv-info" style="font-size:12px;color:#6b7a8d;margin-top:4px;"></div>
+
+    <h3 style="margin-top:16px;">Finansije prema dobavljaču</h3>
+    <div class="ce-row">
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Avans uplaćen</label><input type="number" step="0.01" id="kalk-avans" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Ostatak za uplatu</label><input type="number" step="0.01" id="kalk-ostatak" value="0" oninput="kalkRenderStavke()"></div>
+    </div>
+    <div class="uzorak-hint">Realna faktura (konačan iznos) se obično ne zna odmah — dodaj je posle, kad stigne, kroz listu kalkulacija.</div>
 
     <h3 style="margin-top:16px;">Stavke</h3>
     <div style="position:relative;">
@@ -1786,15 +1820,30 @@ function kalkObrisiStavku(i){
   kalkRenderStavke();
 }
 
+// Predlaže podrazumevani kurs zavisno od izabrane valute (EUR fiksan zvanični kurs, USD
+// približan/tekući) — korisnik ga MOŽE promijeniti ručno posle, ovo je samo polazna tačka.
+function kalkPredloziKurs(){
+  const valuta=document.getElementById('kalk-valuta-nabavke').value;
+  document.getElementById('kalk-kurs').value = valuta==='EUR' ? '1.95583' : '1.70';
+  kalkRenderStavke();
+}
+
 function kalkRenderStavke(){
   const tbody=document.getElementById('kalk-stavke-tbody');
   const objektId=document.getElementById('kalk-objekt').value;
+  const osnovica=parseFloat(document.getElementById('kalk-osnovica').value)||0;
+  const stopaCarine=parseFloat(document.getElementById('kalk-stopa-carine').value)||0;
+  const stopaPdv=parseFloat(document.getElementById('kalk-stopa-pdv').value)||0;
+  const iznosCarine=+(osnovica*stopaCarine/100).toFixed(2);
+  const iznosPdv=+((osnovica+iznosCarine)*stopaPdv/100).toFixed(2);
+  document.getElementById('kalk-carina-pdv-info').innerHTML=
+    `Carina: <b>${fm(iznosCarine)} KM</b> &nbsp;·&nbsp; PDV: <b>${fm(iznosPdv)} KM</b> &nbsp;·&nbsp; Carina+PDV ukupno: <b>${fm(iznosCarine+iznosPdv)} KM</b> (dodaje se na realnu fakturu; carina ulazi i u raspoređivanje troškova ispod, PDV ne)`;
+
   if(!kalkStavke.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#9aa5b1;padding:16px;">Nema dodanih stavki — pretraži artikal iznad.</td></tr>'; kalkAzurirajSume(0); return; }
 
   const trProm=parseFloat(document.getElementById('kalk-trosak-prevoz').value)||0;
-  const trCar=parseFloat(document.getElementById('kalk-trosak-carina').value)||0;
-  const trOst=parseFloat(document.getElementById('kalk-trosak-ostalo').value)||0;
-  const ukupniTroskovi=trProm+trCar+trOst;
+  const trOst=parseFloat(document.getElementById('kalk-drugi-troskovi').value)||0;
+  const ukupniTroskovi=trProm+iznosCarine+trOst;
   const ukupnaVrijednost=kalkStavke.reduce((s,x)=>s+x.kolicina*x.nabavna_cijena,0);
 
   tbody.innerHTML=kalkStavke.map((s,i)=>{
@@ -1842,9 +1891,23 @@ async function kalkSacuvaj(){
         broj:document.getElementById('kalk-broj').value.trim()||null,
         dobavljac, datum, objekt_id:objektId,
         objekt_naziv:kalkMojiPJovi.find(p=>String(p.id)===String(objektId))?.naziv,
+        broj_kontejnera:document.getElementById('kalk-broj-kontejnera').value.trim()||null,
+        eta:document.getElementById('kalk-eta').value||null,
+        broj_fakture_dobavljaca:document.getElementById('kalk-broj-fakture-dobavljaca').value.trim()||null,
+        kupac_direktno:document.getElementById('kalk-kupac-direktno').value.trim()||null,
+        valuta_nabavke:document.getElementById('kalk-valuta-nabavke').value,
+        vrednost_nabavke:document.getElementById('kalk-vrednost-nabavke').value,
+        vrednost_brodarine:document.getElementById('kalk-vrednost-brodarine').value,
+        kurs:document.getElementById('kalk-kurs').value,
         trosak_prevoz:document.getElementById('kalk-trosak-prevoz').value,
-        trosak_carina:document.getElementById('kalk-trosak-carina').value,
-        trosak_ostalo:document.getElementById('kalk-trosak-ostalo').value,
+        trosak_luka_km:document.getElementById('kalk-trosak-luka').value,
+        drugi_troskovi_km:document.getElementById('kalk-drugi-troskovi').value,
+        trosak_ostalo:'0',
+        osnovica_za_carinjenje:document.getElementById('kalk-osnovica').value,
+        stopa_carine_pct:document.getElementById('kalk-stopa-carine').value,
+        stopa_pdv_pct:document.getElementById('kalk-stopa-pdv').value,
+        avans_uplacen:document.getElementById('kalk-avans').value,
+        ostatak_za_uplatu:document.getElementById('kalk-ostatak').value,
         napomena:document.getElementById('kalk-napomena').value.trim(),
         stavke:kalkStavke,
       }),
@@ -1852,14 +1915,23 @@ async function kalkSacuvaj(){
     const data=await r.json();
     if(!r.ok) throw new Error(data.error);
     msg.style.color='green';
-    msg.textContent=`✓ Kalkulacija #${data.id} sačuvana — stanje robe je uvećano.`;
+    msg.textContent=`✓ Kalkulacija #${data.id} sačuvana — stanje robe je uvećano. Carina: ${fm(data.iznos_carine)} KM, PDV: ${fm(data.iznos_pdv)} KM.`;
     kalkStavke=[];
     document.getElementById('kalk-dobavljac').value='';
     document.getElementById('kalk-broj').value='';
+    document.getElementById('kalk-broj-kontejnera').value='';
+    document.getElementById('kalk-eta').value='';
+    document.getElementById('kalk-broj-fakture-dobavljaca').value='';
+    document.getElementById('kalk-kupac-direktno').value='';
     document.getElementById('kalk-napomena').value='';
+    document.getElementById('kalk-vrednost-nabavke').value='0';
+    document.getElementById('kalk-vrednost-brodarine').value='0';
     document.getElementById('kalk-trosak-prevoz').value='0';
-    document.getElementById('kalk-trosak-carina').value='0';
-    document.getElementById('kalk-trosak-ostalo').value='0';
+    document.getElementById('kalk-trosak-luka').value='0';
+    document.getElementById('kalk-drugi-troskovi').value='0';
+    document.getElementById('kalk-osnovica').value='0';
+    document.getElementById('kalk-avans').value='0';
+    document.getElementById('kalk-ostatak').value='0';
     kalkRenderStavke();
   }catch(e){
     msg.style.color='red';
