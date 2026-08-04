@@ -304,10 +304,12 @@ router.get('/najprodavaniji', zahtijevaProdaju, async (req, res) => {
   }
 });
 
-// GET /api/roba/kretanje-pregled?objekt_id=X&od=YYYY-MM-DD&do=YYYY-MM-DD — pregled
-// kretanja robe za taj PJ i period: ulaz (kalkulacije + prenosi u), izlaz (prodaja +
-// prenosi iz), neto, i početno stanje (trenutno − neto). ISKLJUČIVO za PJ (prodajna
-// mjesta), ne dotiče proizvodnju/radne naloge.
+// GET /api/roba/kretanje-pregled?objekt_id=X&od=YYYY-MM-DD&do=YYYY-MM-DD — DETALJAN
+// pregled kretanja robe (jedan red = jedna transakcija, ne zbirno po artiklu) da bi se
+// znalo TAČNO od koga je ušlo / kome je izašlo, i da bi filtriranje po partneru/artiklu/
+// iznosu bilo moguće na frontu. ISKLJUČIVO za PJ, ne dotiče proizvodnju/radne naloge.
+// NAPOMENA: raspon datuma koristi >= / < (ne BETWEEN) jer su izvorne kolone TIMESTAMP —
+// BETWEEN 'dan' AND 'dan' bi uhvatio SAMO tačno ponoć, "Danas" ne bi pokazivao ništa.
 router.get('/kretanje-pregled', zahtijevaRobaMagacin, async (req, res) => {
   try {
     const objektId = trebaObjekat(req.query.objekt_id);
@@ -317,70 +319,52 @@ router.get('/kretanje-pregled', zahtijevaRobaMagacin, async (req, res) => {
     if (!od || !do_) return res.status(400).json({ error: 'Nedostaje period (od/do).' });
 
     const r = await pool.query(
-      `SELECT
-         r.id, r.sifra, r.naziv, r.jed_mjera,
-         rp.stanje AS trenutno_stanje, rp.cijena,
-         COALESCE(ulk.kol, 0) AS ulaz_kalkulacija,
-         COALESCE(ulk.vr, 0) AS ulaz_kalkulacija_vrijednost,
-         COALESCE(ulp.kol, 0) AS ulaz_prenos,
-         COALESCE(izp.kol, 0) AS izlaz_prodaja,
-         COALESCE(izp.vr, 0) AS izlaz_prodaja_vrijednost,
-         COALESCE(izpr.kol, 0) AS izlaz_prenos
-       FROM roba r
-       JOIN roba_pj rp ON rp.roba_id = r.id AND rp.objekt_id = $1
-       LEFT JOIN (
-         SELECT ks.roba_id, SUM(ks.kolicina) AS kol, SUM(ks.kolicina * ks.prava_nabavna_cijena) AS vr
-         FROM kalkulacija_stavke ks JOIN kalkulacije k ON k.id = ks.kalkulacija_id
-         WHERE k.objekt_id = $1 AND k.datum BETWEEN $2 AND $3
-         GROUP BY ks.roba_id
-       ) ulk ON ulk.roba_id = r.id
-       LEFT JOIN (
-         SELECT pr.roba_id, SUM(pr.kolicina) AS kol
-         FROM prenosi_robe pr
-         WHERE pr.u_objekat_id = $1 AND pr.kreiran::date BETWEEN $2 AND $3
-         GROUP BY pr.roba_id
-       ) ulp ON ulp.roba_id = r.id
-       LEFT JOIN (
-         SELECT os.roba_id, SUM(os.kolicina) AS kol, SUM(os.iznos) AS vr
-         FROM otpremnica_stavke os JOIN otpremnice o ON o.id = os.otpremnica_id
-         WHERE o.objekt_id = $1 AND o.status = 'potvrdjena' AND o.datum BETWEEN $2 AND $3
-         GROUP BY os.roba_id
-       ) izp ON izp.roba_id = r.id
-       LEFT JOIN (
-         SELECT pr.roba_id, SUM(pr.kolicina) AS kol
-         FROM prenosi_robe pr
-         WHERE pr.iz_objekta_id = $1 AND pr.kreiran::date BETWEEN $2 AND $3
-         GROUP BY pr.roba_id
-       ) izpr ON izpr.roba_id = r.id
-       WHERE r.aktivan = true
-         AND (COALESCE(ulk.kol,0) + COALESCE(ulp.kol,0) + COALESCE(izp.kol,0) + COALESCE(izpr.kol,0)) > 0
-       ORDER BY r.naziv`,
+      `SELECT 'ulaz' AS tip, 'kalkulacija' AS izvor, k.datum, ks.roba_id, ks.sifra, ks.naziv,
+              r.jed_mjera, ks.kolicina, (ks.kolicina * ks.prava_nabavna_cijena) AS iznos,
+              k.dobavljac AS partner
+       FROM kalkulacija_stavke ks
+       JOIN kalkulacije k ON k.id = ks.kalkulacija_id
+       JOIN roba r ON r.id = ks.roba_id
+       WHERE k.objekt_id = $1 AND k.datum >= $2::date AND k.datum < ($3::date + 1)
+
+       UNION ALL
+
+       SELECT 'ulaz', 'prenos', pr.kreiran::date, pr.roba_id, pr.sifra, pr.naziv,
+              pr.jed_mjera, pr.kolicina, pr.kolicina * COALESCE(rp.cijena,0),
+              'Prenos iz — ' || pr.iz_objekta_naziv
+       FROM prenosi_robe pr
+       LEFT JOIN roba_pj rp ON rp.roba_id = pr.roba_id AND rp.objekt_id = $1
+       WHERE pr.u_objekat_id = $1 AND pr.kreiran::date >= $2::date AND pr.kreiran::date < ($3::date + 1)
+
+       UNION ALL
+
+       SELECT 'izlaz', 'prodaja', o.datum::date, os.roba_id, os.sifra, os.naziv,
+              os.jed_mjera, os.kolicina, os.iznos,
+              COALESCE(NULLIF(TRIM(o.kupac_naziv),''), 'Kupac nepoznat')
+       FROM otpremnica_stavke os
+       JOIN otpremnice o ON o.id = os.otpremnica_id
+       WHERE o.objekt_id = $1 AND o.status = 'potvrdjena'
+         AND o.datum >= $2::date AND o.datum < ($3::date + 1)
+
+       UNION ALL
+
+       SELECT 'izlaz', 'prenos', pr.kreiran::date, pr.roba_id, pr.sifra, pr.naziv,
+              pr.jed_mjera, pr.kolicina, pr.kolicina * COALESCE(rp.cijena,0),
+              'Prenos u — ' || pr.u_objekat_naziv
+       FROM prenosi_robe pr
+       LEFT JOIN roba_pj rp ON rp.roba_id = pr.roba_id AND rp.objekt_id = $1
+       WHERE pr.iz_objekta_id = $1 AND pr.kreiran::date >= $2::date AND pr.kreiran::date < ($3::date + 1)
+
+       ORDER BY datum DESC`,
       [objektId, od, do_]
     );
 
-    // Vrijednost se računa iz STVARNIH transakcionih iznosa (ono što je zaista naplaćeno/
-    // koštalo — otpremnica_stavke.iznos, kalkulacija_stavke.prava_nabavna_cijena), NE iz
-    // trenutne kataloške cijene — inače se ne bi poklapalo sa stvarnim prometom u
-    // maloprodaji (npr. ako je cijena artikla promijenjena poslije prodaje, ili je bilo
-    // odstupanja od zadane cijene na samoj otpremnici). Prenosi između PJ nemaju svoju
-    // transakcionu vrijednost (interni su, ne mijenjaju novac) — za njih se i dalje
-    // koristi trenutna cijena, kao procjena.
-    const stavke = r.rows.map(row => {
-      const ulaz = parseFloat(row.ulaz_kalkulacija) + parseFloat(row.ulaz_prenos);
-      const izlaz = parseFloat(row.izlaz_prodaja) + parseFloat(row.izlaz_prenos);
-      const neto = ulaz - izlaz;
-      const trenutno = parseFloat(row.trenutno_stanje);
-      const pocetno = trenutno - neto;
-      const cijena = parseFloat(row.cijena) || 0;
-      const vrijednostUlaz = parseFloat(row.ulaz_kalkulacija_vrijednost) + parseFloat(row.ulaz_prenos) * cijena;
-      const vrijednostIzlaz = parseFloat(row.izlaz_prodaja_vrijednost) + parseFloat(row.izlaz_prenos) * cijena;
-      return {
-        roba_id: row.id, sifra: row.sifra, naziv: row.naziv, jed_mjera: row.jed_mjera,
-        pocetno_stanje: +pocetno.toFixed(3), ulaz: +ulaz.toFixed(3), izlaz: +izlaz.toFixed(3),
-        neto: +neto.toFixed(3), trenutno_stanje: +trenutno.toFixed(3),
-        vrijednost_promjene: +(vrijednostUlaz - vrijednostIzlaz).toFixed(2),
-      };
-    });
+    const stavke = r.rows.map(row => ({
+      tip: row.tip, izvor: row.izvor, datum: row.datum,
+      roba_id: row.roba_id, sifra: row.sifra, naziv: row.naziv, jed_mjera: row.jed_mjera,
+      kolicina: +parseFloat(row.kolicina).toFixed(3), iznos: +parseFloat(row.iznos).toFixed(2),
+      partner: row.partner,
+    }));
 
     res.json(stavke);
   } catch (err) {
