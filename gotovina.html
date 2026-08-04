@@ -537,7 +537,10 @@ async function ucitajMojePJ(){
       🏢 ${esc(p.naziv)}${p.valuta==='EUR'?' (€)':''}
     </button>
   `).join('');
-  izaberiBlagajnaPJ(mojiPJovi[0].id);
+  // NAPOMENA: izaberiBlagajnaPJ() se NE zove automatski ovdje (ranije jeste) — pozivalac
+  // (inicijalizacija ispod) prvo popuni "fil-pj" dropdown (ucitajFilterPJ, koristi
+  // mojiPJovi popunjen upravo gore), PA TEK ONDA bira PJ — jer izaberiBlagajnaPJ postavlja
+  // fil-pj.value, što se izgubi ako se dropdown popuni POSLIJE (innerHTML resetuje izbor).
 }
 
 function izaberiBlagajnaPJ(objektId){
@@ -955,10 +958,18 @@ function azurirajFilterKomercijalista(){
 }
 
 async function ucitajFilterPJ(){
+  const sel=document.getElementById('fil-pj');
+  // Blagajnik smije birati SAMO svoje PJ ovde (isti spisak kao mojiPJovi, već popunjen
+  // preko ucitajMojePJ) — ranije je ovaj dropdown nudio SVE PJ i "Svi" (uključujući tuđe),
+  // što je bilo zbunjujuće/moglo dovesti do pogrešnog utiska da se vidi tuđa blagajna
+  // (iako je backend uvijek ispravno filtrirao stvarne podatke — ovo je čisto UI ispravka).
+  if(!isAdmin){
+    sel.innerHTML=mojiPJovi.map(o=>`<option value="${esc(o.naziv)}">${esc(o.naziv)}</option>`).join('');
+    return;
+  }
   try{
     const r=await fetch(`${API}/api/prodajni-objekti`);
     const objekti=await r.json();
-    const sel=document.getElementById('fil-pj');
     sel.innerHTML='<option value="">Svi</option>'+objekti.map(o=>`<option value="${esc(o.naziv)}">${esc(o.naziv)}</option>`).join('');
   }catch(e){}
 }
@@ -1434,7 +1445,7 @@ document.getElementById('logout').onclick=async e=>{
 fetch(`${API}/api/auth/me`).then(r=>{
   if(!r.ok){location.href='login.html';return;}
   return r.json();
-}).then(u=>{
+}).then(async u=>{
   if(!u) return;
   isAdmin=u.rola==='admin';
   trenutniUser=u;
@@ -1445,18 +1456,26 @@ fetch(`${API}/api/auth/me`).then(r=>{
     ['card-danas','card-sedmica','card-mjesec','card-naplaceno-nalozi','card-ocekivano-nalozi','card-ocekivano-malo']
       .forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
     document.getElementById('blagajna-box').style.display='block';
-    ucitajMojePJ();
   } else {
     document.getElementById('admin-blagajna-pregled-box').style.display='block';
     ucitajAdminBlagajnaPregled();
     document.getElementById('admin-razduzenja-box').style.display='block';
     ucitajAdminRazduzenja();
+    // Admin ranije NIJE imao pristup istom detaljnom prikazu (T-konto "zaduženo/razduženo"
+    // po PJ) koji blagajnik vidi — sad ga vidi i admin, za BILO KOJI PJ (moji-pj vraća sve
+    // PJ za admina), da može provjeriti bilo koju blagajnu na isti način kao blagajnik.
+    document.getElementById('blagajna-box').style.display='block';
   }
+  await ucitajMojePJ(); // popuni mojiPJovi (i PJ tabove) — ali JOŠ ne bira nijedan
+  await ucitajFilterPJ(); // popuni "fil-pj" dropdown (ogranicen na mojiPJovi za blagajnika)
+  if(mojiPJovi.length) izaberiBlagajnaPJ(mojiPJovi[0].id); // TEK SAD izaberi prvi PJ
 
-  load();
-  loadSume();
-  ucitajFilterPJ();
   azurirajNalogPoljeVidljivost();
+  // NAPOMENA: "load()" se NE zove direktno ovdje — ucitajMojePJ() sam pokreće load()
+  // (preko izaberiBlagajnaPJ), već filtriran na PRVI PJ (isto za admina i blagajnika).
+  // Pozivanje load() i ovdje ODMAH bi kratkotrajno prikazalo NEFILTRIRANU listu (sve PJ
+  // pomiješano) prije nego što se sinhronizacija završi — baš ono što je zbunjivalo blagajnike.
+  loadSume();
 
   // Automatsko osvježavanje — bez ovoga, promjene iz drugih ekrana (npr. štikliranje
   // "naplaćeno" u radnim nalozima) ne bi se vidjele dok se ručno ne osvježi stranica.

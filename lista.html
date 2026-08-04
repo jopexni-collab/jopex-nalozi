@@ -155,6 +155,7 @@ a.lk{color:var(--blue);text-decoration:none;}
 <div id="kom-kontekst-meni">
   <button onclick="otvoriKomentarEditor()" id="kom-btn-dodaj">💬 Dodaj komentar</button>
   <button onclick="obrisiKomentar()" class="obrisi" id="kom-btn-obrisi" style="display:none;">🗑 Obriši komentar</button>
+  <button onclick="prikaziStatusLogIzMenija()" id="kom-btn-istorija" style="display:none;">📜 Istorija promjena</button>
 </div>
 <div id="kom-tooltip"></div>
 <div id="status-log-tooltip"></div>
@@ -250,7 +251,7 @@ function chipS(s, stornirano){
     'Isporučeno':'s-zavrseno','Čeka isporuku':'s-ceka',
     'Otkazano':'s-otkazano','Zakazano':'s-zakazano','Završeno':'s-zavrseno'
   };
-  const icon=s==='Čeka isporuku'?'🚚 ':s==='Isporučeno'?'✓ ':'';
+  const icon=s==='Čeka isporuku'?'🚚 ':s==='Isporučeno'?'✓ ':s==='U radu'?'🔨 ':'';
   const stil=stornirano?' style="text-decoration:line-through;text-decoration-color:#000;text-decoration-thickness:2px;"':'';
   return`<span class="chip ${m[s]||'s-nije'}"${stil}>${icon}${esc(s||'')}</span>`;
 }
@@ -570,17 +571,17 @@ function render(){
     }else if(c.edit&&mozeEditovati(c.edit.field,r)){
       cell=addTdClass(cell,'editable');
     }
-    return dodajStatusLogAtribut(dodajKomentarAtribut(cell, r.r_br, c.k), r.r_br, c.edit?.field);
+    return dodajKomentarAtribut(cell, r.r_br, c.k, c.edit?.field);
   }).join('')}</tr>`).join('');
 }
 
 // Dodaje desni-klik hendler na SVAKU ćeliju (za komentare, kao u Excel-u) i crveni
 // trougao u uglu ako komentar već postoji — bez potrebe da se svaka kolona pojedinačno
 // mijenja (isti obrazac kao addTdClass iznad).
-function dodajKomentarAtribut(html, rBr, kolona){
+function dodajKomentarAtribut(html, rBr, kolona, statusPolje){
   const kljuc=rBr+'|'+kolona;
   const imaKom=!!komentari[kljuc];
-  let novi=html.replace('<td', `<td oncontextmenu="return otvoriKomentarMeni(event,${rBr},'${kolona}')"`);
+  let novi=html.replace('<td', `<td oncontextmenu="return otvoriKomentarMeni(event,${rBr},'${kolona}','${statusPolje||''}')"`);
   if(imaKom){
     novi=novi.replace('<td', `<td onmouseenter="prikaziKomentarTooltip(event,'${kljuc}')" onmouseleave="document.getElementById('kom-tooltip').style.display='none'"`);
     novi=addTdClass(novi,'ima-komentar');
@@ -588,15 +589,13 @@ function dodajKomentarAtribut(html, rBr, kolona){
   return novi;
 }
 
+// Uklonjena stara dodajStatusLogAtribut (hover na svakoj ćeliji, dvojni oncontextmenu
+// sukob sa komentarima) — istorija se sad otvara kroz ISTI desni-klik meni kao komentari,
+// dugme "📜 Istorija promjena" (vidi otvoriKomentarMeni/prikaziStatusLogIzMenija ispod).
+
 // Dodaje status-log hover na SVAKU editabilnu ćeliju (bilo koje polje koje prolazi kroz
 // PATCH /api/proizvodnja/:r_br) — ali SAMO ako ćelija već nema onmouseenter (npr. od
 // komentara), da se izbjegne sudar dva hover mehanizma na istoj ćeliji.
-function dodajStatusLogAtribut(html, rBr, polje){
-  if(!polje) return html;
-  if(html.includes('onmouseenter')) return html; // komentar hover ima prednost
-  return html.replace('<td', `<td onmouseenter="prikaziStatusLog(event,${rBr},'${polje}')" onmouseleave="sakrijStatusLog()"`);
-}
-
 async function ucitajKomentare(){
   try{
     const r=await fetch(`${API}/api/proizvodnja/komentari`);
@@ -606,13 +605,14 @@ async function ucitajKomentare(){
   }catch(e){}
 }
 
-function otvoriKomentarMeni(event, rBr, kolona){
+function otvoriKomentarMeni(event, rBr, kolona, statusPolje){
   event.preventDefault();
-  komentarMeta={rBr, kolona};
+  komentarMeta={rBr, kolona, statusPolje: statusPolje||null};
   const meni=document.getElementById('kom-kontekst-meni');
   const postoji=!!komentari[rBr+'|'+kolona];
   document.getElementById('kom-btn-dodaj').textContent = postoji ? '💬 Uredi komentar' : '💬 Dodaj komentar';
   document.getElementById('kom-btn-obrisi').style.display = postoji ? 'block' : 'none';
+  document.getElementById('kom-btn-istorija').style.display = statusPolje ? 'block' : 'none';
   meni.style.left=event.clientX+'px';
   meni.style.top=event.clientY+'px';
   meni.style.display='block';
@@ -682,52 +682,46 @@ function statusLogVrijednostText(kolona, v){
 }
 
 // Keš po r_br — hover na isti red drugi put ne šalje ponovo isti upit.
-const statusLogKes={};
-let statusLogTimer=null;
-async function prikaziStatusLog(event, rBr, polje){
+// Bez keširanja — svaki poziv povlači SVJEŽE iz baze, samo za JEDNO polje (filtrirano na
+// serveru), pozvano ISKLJUČIVO klikom na dugme u kontekst meniju (ne na hover) — mnogo
+// manje memorije i mrežnih poziva nego ranija verzija koja je kešrandom rezultate za
+// svaki red preko koga bi miš prošao.
+async function prikaziStatusLogIzMenija(){
+  document.getElementById('kom-kontekst-meni').style.display='none';
+  if(!komentarMeta || !komentarMeta.statusPolje) return;
+  const {rBr, statusPolje}=komentarMeta;
   const tip=document.getElementById('status-log-tooltip');
-  tip.style.left=(event.clientX+12)+'px';
-  tip.style.top=(event.clientY+12)+'px';
-  clearTimeout(statusLogTimer);
-  if(statusLogKes[rBr]){
-    renderStatusLogTooltip(statusLogKes[rBr], polje);
-    return;
-  }
-  // Malo odlaganje da se ne šalje upit za SVAKI prolaz miša preko reda (samo ako se
-  // zadrži bar 150ms) — izbjegava nepotrebne pozive pri brzom skrolovanju/prelasku.
-  statusLogTimer=setTimeout(async ()=>{
-    try{
-      const r=await fetch(`${API}/api/proizvodnja/${rBr}/status-log`);
-      const log=await r.json();
-      statusLogKes[rBr]=log;
-      renderStatusLogTooltip(log, polje);
-    }catch(e){}
-  }, 150);
+  tip.style.left=zadnjiKlikX+'px';
+  tip.style.top=zadnjiKlikY+'px';
+  tip.innerHTML='<div style="color:#8b96a5;">Učitavanje...</div>';
+  tip.style.display='block';
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/${rBr}/status-log?polje=${encodeURIComponent(statusPolje)}`);
+    const log=await r.json();
+    renderStatusLogTooltip(log, statusPolje);
+  }catch(e){ tip.style.display='none'; }
 }
-function renderStatusLogTooltip(logSve, polje){
+function renderStatusLogTooltip(log, polje){
   const tip=document.getElementById('status-log-tooltip');
-  // Prikazuje SAMO promjene za polje nad kojim je miš trenutno (ne mješa npr. istoriju
-  // "Zadatka" sa istorijom "Gotovo" u istom tooltip-u).
-  const log=polje ? logSve.filter(l=>l.kolona===polje) : logSve;
   if(!log.length){ tip.style.display='none'; return; }
   // Log dolazi sortiran najnovije-prvo — najstariji zapis (poslednji u nizu) nosi
   // "staru vrijednost" koja je zapravo ORIGINALNA vrijednost prije bilo koje promjene.
-  const naziv=STATUS_LOG_NAZIVI[log[0].kolona]||log[0].kolona;
+  const naziv=STATUS_LOG_NAZIVI[polje]||polje;
   const originalna=log[log.length-1].stara_vrijednost;
-  let html=`<div style="margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #b8d0f0;"><b>Originalno:</b> ${esc(statusLogVrijednostText(log[0].kolona,originalna))}</div>`;
+  let html=`<div style="margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #b8d0f0;"><b>Originalno:</b> ${esc(statusLogVrijednostText(polje,originalna))}</div>`;
   html+=log.map(l=>{
     const inicijali=(l.korisnik_ime||'?').split(/\s+/).map(x=>x[0]).join('').toUpperCase().slice(0,2);
     const datum=new Date(l.kada).toLocaleDateString('sr-Latn-BA',{day:'2-digit',month:'2-digit',year:'numeric'});
     const vrijeme=new Date(l.kada).toLocaleTimeString('sr-Latn-BA',{hour:'2-digit',minute:'2-digit'});
-    return `<div style="margin-bottom:4px;"><b>${esc(inicijali)}</b> · ${datum} · ${vrijeme}<br>${esc(statusLogVrijednostText(l.kolona,l.stara_vrijednost))} → <b>${esc(statusLogVrijednostText(l.kolona,l.nova_vrijednost))}</b></div>`;
+    return `<div style="margin-bottom:4px;"><b>${esc(inicijali)}</b> · ${datum} · ${vrijeme}<br>${esc(statusLogVrijednostText(polje,l.stara_vrijednost))} → <b>${esc(statusLogVrijednostText(polje,l.nova_vrijednost))}</b></div>`;
   }).join('');
   tip.innerHTML=`<div style="font-weight:700;margin-bottom:4px;">${esc(naziv)} — istorija</div>`+html;
   tip.style.display='block';
 }
-function sakrijStatusLog(){
-  clearTimeout(statusLogTimer);
-  document.getElementById('status-log-tooltip').style.display='none';
-}
+// Zatvara tooltip na sledeći klik bilo gde (isti obrazac kao kom-kontekst-meni).
+let zadnjiKlikX=0, zadnjiKlikY=0;
+document.addEventListener('contextmenu', e=>{ zadnjiKlikX=e.clientX+12; zadnjiKlikY=e.clientY+12; });
+document.addEventListener('click', ()=>{ document.getElementById('status-log-tooltip').style.display='none'; });
 
 // ─── INLINE EDIT POPUP ────────────────────────────────────────────────────
 const pop=document.getElementById('inline-pop');

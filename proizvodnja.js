@@ -143,14 +143,16 @@ router.get('/:r_br', async (req, res) => {
   }
 });
 
-// GET /api/proizvodnja/:r_br/status-log — audit trag za hover u lista.html (ko/kad/šta
-// je promijenio od status polja: status, gotovo, reklamacija_dodatni_rad, nova_procjena).
+// GET /api/proizvodnja/:r_br/status-log?polje=X — audit trag za desni-klik meni u
+// lista.html (ko/kad/šta je promijenio). Opciono filtrira SAMO jedno polje na serveru
+// (manje podataka po zahtjevu, umjesto da fronta povuče sve pa filtrira lokalno).
 router.get('/:r_br/status-log', async (req, res) => {
   try {
+    const { polje } = req.query;
     const r = await pool.query(
       `SELECT kolona, stara_vrijednost, nova_vrijednost, korisnik_ime, kada
-       FROM status_promjene_log WHERE r_br=$1 ORDER BY kada DESC LIMIT 20`,
-      [req.params.r_br]
+       FROM status_promjene_log WHERE r_br=$1 ${polje ? 'AND kolona=$2' : ''} ORDER BY kada DESC LIMIT 20`,
+      polje ? [req.params.r_br, polje] : [req.params.r_br]
     );
     res.json(r.rows);
   } catch (err) {
