@@ -220,7 +220,7 @@ function sastaviStavke(inputStavke, zivaRoba) {
 router.get('/', async (req, res) => {
   try {
     const user = req.session?.user;
-    const { status, od, do: do_, komercijalista_id, odstupanje, objekt_id, broj } = req.query;
+    const { status, od, do: do_, komercijalista_id, odstupanje, objekt_id, broj, samo_moje } = req.query;
     let where = [];
     let vals = [];
     let i = 1;
@@ -253,7 +253,11 @@ router.get('/', async (req, res) => {
         }
       }
     } else if (user?.rola !== 'admin') {
-      if (dozvoljeniPJevi.length) {
+      if (samo_moje === 'true') {
+        // Korisnik eksplicitno traži SAMO svoje (pod-tab "Moje otpremnice") — čak i ako
+        // ima pristup celom PJ preko prodavci_pj, ovde se ne pokazuju tuđe.
+        where.push(`komercijalista_id = $${i++}`); vals.push(user.id);
+      } else if (dozvoljeniPJevi.length) {
         where.push(`(komercijalista_id = $${i++} OR objekt_id = ANY($${i++}::int[]))`);
         vals.push(user.id, dozvoljeniPJevi);
       } else {
