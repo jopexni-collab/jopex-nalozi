@@ -66,10 +66,26 @@ router.post('/logout', (req, res) => {
 });
 
 // GET /api/auth/me
-router.get('/me', (req, res) => {
+router.get('/me', async (req, res) => {
   if (!req.session?.user)
     return res.status(401).json({ error: 'Niste prijavljeni.' });
-  res.json(req.session.user);
+  const user = req.session.user;
+  // Da li korisnik SME uopšte da otvori Maloprodaju — provjerava se UŽIVO (ne iz sesije,
+  // koja je snimljena na login i ne prati promjene "Prodaja PJ" tokom sesije). Admin i
+  // blagajnik uvijek smiju; ostali moraju imati bar JEDAN dodijeljen PJ.
+  let imaProdajuPJ = user.rola === 'admin';
+  if (!imaProdajuPJ && user.id) {
+    try {
+      const blag = await pool.query('SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 LIMIT 1', [user.id]);
+      if (blag.rows.length) {
+        imaProdajuPJ = true;
+      } else {
+        const prod = await pool.query('SELECT 1 FROM prodavci_pj WHERE zaposleni_id=$1 LIMIT 1', [user.id]);
+        imaProdajuPJ = prod.rows.length > 0;
+      }
+    } catch (e) { imaProdajuPJ = false; }
+  }
+  res.json({ ...user, ima_prodaju_pj: imaProdajuPJ });
 });
 
 // GET /api/auth/prijave - SAMO admin - istorija prijava (poslednjih 200)
@@ -110,6 +126,37 @@ router.get('/aktivni', async (req, res) => {
       if (!poKorisniku[a.id] || a.istice > poKorisniku[a.id].istice) poKorisniku[a.id] = a;
     }
     res.json(Object.values(poKorisniku));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/auth/stranice - SAMO admin - poslednjih 300 otvaranja stranica, SVI korisnici
+// (za brz pregled "šta se sad dešava" u Aktivnosti).
+router.get('/stranice', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin.' });
+  try {
+    const r = await pool.query(
+      `SELECT id, korisnik_id, korisnik_ime, putanja, kada FROM stranica_posjete ORDER BY kada DESC LIMIT 300`
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/auth/stranice/:korisnik_id - SAMO admin - PUNA istorija otvaranja stranica za
+// JEDNOG konkretnog zaposlenog (klik na ime u Aktivnosti → njegova cela istorija).
+router.get('/stranice/:korisnik_id', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin.' });
+  try {
+    const r = await pool.query(
+      `SELECT id, putanja, kada FROM stranica_posjete WHERE korisnik_id=$1 ORDER BY kada DESC LIMIT 500`,
+      [req.params.korisnik_id]
+    );
+    res.json(r.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

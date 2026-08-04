@@ -551,18 +551,17 @@ router.post('/potvrdi', async (req, res) => {
   if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat.' });
 
   // Provjera da komercijalista SME da prodaje za OVAJ PJ (prodavci_pj) — brani zaobilaženje
-  // frontend birača (npr. direktnim pozivom API-ja). Admin uvijek prolazi. Ako korisnik
-  // NEMA nijedan zapis u prodavci_pj (nikad eksplicitno ograničen), i dalje prolazi —
-  // isto opt-in ponašanje kao i birač PJ u maloprodaji (ne zaključava postojeće korisnike
-  // dok ih admin svjesno ne ograniči).
+  // frontend birača (npr. direktnim pozivom API-ja). Admin i blagajnik uvijek prolaze.
+  // Ostali BEZ ijednog zapisa u prodavci_pj se BLOKIRAJU u potpunosti (ne mogu prodavati
+  // NIGDJE dok ih admin eksplicitno ne dodijeli bar jednom PJ preko "Prodaja PJ").
   if (user.rola !== 'admin') {
-    const dodijeljeni = await pool.query('SELECT 1 FROM prodavci_pj WHERE zaposleni_id=$1', [user.id]);
-    if (dodijeljeni.rows.length) {
+    const blag = await pool.query('SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 LIMIT 1', [user.id]);
+    if (!blag.rows.length) {
       const smijeOvdje = await pool.query(
         'SELECT 1 FROM prodavci_pj WHERE zaposleni_id=$1 AND objekat_id=$2', [user.id, objektId]
       );
       if (!smijeOvdje.rows.length)
-        return res.status(403).json({ error: 'Niste ovlašćeni za prodaju u ovom prodajnom objektu.' });
+        return res.status(403).json({ error: 'Niste ovlašćeni za prodaju u ovom prodajnom objektu. Obratite se administratoru da vam dodijeli PJ (Korisnici → Prodaja PJ).' });
     }
   }
 

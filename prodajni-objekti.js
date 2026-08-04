@@ -25,9 +25,9 @@ router.get('/kupci-grupe', async (req, res) => {
 // je korisnik konkretno ovlašćen (prodavci_pj) — koristi SAMO maloprodaja.html birač PJ.
 // Ostali potrošači ove rute (Kalkulacija, Roba/magacin...) i dalje koriste GET / (svi PJ),
 // jer imaju SVOJU logiku pristupa (moze_roba_magacin itd.), ne vezanu za maloprodaju.
-// SIGURNOSNA NAPOMENA: ako korisnik NEMA nijedan zapis u prodavci_pj (admin ga nikad nije
-// eksplicitno ograničio), vidi SVE PJ — isto kao ranije (opt-in ograničenje, ne bi trebalo
-// iznenada zaključati postojeće komercijaliste dok ih admin svjesno ne ograniči).
+// PRAVILO: ako korisnik NEMA nijedan zapis u prodavci_pj, vraća se PRAZNA lista (ne vidi/
+// ne može otvoriti NIJEDAN PJ) — osim ako je blagajnik (blagajnici_pj), koji uvijek vidi
+// sve, jer njemu treba pun pregled bez obzira na "Prodaja PJ" podešavanje.
 router.get('/za-maloprodaju', async (req, res) => {
   try {
     const u = req.session?.user;
@@ -35,11 +35,13 @@ router.get('/za-maloprodaju', async (req, res) => {
       const r = await pool.query('SELECT * FROM prodajni_objekti WHERE aktivan=true ORDER BY naziv');
       return res.json(r.rows);
     }
-    const dodijeljeni = await pool.query('SELECT objekat_id FROM prodavci_pj WHERE zaposleni_id=$1', [u.id]);
-    if (!dodijeljeni.rows.length) {
+    const blag = await pool.query('SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 LIMIT 1', [u.id]);
+    if (blag.rows.length) {
       const r = await pool.query('SELECT * FROM prodajni_objekti WHERE aktivan=true ORDER BY naziv');
       return res.json(r.rows);
     }
+    const dodijeljeni = await pool.query('SELECT objekat_id FROM prodavci_pj WHERE zaposleni_id=$1', [u.id]);
+    if (!dodijeljeni.rows.length) return res.json([]); // bez dodjele = ne vidi NIJEDAN PJ
     const idjevi = dodijeljeni.rows.map(row => row.objekat_id);
     const r = await pool.query(
       'SELECT * FROM prodajni_objekti WHERE aktivan=true AND id = ANY($1::int[]) ORDER BY naziv',

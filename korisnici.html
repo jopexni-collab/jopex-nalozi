@@ -328,7 +328,7 @@ async function load(){
 function render(){
   document.getElementById('tbody').innerHTML=korisnici.map(k=>`
     <tr id="row-${k.id}">
-      <td class="ime">${esc(k.ime_prezime)}${k.rola==='admin'?'<span class="badge-admin">ADMIN</span>':''}</td>
+      <td class="ime" style="cursor:pointer;" onclick="otvoriIstorijaStranica(${k.id},'${esc(k.ime_prezime).replace(/'/g,"\\'")}')" title="Klik za istoriju otvaranja stranica">${esc(k.ime_prezime)}${k.rola==='admin'?'<span class="badge-admin">ADMIN</span>':''}</td>
       <td class="poz">
         <input type="text" value="${esc(k.pozicija||'')}" placeholder="npr. Komercijalista"
           style="font:inherit;font-size:11.5px;padding:3px 6px;border:1px solid #ddd;border-radius:4px;width:100%;"

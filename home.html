@@ -143,8 +143,10 @@ async function checkAuth(){
     // Blagajna — admin ili blagajnik (dodijeljen za bar jedan PJ)
     if(admin || u.je_blagajnik) show('card-blagajna');
 
-    // Maloprodaja — moze_prodavati ili admin
-    if(admin || u.moze_prodavati) show('card-maloprodaja');
+    // Maloprodaja — admin uvijek vidi. Ostali moraju IMATI moze_prodavati I imati
+    // dodijeljen bar jedan PJ (osim blagajnika, koji uvijek smiju — pokriveno kroz
+    // ima_prodaju_pj sa backend-a) — provjereno uživo preko /api/auth/me.
+    if(admin || (u.moze_prodavati && u.ima_prodaju_pj)) show('card-maloprodaja');
     if(admin || u.moze_roba_magacin) show('card-roba-magacin');
 
     // Ponude — moze_ugovarati ili admin

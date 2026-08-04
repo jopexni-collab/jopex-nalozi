@@ -1108,7 +1108,7 @@ async function otvoriIzborObjekta(){
     const r=await fetch(`${API}/api/prodajni-objekti/za-maloprodaju`);
     const rows=await r.json();
     if(!rows.length){
-      cont.innerHTML='<div class="empty-msg">Nema definisanih prodajnih objekata. Obratite se administratoru.</div>';
+      cont.innerHTML='<div class="empty-msg">⛔ Nemate dodeljen nijedan prodajni objekat za prodaju. Obratite se administratoru da vam dodeli PJ (Korisnici → dugme "Prodaja PJ").</div>';
       return;
     }
     cont.innerHTML=rows.map(o=>`
