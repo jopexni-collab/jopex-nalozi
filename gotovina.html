@@ -128,9 +128,17 @@ td.num{text-align:right;font-weight:700;}
       <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('7dana',this)">7 dana</button>
       <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('mjesec',this)">Mjesec dana</button>
       <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('sve',this)">Sve</button>
-      <input type="date" id="bd-od" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();" style="font:inherit;font-size:11.5px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;">
+      <div style="display:flex;gap:3px;align-items:center;">
+        <input type="number" id="bd-od-dan" placeholder="DD" min="1" max="31" style="width:44px;text-align:center;padding:5px 4px;font-size:11.5px;" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();">.
+        <input type="number" id="bd-od-mjesec" placeholder="MM" min="1" max="12" style="width:44px;text-align:center;padding:5px 4px;font-size:11.5px;" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();">.
+        <input type="number" id="bd-od-godina" placeholder="GGGG" min="2020" max="2100" style="width:60px;text-align:center;padding:5px 4px;font-size:11.5px;" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();">
+      </div>
       <span style="align-self:center;color:#8b96a5;font-size:11px;">—</span>
-      <input type="date" id="bd-do" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();" style="font:inherit;font-size:11.5px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;">
+      <div style="display:flex;gap:3px;align-items:center;">
+        <input type="number" id="bd-do-dan" placeholder="DD" min="1" max="31" style="width:44px;text-align:center;padding:5px 4px;font-size:11.5px;" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();">.
+        <input type="number" id="bd-do-mjesec" placeholder="MM" min="1" max="12" style="width:44px;text-align:center;padding:5px 4px;font-size:11.5px;" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();">.
+        <input type="number" id="bd-do-godina" placeholder="GGGG" min="2020" max="2100" style="width:60px;text-align:center;padding:5px 4px;font-size:11.5px;" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();">
+      </div>
     </div>
 
     <div style="background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
@@ -183,7 +191,7 @@ td.num{text-align:right;font-weight:700;}
     💡 Za naplatu duga u maloprodaji — povežite kupca gore (pretraga po imenu/telefonu). Sistem će prikazati dug po poslovnoj jedinici, a upisani iznos automatski pokriti taj dug (i reflektovati se kod komercijaliste u maloprodaji).
   </div>
   <div class="forma-grid">
-    <div class="fg"><label>Datum</label><input type="date" id="f-datum"></div>
+    <div class="fg"><label>Datum</label><div id="f-datum-wrap"></div></div>
     <div class="fg"><label id="f-iznos-lbl">Iznos (KM)</label><input type="number" id="f-iznos" step="0.01" min="0" placeholder="0.00"></div>
     <div class="fg"><label>Izvor</label>
       <select id="f-izvor" onchange="azurirajNalogPoljeVidljivost()">
@@ -213,7 +221,7 @@ td.num{text-align:right;font-weight:700;}
     <span id="i-kom-ime"></span> — povrat avansa <span style="cursor:pointer;color:var(--red);font-weight:400;" onclick="ocistiKomitenta('i')">✕ ukloni</span>
   </div>
   <div class="forma-grid">
-    <div class="fg"><label>Datum</label><input type="date" id="i-datum"></div>
+    <div class="fg"><label>Datum</label><div id="i-datum-wrap"></div></div>
     <div class="fg"><label id="i-iznos-lbl">Iznos (KM)</label><input type="number" id="i-iznos" step="0.01" min="0" placeholder="0.00"></div>
     <div class="fg"><label>Izvor</label>
       <select id="i-izvor">
@@ -233,9 +241,9 @@ td.num{text-align:right;font-weight:700;}
 <!-- FILTERI -->
 <div class="filteri">
   <label>Period:</label>
-  <input type="date" id="fil-od" onchange="load()">
+  <div id="fil-od-wrap" style="display:inline-flex;"></div>
   <span>—</span>
-  <input type="date" id="fil-do" onchange="load()">
+  <div id="fil-do-wrap" style="display:inline-flex;"></div>
   <label>Primio:</label>
   <select id="fil-primio" onchange="load()">
     <option value="">Svi</option>
@@ -506,10 +514,52 @@ function fvrijeme(d){
   return dt.toLocaleTimeString('sr-Latn-BA',{hour:'2-digit',minute:'2-digit'});
 }
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+// ── DAN/MJESEC/GODINA unos datuma — ZAMJENA za <input type="date"> ──────────────────
+// Native date input dozvoljava direktan unos cifara čiji redosled zavisi od lokalnih
+// podešavanja BROWSERA (može biti MM/DD umjesto DD/MM) — to je uzrok stvarne greške
+// (uneseno "08.05" mesto "05.08", dan/mjesec zamijenjeni). Ova tri odvojena polja NEMAJU
+// tu dvosmislenost — uvijek je dan-mjesec-godina, bez obzira na browser/OS.
+function citajDMG(prefix){
+  const d=document.getElementById(prefix+'-dan')?.value;
+  const m=document.getElementById(prefix+'-mjesec')?.value;
+  const g=document.getElementById(prefix+'-godina')?.value;
+  if(!d||!m||!g) return '';
+  return `${g.padStart(4,'0')}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+}
+function postaviDMG(prefix, isoDatum){
+  if(!isoDatum){
+    ['dan','mjesec','godina'].forEach(p=>{ const el=document.getElementById(prefix+'-'+p); if(el) el.value=''; });
+    return;
+  }
+  const [g,m,d]=isoDatum.split('T')[0].split('-');
+  const elD=document.getElementById(prefix+'-dan'); if(elD) elD.value=parseInt(d);
+  const elM=document.getElementById(prefix+'-mjesec'); if(elM) elM.value=parseInt(m);
+  const elG=document.getElementById(prefix+'-godina'); if(elG) elG.value=g;
+}
+// Generiše HTML za tri polja (dan/mjesec/godina) — koristi se umjesto <input type="date">.
+function htmlDMG(prefix, onchangeFn){
+  const onch = onchangeFn ? ` onchange="${onchangeFn}"` : '';
+  return `<div style="display:flex;gap:3px;align-items:center;">
+    <input type="number" id="${prefix}-dan" placeholder="DD" min="1" max="31" style="width:44px;text-align:center;padding:5px 4px;"${onch}>
+    <span style="color:#8b96a5;">.</span>
+    <input type="number" id="${prefix}-mjesec" placeholder="MM" min="1" max="12" style="width:44px;text-align:center;padding:5px 4px;"${onch}>
+    <span style="color:#8b96a5;">.</span>
+    <input type="number" id="${prefix}-godina" placeholder="GGGG" min="2020" max="2100" style="width:62px;text-align:center;padding:5px 4px;"${onch}>
+  </div>`;
+}
 function gv(id){return(document.getElementById(id)||{}).value||'';}
 
-// Postavi defaultni datum = danas
-document.getElementById('f-datum').value=new Date().toISOString().split('T')[0];
+// Postavi DAN/MJESEC/GODINA polja za uplatu i isplatu — OBA defaultno na DANAS (ranije je
+// i-datum ostajao PRAZAN, korisnik je morao ručno kucati datum — otud i stvarna greška
+// "08.05" umjesto "05.08", dan i mjesec zamijenjeni pri kucanju).
+document.getElementById('f-datum-wrap').innerHTML = htmlDMG('f-datum');
+document.getElementById('i-datum-wrap').innerHTML = htmlDMG('i-datum');
+const danas = new Date().toISOString().split('T')[0];
+postaviDMG('f-datum', danas);
+postaviDMG('i-datum', danas);
+document.getElementById('fil-od-wrap').innerHTML = htmlDMG('fil-od','load()');
+document.getElementById('fil-do-wrap').innerHTML = htmlDMG('fil-do','load()');
 
 /* ── BLAGAJNA (razduženja banka/sef) — više PJ po osobi ──────────────── */
 let mojiPJovi=[];
@@ -590,8 +640,8 @@ function postaviBrzuPeriodBreakdown(period, btn){
   else if(period==='7dana'){ const p=new Date(danas); p.setDate(p.getDate()-6); od=fmtDate(p); do_=fmtDate(danas); }
   else if(period==='mjesec'){ const p=new Date(danas); p.setDate(p.getDate()-30); od=fmtDate(p); do_=fmtDate(danas); }
   // 'sve' ostavlja od/do prazno
-  document.getElementById('bd-od').value=od;
-  document.getElementById('bd-do').value=do_;
+  postaviDMG('bd-od', od||null);
+  postaviDMG('bd-do', do_||null);
   if(btn) btn.parentElement.querySelectorAll('.btn-brzi-period').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
   ucitajBlagajnaBreakdown();
@@ -671,7 +721,7 @@ async function ucitajBlagajnaBreakdown(tiho){
     // (npr. blagajna nije prazna, ali danas se ništa novo nije desilo). Zato se poslednji
     // prikazani dan (kraj izabranog perioda, ili danas ako period nema kraj) UVIJEK
     // eksplicitno osigurava — prazan ako mora biti, samo da prenos ima gdje da se prikaže.
-    const doFilRani=document.getElementById('bd-do').value;
+    const doFilRani=citajDMG('bd-do');
     const zadnjiDanZaOsiguranje = doFilRani || new Date().toISOString().slice(0,10);
     osiguraj(zadnjiDanZaOsiguranje);
 
@@ -679,8 +729,8 @@ async function ucitajBlagajnaBreakdown(tiho){
     if(!svidani.length){ cont.innerHTML='<div style="color:#8b96a5;">Nema zapisa.</div>'; return; }
 
     // Period-filter — koji dani se STVARNO prikazuju (računica gore ostaje na CIJELOJ istoriji).
-    const odFil=document.getElementById('bd-od').value;
-    const doFil=document.getElementById('bd-do').value;
+    const odFil=citajDMG('bd-od');
+    const doFil=citajDMG('bd-do');
 
     let saldo=0;
     let html='';
@@ -783,8 +833,8 @@ async function ucitajMojaRazduzenja(){
   const valuta=pj?pj.valuta:'KM';
   const params=new URLSearchParams();
   params.set('objekt_id', blagajnaObjektId);
-  const od=document.getElementById('bd-od')?.value;
-  const do_=document.getElementById('bd-do')?.value;
+  const od=citajDMG('bd-od');
+  const do_=citajDMG('bd-do');
   if(od) params.set('od', od);
   if(do_) params.set('do', do_);
   try{
@@ -916,8 +966,8 @@ function filtrirajNaNepredanoPJ(objektNaziv, izvor){
 
 async function load(){
   const params=new URLSearchParams();
-  if(gv('fil-od')) params.set('od',gv('fil-od'));
-  if(gv('fil-do')) params.set('do',gv('fil-do'));
+  if(citajDMG('fil-od')) params.set('od',citajDMG('fil-od'));
+  if(citajDMG('fil-do')) params.set('do',citajDMG('fil-do'));
   if(gv('fil-primio')) params.set('primio',gv('fil-primio'));
   if(gv('fil-izvor')) params.set('izvor',gv('fil-izvor'));
   if(gv('fil-pj')) params.set('objekt_naziv',gv('fil-pj'));
@@ -996,6 +1046,10 @@ function render(){
     const imeIzOpisa=(r.opis||'').split(' — ')[1]||'kupca';
     const rijecPozitivno = jeVp ? (jePlus?`Oslobodi ${esc(r.komercijalista_ime||'komercijalistu')}`:`Zaduži ${esc(imeIzOpisa)}`)
                           : jeIsplata ? 'Odobreno' : 'Predano';
+    // Dugme (akcija) treba da bude imperativ ("Predaj") a NE stanje ("Predano") — status
+    // već predatog ostaje "Predano" (iznad, rijecPozitivno), ovo je SAMO za dugme.
+    const rijecDugme = jeVp ? (jePlus?`Oslobodi ${esc(r.komercijalista_ime||'komercijalistu')}`:`Zaduži ${esc(imeIzOpisa)}`)
+                          : jeIsplata ? 'Odobri' : 'Predaj';
     const rijecNegativno = jeVp ? '🚚 Odvezeno, nije naplaćeno' : (jeIsplata ? 'Nije odobreno' : 'Nije predano');
     return `
     <tr>
@@ -1024,7 +1078,7 @@ function render(){
         : jeVp
           ? `<span class="nepredano-txt">${rijecNegativno}</span> <span style="font-size:10px;color:#8b96a5;">(potvrdi gore, u panelu "🚚 Otpremnice koje čekaju")</span>`
           : `<span class="nepredano-txt">${rijecNegativno}</span>
-             <button class="btn-predaj" onclick="predajBlagajniku(${r.id})">${rijecPozitivno}</button>`
+             <button class="btn-predaj" onclick="predajBlagajniku(${r.id})">${rijecDugme}</button>`
       }</td>
       <td>${isAdmin?`<button class="btn-del" onclick="obrisi(${r.id})">🗑</button>`:''}</td>
     </tr>
@@ -1275,7 +1329,24 @@ function ocistiKomitenta(prefix){
   }
 }
 
+// Sprječava unos datuma UNAZAD (prije danas) za sve OSIM admina — blagajnik mora uneti sa
+// DANAŠNJIM datumom čak i ako se transakcija stvarno desila ranije (razlog/napomenu za
+// to stavlja u polje "opis", ne mijenja datum). Sprječava da se dan pogrešno "izgubi" iz
+// dnevnog salda (i buduću zabunu istu kao ranija greška sa zamijenjenim danom/mjesecom).
+function validirajDatumUnosa(prefix){
+  const uneseni=citajDMG(prefix);
+  if(!uneseni){ alert('Unesite datum (dan/mjesec/godina).'); return false; }
+  if(isAdmin) return true;
+  const danas=new Date().toISOString().split('T')[0];
+  if(uneseni<danas){
+    alert('Ne možete unijeti datum unazad. Ako se transakcija stvarno desila ranije, unesite je sa DANAŠNJIM datumom i napišite u opisu/napomeni kada se stvarno desilo (npr. "bilo prije 3 dana").');
+    return false;
+  }
+  return true;
+}
+
 async function dodajNaplatu(){
+  if(!validirajDatumUnosa('f-datum')) return;
   const iznos=parseFloat(document.getElementById('f-iznos').value);
   const napomena=gv('f-opis');
   const msg=document.getElementById('f-msg');
@@ -1320,7 +1391,7 @@ async function dodajNaplatu(){
     const r=await fetch(`${API}/api/gotovina`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        datum:gv('f-datum')||new Date().toISOString().split('T')[0],
+        datum:citajDMG('f-datum')||new Date().toISOString().split('T')[0],
         iznos, primio,
         izvor:gv('f-izvor')||'Proizvodnja',
         nalog_r_br:parseInt(gv('f-nalog'))||null,
@@ -1341,6 +1412,7 @@ async function dodajNaplatu(){
 }
 
 async function dodajIsplatuRucno(){
+  if(!validirajDatumUnosa('i-datum')) return;
   const iznos=parseFloat(document.getElementById('i-iznos').value);
   const opis=gv('i-opis');
   const msg=document.getElementById('i-msg');
@@ -1378,7 +1450,7 @@ async function dodajIsplatuRucno(){
     const r=await fetch(`${API}/api/gotovina`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        datum:gv('i-datum')||new Date().toISOString().split('T')[0],
+        datum:citajDMG('i-datum')||new Date().toISOString().split('T')[0],
         iznos: -iznos, primio,
         izvor:gv('i-izvor')||'Proizvodnja',
         nalog_r_br:parseInt(gv('i-nalog'))||null,
@@ -1427,7 +1499,9 @@ async function obrisi(id){
 }
 
 function resetFilteri(){
-  ['fil-od','fil-do','fil-primio','fil-izvor','fil-pj','fil-komercijalista'].forEach(id=>{
+  postaviDMG('fil-od', null);
+  postaviDMG('fil-do', null);
+  ['fil-primio','fil-izvor','fil-pj','fil-komercijalista'].forEach(id=>{
     const el=document.getElementById(id);
     if(el) el.value='';
   });
