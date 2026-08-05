@@ -128,17 +128,9 @@ td.num{text-align:right;font-weight:700;}
       <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('7dana',this)">7 dana</button>
       <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('mjesec',this)">Mjesec dana</button>
       <button class="btn-brzi-period" onclick="postaviBrzuPeriodBreakdown('sve',this)">Sve</button>
-      <div style="display:flex;gap:3px;align-items:center;">
-        <input type="number" id="bd-od-dan" placeholder="DD" min="1" max="31" style="width:44px;text-align:center;padding:5px 4px;font-size:11.5px;" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();">.
-        <input type="number" id="bd-od-mjesec" placeholder="MM" min="1" max="12" style="width:44px;text-align:center;padding:5px 4px;font-size:11.5px;" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();">.
-        <input type="number" id="bd-od-godina" placeholder="GGGG" min="2020" max="2100" style="width:60px;text-align:center;padding:5px 4px;font-size:11.5px;" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();">
-      </div>
+      <div id="bd-od-wrap" style="display:inline-flex;"></div>
       <span style="align-self:center;color:#8b96a5;font-size:11px;">—</span>
-      <div style="display:flex;gap:3px;align-items:center;">
-        <input type="number" id="bd-do-dan" placeholder="DD" min="1" max="31" style="width:44px;text-align:center;padding:5px 4px;font-size:11.5px;" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();">.
-        <input type="number" id="bd-do-mjesec" placeholder="MM" min="1" max="12" style="width:44px;text-align:center;padding:5px 4px;font-size:11.5px;" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();">.
-        <input type="number" id="bd-do-godina" placeholder="GGGG" min="2020" max="2100" style="width:60px;text-align:center;padding:5px 4px;font-size:11.5px;" onchange="ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();">
-      </div>
+      <div id="bd-do-wrap" style="display:inline-flex;"></div>
     </div>
 
     <div style="background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
@@ -523,8 +515,9 @@ function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','
 function citajDMG(prefix){
   const d=document.getElementById(prefix+'-dan')?.value;
   const m=document.getElementById(prefix+'-mjesec')?.value;
-  const g=document.getElementById(prefix+'-godina')?.value;
+  let g=document.getElementById(prefix+'-godina')?.value;
   if(!d||!m||!g) return '';
+  if(g.length===2) g='20'+g; // "26" -> "2026"
   return `${g.padStart(4,'0')}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
 }
 function postaviDMG(prefix, isoDatum){
@@ -535,18 +528,31 @@ function postaviDMG(prefix, isoDatum){
   const [g,m,d]=isoDatum.split('T')[0].split('-');
   const elD=document.getElementById(prefix+'-dan'); if(elD) elD.value=parseInt(d);
   const elM=document.getElementById(prefix+'-mjesec'); if(elM) elM.value=parseInt(m);
-  const elG=document.getElementById(prefix+'-godina'); if(elG) elG.value=g;
+  const elG=document.getElementById(prefix+'-godina'); if(elG) elG.value=g.slice(2); // "2026" -> "26"
+  azurirajMaxDan(prefix);
 }
-// Generiše HTML za tri polja (dan/mjesec/godina) — koristi se umjesto <input type="date">.
+// Koliko dana ima izabrani mjesec (uzima u obzir prestupnu godinu za februar) — koristi se
+// da "dan" polje ne dozvoli npr. 30. februar.
+function azurirajMaxDan(prefix){
+  const elD=document.getElementById(prefix+'-dan');
+  const elM=document.getElementById(prefix+'-mjesec');
+  const elG=document.getElementById(prefix+'-godina');
+  if(!elD||!elM) return;
+  const m=parseInt(elM.value), g=elG&&elG.value?2000+parseInt(elG.value.length===2?elG.value:elG.value.slice(2)):new Date().getFullYear();
+  if(!m) return;
+  const maxDan=new Date(g, m, 0).getDate(); // dan 0 sledeceg mjeseca = zadnji dan ovog
+  elD.max=maxDan;
+  if(parseInt(elD.value)>maxDan) elD.value=maxDan;
+}
+// Generiše HTML za tri polja (dan/mjesec/godina) — kompaktno, BEZ vidljivih okvira,
+// izgleda kao normalan tekst "05.08.26" ali je strukturno DD/MM/GG (bez zabune redosleda
+// kao kod native <input type="date"> koji zavisi od lokalnih podešavanja browsera).
 function htmlDMG(prefix, onchangeFn){
-  const onch = onchangeFn ? ` onchange="${onchangeFn}"` : '';
-  return `<div style="display:flex;gap:3px;align-items:center;">
-    <input type="number" id="${prefix}-dan" placeholder="DD" min="1" max="31" style="width:44px;text-align:center;padding:5px 4px;"${onch}>
-    <span style="color:#8b96a5;">.</span>
-    <input type="number" id="${prefix}-mjesec" placeholder="MM" min="1" max="12" style="width:44px;text-align:center;padding:5px 4px;"${onch}>
-    <span style="color:#8b96a5;">.</span>
-    <input type="number" id="${prefix}-godina" placeholder="GGGG" min="2020" max="2100" style="width:62px;text-align:center;padding:5px 4px;"${onch}>
-  </div>`;
+  const onch = `azurirajMaxDan('${prefix}');${onchangeFn||''}`;
+  const stilPolja='font:inherit;font-size:12px;padding:2px 1px;border:none;border-bottom:1px solid var(--border);border-radius:0;background:transparent;text-align:center;-moz-appearance:textfield;';
+  return `<span style="display:inline-flex;align-items:baseline;gap:1px;font-size:12px;">
+    <input type="number" id="${prefix}-dan" placeholder="DD" min="1" max="31" style="${stilPolja}width:22px;" onchange="${onch}">.<input type="number" id="${prefix}-mjesec" placeholder="MM" min="1" max="12" style="${stilPolja}width:22px;" onchange="${onch}">.<input type="text" id="${prefix}-godina" placeholder="GG" maxlength="2" style="${stilPolja}width:20px;" onchange="${onch}">
+  </span>`;
 }
 function gv(id){return(document.getElementById(id)||{}).value||'';}
 
@@ -560,6 +566,8 @@ postaviDMG('f-datum', danas);
 postaviDMG('i-datum', danas);
 document.getElementById('fil-od-wrap').innerHTML = htmlDMG('fil-od','load()');
 document.getElementById('fil-do-wrap').innerHTML = htmlDMG('fil-do','load()');
+document.getElementById('bd-od-wrap').innerHTML = htmlDMG('bd-od','ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();');
+document.getElementById('bd-do-wrap').innerHTML = htmlDMG('bd-do','ucitajBlagajnaBreakdown();ucitajMojaRazduzenja();');
 
 /* ── BLAGAJNA (razduženja banka/sef) — više PJ po osobi ──────────────── */
 let mojiPJovi=[];
