@@ -305,6 +305,15 @@ function lk(u){
 function gv(id){return(document.getElementById(id)||{}).value||'';}
 
 // ─── KOLONE ───────────────────────────────────────────────────────────────
+// "Velika ponuda" (Generator ponuda alat) — samo admin/Ponude vide finansije, usko.
+// "Mala ponuda" (brza forma) — svako ko radi sa nalozima (unos/status/izmjena) vidi.
+// GLOBALNA funkcija (ne samo unutar getCols) — koristi je i render() za sumu na dnu.
+function mozeVidjetiFin(r){
+  if(isAdmin||!!(trenutniUser&&trenutniUser.moze_ugovarati)) return true;
+  if(trenutniUser&&r.ugovorio_id===trenutniUser.id) return true; // kreirao=ugovorio — uvijek vidi svoj nalog
+  if(r.izvor==='mala_ponuda') return !!(trenutniUser&&(trenutniUser.unos_naloga||trenutniUser.izmjena_statusa||trenutniUser.izmjena_naloga));
+  return false;
+}
 function getCols(){
   const base=[
     {k:'r_br',l:'R.Br.',w:50,filter:'text',render:r=>`<td class="num">${r.stornirano?'⛔ ':''}${r.r_br}${isAdmin?` <button onclick="event.stopPropagation();promijeniBrojNaloga(${r.r_br})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--blue);" title="Promijeni broj naloga">✎</button>`:''}</td>`,edit:null},
@@ -324,14 +333,6 @@ function getCols(){
     {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center">${lk(r.link_skica)}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
     {k:'link_ponuda',l:'R.Nalog',w:50,filter:null,render:r=>`<td class="center">${lk(r.link_ponuda)}</td>`,edit:{type:'text',field:'link_ponuda',label:'Link radni nalog'}},
   ];
-  // "Velika ponuda" (Generator ponuda alat) — samo admin/Ponude vide finansije, usko.
-  // "Mala ponuda" (brza forma) — svako ko radi sa nalozima (unos/status/izmjena) vidi.
-  const mozeVidjetiFin=r=>{
-    if(isAdmin||!!(trenutniUser&&trenutniUser.moze_ugovarati)) return true;
-    if(trenutniUser&&r.ugovorio_id===trenutniUser.id) return true; // kreirao=ugovorio — uvijek vidi svoj nalog
-    if(r.izvor==='mala_ponuda') return !!(trenutniUser&&(trenutniUser.unos_naloga||trenutniUser.izmjena_statusa||trenutniUser.izmjena_naloga));
-    return false;
-  };
   const fin=[
     {k:'ugovorena_suma',l:'Ugovoreno',w:90,filter:null,render:r=>mozeVidjetiFin(r)?`<td class="num">${fm(r.ugovorena_suma)}</td>`:'<td class="num">—</td>',edit:{type:'number',field:'ugovorena_suma',label:'Ugovorena suma (KM)'}},
     {k:'avans',l:'Avans',w:80,filter:null,render:r=>{
@@ -573,6 +574,25 @@ function render(){
     }
     return dodajKomentarAtribut(cell, r.r_br, c.k, c.edit?.field);
   }).join('')}</tr>`).join('');
+
+  // Suma za "Ugovoreno" i "Za naplatu" — SAMO za redove koji NISU stornirani i za koje
+  // korisnik uopšte SMIJE vidjeti finansije (isto pravilo kao pojedinačne ćelije, da se
+  // suma ne "iscuri" iz redova čije cifre inače ne vidi). Prati TRENUTNE filtere (rows je
+  // već filtrirano) — promijeni mjesec/godinu/status u filteru i suma se sama ažurira.
+  const imaUgovoreno=cols.some(c=>c.k==='ugovorena_suma');
+  const imaZaNaplatu=cols.some(c=>c.k==='za_naplatu');
+  if(imaUgovoreno||imaZaNaplatu){
+    const zaSumu=rows.filter(r=>!r.stornirano && mozeVidjetiFin(r));
+    const sumaUgovoreno=zaSumu.reduce((s,r)=>s+(parseFloat(r.ugovorena_suma)||0),0);
+    const sumaZaNaplatu=zaSumu.reduce((s,r)=>s+(parseFloat(r.za_naplatu)||0),0);
+    const redSume=`<tr style="background:#eef4fc;font-weight:700;border-top:2px solid var(--blue,#1a5fa8);">${cols.map(c=>{
+      if(c.k==='ugovorena_suma') return `<td class="num">${fm(sumaUgovoreno)}</td>`;
+      if(c.k==='za_naplatu') return `<td class="num">${fm(sumaZaNaplatu)}</td>`;
+      if(c===cols[0]) return `<td>Σ Suma (${zaSumu.length} naloga)</td>`;
+      return '<td></td>';
+    }).join('')}</tr>`;
+    document.getElementById('tbody').innerHTML+=redSume;
+  }
 }
 
 // Dodaje desni-klik hendler na SVAKU ćeliju (za komentare, kao u Excel-u) i crveni
