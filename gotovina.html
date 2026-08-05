@@ -512,47 +512,45 @@ function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','
 // podešavanja BROWSERA (može biti MM/DD umjesto DD/MM) — to je uzrok stvarne greške
 // (uneseno "08.05" mesto "05.08", dan/mjesec zamijenjeni). Ova tri odvojena polja NEMAJU
 // tu dvosmislenost — uvijek je dan-mjesec-godina, bez obzira na browser/OS.
+// Parsira "DD.MM.GG" ili "DD.MM.GGGG" tekst u ISO datum (YYYY-MM-DD), ili vraća '' ako
+// nije kompletno/ispravno unešeno.
 function citajDMG(prefix){
-  const d=document.getElementById(prefix+'-dan')?.value;
-  const m=document.getElementById(prefix+'-mjesec')?.value;
-  let g=document.getElementById(prefix+'-godina')?.value;
-  if(!d||!m||!g) return '';
-  if(g.length===2) g='20'+g; // "26" -> "2026"
-  return `${g.padStart(4,'0')}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+  const v=(document.getElementById(prefix)||{}).value||'';
+  const m=v.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
+  if(!m) return '';
+  let [,d,mj,g]=m;
+  if(g.length===2) g='20'+g;
+  d=d.padStart(2,'0'); mj=mj.padStart(2,'0');
+  // Provjeri da je datum stvarno ispravan (npr. ne 31.02) — ako nije, tretiraj kao prazno.
+  const provjera=new Date(`${g}-${mj}-${d}T00:00:00`);
+  if(isNaN(provjera.getTime()) || provjera.getDate()!==parseInt(d)) return '';
+  return `${g}-${mj}-${d}`;
 }
 function postaviDMG(prefix, isoDatum){
-  if(!isoDatum){
-    ['dan','mjesec','godina'].forEach(p=>{ const el=document.getElementById(prefix+'-'+p); if(el) el.value=''; });
-    return;
-  }
+  const el=document.getElementById(prefix);
+  if(!el) return;
+  if(!isoDatum){ el.value=''; return; }
   const [g,m,d]=isoDatum.split('T')[0].split('-');
-  const elD=document.getElementById(prefix+'-dan'); if(elD) elD.value=parseInt(d);
-  const elM=document.getElementById(prefix+'-mjesec'); if(elM) elM.value=parseInt(m);
-  const elG=document.getElementById(prefix+'-godina'); if(elG) elG.value=g.slice(2); // "2026" -> "26"
-  azurirajMaxDan(prefix);
+  el.value=`${d}.${m}.${g.slice(2)}`;
 }
-// Koliko dana ima izabrani mjesec (uzima u obzir prestupnu godinu za februar) — koristi se
-// da "dan" polje ne dozvoli npr. 30. februar.
-function azurirajMaxDan(prefix){
-  const elD=document.getElementById(prefix+'-dan');
-  const elM=document.getElementById(prefix+'-mjesec');
-  const elG=document.getElementById(prefix+'-godina');
-  if(!elD||!elM) return;
-  const m=parseInt(elM.value), g=elG&&elG.value?2000+parseInt(elG.value.length===2?elG.value:elG.value.slice(2)):new Date().getFullYear();
-  if(!m) return;
-  const maxDan=new Date(g, m, 0).getDate(); // dan 0 sledeceg mjeseca = zadnji dan ovog
-  elD.max=maxDan;
-  if(parseInt(elD.value)>maxDan) elD.value=maxDan;
+// Dok korisnik kuca cifre, automatski ubacuje tačke posle dana i mjeseca (05.08.26) —
+// bez potrebe da korisnik sam kuca tačke. Redosled je UVIJEK dan-mjesec-godina, bez obzira
+// na browser/OS podešavanja (za razliku od native <input type="date">, koji je uzrok
+// stvarne greške — zamijenjeni dan/mjesec pri direktnom kucanju).
+function oblikujDMGUnos(input){
+  let cifre=input.value.replace(/\D/g,'').slice(0,6);
+  let rez=cifre;
+  if(cifre.length>=5) rez=cifre.slice(0,2)+'.'+cifre.slice(2,4)+'.'+cifre.slice(4);
+  else if(cifre.length>=3) rez=cifre.slice(0,2)+'.'+cifre.slice(2);
+  input.value=rez;
 }
-// Generiše HTML za tri polja (dan/mjesec/godina) — kompaktno, BEZ vidljivih okvira,
-// izgleda kao normalan tekst "05.08.26" ali je strukturno DD/MM/GG (bez zabune redosleda
-// kao kod native <input type="date"> koji zavisi od lokalnih podešavanja browsera).
+// Generiše JEDNO polje, podebljano, bez okvira/linija — izgleda kao obican tekst
+// "05.08.26" ali dok kucaš, tačke se same ubacuju (uvijek dan-mjesec-godina redosled).
 function htmlDMG(prefix, onchangeFn){
-  const onch = `azurirajMaxDan('${prefix}');${onchangeFn||''}`;
-  const stilPolja='font:inherit;font-size:12px;padding:2px 1px;border:none;border-bottom:1px solid var(--border);border-radius:0;background:transparent;text-align:center;-moz-appearance:textfield;';
-  return `<span style="display:inline-flex;align-items:baseline;gap:1px;font-size:12px;">
-    <input type="number" id="${prefix}-dan" placeholder="DD" min="1" max="31" style="${stilPolja}width:22px;" onchange="${onch}">.<input type="number" id="${prefix}-mjesec" placeholder="MM" min="1" max="12" style="${stilPolja}width:22px;" onchange="${onch}">.<input type="text" id="${prefix}-godina" placeholder="GG" maxlength="2" style="${stilPolja}width:20px;" onchange="${onch}">
-  </span>`;
+  const onch = onchangeFn ? `;${onchangeFn}` : '';
+  return `<input type="text" id="${prefix}" placeholder="dd.mm.gg" maxlength="8" inputmode="numeric"
+    style="font:inherit;font-weight:700;font-size:13px;padding:2px 4px;border:none;background:transparent;width:70px;text-align:center;cursor:text;"
+    oninput="oblikujDMGUnos(this)" onchange="${onch.replace(/^;/,'')}">`;
 }
 function gv(id){return(document.getElementById(id)||{}).value||'';}
 
