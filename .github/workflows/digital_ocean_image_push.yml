@@ -1,0 +1,40 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install doctl
+      uses: digitalocean/action-doctl@v2
+      with:
+        token: ${{ secrets.DIGITAL_OCEAN_TOKEN }}
+
+    - name: Build the Docker image
+      run: docker build . --file Dockerfile -t jopex-test:latest -t ${{ secrets.REGISTRY_NAME }}/jopex-test:latest
+    
+    - name: Log in to DigitalOcean Container Registry with short-lived credentials
+      run: doctl registries login --expiry-seconds 1200
+
+    - name: Push image to DigitalOcean Container Registry
+      run: docker push ${{ secrets.REGISTRY_NAME }}/jopex-test:latest
+
+    - name: Executing remote SSH commands
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.SERVER_IP }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          cd ~
+          ./run_jpxapp.sh
+  
