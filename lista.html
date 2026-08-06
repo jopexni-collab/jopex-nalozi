@@ -586,6 +586,8 @@ function render(){
     const sumaUgovoreno=zaSumu.reduce((s,r)=>s+(parseFloat(r.ugovorena_suma)||0),0);
     // "Za naplatu" suma broji SAMO ono što JOŠ NIJE naplaćeno — nalog gdje je "naplaceno"
     // štiklirano se isključuje iz sume (bez obzira šta trenutno piše u za_naplatu polju).
+    // Negativan za_naplatu (preplaćen nalog) se RAČUNA kao negativan — umanjuje ukupnu
+    // sumu, ne zaustavlja se na 0.
     const sumaZaNaplatu=zaSumu.filter(r=>!r.naplaceno).reduce((s,r)=>s+(parseFloat(r.za_naplatu)||0),0);
     const redSume=`<tr style="background:#eef4fc;font-weight:700;border-top:2px solid var(--blue,#1a5fa8);">${cols.map(c=>{
       if(c.k==='ugovorena_suma') return `<td class="num">${fm(sumaUgovoreno)}</td>`;

@@ -147,7 +147,7 @@ router.get('/suma', async (req, res) => {
       const rn = await pool.query(`
         SELECT
           COALESCE(SUM(COALESCE(ugovorena_suma,0)) FILTER (WHERE naplaceno IS TRUE AND COALESCE(stornirano,false)=false), 0) AS naplaceno_ukupno,
-          COALESCE(SUM(GREATEST(COALESCE(ugovorena_suma,0) - COALESCE(avans,0) - COALESCE(naplaceno_iznos,0), 0)) FILTER (WHERE naplaceno IS NOT TRUE AND COALESCE(stornirano,false)=false), 0) AS ocekivano_ukupno
+          COALESCE(SUM(COALESCE(ugovorena_suma,0) - COALESCE(avans,0) - COALESCE(naplaceno_iznos,0)) FILTER (WHERE naplaceno IS NOT TRUE AND COALESCE(stornirano,false)=false), 0) AS ocekivano_ukupno
         FROM proizvodnja_jopex
       `);
       naplacenoNalozi = parseFloat(rn.rows[0].naplaceno_ukupno) || 0;
