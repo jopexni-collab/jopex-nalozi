@@ -1174,17 +1174,32 @@ async function ucitajVpCekanje(){
   try{
     const r=await fetch(`${API}/api/finansije/vp-cekanje`);
     const rows=await r.json();
-    if(!rows.length){ cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Nema otpremnica koje čekaju potvrdu. 🎉</div>'; return; }
-    cont.innerHTML=rows.map(o=>`
-      <div style="display:flex;justify-content:space-between;align-items:center;background:#fff8e6;border:1px solid #f0d78c;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+    if(!rows.length){ cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Nema VP otpremnica. 🎉</div>'; return; }
+    cont.innerHTML=rows.map(o=>{
+      // Tri stanja: čeka potvrdu (žuto) → potvrđeno ali nije plaćeno (crveno) → plaćeno (zeleno).
+      const jePlaceno = o.status_placanja==='placeno';
+      const jePotvrdjeno = o.sve_potvrdjeno===true || o.sve_potvrdjeno==='true';
+      let boja, akcija;
+      if(!jePotvrdjeno){
+        boja='background:#fff8e6;border:1px solid #f0d78c;';
+        akcija=`<button class="btn-predaj" onclick="potvrdiVpOtpremnicu('${esc(o.broj).replace(/'/g,"\\'")}')" style="white-space:nowrap;">✓ Potvrdi otpremnicu</button>`;
+      }else if(!jePlaceno){
+        boja='background:#fce8e6;border:1px solid #e8a8a0;';
+        akcija=`<button class="btn-predaj" onclick="location.href='maloprodaja.html?naplati_otpremnicu=${encodeURIComponent(o.broj)}'" style="white-space:nowrap;background:var(--red);border-color:var(--red);">⚠ Nije plaćeno — Naplati</button>`;
+      }else{
+        boja='background:#e6f4ea;border:1px solid #a8d8b8;';
+        akcija=`<span style="color:var(--green);font-weight:700;font-size:12px;white-space:nowrap;">✓ Plaćeno${o.naplatio_ime?' — '+esc(o.naplatio_ime):''}${o.naplatio_kada?' · '+fd(o.naplatio_kada):''}</span>`;
+      }
+      return `
+      <div style="display:flex;justify-content:space-between;align-items:center;${boja}border-radius:8px;padding:10px 12px;margin-bottom:8px;">
         <div style="font-size:12.5px;">
           <b>${esc(o.broj)}</b> — ${esc(o.kupac_naziv||'—')}
           <span style="color:#8b96a5;"> · ${esc(o.objekt_naziv||'')} · ${fd(o.datum)} · Komercijalista: ${esc(o.komercijalista_ime||'—')}</span>
-          <div style="margin-top:2px;">Ukupno: ${fm(o.ukupan_iznos)} · Duguje: <b style="color:var(--red);">${fm(o.duguje)}</b></div>
+          <div style="margin-top:2px;">Ukupno: ${fm(o.ukupan_iznos)}${!jePlaceno?` · Duguje: <b style="color:var(--red);">${fm(o.duguje)}</b>`:` · Plaćeno: <b>${fm(o.iznos_placeno)}</b>`}</div>
         </div>
-        <button class="btn-predaj" onclick="potvrdiVpOtpremnicu('${esc(o.broj).replace(/'/g,"\\'")}')" style="white-space:nowrap;">✓ Potvrdi otpremnicu</button>
+        ${akcija}
       </div>
-    `).join('');
+    `;}).join('');
   }catch(e){ cont.innerHTML='<div style="text-align:center;color:red;padding:20px;">Greška pri učitavanju.</div>'; }
 }
 

@@ -497,8 +497,10 @@ router.post('/ocekivana-uplata/:id/otkazi', async (req, res) => {
 // stvaran događaj), ovo grupiše sve gotovina redove jedne otpremnice i potvrđuje ih
 // SVE odjednom, jednim klikom, na jednom mjestu.
 
-// GET /api/finansije/vp-cekanje — otpremnice koje imaju bar jedan neverifikovan
-// gotovina red (bruto i/ili dug).
+// GET /api/finansije/vp-cekanje — SVE otpremnice koje potiču od VP/dug prodaje (imaju bar
+// jedan gotovina red 'Prodaja (bruto)' ili 'Dug po otpremnici'), BEZ obzira da li su već
+// potvrđene ili plaćene — otpremnica ostaje vidljiva ovde kao trag, sa statusom koji se
+// menja: čeka potvrdu → potvrđeno/nije plaćeno (crveno) → plaćeno.
 router.get('/vp-cekanje', async (req, res) => {
   const user = req.session?.user;
   if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });
@@ -506,15 +508,25 @@ router.get('/vp-cekanje', async (req, res) => {
     const r = await pool.query(`
       SELECT
         o.broj, o.datum, o.kupac_naziv, o.komercijalista_ime, o.objekt_naziv,
-        o.ukupan_iznos, o.iznos_placeno, (o.ukupan_iznos - o.iznos_placeno) AS duguje,
-        COUNT(g.id) AS broj_zapisa
+        o.ukupan_iznos, o.iznos_placeno, o.status_placanja,
+        (o.ukupan_iznos - o.iznos_placeno) AS duguje,
+        COUNT(g.id) AS broj_zapisa,
+        BOOL_AND(g.predao_blagajniku) AS sve_potvrdjeno,
+        MAX(g.preuzeo_ime) AS potvrdio_ime,
+        zn.upisao_ime AS naplatio_ime,
+        zn.kreirano AS naplatio_kada
       FROM otpremnice o
       JOIN gotovina g ON g.nalog_r_br = o.broj
         AND (g.opis LIKE 'Prodaja (bruto)%' OR g.opis LIKE 'Dug po otpremnici%')
-        AND g.predao_blagajniku = false
+      LEFT JOIN LATERAL (
+        SELECT upisao_ime, kreirano FROM naplate_duga_log
+        WHERE otpremnica_broj = o.broj AND COALESCE(stornirano,false)=false
+        ORDER BY kreirano DESC LIMIT 1
+      ) zn ON true
       GROUP BY o.id, o.broj, o.datum, o.kupac_naziv, o.komercijalista_ime, o.objekt_naziv,
-               o.ukupan_iznos, o.iznos_placeno
+               o.ukupan_iznos, o.iznos_placeno, o.status_placanja, zn.upisao_ime, zn.kreirano
       ORDER BY o.datum DESC
+      LIMIT 200
     `);
     res.json(r.rows);
   } catch (err) {
