@@ -515,10 +515,17 @@ function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','
 // Parsira "DD.MM.GG" ili "DD.MM.GGGG" tekst u ISO datum (YYYY-MM-DD), ili vraća '' ako
 // nije kompletno/ispravno unešeno.
 function citajDMG(prefix){
-  const v=(document.getElementById(prefix)||{}).value||'';
-  const m=v.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
-  if(!m) return '';
-  let [,d,mj,g]=m;
+  let v=((document.getElementById(prefix)||{}).value||'').trim().replace(/\//g,'.');
+  // Prihvata "05.08.26", "05.08.2026", "5.8.26" (puna 3 dijela) ILI samo "05.08"/"5/8"
+  // (2 dijela, bez godine) — u tom slucaju podrazumijeva TEKUCU godinu.
+  let m=v.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
+  let d,mj,g;
+  if(m){ [,d,mj,g]=m; }
+  else{
+    m=v.match(/^(\d{1,2})\.(\d{1,2})$/);
+    if(!m) return '';
+    [,d,mj]=m; g=String(new Date().getFullYear());
+  }
   if(g.length===2) g='20'+g;
   d=d.padStart(2,'0'); mj=mj.padStart(2,'0');
   // Provjeri da je datum stvarno ispravan (npr. ne 31.02) — ako nije, tretiraj kao prazno.
@@ -534,15 +541,17 @@ function postaviDMG(prefix, isoDatum){
   el.value=`${d}.${m}.${g.slice(2)}`;
 }
 // Dok korisnik kuca cifre, automatski ubacuje tačke posle dana i mjeseca (05.08.26) —
-// bez potrebe da korisnik sam kuca tačke. Redosled je UVIJEK dan-mjesec-godina, bez obzira
-// na browser/OS podešavanja (za razliku od native <input type="date">, koji je uzrok
-// stvarne greške — zamijenjeni dan/mjesec pri direktnom kucanju).
+// bez potrebe da korisnik sam kuca tačke. Ako korisnik SAM ukuca tačku ili kosu crtu kao
+// separator (npr. "5.8" ili "5/8"), to se poštuje/normalizuje na tačku, bez nametanja
+// dodatnih. Redosled je UVIJEK dan-mjesec-godina, bez obzira na browser/OS podešavanja.
 function oblikujDMGUnos(input){
-  let cifre=input.value.replace(/\D/g,'').slice(0,6);
-  let rez=cifre;
-  if(cifre.length>=5) rez=cifre.slice(0,2)+'.'+cifre.slice(2,4)+'.'+cifre.slice(4);
-  else if(cifre.length>=3) rez=cifre.slice(0,2)+'.'+cifre.slice(2);
-  input.value=rez;
+  let v=input.value.replace(/\//g,'.');
+  if(/^\d+$/.test(v)){
+    const cifre=v.slice(0,8);
+    if(cifre.length>=5) v=cifre.slice(0,2)+'.'+cifre.slice(2,4)+'.'+cifre.slice(4);
+    else if(cifre.length>=3) v=cifre.slice(0,2)+'.'+cifre.slice(2);
+  }
+  input.value=v;
 }
 // Generiše JEDNO polje, podebljano, bez okvira/linija — izgleda kao obican tekst
 // "05.08.26" ali dok kucaš, tačke se same ubacuju (uvijek dan-mjesec-godina redosled).
