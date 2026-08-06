@@ -9,34 +9,33 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('./db');
+const geo = require('./geometrija');
 
 /* ─────────────────────────── pomoćne funkcije ─────────────────────────── */
 
-// Površina u m2. L-oblik = puni pravougaonik minus izrez.
-function povrsinaM2(oblik, a, b, c, d) {
-  const A = Number(a) || 0, B = Number(b) || 0;
-  const C = Number(c) || 0, D = Number(d) || 0;
-  const mm2 = oblik === 'L' ? (A * B - C * D) : (A * B);
-  return Math.max(0, mm2) / 1000000;
+// Tjemena oblika: iz kolone 'poligon' ako postoji, inače iz A/B/C/D.
+function tjemenaRestla(r) {
+  if (r.poligon) {
+    const p = typeof r.poligon === 'string' ? JSON.parse(r.poligon) : r.poligon;
+    if (Array.isArray(p) && p.length >= 3) return p;
+  }
+  return geo.tjemenaOdMjera(r.oblik, r.dim_a, r.dim_b, r.dim_c, r.dim_d);
 }
 
-// Da li komad w×h staje u restl? Restl se razlaže na pravougaonike:
-//  - pravougaonik: jedan (A×B)
-//  - L (izrez C×D u gornjem desnom uglu): (A−C)×B  i  A×(B−D)
-// Komad staje ako staje u BILO KOJI od njih, u bilo kojoj od dvije rotacije.
-function pravougaoniciRestla(r) {
-  const A = Number(r.dim_a), B = Number(r.dim_b);
-  if (r.oblik !== 'L') return [[A, B]];
-  const C = Number(r.dim_c) || 0, D = Number(r.dim_d) || 0;
-  return [[A - C, B], [A, B - D]];
+function povrsinaM2(oblik, a, b, c, d, poligon) {
+  const t = poligon && poligon.length >= 3 ? poligon : geo.tjemenaOdMjera(oblik, a, b, c, d);
+  return geo.povrsinaPoligona(t) / 1000000;
 }
 
+// Da li komad w×h staje u restl? Radi za SVE oblike — pravougaonik, L, trapez,
+// kosi rez — jer se svaki svede na listu tjemena.
 function staje(r, w, h, rez) {
-  const t = Number(rez) || 0; // debljina reza / sigurnosna rezerva u mm
-  const W = Number(w) + t, H = Number(h) + t;
-  return pravougaoniciRestla(r).some(([pw, ph]) =>
-    (W <= pw && H <= ph) || (H <= pw && W <= ph)
-  );
+  return !!geo.komadStaje(tjemenaRestla(r), w, h, rez);
+}
+
+// Gdje tačno staje (za prikaz majstoru) — vraća položaj i da li je rotiran.
+function gdjeStaje(r, w, h, rez) {
+  return geo.komadStaje(tjemenaRestla(r), w, h, rez);
 }
 
 // Koliko m2 "propada" ako se komad izreže iz ovog restla — manje je bolje (best-fit).
@@ -191,8 +190,9 @@ router.post('/trazi', smijeVidjeti, async (req, res) => {
     );
 
     const kandidati = q.rows
-      .filter(r => staje(r, sirina, visina, rez))
-      .map(r => ({ ...r, otpad_m2: otpadM2(r, sirina, visina) }))
+      .map(r => ({ r, poz: gdjeStaje(r, sirina, visina, rez) }))
+      .filter(x => x.poz)
+      .map(({ r, poz }) => ({ ...r, otpad_m2: otpadM2(r, sirina, visina), polozaj: poz }))
       .sort((a, b) => a.otpad_m2 - b.otpad_m2)
       .slice(0, 20);
 
@@ -231,14 +231,29 @@ router.post('/', smijeUnositi, async (req, res) => {
       objekt_id, roba_id, materijal, grupa, debljina_cm, oblik,
       dim_a, dim_b, dim_c, dim_d, cijena_m2, foto_url,
       roditelj_id, nastao_iz_naloga, izvor, lokacija, napomena,
-      umanji_lager_m2
+      umanji_lager_m2, poligon
     } = req.body;
 
     if (!objekt_id) return res.status(400).json({ error: 'PJ (objekt_id) je obavezan.' });
     if (!materijal) return res.status(400).json({ error: 'Materijal je obavezan.' });
-    if (!dim_a || !dim_b) return res.status(400).json({ error: 'Mjere A i B su obavezne.' });
-    const ob = oblik === 'L' ? 'L' : 'pravougaonik';
+    if (oblik !== 'poligon' && (!dim_a || !dim_b))
+      return res.status(400).json({ error: 'Mjere A i B su obavezne.' });
+    const ob = ['L', 'poligon'].includes(oblik) ? oblik : 'pravougaonik';
     if (ob === 'L' && (!dim_c || !dim_d)) return res.status(400).json({ error: 'Za L-oblik su obavezne i mjere C i D.' });
+
+    // Proizvoljan oblik (trapez, kosi rez): tjemena su izvor istine, a A i B se
+    // izvedu kao granični pravougaonik — tako predfilter u pretrazi i dalje radi.
+    let tjemena = null;
+    if (ob === 'poligon') {
+      tjemena = Array.isArray(poligon) ? poligon.map(p => [Number(p[0]), Number(p[1])]) : null;
+      const greska = geo.provjeriTjemena(tjemena || []);
+      if (greska) return res.status(400).json({ error: greska });
+    } else {
+      tjemena = geo.tjemenaOdMjera(ob, dim_a, dim_b, dim_c, dim_d);
+    }
+    const okv = geo.okvir(tjemena);
+    const A = ob === 'poligon' ? okv.sirina : dim_a;
+    const B = ob === 'poligon' ? okv.visina : dim_b;
 
     await client.query('BEGIN');
 
@@ -260,18 +275,18 @@ router.post('/', smijeUnositi, async (req, res) => {
     }
 
     const oznaka = await sljedecaOznaka(client);
-    const pov = povrsinaM2(ob, dim_a, dim_b, dim_c, dim_d);
+    const pov = povrsinaM2(ob, A, B, dim_c, dim_d, tjemena);
 
     const r = await client.query(
       `INSERT INTO restlovi
          (oznaka, objekt_id, roba_id, materijal, grupa, debljina_cm, oblik,
-          dim_a, dim_b, dim_c, dim_d, povrsina, cijena_m2, foto_url,
+          dim_a, dim_b, dim_c, dim_d, poligon, povrsina, cijena_m2, foto_url,
           roditelj_id, nastao_iz_naloga, izvor, lokacija, napomena,
           kreirao_id, kreirao_ime)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
        RETURNING *`,
       [oznaka, objekt_id, roba_id || null, materijal, grupa || null, debljina_cm || null, ob,
-       dim_a, dim_b, dim_c || 0, dim_d || 0, pov, cijena, foto_url || null,
+       A, B, dim_c || 0, dim_d || 0, JSON.stringify(tjemena), pov, cijena, foto_url || null,
        roditelj_id || null, nastao_iz_naloga || null,
        izvor || (roditelj_id ? 'restl' : 'tabla'), lokacija || null, napomena || null,
        user.id, user.ime_prezime]
@@ -314,18 +329,29 @@ router.post('/:id/koristi', smijeUnositi, async (req, res) => {
 
     let noviId = null;
     if (ostatak && ostatak.dim_a && ostatak.dim_b && !potrosen_do_kraja) {
-      const ob = ostatak.oblik === 'L' ? 'L' : 'pravougaonik';
-      const pov = povrsinaM2(ob, ostatak.dim_a, ostatak.dim_b, ostatak.dim_c, ostatak.dim_d);
+      const ob = ['L', 'poligon'].includes(ostatak.oblik) ? ostatak.oblik : 'pravougaonik';
+      let tj;
+      if (ob === 'poligon') {
+        tj = Array.isArray(ostatak.poligon) ? ostatak.poligon.map(p => [Number(p[0]), Number(p[1])]) : null;
+        const g = geo.provjeriTjemena(tj || []);
+        if (g) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Ostatak: ' + g }); }
+      } else {
+        tj = geo.tjemenaOdMjera(ob, ostatak.dim_a, ostatak.dim_b, ostatak.dim_c, ostatak.dim_d);
+      }
+      const ok2 = geo.okvir(tj);
+      const oA = ob === 'poligon' ? ok2.sirina : ostatak.dim_a;
+      const oB = ob === 'poligon' ? ok2.visina : ostatak.dim_b;
+      const pov = geo.povrsinaPoligona(tj) / 1000000;
       const oznaka = await sljedecaOznaka(client);
       const ins = await client.query(
         `INSERT INTO restlovi
            (oznaka, objekt_id, roba_id, materijal, grupa, debljina_cm, oblik,
-            dim_a, dim_b, dim_c, dim_d, povrsina, cijena_m2, foto_url,
+            dim_a, dim_b, dim_c, dim_d, poligon, povrsina, cijena_m2, foto_url,
             roditelj_id, nastao_iz_naloga, izvor, lokacija, napomena, kreirao_id, kreirao_ime)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'restl',$17,$18,$19,$20)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'restl',$18,$19,$20,$21)
          RETURNING id, oznaka`,
         [oznaka, r.objekt_id, r.roba_id, r.materijal, r.grupa, r.debljina_cm, ob,
-         ostatak.dim_a, ostatak.dim_b, ostatak.dim_c || 0, ostatak.dim_d || 0,
+         oA, oB, ostatak.dim_c || 0, ostatak.dim_d || 0, JSON.stringify(tj),
          pov, r.cijena_m2, ostatak.foto_url || null, r.id, nalog_r_br || null,
          ostatak.lokacija || r.lokacija, ostatak.napomena || null, user.id, user.ime_prezime]
       );
@@ -406,7 +432,7 @@ router.post('/:id/prenos', smijeUnositi, async (req, res) => {
 });
 
 // PATCH /api/restlovi/:id — inline izmjena, svaka promjena ide u restl_log
-const IZMJENJIVE = ['materijal', 'grupa', 'debljina_cm', 'oblik', 'dim_a', 'dim_b', 'dim_c', 'dim_d',
+const IZMJENJIVE = ['materijal', 'grupa', 'debljina_cm', 'oblik', 'dxf_url', 'poligon', 'dim_a', 'dim_b', 'dim_c', 'dim_d',
                     'cijena_m2', 'foto_url', 'lokacija', 'napomena', 'status', 'nastao_iz_naloga'];
 
 router.patch('/:id', smijeUnositi, async (req, res) => {
@@ -431,7 +457,7 @@ router.patch('/:id', smijeUnositi, async (req, res) => {
     }
     // Ako su dirane mjere ili oblik — površina se preračunava
     const nov = { ...stari, ...req.body };
-    const pov = povrsinaM2(nov.oblik, nov.dim_a, nov.dim_b, nov.dim_c, nov.dim_d);
+    const pov = geo.povrsinaPoligona(tjemenaRestla(nov)) / 1000000;
     sets.push(`povrsina = $${i++}`); vals.push(pov);
 
     vals.push(req.params.id);
@@ -504,6 +530,67 @@ router.post('/koristenje/:korId/storno', smijeUnositi, async (req, res) => {
     await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ error: err.message });
   } finally { client.release(); }
+});
+
+
+/* ─────────────────────────── DXF ─────────────────────────── */
+
+// Minimalni DXF (R12) — samo LINE entiteti i jedan TEXT sa oznakom. Namjerno bez
+// LWPOLYLINE jer je stariji CAM softver ne čita uvijek; LINE razumije baš svaki.
+function napraviDXF(r) {
+  const t = tjemenaRestla(r);
+  const red = [];
+  const p = (kod, v) => { red.push(String(kod), String(v)); };
+
+  p(0,'SECTION'); p(2,'HEADER');
+  p(9,'$INSUNITS'); p(70,4);        // 4 = milimetri
+  p(9,'$EXTMIN'); p(10,0); p(20,0); p(30,0);
+  p(9,'$EXTMAX'); p(10,r.dim_a); p(20,r.dim_b); p(30,0);
+  p(0,'ENDSEC');
+
+  p(0,'SECTION'); p(2,'ENTITIES');
+  for (let i = 0; i < t.length; i++) {
+    const a = t[i], b = t[(i + 1) % t.length];
+    p(0,'LINE'); p(8,'RESTL');
+    p(10,a[0]); p(20,a[1]); p(30,0);
+    p(11,b[0]); p(21,b[1]); p(31,0);
+  }
+  // Oznaka i materijal kao tekst unutar komada — da se zna šta je kad se otvori u CAD-u
+  p(0,'TEXT'); p(8,'OPIS');
+  p(10, Math.round(Number(r.dim_a) * 0.06)); p(20, Math.round(Number(r.dim_b) * 0.06)); p(30,0);
+  p(40, Math.max(20, Math.round(Number(r.dim_b) / 20)));
+  p(1, `${r.oznaka} ${r.materijal || ''} ${r.debljina_cm ? r.debljina_cm + 'cm' : ''}`.trim());
+  p(0,'ENDSEC');
+
+  p(0,'EOF');
+  return red.join('\r\n') + '\r\n';
+}
+
+// GET /api/restlovi/:id/dxf — preuzimanje crteža restla
+router.get('/:id/dxf', smijeVidjeti, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT * FROM restlovi WHERE id=$1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Restl nije pronađen.' });
+    const restl = r.rows[0];
+    res.setHeader('Content-Type', 'application/dxf');
+    res.setHeader('Content-Disposition', `attachment; filename="${restl.oznaka}.dxf"`);
+    res.send(napraviDXF(restl));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/restlovi/:id/dxf-sacuvaj — isti crtež, ali se trajno smjesti na R2 i
+// link se zapamti, da se može poslati majstoru bez ponovnog generisanja.
+router.post('/:id/dxf-sacuvaj', smijeUnositi, async (req, res) => {
+  try {
+    const { uploadFile } = require('./storage');
+    const r = await pool.query('SELECT * FROM restlovi WHERE id=$1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Restl nije pronađen.' });
+    const restl = r.rows[0];
+    const buf = Buffer.from(napraviDXF(restl), 'utf8');
+    const link = await uploadFile(`restlovi/${restl.oznaka}.dxf`, buf, 'application/dxf');
+    await pool.query('UPDATE restlovi SET dxf_url=$1 WHERE id=$2', [link, restl.id]);
+    res.json({ ok: true, link });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 /* ─────────────────────────── istorija ─────────────────────────── */

@@ -176,11 +176,22 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
         <label class="polje">Oblik<select id="n_oblik" onchange="osvjeziCrtez()" style="width:160px">
           <option value="pravougaonik">Pravougaonik</option>
           <option value="L">L-oblik</option>
+          <option value="poligon">Kosi rez / trapez / nepravilan</option>
         </select></label>
         <label class="polje">A — širina *<input type="number" id="n_a" oninput="osvjeziCrtez()" style="width:110px"></label>
         <label class="polje">B — visina *<input type="number" id="n_b" oninput="osvjeziCrtez()" style="width:110px"></label>
         <label class="polje" id="w_c" style="display:none">C — izrez šir.<input type="number" id="n_c" oninput="osvjeziCrtez()" style="width:110px"></label>
         <label class="polje" id="w_d" style="display:none">D — izrez vis.<input type="number" id="n_d" oninput="osvjeziCrtez()" style="width:110px"></label>
+      </div>
+
+      <div id="w_poligon" style="display:none;margin-top:12px">
+        <div class="hint" style="margin-bottom:6px">
+          Unesi tjemena redom, obilazeći komad u istom smjeru (npr. suprotno od kazaljke).
+          Prvo tjeme je (0,0) — donji lijevi ugao. Y raste nagore, sve u milimetrima.
+        </div>
+        <div id="tjemena_lista"></div>
+        <button type="button" class="btn sec mali" onclick="dodajTjeme()">+ tjeme</button>
+        <button type="button" class="btn sec mali" onclick="predlozakTrapez()">Trapez (predložak)</button>
       </div>
       <div style="margin-top:12px;display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
         <svg id="crtez" class="crtez" width="300" height="220"></svg>
@@ -242,7 +253,50 @@ document.querySelectorAll('.glavni-tab-btn').forEach(t => t.onclick = () => {
 
 /* ═══════════════ crtež oblika ═══════════════ */
 // A×B pravougaonik, ili L sa izrezom C×D u gornjem desnom uglu.
+function tjemenaOd(oblik, a, b, c, d) {
+  const A = Number(a) || 0, B = Number(b) || 0;
+  if (oblik === 'L') {
+    const C = Number(c) || 0, D = Number(d) || 0;
+    return [[0,0],[A,0],[A,B-D],[A-C,B-D],[A-C,B],[0,B]];
+  }
+  return [[0,0],[A,0],[A,B],[0,B]];
+}
+
+function povrsinaTjemena(t) {
+  let s = 0;
+  for (let i = 0; i < t.length; i++) {
+    const [x1,y1] = t[i], [x2,y2] = t[(i+1) % t.length];
+    s += x1*y2 - x2*y1;
+  }
+  return Math.abs(s) / 2 / 1000000;
+}
+
+// Crta proizvoljan oblik iz tjemena (y se okreće — na ekranu raste nadolje).
+function nacrtajTjemena(svgEl, t, w, h) {
+  w = w || 300; h = h || 220;
+  svgEl.setAttribute('width', w); svgEl.setAttribute('height', h);
+  if (!t || t.length < 3) {
+    svgEl.innerHTML = '<text x="' + (w/2) + '" y="' + (h/2) + '" text-anchor="middle" font-size="12" fill="#8b96a5">unesi tjemena</text>';
+    return;
+  }
+  const xs = t.map(p => p[0]), ys = t.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const sirina = maxX - minX || 1, visina = maxY - minY || 1;
+  const pad = 26;
+  const k = Math.min((w - pad*2) / sirina, (h - pad*2) / visina);
+  const px = p => (w - sirina*k)/2 + (p[0] - minX) * k;
+  const py = p => (h - visina*k)/2 + (maxY - p[1]) * k;
+  const put = t.map((p, i) => (i ? 'L' : 'M') + px(p).toFixed(1) + ' ' + py(p).toFixed(1)).join(' ') + ' Z';
+  svgEl.innerHTML =
+    '<path d="' + put + '" fill="#e8f0fa" stroke="#1a5fa8" stroke-width="1.5"/>' +
+    t.map(p => '<circle cx="' + px(p).toFixed(1) + '" cy="' + py(p).toFixed(1) + '" r="2.5" fill="#1a5fa8"/>').join('') +
+    '<text x="' + (w/2) + '" y="' + (h - 6) + '" text-anchor="middle" font-size="10.5" fill="#8b96a5">' +
+      Math.round(sirina) + ' × ' + Math.round(visina) + ' mm</text>';
+}
+
 function nacrtaj(svgEl, oblik, a, b, c, d, w, h) {
+  if (oblik === 'poligon') return nacrtajTjemena(svgEl, citajTjemena(), w, h);
   w = w || 300; h = h || 220;
   const A = Number(a) || 0, B = Number(b) || 0;
   const C = Number(c) || 0, D = Number(d) || 0;
@@ -277,15 +331,48 @@ function povrsinaOd(oblik, a, b, c, d) {
   return Math.max(0, oblik === 'L' ? (A * B - C * D) : (A * B)) / 1000000;
 }
 
+let TJEMENA = [[0,0],[1200,0],[700,600],[0,600]];
+
+function citajTjemena() {
+  const red = [...document.querySelectorAll('#tjemena_lista .tjeme-red')];
+  if (!red.length) return TJEMENA;
+  return red.map(r => [
+    Number(r.querySelector('.tj-x').value) || 0,
+    Number(r.querySelector('.tj-y').value) || 0
+  ]);
+}
+
+function crtajTjemena() {
+  document.getElementById('tjemena_lista').innerHTML = TJEMENA.map((p, i) =>
+    '<div class="tjeme-red" style="display:flex;gap:6px;align-items:center;margin-bottom:5px">' +
+    '<span style="font-size:11px;color:#8b96a5;width:52px">Tjeme ' + (i+1) + '</span>' +
+    '<input class="tj-x" type="number" value="' + p[0] + '" oninput="tjemeIzmijenjeno()" style="width:96px" placeholder="X">' +
+    '<input class="tj-y" type="number" value="' + p[1] + '" oninput="tjemeIzmijenjeno()" style="width:96px" placeholder="Y">' +
+    (TJEMENA.length > 3 ? '<button type="button" class="btn sec mali" onclick="obrisiTjeme(' + i + ')">×</button>' : '') +
+    '</div>'
+  ).join('');
+}
+
+function tjemeIzmijenjeno() { TJEMENA = citajTjemena(); osvjeziCrtez(); }
+function dodajTjeme() { TJEMENA = citajTjemena(); TJEMENA.push([0,0]); crtajTjemena(); osvjeziCrtez(); }
+function obrisiTjeme(i) { TJEMENA = citajTjemena(); TJEMENA.splice(i,1); crtajTjemena(); osvjeziCrtez(); }
+function predlozakTrapez() {
+  TJEMENA = [[0,0],[1200,0],[700,600],[0,600]];
+  crtajTjemena(); osvjeziCrtez();
+}
+
 function osvjeziCrtez() {
   const oblik = document.getElementById('n_oblik').value;
-  const jeL = oblik === 'L';
+  const jeL = oblik === 'L', jeP = oblik === 'poligon';
   document.getElementById('w_c').style.display = jeL ? 'flex' : 'none';
   document.getElementById('w_d').style.display = jeL ? 'flex' : 'none';
+  document.getElementById('w_poligon').style.display = jeP ? 'block' : 'none';
+  ['n_a','n_b'].forEach(x => { document.getElementById(x).closest('label').style.display = jeP ? 'none' : 'flex'; });
+  if (jeP && !document.querySelector('#tjemena_lista .tjeme-red')) crtajTjemena();
   const a = document.getElementById('n_a').value, b = document.getElementById('n_b').value;
   const c = document.getElementById('n_c').value, d = document.getElementById('n_d').value;
   nacrtaj(document.getElementById('crtez'), oblik, a, b, c, d);
-  const p = povrsinaOd(oblik, a, b, c, d);
+  const p = oblik === 'poligon' ? povrsinaTjemena(citajTjemena()) : povrsinaOd(oblik, a, b, c, d);
   const cij = Number(document.getElementById('n_cijena').value) || 0;
   document.getElementById('povrsina_info').textContent =
     'Površina: ' + m2(p) + (cij ? '  ·  vrijednost: ' + fmt(p * cij) + ' KM' : '');
@@ -373,11 +460,13 @@ async function trazi() {
         '<div class="uspjeh" style="margin-top:14px">Pronađeno ' + d.kandidati.length +
         ' restl(ova) u koje komad ' + sirina + '×' + visina + ' mm staje. Prvi u listi ostavlja najmanje otpada.</div>' +
         '<div class="tbl-wrap"><table><thead><tr><th>Oznaka</th><th>Materijal</th><th>Oblik / mjere</th><th>Površina</th>' +
-        '<th>Otpad ako se uzme</th><th>PJ</th><th></th></tr></thead><tbody>' +
+        '<th>Otpad ako se uzme</th><th>Položaj</th><th>PJ</th><th></th></tr></thead><tbody>' +
         d.kandidati.map(r =>
           '<tr><td><b>' + r.oznaka + '</b></td><td>' + (r.materijal || '') + '</td>' +
-          '<td>' + (r.oblik === 'L' ? 'L ' : '') + r.dim_a + '×' + r.dim_b +
+          '<td>' + (r.oblik === 'L' ? 'L ' : r.oblik === 'poligon' ? '⬟ ' : '') + r.dim_a + '×' + r.dim_b +
           (r.oblik === 'L' ? ' (izrez ' + r.dim_c + '×' + r.dim_d + ')' : '') + '</td>' +
+          '<td class="hint">' + (r.polozaj ? 'na ' + Math.round(r.polozaj.x) + ',' + Math.round(r.polozaj.y) +
+            (r.polozaj.rotiran ? ' (okrenuto)' : '') : '') + '</td>' +
           '<td>' + m2(r.povrsina) + '</td><td>' + m2(r.otpad_m2) + '</td>' +
           '<td>' + (r.objekt_naziv || '') + '</td>' +
           '<td>' + (DOZVOLE.unos ? '<button class="btn mali" onclick="otvoriKoristi(' + r.id + ',' + sirina + ',' + visina + ')">Uzmi za nalog</button>' : '') + '</td></tr>'
@@ -418,7 +507,7 @@ async function ucitajListu() {
         '<tr><td><b>' + r.oznaka + '</b>' + (r.foto_url ? ' <a href="' + r.foto_url + '" target="_blank">📷</a>' : '') + '</td>' +
         '<td>' + (r.materijal || '') + '</td><td>' + (r.grupa || '') + '</td>' +
         '<td>' + (r.debljina_cm || '') + '</td>' +
-        '<td>' + (r.oblik === 'L' ? 'L ' : '') + r.dim_a + '×' + r.dim_b +
+        '<td>' + (r.oblik === 'L' ? 'L ' : r.oblik === 'poligon' ? '⬟ ' : '') + r.dim_a + '×' + r.dim_b +
         (r.oblik === 'L' ? ' (' + r.dim_c + '×' + r.dim_d + ')' : '') + '</td>' +
         '<td>' + m2(r.povrsina) + '</td><td>' + fmt(r.cijena_m2) + '</td>' +
         '<td>' + fmt(r.vrijednost) + '</td><td>' + (r.objekt_naziv || '') + '</td>' +
@@ -427,6 +516,7 @@ async function ucitajListu() {
         (r.nastao_iz_naloga ? '<br>nalog ' + r.nastao_iz_naloga : '') + '</td>' +
         '<td style="white-space:nowrap">' +
         '<button class="btn sec mali" onclick="rodovnik(' + r.id + ')">Rodovnik</button> ' +
+        '<a class="btn sec mali" style="text-decoration:none;display:inline-block" href="/api/restlovi/' + r.id + '/dxf">DXF</a> ' +
         (DOZVOLE.unos && r.status !== 'potrosen'
           ? '<button class="btn sec mali" onclick="otvoriPrenos(' + r.id + ')">Prenos</button> ' +
             '<button class="btn mali" onclick="otvoriKoristi(' + r.id + ')">Uzmi</button>' : '') +
@@ -574,6 +664,7 @@ async function sacuvajNovi() {
     dim_b: document.getElementById('n_b').value,
     dim_c: document.getElementById('n_c').value || 0,
     dim_d: document.getElementById('n_d').value || 0,
+    poligon: document.getElementById('n_oblik').value === 'poligon' ? citajTjemena() : null,
     nastao_iz_naloga: document.getElementById('n_nalog').value || null,
     lokacija: document.getElementById('n_lokacija').value || null,
     napomena: document.getElementById('n_napomena').value || null,
@@ -582,8 +673,10 @@ async function sacuvajNovi() {
     umanji_lager_m2: document.getElementById('n_lager').value || 0,
     izvor: 'tabla'
   };
-  if (!telo.objekt_id || !telo.materijal || !telo.dim_a || !telo.dim_b)
-    return poruka('PJ, materijal i mjere A i B su obavezni.', 'greska');
+  if (!telo.objekt_id || !telo.materijal)
+    return poruka('PJ i materijal su obavezni.', 'greska');
+  if (telo.oblik !== 'poligon' && (!telo.dim_a || !telo.dim_b))
+    return poruka('Mjere A i B su obavezne.', 'greska');
   try {
     const d = await api('', { method: 'POST', body: JSON.stringify(telo) });
     poruka('Restl ' + d.oznaka + ' je sačuvan.' + (d.upozorenje ? ' ' + d.upozorenje : ''),
