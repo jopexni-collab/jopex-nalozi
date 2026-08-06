@@ -14,10 +14,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Install doctl
-      uses: digitalocean/action-doctl@v2
-      with:
-        token: ${{ secrets.DIGITAL_OCEAN_TOKEN }}
     - name: Create .env file
       run: |
         touch .env
@@ -26,8 +22,8 @@ jobs:
     - name: Build the Docker image
       run: docker build . --file Dockerfile -t jopex-test:latest -t ${{ secrets.REGISTRY_NAME }}/jopex-test:latest
     
-    - name: Log in to DigitalOcean Container Registry with short-lived credentials
-      run: doctl registries login ${{ secrets.REGISTRY_NAME }} --expiry-seconds 1200
+    - name: Log in to DigitalOcean Container Registry
+      run: docker login -u ${{ secrets.DIGITAL_OCEAN_TOKEN }} -p ${{ secrets.DIGITAL_OCEAN_TOKEN }} ${{ secrets.REGISTRY_NAME }}
 
     - name: Push image to DigitalOcean Container Registry
       run: docker push ${{ secrets.REGISTRY_NAME }}/jopex-test:latest
