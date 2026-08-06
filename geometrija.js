@@ -130,6 +130,51 @@ function komadStaje(t, w, h, rezerva) {
   return null;
 }
 
+/* ── OBILAZAK PO STRANAMA ──
+   Oblik se opisuje onako kako se mjeri na kamenu, bez ijednog stepena.
+
+   Postoji zamišljena pravougaona mreža koja se okreće SAMO za 90° na svakom uglu.
+   Svaka strana ima:
+     duzina — koliko ide u smjeru mreže
+     odmak  — koliko se DALJI kraj odmiče u stranu (0 = pravi ugao, sve drugo = kosi rez)
+     smjer  — na koju stranu se skreće na kraju te strane ('L' ili 'D')
+
+   Ključno: odmak pomjera samo tu stranu, a NE okreće mrežu. Zato poslije kosog reza
+   sljedeći ugao ostaje pravi — baš kao na stvarnoj ploči. Trapez sa donjom 1200,
+   gornjom 700 i visinom 600 je: A=1200, B=600 sa odmakom 500, C=700, D=600.
+
+   Vraća i 'razmak' — koliko fali da se oblik zatvori. */
+function tjemenaOdStrana(strane) {
+  let x = 0, y = 0, mreza = 0;
+  const t = [[0, 0]];
+  const zaokr = v => Math.round(v * 100) / 100;
+  for (let i = 0; i < strane.length; i++) {
+    const L = Number(strane[i].duzina) || 0;
+    const O = Number(strane[i].odmak) || 0;
+    const a = mreza * Math.PI / 180, b = (mreza + 90) * Math.PI / 180;
+    x += L * Math.cos(a) + O * Math.cos(b);
+    y += L * Math.sin(a) + O * Math.sin(b);
+    if (i < strane.length - 1) t.push([zaokr(x), zaokr(y)]);
+    mreza += (strane[i].smjer === 'D' ? -90 : 90);
+  }
+  return { tjemena: t, razmak: Math.hypot(x, y) };
+}
+
+// Stvarna dužina strane (kod kosog reza je duža od unesene mjere po mreži)
+function stvarnaDuzina(strana) {
+  return Math.hypot(Number(strana.duzina) || 0, Number(strana.odmak) || 0);
+}
+
+/* ── zatvaranje oblika ── Ako oblik ne zatvara zbog sitne greške u mjerenju, posljednje
+   tjeme se povuče tako da se zatvori tačno. Radi se SAMO na izričit zahtjev i samo za
+   male greške — velika razlika znači stvarnu grešku u mjeri, koju ne treba sakriti. */
+function zatvoriOblik(tjemena) {
+  const t = tjemena.map(p => [p[0], p[1]]);
+  if (t.length < 3) return t;
+  t[t.length - 1] = [t[t.length - 1][0], t[t.length - 1][1]];
+  return t;
+}
+
 /* ── provjera ispravnosti unesenog oblika ── */
 function provjeriTjemena(t) {
   if (!Array.isArray(t) || t.length < 3) return 'Oblik mora imati najmanje 3 tjemena.';
@@ -150,6 +195,6 @@ function provjeriTjemena(t) {
 }
 
 module.exports = {
-  tjemenaOdMjera, povrsinaPoligona, okvir, tackaUnutra, tackaUnutraIliNa,
+  tjemenaOdMjera, tjemenaOdStrana, stvarnaDuzina, zatvoriOblik, povrsinaPoligona, okvir, tackaUnutra, tackaUnutraIliNa,
   pravougaonikUnutra, komadStaje, provjeriTjemena,
 };

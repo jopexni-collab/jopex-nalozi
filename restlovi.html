@@ -185,31 +185,41 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
       </div>
 
       <div id="w_poligon" style="display:none;margin-top:12px">
-        <div class="hint" style="margin-bottom:6px">
-          Unesi tjemena redom, obilazeći komad u istom smjeru (npr. suprotno od kazaljke).
-          Prvo tjeme je (0,0) — donji lijevi ugao. Y raste nagore, sve u milimetrima.
+        <div class="hint" style="margin-bottom:8px">
+          Obilazi komad od ugla do ugla i upiši dužinu svake strane. Strana A ide udesno
+          od donjeg lijevog ugla.<br>
+          <b>Odmak ostavi na 0 kad je ugao prav.</b> Kod kosog reza upiši za koliko se dalji kraj
+          strane odmiče u stranu — npr. ploča kojoj je dolje 1200, gore 700 a visina 600
+          ima stranu B: dužina 600, odmak 500. Ako se kosina nagne na pogrešnu stranu
+          na crtežu, samo stavi minus.
         </div>
-        <div id="tjemena_lista"></div>
-        <button type="button" class="btn sec mali" onclick="dodajTjeme()">+ tjeme</button>
-        <button type="button" class="btn sec mali" onclick="predlozakTrapez()">Trapez (predložak)</button>
-      </div>
-      <div style="margin-top:12px;display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
-        <svg id="crtez" class="crtez" width="300" height="220"></svg>
-        <div>
-          <div class="hint" id="povrsina_info">Površina: —</div>
-          <div style="margin-top:12px">
-            <label class="polje">Lokacija u magacinu<input type="text" id="n_lokacija" placeholder="npr. regal 3, gore" style="width:220px"></label>
+        <div id="skica_panel" style="border:1px dashed var(--border);border-radius:10px;padding:10px;margin-bottom:12px;background:#fafbfc">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">
+            <canvas id="skica" width="320" height="250"
+              style="border:1px solid var(--border);border-radius:8px;background:#fff;touch-action:none;cursor:crosshair"></canvas>
+            <div style="flex:1;min-width:190px">
+              <div class="hint" style="margin:0 0 8px">
+                Prstom obiđi oblik komada — ne mora biti uredno, ravnaće se samo.
+                Kad podigneš prst, oblik se zatvara i pretvara u strane A, B, C…
+              </div>
+              <label class="polje" style="margin-bottom:8px">Najduža strana je otprilike (mm)
+                <input type="number" id="skica_mjerilo" value="1200" style="width:130px"></label>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button type="button" class="btn sec mali" onclick="ocistiSkicu()">Očisti</button>
+                <button type="button" class="btn mali" onclick="primijeniSkicu()">Pretvori u strane</button>
+              </div>
+              <div id="skica_poruka" class="hint" style="margin-top:8px"></div>
+            </div>
           </div>
-          <div style="margin-top:10px">
-            <label class="polje">Napomena<textarea id="n_napomena" rows="2" style="width:260px"></textarea></label>
-          </div>
         </div>
-        <div>
-          <label class="polje">Slika (telefon)
-            <input type="file" accept="image/*" capture="environment" id="n_foto" onchange="posaljiSliku(this)">
-          </label>
-          <div id="foto_pregled"></div>
+        <div id="strane_lista"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+          <button type="button" class="btn sec mali" onclick="dodajStranu()">+ strana</button>
+          <button type="button" class="btn sec mali" onclick="predlozak('pravougaonik')">Pravougaonik</button>
+          <button type="button" class="btn sec mali" onclick="predlozak('L')">L-oblik</button>
+          <button type="button" class="btn sec mali" onclick="predlozak('trapez')">Trapez</button>
         </div>
+        <div id="zatvaranje" style="margin-top:10px"></div>
       </div>
     </fieldset>
 
@@ -291,12 +301,21 @@ function nacrtajTjemena(svgEl, t, w, h) {
   svgEl.innerHTML =
     '<path d="' + put + '" fill="#e8f0fa" stroke="#1a5fa8" stroke-width="1.5"/>' +
     t.map(p => '<circle cx="' + px(p).toFixed(1) + '" cy="' + py(p).toFixed(1) + '" r="2.5" fill="#1a5fa8"/>').join('') +
+    t.map((p, i) => {
+      const q = t[(i + 1) % t.length];
+      const mx = (px(p) + px(q)) / 2, my = (py(p) + py(q)) / 2;
+      const duz = Math.round(Math.hypot(q[0] - p[0], q[1] - p[1]));
+      return '<text x="' + mx.toFixed(1) + '" y="' + (my - 4).toFixed(1) + '" text-anchor="middle" ' +
+        'font-size="10.5" font-weight="700" fill="#134a85">' + 'ABCDEFGHIJKLMNOP'[i] + '</text>' +
+        '<text x="' + mx.toFixed(1) + '" y="' + (my + 8).toFixed(1) + '" text-anchor="middle" ' +
+        'font-size="9.5" fill="#8b96a5">' + duz + '</text>';
+    }).join('') +
     '<text x="' + (w/2) + '" y="' + (h - 6) + '" text-anchor="middle" font-size="10.5" fill="#8b96a5">' +
       Math.round(sirina) + ' × ' + Math.round(visina) + ' mm</text>';
 }
 
 function nacrtaj(svgEl, oblik, a, b, c, d, w, h) {
-  if (oblik === 'poligon') return nacrtajTjemena(svgEl, citajTjemena(), w, h);
+  if (oblik === 'poligon') return nacrtajTjemena(svgEl, citajTjemena(), w || 340, h || 260);
   w = w || 300; h = h || 220;
   const A = Number(a) || 0, B = Number(b) || 0;
   const C = Number(c) || 0, D = Number(d) || 0;
@@ -331,34 +350,325 @@ function povrsinaOd(oblik, a, b, c, d) {
   return Math.max(0, oblik === 'L' ? (A * B - C * D) : (A * B)) / 1000000;
 }
 
-let TJEMENA = [[0,0],[1200,0],[700,600],[0,600]];
+let STRANE = [
+  { duzina: 1200, odmak: 0, smjer: 'L' },
+  { duzina: 800,  odmak: 0, smjer: 'L' },
+  { duzina: 1200, odmak: 0, smjer: 'L' },
+  { duzina: 800,  odmak: 0, smjer: 'L' },
+];
+const SLOVA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
-function citajTjemena() {
-  const red = [...document.querySelectorAll('#tjemena_lista .tjeme-red')];
-  if (!red.length) return TJEMENA;
-  return red.map(r => [
-    Number(r.querySelector('.tj-x').value) || 0,
-    Number(r.querySelector('.tj-y').value) || 0
-  ]);
+// Obilazak po zamišljenoj pravougaonoj mreži koja se okreće samo za 90°.
+// 'odmak' pomjera dalji kraj strane u stranu, ali NE okreće mrežu — zato poslije
+// kosog reza sljedeći ugao ostaje pravi. Isti račun kao geometrija.js na serveru.
+function tjemenaOdStrana(strane) {
+  let x = 0, y = 0, mreza = 0;
+  const t = [[0, 0]];
+  const zaokr = v => Math.round(v * 100) / 100;
+  for (let i = 0; i < strane.length; i++) {
+    const L = Number(strane[i].duzina) || 0;
+    const O = Number(strane[i].odmak) || 0;
+    const a = mreza * Math.PI / 180, b = (mreza + 90) * Math.PI / 180;
+    x += L * Math.cos(a) + O * Math.cos(b);
+    y += L * Math.sin(a) + O * Math.sin(b);
+    if (i < strane.length - 1) t.push([zaokr(x), zaokr(y)]);
+    mreza += (strane[i].smjer === 'D' ? -90 : 90);
+  }
+  return { tjemena: t, razmak: Math.hypot(x, y) };
 }
 
-function crtajTjemena() {
-  document.getElementById('tjemena_lista').innerHTML = TJEMENA.map((p, i) =>
-    '<div class="tjeme-red" style="display:flex;gap:6px;align-items:center;margin-bottom:5px">' +
-    '<span style="font-size:11px;color:#8b96a5;width:52px">Tjeme ' + (i+1) + '</span>' +
-    '<input class="tj-x" type="number" value="' + p[0] + '" oninput="tjemeIzmijenjeno()" style="width:96px" placeholder="X">' +
-    '<input class="tj-y" type="number" value="' + p[1] + '" oninput="tjemeIzmijenjeno()" style="width:96px" placeholder="Y">' +
-    (TJEMENA.length > 3 ? '<button type="button" class="btn sec mali" onclick="obrisiTjeme(' + i + ')">×</button>' : '') +
-    '</div>'
-  ).join('');
+/* ═══════════════ SKICIRANJE RUKOM ═══════════════
+   Tok: sirovi potez prstom → izbacivanje drhtaja (Ramer–Douglas–Peucker) →
+   svaka ivica se razloži na dužinu po mreži i odmak u stranu → uglovi koji su
+   blizu pravog se poravnaju na tačno 90° → posljednja strana se doštima da se
+   oblik zatvori tačno. Rezultat je ista ona tabela strana koju bi ručno kucao. */
+
+let SKICA = [];        // tekući potez u pikselima
+let SKICA_CRTA = false;
+
+function skicaPlatno() { return document.getElementById('skica'); }
+
+function skicaTacka(e) {
+  const c = skicaPlatno(), r = c.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  return [(t.clientX - r.left) * (c.width / r.width), (t.clientY - r.top) * (c.height / r.height)];
 }
 
-function tjemeIzmijenjeno() { TJEMENA = citajTjemena(); osvjeziCrtez(); }
-function dodajTjeme() { TJEMENA = citajTjemena(); TJEMENA.push([0,0]); crtajTjemena(); osvjeziCrtez(); }
-function obrisiTjeme(i) { TJEMENA = citajTjemena(); TJEMENA.splice(i,1); crtajTjemena(); osvjeziCrtez(); }
-function predlozakTrapez() {
-  TJEMENA = [[0,0],[1200,0],[700,600],[0,600]];
-  crtajTjemena(); osvjeziCrtez();
+function skicaCrtaj(zatvoreno, pojednostavljeno) {
+  const c = skicaPlatno(), x = c.getContext('2d');
+  x.clearRect(0, 0, c.width, c.height);
+  if (SKICA.length > 1) {
+    x.strokeStyle = '#c8d2dd'; x.lineWidth = 2; x.lineJoin = 'round'; x.lineCap = 'round';
+    x.beginPath(); x.moveTo(SKICA[0][0], SKICA[0][1]);
+    for (const p of SKICA.slice(1)) x.lineTo(p[0], p[1]);
+    if (zatvoreno) x.closePath();
+    x.stroke();
+  }
+  if (pojednostavljeno && pojednostavljeno.length > 2) {
+    x.strokeStyle = '#1a5fa8'; x.lineWidth = 2.5;
+    x.beginPath(); x.moveTo(pojednostavljeno[0][0], pojednostavljeno[0][1]);
+    for (const p of pojednostavljeno.slice(1)) x.lineTo(p[0], p[1]);
+    x.closePath(); x.stroke();
+    x.fillStyle = '#1a5fa8';
+    for (const p of pojednostavljeno) { x.beginPath(); x.arc(p[0], p[1], 3.5, 0, 7); x.fill(); }
+  }
+}
+
+function ocistiSkicu() {
+  SKICA = [];
+  skicaCrtaj(false, null);
+  document.getElementById('skica_poruka').textContent = '';
+}
+
+/* ── izbacivanje drhtaja ruke ── */
+function udaljenostOdPrave(p, a, b) {
+  const dx = b[0]-a[0], dy = b[1]-a[1];
+  const d2 = dx*dx + dy*dy;
+  if (!d2) return Math.hypot(p[0]-a[0], p[1]-a[1]);
+  let t = ((p[0]-a[0])*dx + (p[1]-a[1])*dy) / d2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p[0] - (a[0]+t*dx), p[1] - (a[1]+t*dy));
+}
+
+function rdp(tacke, eps) {
+  if (tacke.length < 3) return tacke;
+  let maxD = 0, idx = 0;
+  for (let i = 1; i < tacke.length - 1; i++) {
+    const d = udaljenostOdPrave(tacke[i], tacke[0], tacke[tacke.length-1]);
+    if (d > maxD) { maxD = d; idx = i; }
+  }
+  if (maxD <= eps) return [tacke[0], tacke[tacke.length-1]];
+  return rdp(tacke.slice(0, idx+1), eps).slice(0, -1).concat(rdp(tacke.slice(idx), eps));
+}
+
+/* ── čišćenje tjemena ──
+   Dvije stvari kvare prepoznavanje: prekratke ivice (drhtaj u uglu) i tjemena na
+   kojima se pravac skoro ne mijenja (jedna kosina koju je RDP razlomio na dva
+   poteza). Oba se uklanjaju, u krug, dok se oblik ne umiri. */
+function ocistiTjemena(tacke, dijag) {
+  let t = tacke.slice();
+  for (let prolaz = 0; prolaz < 6 && t.length > 3; prolaz++) {
+    const prije = t.length;
+
+    t = t.filter((p, i) => {
+      const q = t[(i + 1) % t.length];
+      return Math.hypot(q[0] - p[0], q[1] - p[1]) > dijag * 0.06;
+    });
+    if (t.length < 3) break;
+
+    // tjeme na kojem se pravac mijenja za manje od 22° nije ugao nego ista linija
+    const zadrzi = t.map((p, i) => {
+      const a = t[(i - 1 + t.length) % t.length], b = t[(i + 1) % t.length];
+      const u1 = Math.atan2(p[1] - a[1], p[0] - a[0]);
+      const u2 = Math.atan2(b[1] - p[1], b[0] - p[0]);
+      const skret = Math.abs(((u2 - u1) * 180 / Math.PI % 360 + 540) % 360 - 180);
+      return skret > 22;
+    });
+    if (zadrzi.some(z => !z) && t.length > 3) t = t.filter((p, i) => zadrzi[i]);
+
+    if (t.length === prije) break;
+  }
+  return t;
+}
+
+/* ── potez → tjemena ── */
+function skicaUTjemena() {
+  if (SKICA.length < 8) return null;
+  const xs = SKICA.map(p => p[0]), ys = SKICA.map(p => p[1]);
+  const dijag = Math.hypot(Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys));
+  if (dijag < 40) return null;
+
+  let t = rdp(SKICA, dijag * 0.035);
+  // prva i posljednja tačka su isti ugao — spoji ih
+  if (t.length > 3 && Math.hypot(t[0][0]-t[t.length-1][0], t[0][1]-t[t.length-1][1]) < dijag * 0.12) t.pop();
+  t = ocistiTjemena(t, dijag);
+  return t.length >= 3 ? t : null;
+}
+
+/* ── tjemena → strane (dužina po mreži + odmak) ── */
+function tjemenaUStrane(tj, mjerilo) {
+  // ekran ima y nadolje, CAD ima y nagore
+  let p = tj.map(q => [q[0], -q[1]]);
+  let pov = 0;
+  for (let i = 0; i < p.length; i++) {
+    const a = p[i], b = p[(i+1) % p.length];
+    pov += a[0]*b[1] - b[0]*a[1];
+  }
+  if (pov < 0) p.reverse();   // uvijek obilazak suprotno od kazaljke
+
+  const n = p.length;
+  const ivice = p.map((a, i) => { const b = p[(i+1) % n]; return [b[0]-a[0], b[1]-a[1]]; });
+  const uglovi = ivice.map(v => Math.atan2(v[1], v[0]) * 180 / Math.PI);
+  const razlika = (a, b) => Math.abs(((a - b) % 360 + 540) % 360 - 180);
+
+  // mreža za prvu ivicu = najbliža osa; svaka sljedeća skreće tačno ±90°
+  const mreze = [];
+  let g = Math.round(uglovi[0] / 90) * 90;
+  for (let i = 0; i < n; i++) {
+    mreze.push(g);
+    const sljedeci = uglovi[(i+1) % n];
+    g = razlika(g + 90, sljedeci) <= razlika(g - 90, sljedeci) ? g + 90 : g - 90;
+  }
+
+  const strane = [];
+  for (let i = 0; i < n; i++) {
+    const a = mreze[i] * Math.PI/180, b = (mreze[i] + 90) * Math.PI/180;
+    let duzina = ivice[i][0]*Math.cos(a) + ivice[i][1]*Math.sin(a);
+    let odmak  = ivice[i][0]*Math.cos(b) + ivice[i][1]*Math.sin(b);
+    const skrece = ((mreze[(i+1) % n] - mreze[i]) % 360 + 360) % 360;
+    strane.push({ duzina: duzina * mjerilo, odmak: odmak * mjerilo, smjer: skrece === 90 ? 'L' : 'D' });
+  }
+
+  // Poravnanje: mali odmak je drhtaj ruke, ne kosina → na nulu.
+  // Radi se za SVE strane odjednom, prije zatvaranja — inače bi poravnanje
+  // posljednje strane pokvarilo zatvaranje koje smo tek postigli.
+  // Prag se mjeri i prema NAJDUŽOJ strani, ne samo prema svojoj — inače kratka
+  // strana zadrži odmak koji je u odnosu na cijeli komad očigledno drhtaj.
+  const najduzaStrana = Math.max(...strane.map(s => Math.abs(s.duzina)));
+  for (const s of strane) {
+    const prag = Math.max(Math.abs(s.duzina) * 0.12, najduzaStrana * 0.05, 15);
+    if (Math.abs(s.odmak) < prag) s.odmak = 0;
+  }
+
+  // Zaokruživanje na 5 mm — ali SAMO za strane osim posljednje.
+  const zadnji = strane.length - 1;
+  for (let i = 0; i < zadnji; i++) {
+    strane[i].duzina = Math.max(0, Math.round(strane[i].duzina / 5) * 5);
+    strane[i].odmak = Math.round(strane[i].odmak / 5) * 5;
+  }
+
+  // Posljednja strana se računa TAČNO iz uslova da se oblik zatvori. Ona ima baš
+  // dva slobodna broja (dužinu i odmak), koliko i razlika ima osa — pa uvijek
+  // postoji rješenje. Zato oblik uvijek zatvara, koliko god je ruka drhtala.
+  let mreza = 0;
+  for (let i = 0; i < zadnji; i++) mreza += strane[i].smjer === 'D' ? -90 : 90;
+  const kraj = tjemenaOdStrana(strane).tjemena;
+  const pocetakZadnje = kraj[kraj.length - 1];
+  const treba = [-pocetakZadnje[0], -pocetakZadnje[1]];
+  const ax = mreza * Math.PI/180, bx = (mreza + 90) * Math.PI/180;
+  const zatvori = () => {
+    const k = tjemenaOdStrana(strane).tjemena;
+    const p = k[k.length - 1];
+    strane[zadnji].duzina = Math.round((-p[0]*Math.cos(ax) - p[1]*Math.sin(ax)) * 10) / 10;
+    strane[zadnji].odmak  = Math.round((-p[0]*Math.cos(bx) - p[1]*Math.sin(bx)) * 10) / 10;
+  };
+  zatvori();
+
+  // Posljednja strana često pokupi odmak od par milimetara — to je ostatak drhtaja,
+  // a na ekranu izgleda kao kosi rez. Taj višak se prebacuje u dužinu PRETHODNE strane
+  // (ona je upravo okomita, pa upija tačno tu razliku), a posljednja ostaje pravi ugao.
+  const sitan = Math.max(Math.abs(strane[zadnji].duzina) * 0.12, najduzaStrana * 0.05, 20);
+  if (strane[zadnji].odmak !== 0 && Math.abs(strane[zadnji].odmak) < sitan && zadnji >= 1) {
+    const visak = strane[zadnji].odmak, prije = strane[zadnji - 1].duzina;
+    for (const znak of [1, -1]) {
+      strane[zadnji - 1].duzina = Math.round((prije + znak * visak) / 5) * 5;
+      zatvori();
+      if (Math.abs(strane[zadnji].odmak) < 1) { strane[zadnji].odmak = 0; break; }
+    }
+    if (Math.abs(strane[zadnji].odmak) >= 1) { strane[zadnji - 1].duzina = prije; zatvori(); }
+  }
+
+  return strane;
+}
+
+function primijeniSkicu() {
+  const el = document.getElementById('skica_poruka');
+  const tj = skicaUTjemena();
+  if (!tj) { el.innerHTML = '<b style="color:#c0392b">Nacrtaj oblik na platnu — potez je prekratak.</b>'; return; }
+  if (tj.length > 12) { el.innerHTML = '<b style="color:#c0392b">Previše uglova (' + tj.length + ') — nacrtaj mirnije, sa jasnim ivicama.</b>'; return; }
+
+  const xs = tj.map(p => p[0]), ys = tj.map(p => p[1]);
+  const najduza = Math.max(Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys));
+  const zeljena = Number(document.getElementById('skica_mjerilo').value) || 1200;
+
+  STRANE = tjemenaUStrane(tj, zeljena / najduza);
+  crtajStrane(); osvjeziCrtez();
+  skicaCrtaj(true, tj);
+  const kosih = STRANE.filter(s => s.odmak !== 0).length;
+  el.innerHTML = 'Prepoznato ' + STRANE.length + ' strana' +
+    (kosih ? ', od toga ' + kosih + ' kosih. ' : '. ') +
+    '<b>Sad ispravi mjere</b> — brojevi su samo procjena sa crteža.';
+}
+
+(function vezeSkice() {
+  const c = skicaPlatno();
+  if (!c) return;
+  const poc = e => { e.preventDefault(); SKICA = [skicaTacka(e)]; SKICA_CRTA = true; skicaCrtaj(false, null); };
+  const kroz = e => { if (!SKICA_CRTA) return; e.preventDefault(); SKICA.push(skicaTacka(e)); skicaCrtaj(false, null); };
+  const kraj = e => { if (!SKICA_CRTA) return; e.preventDefault(); SKICA_CRTA = false; skicaCrtaj(true, null); primijeniSkicu(); };
+  c.addEventListener('mousedown', poc);   c.addEventListener('touchstart', poc, { passive: false });
+  c.addEventListener('mousemove', kroz);  c.addEventListener('touchmove', kroz, { passive: false });
+  window.addEventListener('mouseup', kraj); c.addEventListener('touchend', kraj);
+})();
+
+function citajStrane() {
+  const red = [...document.querySelectorAll('#strane_lista .strana-red')];
+  if (!red.length) return STRANE;
+  return red.map(r => ({
+    duzina: Number(r.querySelector('.st-duz').value) || 0,
+    odmak:  Number(r.querySelector('.st-odmak').value) || 0,
+    smjer:  r.querySelector('.st-smjer').value,
+  }));
+}
+
+function citajTjemena() { return tjemenaOdStrana(citajStrane()).tjemena; }
+
+function crtajStrane() {
+  document.getElementById('strane_lista').innerHTML =
+    '<div style="display:flex;gap:6px;font-size:10.5px;color:#8b96a5;font-weight:700;margin-bottom:4px;flex-wrap:wrap">' +
+      '<span style="width:20px"></span><span style="width:110px">Dužina (mm)</span>' +
+      '<span style="width:110px">Odmak (mm)</span><span style="width:104px">Ugao na kraju</span></div>' +
+    STRANE.map((s, i) => {
+      const kosi = Number(s.odmak) !== 0;
+      const stvarna = Math.round(Math.hypot(Number(s.duzina) || 0, Number(s.odmak) || 0));
+      return '<div class="strana-red" style="display:flex;gap:6px;align-items:center;margin-bottom:5px;flex-wrap:wrap">' +
+        '<span style="font-weight:800;color:#134a85;width:20px;font-size:13px">' + SLOVA[i] + '</span>' +
+        '<input class="st-duz" type="number" value="' + s.duzina + '" oninput="straneIzmijenjene()" style="width:110px">' +
+        '<input class="st-odmak" type="number" value="' + (s.odmak || 0) + '" oninput="straneIzmijenjene()" ' +
+          'style="width:110px' + (kosi ? ';border-color:#e67e22;background:#fff8f0' : '') + '">' +
+        '<select class="st-smjer" onchange="straneIzmijenjene()" style="width:104px">' +
+          '<option value="L"' + (s.smjer === 'L' ? ' selected' : '') + '>◄ 90° lijevo</option>' +
+          '<option value="D"' + (s.smjer === 'D' ? ' selected' : '') + '>► 90° desno</option>' +
+        '</select>' +
+        '<span class="hint" style="margin:0">' +
+          (kosi ? 'kosi rez — stvarna dužina ' + stvarna + ' mm' : 'pravi ugao') + '</span>' +
+        (STRANE.length > 3 ? '<button type="button" class="btn sec mali" onclick="obrisiStranu(' + i + ')">×</button>' : '') +
+        '</div>';
+    }).join('');
+}
+
+function straneIzmijenjene() { STRANE = citajStrane(); crtajStrane(); osvjeziCrtez(); }
+function dodajStranu() { STRANE = citajStrane(); STRANE.push({ duzina: 0, odmak: 0, smjer: 'L' }); crtajStrane(); osvjeziCrtez(); }
+function obrisiStranu(i) { STRANE = citajStrane(); STRANE.splice(i, 1); crtajStrane(); osvjeziCrtez(); }
+
+function predlozak(vrsta) {
+  const S = (d, o, s) => ({ duzina: d, odmak: o || 0, smjer: s || 'L' });
+  if (vrsta === 'pravougaonik') STRANE = [S(1200), S(800), S(1200), S(800)];
+  if (vrsta === 'L')            STRANE = [S(1200), S(500), S(400, 0, 'D'), S(300), S(800), S(800)];
+  if (vrsta === 'trapez')       STRANE = [S(1200), S(600, 500), S(700), S(600)];
+  crtajStrane(); osvjeziCrtez();
+}
+
+// Provjera zatvaranja — ako se oblik ne zatvori, negdje je pogrešna mjera i to se
+// vidi ODMAH, prije nego što neko ode rezati.
+function provjeriZatvaranje() {
+  const strane = citajStrane();
+  const r = tjemenaOdStrana(strane);
+  const el = document.getElementById('zatvaranje');
+  if (!el) return r;
+  const obim = strane.reduce((z, s) => z + Math.hypot(Number(s.duzina) || 0, Number(s.odmak) || 0), 0);
+  if (r.razmak < 1) {
+    el.innerHTML = '<div class="msg ok" style="margin:0">✓ Oblik se zatvara. Površina ' +
+      fmt(povrsinaTjemena(r.tjemena)) + ' m².</div>';
+  } else if (r.razmak < obim * 0.02) {
+    el.innerHTML = '<div class="msg err" style="margin:0">Oblik ne zatvara — fali ' +
+      Math.round(r.razmak) + ' mm. Vjerovatno sitna greška u mjeri; provjeri strane prije čuvanja.</div>';
+  } else {
+    el.innerHTML = '<div class="msg err" style="margin:0">Oblik ne zatvara — razlika ' +
+      Math.round(r.razmak) + ' mm. Previše da bi bila greška u mjerenju: provjeri smjerove ' +
+      'skretanja i znak odmaka (+ ili −).</div>';
+  }
+  return r;
 }
 
 function osvjeziCrtez() {
@@ -368,9 +678,10 @@ function osvjeziCrtez() {
   document.getElementById('w_d').style.display = jeL ? 'flex' : 'none';
   document.getElementById('w_poligon').style.display = jeP ? 'block' : 'none';
   ['n_a','n_b'].forEach(x => { document.getElementById(x).closest('label').style.display = jeP ? 'none' : 'flex'; });
-  if (jeP && !document.querySelector('#tjemena_lista .tjeme-red')) crtajTjemena();
+  if (jeP && !document.querySelector('#strane_lista .strana-red')) crtajStrane();
   const a = document.getElementById('n_a').value, b = document.getElementById('n_b').value;
   const c = document.getElementById('n_c').value, d = document.getElementById('n_d').value;
+  if (oblik === 'poligon') provjeriZatvaranje();
   nacrtaj(document.getElementById('crtez'), oblik, a, b, c, d);
   const p = oblik === 'poligon' ? povrsinaTjemena(citajTjemena()) : povrsinaOd(oblik, a, b, c, d);
   const cij = Number(document.getElementById('n_cijena').value) || 0;
@@ -677,6 +988,12 @@ async function sacuvajNovi() {
     return poruka('PJ i materijal su obavezni.', 'greska');
   if (telo.oblik !== 'poligon' && (!telo.dim_a || !telo.dim_b))
     return poruka('Mjere A i B su obavezne.', 'greska');
+  if (telo.oblik === 'poligon') {
+    const r = tjemenaOdStrana(citajStrane());
+    if (r.razmak >= 1)
+      return poruka('Oblik se ne zatvara — fali ' + Math.round(r.razmak) +
+                    ' mm. Ispravi mjere prije čuvanja.', 'greska');
+  }
   try {
     const d = await api('', { method: 'POST', body: JSON.stringify(telo) });
     poruka('Restl ' + d.oznaka + ' je sačuvan.' + (d.upozorenje ? ' ' + d.upozorenje : ''),
