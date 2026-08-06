@@ -424,8 +424,15 @@ function skicaCrtaj(zatvoreno, pojednostavljeno) {
 
 function ocistiSkicu() {
   SKICA = [];
+  IZABRANA_STRANA = null;
   skicaCrtaj(false, null);
   document.getElementById('skica_poruka').textContent = '';
+  const omot = document.getElementById('digital_omot');
+  if (omot) omot.style.display = 'none';
+  const dig = document.getElementById('digital');
+  if (dig) dig.innerHTML = '';
+  const unos = document.getElementById('digital_unos');
+  if (unos) unos.innerHTML = '';
 }
 
 /* ── izbacivanje drhtaja ruke ── */
@@ -518,7 +525,7 @@ function tjemenaUStrane(tj, mjerilo) {
     g = razlika(g + 90, sljedeci) <= razlika(g - 90, sljedeci) ? g + 90 : g - 90;
   }
 
-  const strane = [];
+  let strane = [];
   for (let i = 0; i < n; i++) {
     const a = mreze[i] * Math.PI/180, b = (mreze[i] + 90) * Math.PI/180;
     let duzina = ivice[i][0]*Math.cos(a) + ivice[i][1]*Math.sin(a);
@@ -526,6 +533,17 @@ function tjemenaUStrane(tj, mjerilo) {
     const skrece = ((mreze[(i+1) % n] - mreze[i]) % 360 + 360) % 360;
     strane.push({ duzina: duzina * mjerilo, odmak: odmak * mjerilo, smjer: skrece === 90 ? 'L' : 'D' });
   }
+
+  // Obilazak u tjemenaOdStrana UVIJEK kreće udesno (kurs 0). Ako prva nacrtana ivica
+  // nije išla udesno, oblik bi ispao zarotiran za 90° ili 180° u odnosu na ono što je
+  // nacrtano. Zato se lista zarotira tako da strana A bude baš ona koja ide udesno.
+  const normala = m => ((m % 360) + 360) % 360;
+  let pocetak = mreze.findIndex(m => normala(m) === 0);
+  if (pocetak < 0) {
+    let naj = 1e9;
+    mreze.forEach((m, i) => { const d = Math.min(normala(m), 360 - normala(m)); if (d < naj) { naj = d; pocetak = i; } });
+  }
+  if (pocetak > 0) strane = strane.slice(pocetak).concat(strane.slice(0, pocetak));
 
   // Poravnanje: mali odmak je drhtaj ruke, ne kosina → na nulu.
   // Radi se za SVE strane odjednom, prije zatvaranja — inače bi poravnanje
@@ -688,7 +706,9 @@ function crtajDigitalno() {
   if (!svg) return;
   const strane = citajStrane();
   const t = tjemenaOdStrana(strane).tjemena;
-  if (!t || t.length < 3) { omot.style.display = 'none'; return; }
+  if (!t || t.length < 3 || !SKICA.length && IZABRANA_STRANA === null && omot.style.display === 'none') {
+    if (!t || t.length < 3) { omot.style.display = 'none'; return; }
+  }
   omot.style.display = 'block';
 
   const w = 330, hh = 270, pad = 34;
@@ -764,18 +784,44 @@ function crtajStrane() {
       return '<div class="strana-red" style="display:flex;gap:6px;align-items:center;margin-bottom:5px;flex-wrap:wrap' +
         (IZABRANA_STRANA === i ? ';background:#eef4fc;border-radius:6px;padding:3px' : '') + '">' +
         '<span style="font-weight:800;color:#134a85;width:20px;font-size:13px">' + SLOVA[i] + '</span>' +
-        '<input class="st-duz" type="number" value="' + s.duzina + '" oninput="straneIzmijenjene()" style="width:110px">' +
-        '<input class="st-odmak" type="number" value="' + (s.odmak || 0) + '" oninput="straneIzmijenjene()" ' +
+        '<input class="st-duz" type="number" value="' + s.duzina + '" onchange="primijeniIzmjene()" ' +
+          'onkeydown="if(event.key===\'Enter\'){event.preventDefault();primijeniIzmjene();}" style="width:110px">' +
+        '<input class="st-odmak" type="number" value="' + (s.odmak || 0) + '" onchange="primijeniIzmjene()" ' +
+          'onkeydown="if(event.key===\'Enter\'){event.preventDefault();primijeniIzmjene();}" ' +
           'style="width:110px' + (kosi ? ';border-color:#e67e22;background:#fff8f0' : '') + '">' +
-        '<select class="st-smjer" onchange="straneIzmijenjene()" style="width:104px">' +
+        '<select class="st-smjer" onchange="primijeniIzmjene()" style="width:104px">' +
           '<option value="L"' + (s.smjer === 'L' ? ' selected' : '') + '>◄ 90° lijevo</option>' +
           '<option value="D"' + (s.smjer === 'D' ? ' selected' : '') + '>► 90° desno</option>' +
         '</select>' +
-        '<span class="hint" style="margin:0">' +
+        '<button type="button" class="btn mali" onclick="primijeniIzmjene()" title="Potvrdi mjeru">✓</button>' +
+        '<span class="st-opis hint" style="margin:0">' +
           (kosi ? 'kosi rez — stvarna dužina ' + stvarna + ' mm' : 'pravi ugao') + '</span>' +
         (STRANE.length > 3 ? '<button type="button" class="btn sec mali" onclick="obrisiStranu(' + i + ')">×</button>' : '') +
         '</div>';
     }).join('');
+}
+
+// Primjenjuje ono što je ukucano BEZ ponovnog pravljenja redova — inače bi polje u
+// kojem kucaš izgubilo fokus i kursor bi skakao. Redovi se prave iznova samo kad se
+// mijenja BROJ strana (dodavanje, brisanje, nova skica, predložak).
+function primijeniIzmjene() {
+  STRANE = citajStrane();
+  const redovi = document.querySelectorAll('#strane_lista .strana-red');
+  STRANE.forEach((s, i) => {
+    const red = redovi[i];
+    if (!red) return;
+    const kosi = Number(s.odmak) !== 0;
+    const opis = red.querySelector('.st-opis');
+    if (opis) opis.textContent = kosi
+      ? 'kosi rez — stvarna dužina ' + Math.round(Math.hypot(s.duzina, s.odmak)) + ' mm'
+      : 'pravi ugao';
+    const polje = red.querySelector('.st-odmak');
+    if (polje) {
+      polje.style.borderColor = kosi ? '#e67e22' : '';
+      polje.style.background = kosi ? '#fff8f0' : '';
+    }
+  });
+  osvjeziCrtez();
 }
 
 function straneIzmijenjene() { STRANE = citajStrane(); crtajStrane(); osvjeziCrtez(); }
