@@ -120,7 +120,7 @@ a.lk{color:var(--blue);text-decoration:none;}
 #kom-kontekst-meni button:hover{background:#f0f2f5;}
 #kom-kontekst-meni button.obrisi{color:#c0392b;}
 #kom-tooltip{position:fixed;z-index:499;background:#fff8e6;border:1px solid #f0d78c;border-radius:6px;padding:8px 10px;font-size:11.5px;max-width:260px;box-shadow:0 2px 8px rgba(0,0,0,.15);display:none;pointer-events:none;}
-#status-log-tooltip{position:fixed;z-index:499;background:#eef4fc;border:1px solid #b8d0f0;border-radius:6px;padding:8px 10px;font-size:11px;max-width:280px;max-height:320px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.15);display:none;pointer-events:none;line-height:1.5;}
+#status-log-tooltip{position:fixed;z-index:499;background:#eef4fc;border:1px solid #b8d0f0;border-radius:6px;padding:8px 10px;font-size:11px;max-width:280px;max-height:320px;overflow-y:auto;box-shadow:0 2px 8px rgba(0,0,0,.15);display:none;line-height:1.5;}
 </style>
 </head>
 <body>
@@ -731,14 +731,28 @@ function renderStatusLogTooltip(log, polje){
   const naziv=STATUS_LOG_NAZIVI[polje]||polje;
   const originalna=log[log.length-1].stara_vrijednost;
   let html=`<div style="margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #b8d0f0;"><b>Originalno:</b> ${esc(statusLogVrijednostText(polje,originalna))}</div>`;
-  html+=log.map(l=>{
+  html+=log.map((l,i)=>{
     const inicijali=(l.korisnik_ime||'?').split(/\s+/).map(x=>x[0]).join('').toUpperCase().slice(0,2);
     const datum=new Date(l.kada).toLocaleDateString('sr-Latn-BA',{day:'2-digit',month:'2-digit',year:'numeric'});
     const vrijeme=new Date(l.kada).toLocaleTimeString('sr-Latn-BA',{hour:'2-digit',minute:'2-digit'});
-    return `<div style="margin-bottom:4px;"><b>${esc(inicijali)}</b> · ${datum} · ${vrijeme}<br>${esc(statusLogVrijednostText(polje,l.stara_vrijednost))} → <b>${esc(statusLogVrijednostText(polje,l.nova_vrijednost))}</b></div>`;
+    // "Undo" dugme se prikazuje SAMO za najnoviju (prvu, i=0) promjenu — vraćanje starije
+    // van reda bi preskočilo međukorake i zbunilo istoriju. Backend i onako ovo ponovo
+    // provjerava (409 ako je nešto promijenjeno u međuvremenu).
+    const undoDugme = i===0 ? `<button onclick="undoPromjenu(${komentarMeta.rBr},${l.id},'${polje}')" style="font-size:10px;padding:2px 6px;margin-left:6px;border:1px solid var(--blue,#1a5fa8);color:var(--blue,#1a5fa8);background:#fff;border-radius:4px;cursor:pointer;">↩️ Undo</button>` : '';
+    return `<div style="margin-bottom:4px;"><b>${esc(inicijali)}</b> · ${datum} · ${vrijeme}${undoDugme}<br>${esc(statusLogVrijednostText(polje,l.stara_vrijednost))} → <b>${esc(statusLogVrijednostText(polje,l.nova_vrijednost))}</b></div>`;
   }).join('');
   tip.innerHTML=`<div style="font-weight:700;margin-bottom:4px;">${esc(naziv)} — istorija</div>`+html;
   tip.style.display='block';
+}
+async function undoPromjenu(rBr, logId, polje){
+  if(!confirm('Vratiti ovo polje na prethodnu vrijednost?')) return;
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/${rBr}/undo/${logId}`,{method:'POST'});
+    const data=await r.json();
+    if(!r.ok){ alert('✗ '+data.error); return; }
+    document.getElementById('status-log-tooltip').style.display='none';
+    await load(); // osvježi listu da se vidi vraćena vrijednost
+  }catch(e){ alert('✗ Greška pri undo-u.'); }
 }
 // Zatvara tooltip na sledeći klik bilo gde (isti obrazac kao kom-kontekst-meni).
 let zadnjiKlikX=0, zadnjiKlikY=0;

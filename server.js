@@ -8,6 +8,11 @@ const pgSession  = require('connect-pg-simple')(session);
 const pool       = require('./db');
 const requireLogin = require('./requireLogin');
 const app = express();
+// Iza reverse proxy-ja (nginx, itd.) — bez ovoga Express NE VJERUJE zaglavlju
+// X-Forwarded-Proto koje nginx šalje, pa "misli" da je konekcija HTTP čak i kad je
+// stvarna konekcija (klijent → nginx) HTTPS. To može praviti probleme sa "secure"
+// kolačićem i drugom logikom koja zavisi od req.protocol/req.secure.
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '15mb' })); // slike sa telefona (base64) lako prelaze 2mb
 app.use(express.urlencoded({ extended: false }));
 app.use((req, res, next) => {
@@ -32,6 +37,8 @@ app.use(session({
     maxAge: 30 * 60 * 1000, // 30 minuta neaktivnosti
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax', // eksplicitno postavljeno — bez ovoga browser koristi svoj default,
+                      // što ponekad pravi probleme kod redirect tokova iza reverse proxy-ja
   },
 }));
 function requireLoginOrApiKey(req, res, next) {
@@ -74,6 +81,14 @@ app.use('/api/blagajna-razduzenja', requireLoginOrApiKey, require('./blagajna-ra
 app.use((req, res, next) => {
   if (req.path.endsWith('.html')) {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    // Beleži KO je otvorio KOJU stranicu i KADA — samo za prijavljene korisnike, bez
+    // blokiranja odgovora (fire-and-forget, ne čeka se upit u bazu).
+    if (req.session?.user && req.session.user.id) {
+      pool.query(
+        `INSERT INTO stranica_posjete (korisnik_id, korisnik_ime, putanja) VALUES ($1,$2,$3)`,
+        [req.session.user.id, req.session.user.ime_prezime, req.path]
+      ).catch(() => {}); // greška u logovanju ne smije nikad srušiti stranicu
+    }
   }
   next();
 });

@@ -150,11 +150,73 @@ router.get('/:r_br/status-log', async (req, res) => {
   try {
     const { polje } = req.query;
     const r = await pool.query(
-      `SELECT kolona, stara_vrijednost, nova_vrijednost, korisnik_ime, kada
+      `SELECT id, kolona, stara_vrijednost, nova_vrijednost, korisnik_ime, kada
        FROM status_promjene_log WHERE r_br=$1 ${polje ? 'AND kolona=$2' : ''} ORDER BY kada DESC LIMIT 20`,
       polje ? [req.params.r_br, polje] : [req.params.r_br]
     );
     res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Polja čija je stvarna kolona u proizvodnja_jopex BOOLEAN tip (log ih čuva kao tekst
+// 'true'/'false' — undo mora pravilno pretvoriti nazad u pravi boolean).
+const BOOLEAN_POLJA = ['gotovo', 'naplaceno'];
+
+// Whitelist SVIH kolona koje undo smije da mijenja — log.kolona se koristi direktno u SQL
+// (dinamičko ime kolone), pa MORA proći kroz ovu provjeru prije upotrebe (odbrana od
+// SQL injekcije, čak i ako bi status_promjene_log ikad sadržao neočekivan unos).
+const UNDO_DOZVOLJENE_KOLONE = [
+  'status', 'gotovo', 'reklamacija_dodatni_rad', 'nova_procjena',
+  'zadatak', 'prioritet', 'narucilac', 'materijal', 'pocetak', 'planirani_zavrsetak',
+  'napomena', 'link_skica', 'link_ponuda', 'ugovorio',
+  'ugovorena_suma', 'avans', 'naplata_detalji', 'naplaceno_fakturisano',
+  'dodatni_rad_napomena', 'naplaceno',
+];
+
+// POST /api/proizvodnja/:r_br/undo/:logId — vraća JEDNO polje na vrijednost koju je imalo
+// PRIJE te konkretne promjene (stara_vrijednost iz log reda). Dozvoljeno SAMO ako je ovo
+// još uvijek NAJNOVIJA promjena za to polje (spriječava zbrku ako je neko posle toga opet
+// mijenjao — undo bi "preskočio" međukorak). Sam undo se TAKOĐE loguje (novi red u
+// status_promjene_log), da audit trag ostane potpun i taj korak.
+router.post('/:r_br/undo/:logId', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  try {
+    const logRes = await pool.query(
+      `SELECT * FROM status_promjene_log WHERE id=$1 AND r_br=$2`,
+      [req.params.logId, req.params.r_br]
+    );
+    if (!logRes.rows.length) return res.status(404).json({ error: 'Zapis u istoriji nije pronađen.' });
+    const log = logRes.rows[0];
+
+    const najnoviji = await pool.query(
+      `SELECT id FROM status_promjene_log WHERE r_br=$1 AND kolona=$2 ORDER BY kada DESC LIMIT 1`,
+      [req.params.r_br, log.kolona]
+    );
+    if (najnoviji.rows[0]?.id !== log.id) {
+      return res.status(409).json({ error: 'Ovo više nije najnovija promjena za ovo polje (neko je posle toga opet menjao) — undo nije moguć bez preskakanja koraka.' });
+    }
+
+    if (!UNDO_DOZVOLJENE_KOLONE.includes(log.kolona)) {
+      return res.status(400).json({ error: 'Ovo polje ne podržava undo.' });
+    }
+
+    let vrijednostZaUpis = log.stara_vrijednost;
+    if (BOOLEAN_POLJA.includes(log.kolona)) vrijednostZaUpis = vrijednostZaUpis === 'true';
+
+    await pool.query(
+      `UPDATE proizvodnja_jopex SET ${log.kolona} = $1 WHERE r_br = $2`,
+      [vrijednostZaUpis, req.params.r_br]
+    );
+    await pool.query(
+      `INSERT INTO status_promjene_log (r_br, kolona, stara_vrijednost, nova_vrijednost, korisnik_id, korisnik_ime)
+       VALUES ($1,$2,$3,$4,$5,$6)`,
+      [req.params.r_br, log.kolona, log.nova_vrijednost, log.stara_vrijednost, user.id, user.ime_prezime + ' (undo)']
+    );
+
+    res.json({ ok: true, kolona: log.kolona, vraceno_na: log.stara_vrijednost });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
