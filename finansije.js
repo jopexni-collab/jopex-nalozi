@@ -507,7 +507,7 @@ router.get('/vp-cekanje', async (req, res) => {
   try {
     const r = await pool.query(`
       SELECT
-        o.broj, o.datum, o.kupac_naziv, o.komercijalista_ime, o.objekt_naziv,
+        o.id, o.broj, o.datum, o.kupac_naziv, o.komercijalista_ime, o.objekt_naziv,
         o.ukupan_iznos, o.iznos_placeno, o.status_placanja,
         (o.ukupan_iznos - o.iznos_placeno) AS duguje,
         COUNT(g.id) AS broj_zapisa,

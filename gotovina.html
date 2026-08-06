@@ -1185,7 +1185,7 @@ async function ucitajVpCekanje(){
         akcija=`<button class="btn-predaj" onclick="potvrdiVpOtpremnicu('${esc(o.broj).replace(/'/g,"\\'")}')" style="white-space:nowrap;">✓ Potvrdi otpremnicu</button>`;
       }else if(!jePlaceno){
         boja='background:#fce8e6;border:1px solid #e8a8a0;';
-        akcija=`<button class="btn-predaj" onclick="location.href='maloprodaja.html?naplati_otpremnicu=${encodeURIComponent(o.broj)}'" style="white-space:nowrap;background:var(--red);border-color:var(--red);">⚠ Nije plaćeno — Naplati</button>`;
+        akcija=`<button class="btn-predaj" onclick="location.href='maloprodaja.html?naplati_otpremnicu=${o.id}'" style="white-space:nowrap;background:var(--red);border-color:var(--red);">⚠ Nije plaćeno — Naplati</button>`;
       }else{
         boja='background:#e6f4ea;border:1px solid #a8d8b8;';
         akcija=`<span style="color:var(--green);font-weight:700;font-size:12px;white-space:nowrap;">✓ Plaćeno${o.naplatio_ime?' — '+esc(o.naplatio_ime):''}${o.naplatio_kada?' · '+fd(o.naplatio_kada):''}</span>`;
@@ -1917,7 +1917,7 @@ async function otvoriDugDetalji(kupacId, naziv){
         <div style="font-size:11px;color:#8b96a5;margin-top:2px;">${s.datum?new Date(s.datum).toLocaleDateString('sr-Latn-BA'):'—'} · ${esc(s.opis||'')}</div>
         ${kategZnacka?`<div style="margin-top:4px;">${kategZnacka}</div>`:''}
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
-          ${s.tip==='otpremnica'?`<button class="btn-sm" onclick="location.href='maloprodaja.html?naplati_otpremnicu=${s.broj}'" style="flex:1;min-width:110px;background:var(--blue,#1a5fa8);color:#fff;">Naplati ovu →</button>`:''}
+          ${s.tip==='otpremnica'?`<button class="btn-sm" onclick="location.href='maloprodaja.html?naplati_otpremnicu=${s.stavka_id}'" style="flex:1;min-width:110px;background:var(--blue,#1a5fa8);color:#fff;">Naplati ovu →</button>`:''}
           ${s.tip==='radni_nalog'?`<button class="btn-sm" onclick="otvoriNaplataNaloga(${s.broj},'sve',${s.iznos})" style="flex:1;min-width:110px;background:var(--green,#1f8a4c);color:#fff;">✓ Naplati</button>`:''}
           ${s.kategorija!=='ocekivana_naplata'?`<button class="btn-sm" onclick="postaviStavkaKategorija('${s.tip}','${s.stavka_id}','ocekivana_naplata','${kupacId||''}','${esc(naziv).replace(/'/g,"\\'")}')" style="flex:1;min-width:90px;background:#eef4fc;color:var(--blue,#1a5fa8);">→ Očekivana</button>`:''}
           ${s.kategorija!=='tesko_naplativo'?`<button class="btn-sm" onclick="postaviStavkaKategorija('${s.tip}','${s.stavka_id}','tesko_naplativo','${kupacId||''}','${esc(naziv).replace(/'/g,"\\'")}')" style="flex:1;min-width:90px;background:#fce8e6;color:var(--red,#c0392b);">→ Teško napl.</button>`:''}
