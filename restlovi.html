@@ -213,8 +213,9 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
           </div>
           <div id="digital_omot" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
             <div class="hint" style="margin-bottom:6px">
-              <b>Prepoznati oblik.</b> Dodirni <b>slovo strane</b> da upišeš njenu mjeru,
-              ili <b>ugao</b> da ga postaviš na pravi (90°). Ugao koji nije prav prikazan je narandžasto.
+              <b>Prepoznati oblik.</b> <b>Povuci tjeme prstom</b> da grubo namjestiš oblik, pa upiši
+              tačne mjere u polja ispod. Dodir na <b>malo slovo</b> otvara unos strane, na <b>veliko slovo</b>
+              unos kota tjemena. Narandžasto = ugao nije prav.
             </div>
             <svg id="digital" width="330" height="270" class="crtez" style="touch-action:manipulation"></svg>
             <div id="digital_unos" style="margin-top:8px"></div>
@@ -365,7 +366,20 @@ let STRANE = [
   { duzina: 1200, odmak: 0, smjer: 'L' },
   { duzina: 800,  odmak: 0, smjer: 'L' },
 ];
-const SLOVA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const SLOVA_T = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';        // TJEMENA — velika slova
+const SLOVA_S = 'abcdefghijklmnopqrstuvwxyz';        // strane — mala slova
+const SLOVA = SLOVA_S;                               // zadržano radi starijih poziva
+
+// Stvarna dužina strane — ono što se izmjeri metrom. Kod kosog reza je duža od
+// mjere po mreži, jer je hipotenuza: √(duzina² + odmak²).
+function stvarnaDuz(s) {
+  return Math.round(Math.hypot(Number(s.duzina) || 0, Number(s.odmak) || 0) * 10) / 10;
+}
+// Obrnuto: iz izmjerene stvarne dužine i odmaka dobija se mjera po mreži.
+function duzPoMrezi(stvarna, odmak) {
+  const T = Math.abs(Number(stvarna) || 0), O = Math.abs(Number(odmak) || 0);
+  return T <= O ? 0 : Math.round(Math.sqrt(T*T - O*O) * 10) / 10;
+}
 
 // Obilazak po zamišljenoj pravougaonoj mreži koja se okreće samo za 90°.
 // 'odmak' pomjera dalji kraj strane u stranu, ali NE okreće mrežu — zato poslije
@@ -709,7 +723,7 @@ function postaviTjeme(v, noviX, noviY) {
   STRANE = straneIzTjemena(tj, strane.map(s => s.smjer));
   crtajStrane(); osvjeziCrtez();
   document.getElementById('skica_poruka').innerHTML =
-    'Tjeme ' + (v + 1) + ' pomjereno. Oblik ostaje zatvoren jer se mijenjaju tjemena, ne strane.';
+    'Tjeme ' + SLOVA_T[v] + ' pomjereno. Oblik ostaje zatvoren jer se mijenjaju tjemena, ne strane.';
 }
 
 // Zatvaranje bez pravljenja novih kosina: razlika se upije u DUŽINE dvije strane
@@ -787,10 +801,14 @@ function crtajDigitalno() {
 
   const w = 380, hh = 320, lijevo = 54, dolje = 46, gore = 18, desno = 46;
   const xs = t.map(p => p[0]), ys = t.map(p => p[1]);
-  const minX = Math.min(...xs), maxX = Math.max(...xs);
-  const minY = Math.min(...ys), maxY = Math.max(...ys);
-  const sw = (maxX - minX) || 1, sh = (maxY - minY) || 1;
-  const k = Math.min((w - lijevo - desno) / sw, (hh - dolje - gore) / sh);
+  const minX0 = Math.min(...xs), maxX = Math.max(...xs);
+  const minY0 = Math.min(...ys), maxY = Math.max(...ys);
+  const sw = (maxX - minX0) || 1, sh = (maxY - minY0) || 1;
+  // Dok se tjeme vuče prstom, razmjera se ZAMRZAVA — inače bi se cijeli crtež
+  // prilagođavao novom okviru pri svakom pomjeraju i bježao ispod prsta.
+  const k = VUCEM ? PRESLIKA.k : Math.min((w - lijevo - desno) / sw, (hh - dolje - gore) / sh);
+  const minX = VUCEM ? PRESLIKA.minX : minX0;
+  const minY = VUCEM ? PRESLIKA.minY : minY0;
   const px = p => lijevo + (p[0] - minX) * k;
   const py = p => hh - dolje - (p[1] - minY) * k;
   const L = px([minX, 0]), D = px([maxX, 0]), B = py([0, minY]), G = py([0, maxY]);
@@ -826,6 +844,9 @@ function crtajDigitalno() {
   });
 
   // ── sam oblik ──
+  PRESLIKA = { lijevo, dolje, hh, k, minX, minY, w };
+  TJEMENA_PRIKAZ = t;
+
   const put = t.map((p, i) => (i ? 'L' : 'M') + px(p).toFixed(1) + ' ' + py(p).toFixed(1)).join(' ') + ' Z';
   s += '<path d="' + put + '" fill="#e8f0fa" stroke="#1a5fa8" stroke-width="1.5"/>';
 
@@ -846,7 +867,9 @@ function crtajDigitalno() {
       (prav
         ? '<rect x="' + (x-4.5).toFixed(1) + '" y="' + (y-4.5).toFixed(1) + '" width="9" height="9" fill="#fff" stroke="#1f8a4c" stroke-width="1.8"/>'
         : '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="5" fill="#e67e22"/>') +
-      (IZABRANO_TJEME === v ? '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="10" fill="none" stroke="#1a5fa8" stroke-width="1.5"/>' : '') +
+      (IZABRANO_TJEME === v ? '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="11" fill="none" stroke="#1a5fa8" stroke-width="1.5"/>' : '') +
+      '<text x="' + (x + 9).toFixed(1) + '" y="' + (y - 7).toFixed(1) + '" font-size="12" font-weight="800" ' +
+        'fill="' + (IZABRANO_TJEME === v ? '#1a5fa8' : '#134a85') + '">' + SLOVA_T[v] + '</text>' +
       '</g>';
   });
 
@@ -861,7 +884,7 @@ function crtajDigitalno() {
       '<circle cx="' + mx.toFixed(1) + '" cy="' + my.toFixed(1) + '" r="11" ' +
         'fill="' + (izabrana ? '#1a5fa8' : '#fff') + '" stroke="' + rub + '" stroke-width="1.5"/>' +
       '<text x="' + mx.toFixed(1) + '" y="' + (my + 4).toFixed(1) + '" text-anchor="middle" ' +
-        'font-size="11" font-weight="800" fill="' + (izabrana ? '#fff' : '#134a85') + '">' + SLOVA[i] + '</text>' +
+        'font-size="12" font-weight="800" fill="' + (izabrana ? '#fff' : '#134a85') + '">' + SLOVA_S[i] + '</text>' +
       '<text x="' + mx.toFixed(1) + '" y="' + (my + 24).toFixed(1) + '" text-anchor="middle" ' +
         'font-size="9.5" font-weight="' + (izabrana ? '700' : '400') + '" ' +
         'fill="' + (kriv.krivi.has(i) ? '#c0392b' : (izabrana ? '#134a85' : '#6b7a8d')) + '">' +
@@ -886,11 +909,11 @@ function crtajDigitalno() {
     const kosa = Number(st.odmak) !== 0;
     ispod += '<div class="panel" style="margin:0 0 8px;padding:10px">' +
       '<div style="font-size:12px;font-weight:700;color:#134a85;margin-bottom:8px">Strana ' +
-        SLOVA[IZABRANA_STRANA] + ' — upiši mjeru' +
-        (kosa ? ' <span style="color:#e67e22">(kosi rez, stvarna dužina ' +
-          Math.round(Math.hypot(st.duzina, st.odmak)) + ' mm)</span>' : '') + '</div>' +
+        SLOVA_S[IZABRANA_STRANA] + ' — od tjemena ' + SLOVA_T[IZABRANA_STRANA] + ' do ' +
+        SLOVA_T[(IZABRANA_STRANA + 1) % t.length] +
+        (kosa ? ' <span style="color:#e67e22">(kosi rez, po mreži ' + Math.round(st.duzina) + ' mm)</span>' : '') + '</div>' +
       '<div class="red">' +
-      '<label class="polje">Dužina<input type="number" id="sp_duz" value="' + st.duzina + '" style="width:104px"></label>' +
+      '<label class="polje">Stvarna dužina<input type="number" id="sp_duz" value="' + stvarnaDuz(st) + '" style="width:114px"></label>' +
       '<label class="polje">Odmak u stranu<input type="number" id="sp_odmak" value="' + (st.odmak || 0) + '" style="width:114px"></label>' +
       '<label class="polje">Ugao na kraju<select id="sp_smjer" style="width:112px">' +
         '<option value="L"' + (st.smjer === 'L' ? ' selected' : '') + '>◄ 90° lijevo</option>' +
@@ -905,11 +928,13 @@ function crtajDigitalno() {
     const p = t[IZABRANO_TJEME];
     const odL = Math.round(p[0] - minX), odD = Math.round(maxX - p[0]), vis = Math.round(p[1] - minY);
     ispod += '<div class="panel" style="margin:0 0 8px;padding:10px">' +
-      '<div style="font-size:12px;font-weight:700;color:#134a85;margin-bottom:8px">Tjeme ' + (IZABRANO_TJEME + 1) + ' — izmjeri i upiši</div>' +
+      '<div style="font-size:12px;font-weight:700;color:#134a85;margin-bottom:4px">Tjeme ' +
+        SLOVA_T[IZABRANO_TJEME] + ' — izmjeri od baze i od JEDNE bočne ivice</div>' +
+      '<div class="hint" style="margin-bottom:8px">Popuni visinu, pa <b>ili</b> odstojanje od lijeve <b>ili</b> od desne ivice — šta ti je zgodnije da izmjeriš.</div>' +
       '<div class="red">' +
-      '<label class="polje">Od lijeve ivice<input type="number" id="tj_lijevo" value="' + odL + '" style="width:104px"></label>' +
-      '<label class="polje">Visina od baze<input type="number" id="tj_visina" value="' + vis + '" style="width:104px"></label>' +
-      '<label class="polje">Od desne ivice<input type="number" id="tj_desno" value="' + odD + '" style="width:104px"></label>' +
+      '<label class="polje">Visina od baze<input type="number" id="tj_visina" value="' + vis + '" style="width:110px"></label>' +
+      '<label class="polje">Od lijeve ivice<input type="number" id="tj_lijevo" value="' + odL + '" style="width:110px"></label>' +
+      '<label class="polje">Od desne ivice<input type="number" id="tj_desno" value="' + odD + '" style="width:110px"></label>' +
       '<button type="button" class="btn mali" onclick="primijeniTjeme(' + IZABRANO_TJEME + ',' + minX + ',' + maxX + ')">✓ Primijeni</button>' +
       '<button type="button" class="btn sec mali" onclick="postaviPraviUgao(' + IZABRANO_TJEME + ')">Postavi 90°</button>' +
       '<button type="button" class="btn sec mali" onclick="IZABRANO_TJEME=null;crtajDigitalno()">Zatvori</button>' +
@@ -925,8 +950,15 @@ function crtajDigitalno() {
 function primijeniStranu(i) {
   zapamti();
   STRANE = citajStrane();
-  STRANE[i].duzina = Number(document.getElementById('sp_duz').value) || 0;
-  STRANE[i].odmak  = Number(document.getElementById('sp_odmak').value) || 0;
+  const odmak = Number(document.getElementById('sp_odmak').value) || 0;
+  const stvarna = Number(document.getElementById('sp_duz').value) || 0;
+  if (stvarna && Math.abs(odmak) >= stvarna) {
+    document.getElementById('skica_poruka').innerHTML =
+      '<b style="color:#c0392b">Odmak ne može biti veći od stvarne dužine strane — to nije moguć oblik.</b>';
+    return;
+  }
+  STRANE[i].duzina = duzPoMrezi(stvarna, odmak);
+  STRANE[i].odmak  = odmak;
   STRANE[i].smjer  = document.getElementById('sp_smjer').value;
   crtajStrane(); osvjeziCrtez();
 }
@@ -943,6 +975,77 @@ function ispraviNaPravi(i) {
     ? 'Strana ' + SLOVA[i] + ' poravnata. Dužine ostalih strana su doštimane da oblik ostane zatvoren.'
     : '<b style="color:#c0392b">Strana poravnata, ali oblik ne zatvara — provjeri mjere.</b>';
 }
+
+let PRESLIKA = null, TJEMENA_PRIKAZ = [], VUCEM = null;
+
+function tackaUMm(e) {
+  const svg = document.getElementById('digital');
+  const r = svg.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  const px = (t.clientX - r.left) * (PRESLIKA.w / r.width);
+  const py = (t.clientY - r.top) * (PRESLIKA.hh / r.height);
+  return [PRESLIKA.minX + (px - PRESLIKA.lijevo) / PRESLIKA.k,
+          PRESLIKA.minY + (PRESLIKA.hh - PRESLIKA.dolje - py) / PRESLIKA.k];
+}
+
+function pocniVucenje(e) {
+  if (!PRESLIKA || !TJEMENA_PRIKAZ.length) return;
+  const [mx, my] = tackaUMm(e);
+  const domet = 18 / PRESLIKA.k;          // 18 piksela oko tjemena
+  let naj = -1, najD = domet;
+  TJEMENA_PRIKAZ.forEach((p, i) => {
+    const d = Math.hypot(p[0] - mx, p[1] - my);
+    if (d < najD) { najD = d; naj = i; }
+  });
+  if (naj < 0) return;                     // nije tjeme — puštamo obične dodire
+  e.preventDefault();
+  zapamti();
+  const strane = citajStrane();
+  VUCEM = { v: naj, tj: tjemenaOdStrana(strane).tjemena.map(p => [p[0], p[1]]),
+            smjerovi: strane.map(s => s.smjer), pomjereno: false };
+  IZABRANO_TJEME = naj; IZABRANA_STRANA = null;
+}
+
+function vuci(e) {
+  if (!VUCEM) return;
+  e.preventDefault();
+  let [mx, my] = tackaUMm(e);
+  // zaokruži na 5 mm i poravnaj sa drugim tjemenima — tako uglovi lakše ostanu pravi
+  mx = Math.round(mx / 5) * 5; my = Math.round(my / 5) * 5;
+  const blizu = 12 / PRESLIKA.k;
+  VUCEM.tj.forEach((p, i) => {
+    if (i === VUCEM.v) return;
+    if (Math.abs(p[0] - mx) < blizu) mx = p[0];
+    if (Math.abs(p[1] - my) < blizu) my = p[1];
+  });
+  VUCEM.tj[VUCEM.v] = [mx, my];
+  VUCEM.pomjereno = true;
+  STRANE = straneIzTjemena(VUCEM.tj, VUCEM.smjerovi);
+  crtajStrane(); crtajDigitalno();
+}
+
+function zavrsiVucenje(e) {
+  if (!VUCEM) return;
+  const pomjereno = VUCEM.pomjereno, v = VUCEM.v;
+  VUCEM = null;
+  if (!pomjereno) ISTORIJA.pop();          // samo dodir, nema šta da se poništava
+  crtajStrane(); osvjeziCrtez();
+  if (pomjereno) {
+    document.getElementById('skica_poruka').innerHTML =
+      'Tjeme ' + SLOVA_T[v] + ' pomjereno prstom — sada upiši tačne mjere u polja ispod crteža.';
+  }
+}
+
+(function vezeVucenja() {
+  const svg = document.getElementById('digital');
+  if (!svg) return;
+  svg.addEventListener('mousedown', pocniVucenje);
+  svg.addEventListener('touchstart', pocniVucenje, { passive: false });
+  window.addEventListener('mousemove', vuci);
+  svg.addEventListener('touchmove', vuci, { passive: false });
+  window.addEventListener('mouseup', zavrsiVucenje);
+  svg.addEventListener('touchend', zavrsiVucenje);
+})();
 
 function izaberiTjeme(v) {
   IZABRANO_TJEME = (IZABRANO_TJEME === v ? null : v);
@@ -963,11 +1066,11 @@ function primijeniTjeme(v, minX, maxX) {
 function citajStrane() {
   const red = [...document.querySelectorAll('#strane_lista .strana-red')];
   if (!red.length) return STRANE;
-  return red.map(r => ({
-    duzina: Number(r.querySelector('.st-duz').value) || 0,
-    odmak:  Number(r.querySelector('.st-odmak').value) || 0,
-    smjer:  r.querySelector('.st-smjer').value,
-  }));
+  return red.map(r => {
+    const stvarna = Number(r.querySelector('.st-duz').value) || 0;
+    const odmak = Number(r.querySelector('.st-odmak').value) || 0;
+    return { duzina: duzPoMrezi(stvarna, odmak), odmak, smjer: r.querySelector('.st-smjer').value };
+  });
 }
 
 function citajTjemena() { return tjemenaOdStrana(citajStrane()).tjemena; }
@@ -975,16 +1078,15 @@ function citajTjemena() { return tjemenaOdStrana(citajStrane()).tjemena; }
 function crtajStrane() {
   document.getElementById('strane_lista').innerHTML =
     '<div style="display:flex;gap:6px;font-size:10.5px;color:#8b96a5;font-weight:700;margin-bottom:4px;flex-wrap:wrap">' +
-      '<span style="width:20px"></span><span style="width:110px">Dužina (mm)</span>' +
+      '<span style="width:20px"></span><span style="width:110px">Stvarna dužina (mm)</span>' +
       '<span style="width:110px">Odmak (mm)</span><span style="width:104px">Ugao na kraju</span></div>' +
     STRANE.map((s, i) => {
       const kosi = Number(s.odmak) !== 0;
-      const stvarna = Math.round(Math.hypot(Number(s.duzina) || 0, Number(s.odmak) || 0));
       return '<div class="strana-red" style="display:flex;gap:6px;align-items:center;margin-bottom:5px;flex-wrap:wrap' +
         (IZABRANA_STRANA === i ? ';background:#eef4fc;border-radius:6px;padding:3px' : '') + '">' +
         '<span onclick="izaberiStranu(' + i + ')" style="font-weight:800;color:#134a85;width:20px;' +
-          'font-size:13px;cursor:pointer" title="Prikaži na crtežu">' + SLOVA[i] + '</span>' +
-        '<input class="st-duz" type="number" value="' + s.duzina + '" onchange="primijeniIzmjene()" ' +
+          'font-size:14px;cursor:pointer" title="Prikaži na crtežu">' + SLOVA_S[i] + '</span>' +
+        '<input class="st-duz" type="number" value="' + stvarnaDuz(s) + '" onchange="primijeniIzmjene()" ' +
           'onkeydown="if(event.key===\'Enter\'){event.preventDefault();primijeniIzmjene();}" style="width:110px">' +
         '<input class="st-odmak" type="number" value="' + (s.odmak || 0) + '" onchange="primijeniIzmjene()" ' +
           'onkeydown="if(event.key===\'Enter\'){event.preventDefault();primijeniIzmjene();}" ' +
@@ -995,7 +1097,7 @@ function crtajStrane() {
         '</select>' +
         '<button type="button" class="btn mali" onclick="primijeniIzmjene()" title="Potvrdi mjeru">✓</button>' +
         '<span class="st-opis hint" style="margin:0">' +
-          (kosi ? 'kosi rez — stvarna dužina ' + stvarna + ' mm' : 'pravi ugao') + '</span>' +
+          (kosi ? 'kosi rez — po mreži ' + Math.round(s.duzina) + ' mm' : 'pravi ugao') + '</span>' +
         (STRANE.length > 3 ? '<button type="button" class="btn sec mali" onclick="obrisiStranu(' + i + ')">×</button>' : '') +
         '</div>';
     }).join('');
@@ -1014,7 +1116,7 @@ function primijeniIzmjene() {
     const kosi = Number(s.odmak) !== 0;
     const opis = red.querySelector('.st-opis');
     if (opis) opis.textContent = kosi
-      ? 'kosi rez — stvarna dužina ' + Math.round(Math.hypot(s.duzina, s.odmak)) + ' mm'
+      ? 'kosi rez — po mreži ' + Math.round(s.duzina) + ' mm'
       : 'pravi ugao';
     const polje = red.querySelector('.st-odmak');
     if (polje) {
