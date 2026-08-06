@@ -97,13 +97,13 @@ td.num{text-align:right;font-weight:700;}
 
 <!-- SUME -->
 <div class="sume" id="sume-box">
-  <div class="suma-box" id="card-danas"><div class="val" id="s-danas">—</div><div class="lbl">Danas</div></div>
-  <div class="suma-box" id="card-sedmica"><div class="val" id="s-sedmica">—</div><div class="lbl">Ova sedmica</div></div>
-  <div class="suma-box" id="card-mjesec"><div class="val" id="s-mjesec">—</div><div class="lbl">Ovaj mjesec</div></div>
+  <div class="suma-box" id="card-danas" style="cursor:pointer;" onclick="filtrirajPeriod('danas')" title="Klik da vidiš tačno ove zapise dole u listi"><div class="val" id="s-danas">—</div><div class="lbl">Danas</div></div>
+  <div class="suma-box" id="card-sedmica" style="cursor:pointer;" onclick="filtrirajPeriod('sedmica')" title="Klik da vidiš tačno ove zapise dole u listi"><div class="val" id="s-sedmica">—</div><div class="lbl">Ova sedmica</div></div>
+  <div class="suma-box" id="card-mjesec" style="cursor:pointer;" onclick="filtrirajPeriod('mjesec')" title="Klik da vidiš tačno ove zapise dole u listi"><div class="val" id="s-mjesec">—</div><div class="lbl">Ovaj mjesec</div></div>
   <div id="nepredano-po-pj-cont" style="display:contents;"></div>
-  <div class="suma-box" id="card-naplaceno-nalozi"><div class="val" id="s-naplaceno-nalozi">—</div><div class="lbl">Naplaćeno (nalozi)</div></div>
-  <div class="suma-box ocekivano" id="card-ocekivano-nalozi"><div class="val" id="s-ocekivano-nalozi">—</div><div class="lbl">Očekivano od naloga</div></div>
-  <div class="suma-box ocekivano" id="card-ocekivano-malo"><div class="val" id="s-ocekivano-malo">—</div><div class="lbl">Očekivano od maloprodaje</div></div>
+  <div class="suma-box" id="card-naplaceno-nalozi" style="cursor:pointer;" onclick="otvoriDetaljiSume('naplaceno-nalozi')" title="Klik da vidiš strukturu"><div class="val" id="s-naplaceno-nalozi">—</div><div class="lbl">Naplaćeno (nalozi)</div></div>
+  <div class="suma-box ocekivano" id="card-ocekivano-nalozi" style="cursor:pointer;" onclick="otvoriDetaljiSume('ocekivano-nalozi')" title="Klik da vidiš strukturu"><div class="val" id="s-ocekivano-nalozi">—</div><div class="lbl">Očekivano od naloga</div></div>
+  <div class="suma-box ocekivano" id="card-ocekivano-malo" style="cursor:pointer;" onclick="otvoriDetaljiSume('ocekivano-malo')" title="Klik da vidiš strukturu"><div class="val" id="s-ocekivano-malo">—</div><div class="lbl">Očekivano od maloprodaje</div></div>
 </div>
 
 <!-- BLAGAJNA (blagajnik: svoj PJ; admin: pregled) -->
@@ -447,6 +447,14 @@ td.num{text-align:right;font-weight:700;}
 </div>
 
 <!-- ═══ MODAL: DUG KLIJENTA (dvoklik) ═══ -->
+<div class="modal" id="modal-detalji-sume" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;">
+  <div class="modal-box" style="background:#fff;border-radius:12px;padding:20px;max-width:480px;width:92vw;max-height:80vh;overflow-y:auto;">
+    <h3 id="ds-naslov" style="margin:0 0 12px;">Struktura iznosa</h3>
+    <div id="ds-lista"></div>
+    <button class="btn-sm" onclick="document.getElementById('modal-detalji-sume').style.display='none'" style="width:100%;margin-top:14px;">Zatvori</button>
+  </div>
+</div>
+
 <div class="modal" id="modal-klijent-dug" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;">
   <div class="modal-box" style="background:#fff;border-radius:12px;padding:20px;max-width:460px;width:92vw;max-height:80vh;overflow-y:auto;">
     <h3 id="kd-naslov" style="margin:0 0 12px;">Odakle dolazi dug</h3>
@@ -977,6 +985,53 @@ function filtrirajNaNepredanoPJ(objektNaziv, izvor){
   document.getElementById('fil-izvor').value=izvor||'';
   load();
   document.getElementById('tbody').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+// Klik na "Danas/Ova sedmica/Ovaj mjesec" — filtrira GLAVNU listu ispod na taj period
+// (ista logika kao "Nije predano" mini-kartice) — ne otvara poseban modal, već koristi
+// već postojeću listu (ne dupliramo prikaz, ne vučemo dodatne podatke).
+function filtrirajPeriod(period){
+  const fmtDate=d=>d.toISOString().split('T')[0];
+  const danas=new Date();
+  let od, do_=fmtDate(danas);
+  if(period==='danas') od=fmtDate(danas);
+  else if(period==='sedmica'){ const p=new Date(danas); p.setDate(p.getDate()-6); od=fmtDate(p); }
+  else if(period==='mjesec'){ const p=new Date(danas); p.setDate(p.getDate()-30); od=fmtDate(p); }
+  postaviDMG('fil-od', od);
+  postaviDMG('fil-do', do_);
+  document.getElementById('fil-pj').value='';
+  load();
+  document.getElementById('tbody')?.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+// Klik na "Naplaćeno (nalozi)" / "Očekivano od naloga" / "Očekivano od maloprodaje" —
+// LIJENO učitava strukturu (SAMO kad se klikne, ne unaprijed — da ne zauzima memoriju/
+// mrežu za nešto što možda niko neće ni pogledati).
+const DS_NASLOVI={'naplaceno-nalozi':'Naplaćeno (nalozi) — struktura','ocekivano-nalozi':'Očekivano od naloga — struktura','ocekivano-malo':'Očekivano od maloprodaje — struktura'};
+async function otvoriDetaljiSume(tip){
+  document.getElementById('ds-naslov').textContent=DS_NASLOVI[tip]||'Struktura';
+  document.getElementById('modal-detalji-sume').style.display='flex';
+  const cont=document.getElementById('ds-lista');
+  cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/gotovina/${tip}-detalji`);
+    const rows=await r.json();
+    if(!r.ok) throw new Error(rows.error||'Greška.');
+    if(!rows.length){ cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Nema stavki.</div>'; return; }
+    if(tip==='ocekivano-malo'){
+      cont.innerHTML=rows.map(o=>`
+        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #eee;font-size:12.5px;">
+          <div><b>${esc(o.broj)}</b> — ${esc(o.kupac_naziv||'—')}<div style="color:#8b96a5;font-size:10.5px;">${esc(o.objekt_naziv||'')} · ${new Date(o.datum).toLocaleDateString('sr-Latn-BA')}</div></div>
+          <b style="color:var(--red);">${fmValuta(o.duguje, o.valuta)}</b>
+        </div>`).join('');
+    }else{
+      cont.innerHTML=rows.map(n=>`
+        <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #eee;font-size:12.5px;">
+          <div><b>#${n.r_br}</b> — ${esc(n.narucilac||'—')}<div style="color:#8b96a5;font-size:10.5px;">${esc(n.zadatak||'')}</div></div>
+          <b>${fm(tip==='ocekivano-nalozi'?n.za_naplatu:n.ugovorena_suma)} KM</b>
+        </div>`).join('');
+    }
+  }catch(e){ cont.innerHTML=`<div style="text-align:center;color:red;padding:20px;">${esc(e.message)}</div>`; }
 }
 
 async function load(){

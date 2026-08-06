@@ -139,13 +139,15 @@ router.get('/suma', async (req, res) => {
 
     // Naloga — koristi STVARNU kolonu "naplaceno" (checkbox/štiklirano u lista.html), ne
     // izračunato polje. "Naplaćeno" = zbir ugovorena_suma za sve naloge gdje JE štiklirano;
-    // "Očekivano od naloga" = zbir za_naplatu (ugovorena_suma - avans) za one koji NISU.
+    // "Očekivano od naloga" = zbir za_naplatu — ISTA formula kao proizvodnja.js/lista.html
+    // (ugovorena_suma - avans - naplaceno_iznos), da se cifra ovdje uvek slaže sa sumom
+    // dole u listi naloga. Isključuje STORNIRANE naloge (isto kao lista.html).
     let naplacenoNalozi = 0, ocekivanoNalozi = 0;
     try {
       const rn = await pool.query(`
         SELECT
-          COALESCE(SUM(COALESCE(ugovorena_suma,0)) FILTER (WHERE naplaceno IS TRUE), 0) AS naplaceno_ukupno,
-          COALESCE(SUM(GREATEST(COALESCE(ugovorena_suma,0) - COALESCE(avans,0), 0)) FILTER (WHERE naplaceno IS NOT TRUE), 0) AS ocekivano_ukupno
+          COALESCE(SUM(COALESCE(ugovorena_suma,0)) FILTER (WHERE naplaceno IS TRUE AND COALESCE(stornirano,false)=false), 0) AS naplaceno_ukupno,
+          COALESCE(SUM(GREATEST(COALESCE(ugovorena_suma,0) - COALESCE(avans,0) - COALESCE(naplaceno_iznos,0), 0)) FILTER (WHERE naplaceno IS NOT TRUE AND COALESCE(stornirano,false)=false), 0) AS ocekivano_ukupno
         FROM proizvodnja_jopex
       `);
       naplacenoNalozi = parseFloat(rn.rows[0].naplaceno_ukupno) || 0;
@@ -267,6 +269,66 @@ router.post('/:id/kontrola', async (req, res) => {
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Nije pronađeno.' });
     res.json(r.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/gotovina/naplaceno-nalozi-detalji — struktura "Naplaćeno (nalozi)".
+router.get('/naplaceno-nalozi-detalji', async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  try {
+    const r = await pool.query(`
+      SELECT r_br, narucilac, zadatak, ugovorena_suma
+      FROM proizvodnja_jopex
+      WHERE COALESCE(naplaceno,false) = true AND COALESCE(stornirano,false) = false
+      ORDER BY ugovorena_suma DESC
+      LIMIT 300
+    `);
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/gotovina/ocekivano-nalozi-detalji — struktura "Očekivano od naloga" — lista
+// pojedinačnih naloga koji čine tu sumu, ISTA formula/filter kao sam zbir gore, tako da se
+// uvijek slaže. Lijeno se učitava (poziva se SAMO kad korisnik klikne na karticu).
+router.get('/ocekivano-nalozi-detalji', async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  try {
+    const r = await pool.query(`
+      SELECT r_br, narucilac, zadatak, ugovorena_suma, avans, naplaceno_iznos,
+             GREATEST(COALESCE(ugovorena_suma,0) - COALESCE(avans,0) - COALESCE(naplaceno_iznos,0), 0) AS za_naplatu
+      FROM proizvodnja_jopex
+      WHERE COALESCE(naplaceno,false) = false AND COALESCE(stornirano,false) = false
+        AND GREATEST(COALESCE(ugovorena_suma,0) - COALESCE(avans,0) - COALESCE(naplaceno_iznos,0), 0) > 0.01
+      ORDER BY za_naplatu DESC
+      LIMIT 300
+    `);
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/gotovina/ocekivano-malo-detalji — struktura "Očekivano od maloprodaje" — lista
+// pojedinačnih otpremnica koje čine tu sumu.
+router.get('/ocekivano-malo-detalji', async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  try {
+    const filterMalo = req.blagajnikObjektIds ? `AND o.objekt_id = ANY($1::int[])` : '';
+    const vals = req.blagajnikObjektIds ? [req.blagajnikObjektIds] : [];
+    const r = await pool.query(`
+      SELECT o.broj, o.objekt_naziv, o.kupac_naziv, o.datum, p.valuta,
+             (o.ukupan_iznos - o.iznos_placeno) AS duguje
+      FROM otpremnice o
+      LEFT JOIN prodajni_objekti p ON p.id = o.objekt_id
+      WHERE o.status='potvrdjena' AND o.status_placanja != 'placeno' ${filterMalo}
+      ORDER BY (o.ukupan_iznos - o.iznos_placeno) DESC
+      LIMIT 300
+    `, vals);
+    res.json(r.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
