@@ -5,80 +5,116 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>JoPeX — Restlovi</title>
 <style>
-  * { box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif; margin: 0;
-         background: #f4f5f7; color: #1f2328; font-size: 14px; }
-  header { background: #1f2328; color: #fff; padding: 12px 16px; display: flex;
-           align-items: center; gap: 16px; flex-wrap: wrap; }
-  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
-  header a { color: #9ecbff; text-decoration: none; font-size: 13px; }
-  .wrap { max-width: 1240px; margin: 0 auto; padding: 16px; }
-  .tabs { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
-  .tab { padding: 8px 16px; background: #e6e8eb; border: 0; border-radius: 6px 6px 0 0;
-         cursor: pointer; font-size: 14px; }
-  .tab.aktivan { background: #fff; font-weight: 600; box-shadow: 0 -2px 0 #2b6cb0 inset; }
-  .panel { background: #fff; border-radius: 0 8px 8px 8px; padding: 16px;
-           box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-  .panel.sakriven { display: none; }
-  .red { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
-  label.polje { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #57606a; }
-  input, select, textarea { padding: 7px 9px; border: 1px solid #d0d7de; border-radius: 6px;
-         font-size: 14px; font-family: inherit; background: #fff; }
-  input:focus, select:focus { outline: 2px solid #2b6cb0; outline-offset: -1px; }
-  button.akcija { padding: 8px 16px; background: #2b6cb0; color: #fff; border: 0;
-         border-radius: 6px; cursor: pointer; font-size: 14px; }
-  button.akcija:hover { background: #21528a; }
-  button.tiho { background: #e6e8eb; color: #1f2328; }
-  button.tiho:hover { background: #d5d9dd; }
-  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-  th, td { padding: 7px 8px; text-align: left; border-bottom: 1px solid #eaecef; font-size: 13px; }
-  th { background: #f6f8fa; font-weight: 600; color: #57606a; position: sticky; top: 0; }
-  tr:hover td { background: #f9fafb; }
-  .kartice { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-  .kartica { background: #fff; border-radius: 8px; padding: 12px 16px; min-width: 150px;
-             box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-  .kartica .v { font-size: 20px; font-weight: 600; }
-  .kartica .n { font-size: 12px; color: #57606a; }
-  .znak { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
-  .z-dostupan { background: #dcfce7; color: #166534; }
-  .z-rezervisan { background: #fef3c7; color: #854d0e; }
-  .z-potrosen { background: #f1f3f5; color: #57606a; }
-  .crtez { border: 1px solid #eaecef; border-radius: 6px; background: #fafbfc; }
-  .prazno { padding: 24px; text-align: center; color: #57606a; }
-  .greska { background: #fee; color: #991b1b; padding: 10px 12px; border-radius: 6px; margin: 10px 0; }
-  .uspjeh { background: #dcfce7; color: #166534; padding: 10px 12px; border-radius: 6px; margin: 10px 0; }
-  .modal-poz { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex;
-               align-items: center; justify-content: center; padding: 16px; z-index: 50; }
-  .modal { background: #fff; border-radius: 10px; padding: 20px; max-width: 620px; width: 100%;
-           max-height: 90vh; overflow: auto; }
-  .modal h3 { margin: 0 0 12px; font-size: 16px; }
-  .foto { max-width: 160px; border-radius: 6px; border: 1px solid #eaecef; }
-  .pod { font-size: 12px; color: #57606a; margin-top: 4px; }
-  fieldset { border: 1px solid #eaecef; border-radius: 8px; padding: 12px; margin: 0 0 14px; }
-  legend { font-size: 12px; color: #57606a; padding: 0 6px; }
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f0f2f5;--border:#d0d7de;--red:#c0392b;--green:#1f8a4c;--braon:#8d6e63;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);font-size:14px;color:#222;
+  -webkit-text-size-adjust:100%;}
+
+/* ── HEADER ───────────────────────────────────────────────── */
+header{background:var(--blue);color:#fff;padding:10px 14px;display:flex;align-items:center;
+  justify-content:space-between;position:sticky;top:0;z-index:50;box-shadow:0 1px 4px rgba(0,0,0,.15);}
+header h1{font-size:16px;font-weight:700;display:flex;align-items:center;}
+header nav{display:flex;gap:6px;align-items:center;}
+header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgba(255,255,255,.4);
+  padding:5px 9px;border-radius:5px;min-height:30px;display:flex;align-items:center;}
+header nav a:hover{background:rgba(255,255,255,.15);}
+#who{font-size:10.5px;opacity:.8;display:block;margin-top:1px;}
+.hdr-left{display:flex;flex-direction:column;}
+
+/* ── TABOVI ───────────────────────────────────────────────── */
+.ce-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+.glavni-tab-btn{padding:9px 18px;border-radius:8px;border:1px solid var(--border);background:#eef0f3;
+  font-weight:700;font-size:12.5px;cursor:pointer;color:#6b7a8d;font-family:inherit;}
+.glavni-tab-btn.active{background:var(--blue);color:#fff;border-color:var(--blue);}
+.view{display:none;}
+.view.active{display:block;}
+
+/* ── PANELI I POLJA ───────────────────────────────────────── */
+.panel{background:#fff;border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;}
+.panel h3{font-size:13px;color:var(--dark);margin-bottom:10px;}
+.red{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
+label.polje{display:flex;flex-direction:column;gap:3px;font-size:11px;color:#6b7a8d;font-weight:600;}
+input,select,textarea{font:inherit;font-size:13px;padding:8px 10px;border:1.5px solid var(--border);
+  border-radius:8px;background:#fff;min-height:38px;color:#222;}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);}
+.hint{font-size:11px;color:#8b96a5;margin-top:6px;line-height:1.5;}
+
+/* ── DUGMAD ───────────────────────────────────────────────── */
+.btn{font:inherit;font-size:13px;font-weight:700;padding:9px 16px;border:none;border-radius:8px;
+  cursor:pointer;min-height:38px;background:var(--blue);color:#fff;}
+.btn:active{background:var(--dark);}
+.btn.sec{background:#eef0f3;color:#6b7a8d;border:1px solid var(--border);}
+.btn.zelen{background:var(--green);}
+.btn.mali{font-size:11px;padding:5px 10px;min-height:28px;border-radius:6px;}
+
+/* ── KARTICE SUMA ─────────────────────────────────────────── */
+.kartice{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px;}
+.kartica{background:#fff;border:1px solid var(--border);border-left:4px solid var(--braon);
+  border-radius:10px;padding:12px 14px;}
+.kartica .v{font-size:18px;font-weight:800;color:var(--dark);}
+.kartica .n{font-size:10.5px;color:#8b96a5;margin-top:2px;}
+
+/* ── TABELE ───────────────────────────────────────────────── */
+.tbl-wrap{overflow-x:auto;margin-top:10px;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+thead tr{background:#f7f8fa;}
+th{text-align:left;padding:7px 8px;border-bottom:2px solid var(--border);color:#6b7a8d;
+  font-weight:700;font-size:11px;white-space:nowrap;}
+td{padding:7px 8px;border-bottom:1px solid #eef0f3;}
+tbody tr:hover{background:#f7fafd;}
+td.num{text-align:right;white-space:nowrap;}
+
+/* ── CHIPOVI I PORUKE ─────────────────────────────────────── */
+.chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;}
+.chip-dostupan{background:#e6f4ea;color:var(--green);}
+.chip-rezervisan{background:#fff3e0;color:#e67e22;}
+.chip-potrosen{background:#eef0f3;color:#8b96a5;}
+.msg{padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:12.5px;font-weight:600;}
+.msg.ok{background:#e6f4ea;color:var(--green);}
+.msg.err{background:#fce8e6;color:var(--red);}
+.empty-msg{text-align:center;color:#9aa5b1;font-size:12.5px;padding:24px 10px;}
+
+/* ── MODAL ────────────────────────────────────────────────── */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;display:flex;
+  align-items:center;justify-content:center;padding:14px;}
+.modal-box{background:#fff;border-radius:10px;padding:20px;max-width:640px;width:100%;
+  max-height:90vh;overflow:auto;box-shadow:0 4px 20px rgba(0,0,0,.2);}
+.modal-box h3{margin-bottom:14px;font-size:15px;color:var(--dark);}
+.modal-btns{display:flex;gap:8px;margin-top:16px;}
+
+fieldset{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;}
+legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
+.crtez{border:1px solid var(--border);border-radius:8px;background:#fafbfc;}
+.foto{max-width:150px;border-radius:8px;border:1px solid var(--border);}
 </style>
 </head>
 <body>
 <header>
-  <h1>Restlovi / Bestanding</h1>
-  <a href="home.html">← Početna</a>
-  <span id="korisnik" style="margin-left:auto;font-size:13px;opacity:.85"></span>
+  <div class="hdr-left">
+    <h1><img src="logo-bijeli.png" alt="JoPeX" style="height:30px;vertical-align:middle;margin-right:8px;">Restlovi</h1>
+    <span id="who"></span>
+  </div>
+  <nav>
+    <a href="home.html">← Početna</a>
+    <a href="roba-magacin.html">🏭 Magacin</a>
+    <a href="#" id="logout">Izlaz</a>
+  </nav>
 </header>
 
-<div class="wrap">
+<div style="padding:12px;padding-bottom:40px;">
   <div id="poruka"></div>
 
   <div class="kartice" id="kartice"></div>
 
-  <div class="tabs">
-    <button class="tab aktivan" data-tab="trazi">Traži komad</button>
-    <button class="tab" data-tab="lista">Restlovi</button>
-    <button class="tab" data-tab="novi" id="tabNovi">Novi restl</button>
+  <div class="ce-row">
+    <button type="button" class="glavni-tab-btn active" data-tab="trazi">🔍 Traži komad</button>
+    <button type="button" class="glavni-tab-btn" data-tab="lista">🧩 Restlovi</button>
+    <button type="button" class="glavni-tab-btn" data-tab="novi" id="tabNovi">➕ Novi restl</button>
   </div>
 
   <!-- ══════════════ TRAŽI KOMAD ══════════════ -->
-  <div class="panel" id="p-trazi">
-    <p class="pod" style="margin-top:0">
+  <div class="view active" id="p-trazi"><div class="panel">
+    <p class="hint" style="margin-top:0">
       Unesi mjere komada koji ti treba za nalog. Prvo se gleda ima li restla koji staje —
       tek ako nema, nudi se cijela tabla sa lager liste.
     </p>
@@ -90,13 +126,13 @@
       <label class="polje">Grupa<input type="text" id="t_grupa" style="width:130px"></label>
       <label class="polje">PJ<select id="t_objekt" style="width:170px"><option value="">— sve PJ —</option></select></label>
       <label class="polje">Rez/rezerva (mm)<input type="number" id="t_rez" value="5" style="width:110px"></label>
-      <button class="akcija" onclick="trazi()">Traži</button>
+      <button class="btn" onclick="trazi()">Traži</button>
     </div>
     <div id="rezultat_trazi"></div>
-  </div>
+  </div></div>
 
   <!-- ══════════════ LISTA ══════════════ -->
-  <div class="panel sakriven" id="p-lista">
+  <div class="view" id="p-lista"><div class="panel">
     <div class="red">
       <label class="polje">Pretraga<input type="text" id="f_q" placeholder="oznaka, materijal, napomena" style="width:220px"></label>
       <label class="polje">PJ<select id="f_objekt" style="width:170px"><option value="">— sve PJ —</option></select></label>
@@ -106,22 +142,31 @@
         <option value="rezervisan">Rezervisan</option>
         <option value="potrosen">Potrošen</option>
       </select></label>
-      <button class="akcija" onclick="ucitajListu()">Prikaži</button>
+      <button class="btn" onclick="ucitajListu()">Prikaži</button>
     </div>
     <div id="tabela_lista"></div>
-  </div>
+  </div></div>
 
   <!-- ══════════════ NOVI RESTL ══════════════ -->
-  <div class="panel sakriven" id="p-novi">
+  <div class="view" id="p-novi"><div class="panel">
     <fieldset>
       <legend>Odakle restl</legend>
       <div class="red">
         <label class="polje">PJ (gdje stoji) *<select id="n_objekt" style="width:190px"></select></label>
         <label class="polje">Materijal *<input type="text" id="n_materijal" style="width:200px"></label>
+        <label class="polje">Artikal sa lagera
+          <select id="n_roba" style="width:260px" onchange="artikalIzabran()">
+            <option value="">— nije povezan (lager se NE mijenja) —</option>
+          </select></label>
         <label class="polje">Debljina (cm)<input type="number" step="0.1" id="n_debljina" style="width:110px"></label>
         <label class="polje">Grupa<input type="text" id="n_grupa" style="width:140px"></label>
         <label class="polje">Cijena (KM/m²)<input type="number" step="0.01" id="n_cijena" style="width:130px"></label>
         <label class="polje">Nastao iz naloga (R.Br.)<input type="text" id="n_nalog" style="width:150px"></label>
+        <label class="polje">Skini sa lagera (m²)<input type="number" step="0.01" id="n_lager" style="width:150px"></label>
+      </div>
+      <div class="hint" id="lager_pomoc" style="margin-top:8px">
+        Sam restl OSTAJE na lageru — sa lagera skidaš samo ono što je otišlo:
+        isječeni komad + otpad. Ostavi prazno ako lager ne treba dirati.
       </div>
     </fieldset>
 
@@ -140,7 +185,7 @@
       <div style="margin-top:12px;display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
         <svg id="crtez" class="crtez" width="300" height="220"></svg>
         <div>
-          <div class="pod" id="povrsina_info">Površina: —</div>
+          <div class="hint" id="povrsina_info">Površina: —</div>
           <div style="margin-top:12px">
             <label class="polje">Lokacija u magacinu<input type="text" id="n_lokacija" placeholder="npr. regal 3, gore" style="width:220px"></label>
           </div>
@@ -157,8 +202,8 @@
       </div>
     </fieldset>
 
-    <button class="akcija" onclick="sacuvajNovi()">Sačuvaj restl</button>
-  </div>
+    <button class="btn zelen" onclick="sacuvajNovi()">✓ Sačuvaj restl</button>
+  </div></div>
 </div>
 
 <div id="modal_host"></div>
@@ -172,7 +217,8 @@ const m2 = n => fmt(n) + ' m²';
 
 function poruka(tekst, tip) {
   document.getElementById('poruka').innerHTML =
-    '<div class="' + (tip === 'greska' ? 'greska' : 'uspjeh') + '">' + tekst + '</div>';
+    '<div class="msg ' + (tip === 'greska' ? 'err' : 'ok') + '">' + tekst + '</div>';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   setTimeout(() => { document.getElementById('poruka').innerHTML = ''; }, 5000);
 }
 
@@ -186,11 +232,11 @@ async function api(putanja, opcije) {
 }
 
 /* ═══════════════ tabovi ═══════════════ */
-document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
-  document.querySelectorAll('.tab').forEach(x => x.classList.remove('aktivan'));
-  document.querySelectorAll('.panel').forEach(x => x.classList.add('sakriven'));
-  t.classList.add('aktivan');
-  document.getElementById('p-' + t.dataset.tab).classList.remove('sakriven');
+document.querySelectorAll('.glavni-tab-btn').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.glavni-tab-btn').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  document.getElementById('p-' + t.dataset.tab).classList.add('active');
   if (t.dataset.tab === 'lista') ucitajListu();
 });
 
@@ -245,6 +291,43 @@ function osvjeziCrtez() {
     'Površina: ' + m2(p) + (cij ? '  ·  vrijednost: ' + fmt(p * cij) + ' KM' : '');
 }
 
+/* ═══════════════ lager artikli za izabrani PJ ═══════════════ */
+async function ucitajLager() {
+  const objekt = document.getElementById('n_objekt').value;
+  const sel = document.getElementById('n_roba');
+  sel.innerHTML = '<option value="">— nije povezan (lager se NE mijenja) —</option>';
+  if (!objekt) return;
+  try {
+    const r = await fetch('/api/roba/lager?objekt_id=' + objekt);
+    const red = await r.json();
+    if (!Array.isArray(red)) return;
+    sel.innerHTML += red.map(a =>
+      '<option value="' + a.id + '" data-naziv="' + (a.naziv || '').replace(/"/g, '&quot;') +
+      '" data-grupa="' + (a.grupa || '') + '" data-deb="' + (a.debljina_cm || '') +
+      '" data-jm="' + (a.jed_mjera || '') + '" data-cijena="' + (a.cijena || 0) + '">' +
+      (a.sifra ? a.sifra + ' — ' : '') + a.naziv + ' (' + (a.jed_mjera || '') + ')</option>'
+    ).join('');
+  } catch (e) { /* lager nije dostupan — veza ostaje prazna */ }
+}
+
+// Kad se izabere artikal, popuni materijal/grupu/debljinu/cijenu da se ne kuca ručno.
+function artikalIzabran() {
+  const o = document.getElementById('n_roba').selectedOptions[0];
+  if (!o || !o.value) return;
+  if (!document.getElementById('n_materijal').value) document.getElementById('n_materijal').value = o.dataset.naziv || '';
+  if (!document.getElementById('n_grupa').value) document.getElementById('n_grupa').value = o.dataset.grupa || '';
+  if (!document.getElementById('n_debljina').value) document.getElementById('n_debljina').value = o.dataset.deb || '';
+  if (String(o.dataset.jm).toLowerCase() === 'm2' && !document.getElementById('n_cijena').value) {
+    document.getElementById('n_cijena').value = o.dataset.cijena || '';
+  }
+  document.getElementById('lager_pomoc').innerHTML =
+    String(o.dataset.jm).toLowerCase() === 'm2'
+      ? 'Sam restl OSTAJE na lageru — skidaš samo isječeni komad + otpad.'
+      : '<b style="color:#991b1b">Ovaj artikal je vođen u „' + o.dataset.jm +
+        '", ne u m². Cijena po m² se ne preuzima, a skidanje sa lagera u m² ovdje nema smisla.</b>';
+  osvjeziCrtez();
+}
+
 /* ═══════════════ slika sa telefona ═══════════════ */
 let FOTO_URL = null;
 async function posaljiSliku(input) {
@@ -282,14 +365,14 @@ async function trazi() {
     rez: document.getElementById('t_rez').value || 0
   };
   const cilj = document.getElementById('rezultat_trazi');
-  cilj.innerHTML = '<div class="prazno">Tražim…</div>';
+  cilj.innerHTML = '<div class="empty-msg">Tražim…</div>';
   try {
     const d = await api('/trazi', { method: 'POST', body: JSON.stringify(telo) });
     if (d.ima) {
       cilj.innerHTML =
         '<div class="uspjeh" style="margin-top:14px">Pronađeno ' + d.kandidati.length +
         ' restl(ova) u koje komad ' + sirina + '×' + visina + ' mm staje. Prvi u listi ostavlja najmanje otpada.</div>' +
-        '<table><thead><tr><th>Oznaka</th><th>Materijal</th><th>Oblik / mjere</th><th>Površina</th>' +
+        '<div class="tbl-wrap"><table><thead><tr><th>Oznaka</th><th>Materijal</th><th>Oblik / mjere</th><th>Površina</th>' +
         '<th>Otpad ako se uzme</th><th>PJ</th><th></th></tr></thead><tbody>' +
         d.kandidati.map(r =>
           '<tr><td><b>' + r.oznaka + '</b></td><td>' + (r.materijal || '') + '</td>' +
@@ -297,24 +380,24 @@ async function trazi() {
           (r.oblik === 'L' ? ' (izrez ' + r.dim_c + '×' + r.dim_d + ')' : '') + '</td>' +
           '<td>' + m2(r.povrsina) + '</td><td>' + m2(r.otpad_m2) + '</td>' +
           '<td>' + (r.objekt_naziv || '') + '</td>' +
-          '<td>' + (DOZVOLE.unos ? '<button class="akcija" onclick="otvoriKoristi(' + r.id + ',' + sirina + ',' + visina + ')">Uzmi za nalog</button>' : '') + '</td></tr>'
-        ).join('') + '</tbody></table>';
+          '<td>' + (DOZVOLE.unos ? '<button class="btn mali" onclick="otvoriKoristi(' + r.id + ',' + sirina + ',' + visina + ')">Uzmi za nalog</button>' : '') + '</td></tr>'
+        ).join('') + '</tbody></table></div>';
     } else {
       cilj.innerHTML =
         '<div class="greska" style="margin-top:14px">Nema restla u koji komad ' + sirina + '×' + visina +
         ' mm staje — ide na cijelu tablu.</div>' +
         (d.table && d.table.length
-          ? '<table><thead><tr><th>Šifra</th><th>Naziv (lager)</th><th>Grupa</th><th>Deb. cm</th><th>Stanje</th><th>Cijena</th><th>PJ</th></tr></thead><tbody>' +
+          ? '<div class="tbl-wrap"><table><thead><tr><th>Šifra</th><th>Naziv (lager)</th><th>Grupa</th><th>Deb. cm</th><th>Stanje</th><th>Cijena</th><th>PJ</th></tr></thead><tbody>' +
             d.table.map(t =>
               '<tr><td>' + (t.sifra || '') + '</td><td>' + t.naziv + '</td>' +
               '<td>' + (t.grupa || '') + '</td><td>' + (t.debljina_cm || '') + '</td>' +
               '<td>' + fmt(t.stanje) + ' ' + (t.jed_mjera || '') + '</td>' +
               '<td>' + fmt(t.cijena) + '</td><td>' + (t.objekt_naziv || '') + '</td></tr>'
-            ).join('') + '</tbody></table>' +
-            '<p class="pod">Kad isječeš tablu, ostatak unesi kroz tab <b>Novi restl</b> (izvor: tabla).</p>'
-          : '<div class="prazno">Ni na lageru nema table sa tim materijalom.</div>');
+            ).join('') + '</tbody></table></div>' +
+            '<p class="hint">Kad isječeš tablu, ostatak unesi kroz tab <b>Novi restl</b> (izvor: tabla).</p>'
+          : '<div class="empty-msg">Ni na lageru nema table sa tim materijalom.</div>');
     }
-  } catch (e) { cilj.innerHTML = '<div class="greska">' + e.message + '</div>'; }
+  } catch (e) { cilj.innerHTML = '<div class="msg err">' + e.message + '</div>'; }
 }
 
 /* ═══════════════ lista ═══════════════ */
@@ -324,12 +407,12 @@ async function ucitajListu() {
   if (document.getElementById('f_objekt').value) p.set('objekt_id', document.getElementById('f_objekt').value);
   if (document.getElementById('f_status').value) p.set('status', document.getElementById('f_status').value);
   const cilj = document.getElementById('tabela_lista');
-  cilj.innerHTML = '<div class="prazno">Učitavam…</div>';
+  cilj.innerHTML = '<div class="empty-msg">Učitavam…</div>';
   try {
     const red = await api('?' + p.toString());
-    if (!red.length) return cilj.innerHTML = '<div class="prazno">Nema restlova po ovom filteru.</div>';
+    if (!red.length) return cilj.innerHTML = '<div class="empty-msg">Nema restlova po ovom filteru.</div>';
     cilj.innerHTML =
-      '<table><thead><tr><th>Oznaka</th><th>Materijal</th><th>Grupa</th><th>Deb. cm</th><th>Oblik / mjere</th>' +
+      '<div class="tbl-wrap"><table><thead><tr><th>Oznaka</th><th>Materijal</th><th>Grupa</th><th>Deb. cm</th><th>Oblik / mjere</th>' +
       '<th>Površina</th><th>KM/m²</th><th>Vrijednost</th><th>PJ</th><th>Status</th><th>Nastao</th><th></th></tr></thead><tbody>' +
       red.map(r =>
         '<tr><td><b>' + r.oznaka + '</b>' + (r.foto_url ? ' <a href="' + r.foto_url + '" target="_blank">📷</a>' : '') + '</td>' +
@@ -340,23 +423,23 @@ async function ucitajListu() {
         '<td>' + m2(r.povrsina) + '</td><td>' + fmt(r.cijena_m2) + '</td>' +
         '<td>' + fmt(r.vrijednost) + '</td><td>' + (r.objekt_naziv || '') + '</td>' +
         '<td><span class="znak z-' + r.status + '">' + r.status + '</span></td>' +
-        '<td class="pod">' + (r.roditelj_oznaka ? 'od ' + r.roditelj_oznaka : 'cijela tabla') +
+        '<td class="hint">' + (r.roditelj_oznaka ? 'od ' + r.roditelj_oznaka : 'cijela tabla') +
         (r.nastao_iz_naloga ? '<br>nalog ' + r.nastao_iz_naloga : '') + '</td>' +
         '<td style="white-space:nowrap">' +
-        '<button class="akcija tiho" onclick="rodovnik(' + r.id + ')">Rodovnik</button> ' +
+        '<button class="btn sec mali" onclick="rodovnik(' + r.id + ')">Rodovnik</button> ' +
         (DOZVOLE.unos && r.status !== 'potrosen'
-          ? '<button class="akcija tiho" onclick="otvoriPrenos(' + r.id + ')">Prenos</button> ' +
-            '<button class="akcija" onclick="otvoriKoristi(' + r.id + ')">Uzmi</button>' : '') +
+          ? '<button class="btn sec mali" onclick="otvoriPrenos(' + r.id + ')">Prenos</button> ' +
+            '<button class="btn mali" onclick="otvoriKoristi(' + r.id + ')">Uzmi</button>' : '') +
         '</td></tr>'
-      ).join('') + '</tbody></table>';
-  } catch (e) { cilj.innerHTML = '<div class="greska">' + e.message + '</div>'; }
+      ).join('') + '</tbody></table></div>';
+  } catch (e) { cilj.innerHTML = '<div class="msg err">' + e.message + '</div>'; }
 }
 
 /* ═══════════════ modali ═══════════════ */
 function zatvoriModal() { document.getElementById('modal_host').innerHTML = ''; }
 function modal(html) {
   document.getElementById('modal_host').innerHTML =
-    '<div class="modal-poz" onclick="if(event.target===this)zatvoriModal()"><div class="modal">' + html + '</div></div>';
+    '<div class="modal" onclick="if(event.target===this)zatvoriModal()"><div class="modal-box">' + html + '</div></div>';
 }
 
 // Uzimanje restla za nalog + unos ostatka (koji postaje NOVI restl)
@@ -377,11 +460,11 @@ function otvoriKoristi(id, w, h) {
     '<label class="polje">C<input type="number" id="k_oc" oninput="crtezModal()" style="width:100px"></label>' +
     '<label class="polje">D<input type="number" id="k_od" oninput="crtezModal()" style="width:100px"></label></div>' +
     '<svg id="k_crtez" class="crtez" width="260" height="170" style="margin-top:10px"></svg>' +
-    '<div class="pod">Cijena po m² se automatski nasljeđuje od ovog restla.</div>' +
+    '<div class="hint">Cijena po m² se automatski nasljeđuje od ovog restla.</div>' +
     '</fieldset>' +
-    '<div style="display:flex;gap:8px;margin-top:14px">' +
-    '<button class="akcija" onclick="posaljiKoristi(' + id + ')">Sačuvaj</button>' +
-    '<button class="akcija tiho" onclick="zatvoriModal()">Odustani</button></div>'
+    '<div class="modal-btns">' +
+    '<button class="btn" onclick="posaljiKoristi(' + id + ')">Sačuvaj</button>' +
+    '<button class="btn sec mali" onclick="zatvoriModal()">Odustani</button></div>'
   );
   crtezModal();
 }
@@ -410,7 +493,9 @@ async function posaljiKoristi(id) {
   try {
     const d = await api('/' + id + '/koristi', { method: 'POST', body: JSON.stringify(telo) });
     zatvoriModal();
-    poruka(d.novi_restl_id ? 'Sačuvano — od ostatka je napravljen novi restl.' : 'Sačuvano — restl je potrošen.');
+    poruka((d.novi_restl_id ? 'Sačuvano — od ostatka je napravljen novi restl.' : 'Sačuvano — restl je potrošen.') +
+           (d.skinuto_sa_lagera ? ' Sa lagera skinuto ' + fmt(d.skinuto_sa_lagera) + ' m².' : '') +
+           (d.upozorenje ? ' ' + d.upozorenje : ''), d.upozorenje ? 'greska' : 'uspjeh');
     ucitajListu(); ucitajSume();
   } catch (e) { poruka(e.message, 'greska'); }
 }
@@ -421,9 +506,9 @@ function otvoriPrenos(id) {
     '<label class="polje">Odredišni PJ<select id="pr_objekt" style="width:240px">' +
     OBJEKTI.map(o => '<option value="' + o.id + '">' + o.naziv + '</option>').join('') + '</select></label>' +
     '<label class="polje" style="margin-top:10px">Napomena<input id="pr_nap" style="width:100%"></label>' +
-    '<div style="display:flex;gap:8px;margin-top:14px">' +
-    '<button class="akcija" onclick="posaljiPrenos(' + id + ')">Prenesi</button>' +
-    '<button class="akcija tiho" onclick="zatvoriModal()">Odustani</button></div>'
+    '<div class="modal-btns">' +
+    '<button class="btn" onclick="posaljiPrenos(' + id + ')">Prenesi</button>' +
+    '<button class="btn sec mali" onclick="zatvoriModal()">Odustani</button></div>'
   );
 }
 
@@ -441,7 +526,7 @@ async function rodovnik(id) {
   try {
     const d = await api('/' + id + '/rodovnik');
     modal('<h3>Rodovnik komada</h3>' +
-      '<table><thead><tr><th>Oznaka</th><th>Mjere</th><th>Površina</th><th>Nastao od</th><th>Nalog</th><th>Status</th></tr></thead><tbody>' +
+      '<div class="tbl-wrap"><table><thead><tr><th>Oznaka</th><th>Mjere</th><th>Površina</th><th>Nastao od</th><th>Nalog</th><th>Status</th></tr></thead><tbody>' +
       d.komadi.map(k => {
         const rod = d.komadi.find(x => x.id === k.roditelj_id);
         return '<tr' + (k.id === id ? ' style="background:#eef6ff"' : '') + '><td><b>' + k.oznaka + '</b></td>' +
@@ -450,14 +535,29 @@ async function rodovnik(id) {
           '<td>' + (rod ? rod.oznaka : (k.izvor === 'tabla' ? 'cijela tabla' : '—')) + '</td>' +
           '<td>' + (k.nastao_iz_naloga || '') + '</td>' +
           '<td><span class="znak z-' + k.status + '">' + k.status + '</span></td></tr>';
-      }).join('') + '</tbody></table>' +
+      }).join('') + '</tbody></table></div>' +
       (d.koristenja.length
-        ? '<h3 style="margin-top:16px">Korišćenja</h3><table><thead><tr><th>Restl</th><th>Nalog</th><th>Isječeno</th><th>Ko</th><th>Kada</th></tr></thead><tbody>' +
-          d.koristenja.map(k => '<tr><td>' + k.oznaka + '</td><td>' + (k.nalog_r_br || '') + '</td>' +
-            '<td>' + (k.uzeto_a || '?') + '×' + (k.uzeto_b || '?') + '</td><td>' + (k.korisnik_ime || '') + '</td>' +
-            '<td>' + new Date(k.kada).toLocaleString('bs-BA') + '</td></tr>').join('') + '</tbody></table>'
+        ? '<h3 style="margin-top:16px">Korišćenja</h3><div class="tbl-wrap"><table><thead><tr><th>Restl</th><th>Nalog</th><th>Isječeno</th><th>Lager m²</th><th>Ko</th><th>Kada</th><th></th></tr></thead><tbody>' +
+          d.koristenja.map(k => '<tr' + (k.stornirano ? ' style="opacity:.5;text-decoration:line-through"' : '') +
+            '><td>' + k.oznaka + '</td><td>' + (k.nalog_r_br || '') + '</td>' +
+            '<td>' + (k.uzeto_a || '?') + '×' + (k.uzeto_b || '?') + '</td>' +
+            '<td>' + fmt(k.lager_umanjeno) + '</td><td>' + (k.korisnik_ime || '') + '</td>' +
+            '<td>' + new Date(k.kada).toLocaleString('bs-BA') + '</td>' +
+            '<td>' + (!k.stornirano && DOZVOLE.unos
+              ? '<button class="btn sec mali" onclick="stornirajKoristenje(' + k.id + ')">Storno</button>' : '') +
+            '</td></tr>').join('') + '</tbody></table></div>'
         : '') +
-      '<div style="margin-top:14px"><button class="akcija tiho" onclick="zatvoriModal()">Zatvori</button></div>');
+      '<div style="margin-top:14px"><button class="btn sec mali" onclick="zatvoriModal()">Zatvori</button></div>');
+  } catch (e) { poruka(e.message, 'greska'); }
+}
+
+async function stornirajKoristenje(korId) {
+  if (!confirm('Stornirati ovo korišćenje? Restl se vraća u dostupne, a m² se vraćaju na lager.')) return;
+  try {
+    const d = await api('/koristenje/' + korId + '/storno', { method: 'POST' });
+    zatvoriModal();
+    poruka('Stornirano.' + (d.vraceno_na_lager ? ' Na lager vraćeno ' + fmt(d.vraceno_na_lager) + ' m².' : ''));
+    ucitajListu(); ucitajSume();
   } catch (e) { poruka(e.message, 'greska'); }
 }
 
@@ -478,14 +578,17 @@ async function sacuvajNovi() {
     lokacija: document.getElementById('n_lokacija').value || null,
     napomena: document.getElementById('n_napomena').value || null,
     foto_url: FOTO_URL,
+    roba_id: document.getElementById('n_roba').value || null,
+    umanji_lager_m2: document.getElementById('n_lager').value || 0,
     izvor: 'tabla'
   };
   if (!telo.objekt_id || !telo.materijal || !telo.dim_a || !telo.dim_b)
     return poruka('PJ, materijal i mjere A i B su obavezni.', 'greska');
   try {
     const d = await api('', { method: 'POST', body: JSON.stringify(telo) });
-    poruka('Restl ' + d.oznaka + ' je sačuvan.');
-    ['n_a','n_b','n_c','n_d','n_napomena','n_nalog'].forEach(x => document.getElementById(x).value = '');
+    poruka('Restl ' + d.oznaka + ' je sačuvan.' + (d.upozorenje ? ' ' + d.upozorenje : ''),
+           d.upozorenje ? 'greska' : 'uspjeh');
+    ['n_a','n_b','n_c','n_d','n_napomena','n_nalog','n_lager'].forEach(x => document.getElementById(x).value = '');
     FOTO_URL = null;
     document.getElementById('foto_pregled').innerHTML = '';
     osvjeziCrtez(); ucitajSume();
@@ -505,19 +608,27 @@ async function ucitajSume() {
   } catch (e) { /* nema dozvole ili greška — kartice ostaju prazne */ }
 }
 
+document.getElementById('logout').onclick = async e => {
+  e.preventDefault();
+  await fetch('/api/auth/logout', { method: 'POST' });
+  location.href = 'login.html';
+};
+
 /* ═══════════════ start ═══════════════ */
 (async function start() {
   try {
     const me = await (await fetch('/api/auth/me')).json();
     JA = me;
-    document.getElementById('korisnik').textContent = me.ime_prezime || '';
+    document.getElementById('who').textContent = '👤 ' + (me.ime_prezime || '');
   } catch (e) { location.href = 'login.html'; return; }
 
   DOZVOLE = await api('/dozvole/moje').catch(() => ({ vidi: false, unos: false }));
   if (!DOZVOLE.vidi) {
-    document.querySelector('.wrap').innerHTML =
-      '<div class="panel"><h2>Nemate dozvolu za pregled restlova.</h2>' +
-      '<p class="pod">Traži od administratora da ti u Korisnicima uključi dozvolu „Restlovi“ (moze_restlovi).</p></div>';
+    document.querySelector('.ce-row').style.display = 'none';
+    document.querySelectorAll('.view').forEach(v => v.remove());
+    document.getElementById('poruka').innerHTML =
+      '<div class="panel"><h3>Nemate dozvolu za pregled restlova.</h3>' +
+      '<p class="hint">Traži od administratora da ti u Korisnicima uključi dozvolu „Restlovi” u tabeli korisnika.</p></div>';
     return;
   }
   if (!DOZVOLE.unos) {
@@ -532,7 +643,9 @@ async function ucitajSume() {
     document.getElementById('f_objekt').innerHTML += opcije;
   } catch (e) { poruka('PJ lista nije učitana: ' + e.message, 'greska'); }
 
+  document.getElementById('n_objekt').addEventListener('change', ucitajLager);
   document.getElementById('n_cijena').addEventListener('input', osvjeziCrtez);
+  ucitajLager();
   osvjeziCrtez();
   ucitajSume();
 })();
