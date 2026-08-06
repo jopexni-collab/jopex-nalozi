@@ -300,6 +300,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 <div class="ce-row" style="margin-bottom:14px;">
   <button type="button" class="glavni-tab-btn active" data-tab="kalkulacija" onclick="prebaciGlavniTabRM('kalkulacija')">📦 Kalkulacija</button>
   <button type="button" class="glavni-tab-btn" data-tab="lager" onclick="prebaciGlavniTabRM('lager')">📋 Lager lista</button>
+  <button type="button" class="glavni-tab-btn" data-tab="uvoz-istorija" onclick="prebaciGlavniTabRM('uvoz-istorija')">🗂️ Istorija uvoza</button>
   <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
   <button type="button" class="glavni-tab-btn" data-tab="kretanje" onclick="prebaciGlavniTabRM('kretanje')">📈 Kretanje robe</button>
 </div>
@@ -508,6 +509,15 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         <button type="button" class="ce-tip-btn" onclick="blicPostavi('m3')">Postavi: m³</button>
       </div>
     </div>
+  </div>
+</div>
+
+<div id="tab-uvoz-istorija" style="display:none;">
+  <div class="import-box">
+    <h3>🗂️ Istorija uvoza (XLSX)</h3>
+    <div class="uzorak-hint">Svaki red predstavlja JEDAN cijeli uvoz fajla — ne pojedinačnu stavku. Ako si nekim slučajem uvezao/la isti fajl dva puta (dupliralo stanje), klikni "Storniraj" na tom uvozu — vraća stanje robe tačno na ono što je bilo pre tog uvoza.</div>
+    <select id="uvoz-ist-objekt" onchange="uvozIstorijaUcitaj()" style="margin-bottom:12px;"><option value="">— svi PJ —</option></select>
+    <div id="uvoz-ist-lista"></div>
   </div>
 </div>
 
@@ -1758,10 +1768,62 @@ function prebaciGlavniTabRM(tab){
   document.querySelectorAll('.glavni-tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   document.getElementById('tab-kalkulacija').style.display = tab==='kalkulacija' ? 'block' : 'none';
   document.getElementById('tab-lager').style.display = tab==='lager' ? 'block' : 'none';
+  document.getElementById('tab-uvoz-istorija').style.display = tab==='uvoz-istorija' ? 'block' : 'none';
   document.getElementById('tab-pj').style.display = tab==='pj' ? 'block' : 'none';
   document.getElementById('tab-kretanje').style.display = tab==='kretanje' ? 'block' : 'none';
   if(tab==='kretanje' && !kretanjeObjektiUcitani) kretanjeUcitajObjekte();
+  if(tab==='uvoz-istorija') uvozIstorijaUcitaj();
 }
+
+/* ═══ ISTORIJA UVOZA — pregled i storniranje cijelih XLSX uvoza ═══ */
+let uvozIstPopunjenSelect=false;
+async function uvozIstorijaUcitaj(){
+  if(!uvozIstPopunjenSelect){
+    try{
+      const r=await fetch(`${API}/api/prodajni-objekti`);
+      const objekti=await r.json();
+      document.getElementById('uvoz-ist-objekt').innerHTML='<option value="">— svi PJ —</option>'+
+        objekti.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');
+      uvozIstPopunjenSelect=true;
+    }catch(e){}
+  }
+  const cont=document.getElementById('uvoz-ist-lista');
+  cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Učitavanje...</div>';
+  try{
+    const objektId=document.getElementById('uvoz-ist-objekt').value;
+    const params=objektId?`?objekt_id=${objektId}`:'';
+    const r=await fetch(`${API}/api/roba/uvoz-batch${params}`);
+    const rows=await r.json();
+    if(!rows.length){ cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Nema zabilježenih uvoza.</div>'; return; }
+    cont.innerHTML=rows.map(b=>`
+      <div style="border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;margin-bottom:8px;${b.stornirano?'opacity:.55;':''}">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <div>
+            <b>${esc(b.objekt_naziv||'—')}</b> — ${esc(b.naziv_fajla||'(bez naziva fajla)')}
+            <span style="font-size:11px;color:#8b96a5;margin-left:6px;">${b.nacin==='zamjena'?'zamjena kompletnog lagera':'nabavka (dodato na postojeće)'}</span>
+          </div>
+          ${b.stornirano
+            ? `<span style="color:var(--red,#c0392b);font-size:11.5px;font-weight:700;">✕ Stornirano ${fd(b.stornirano_kada)} — ${esc(b.stornirao_ime||'')}</span>`
+            : `<button class="btn-sm" onclick="uvozStorniraj(${b.id})" style="background:var(--red,#c0392b);color:#fff;">✕ Storniraj ceo uvoz</button>`}
+        </div>
+        <div style="font-size:11.5px;color:#8b96a5;margin-top:4px;">
+          ${fd(b.kreirano)} · ${esc(b.korisnik_ime||'')} · ${b.broj_stavki} stavki (${b.broj_novih} novih, ${b.broj_azuriranih} ažuriranih)
+        </div>
+      </div>
+    `).join('');
+  }catch(e){ cont.innerHTML='<div style="text-align:center;color:red;padding:20px;">Greška pri učitavanju.</div>'; }
+}
+async function uvozStorniraj(id){
+  if(!confirm('Stornirati ovaj CEO uvoz? Ovo vraća stanje robe (za sve stavke iz tog uvoza) tačno na ono što je bilo PRE uvoza. Ako je nešto od te robe u međuvremenu prodato, storno će biti odbijen.')) return;
+  try{
+    const r=await fetch(`${API}/api/roba/uvoz-batch/${id}/storniraj`,{method:'POST'});
+    const data=await r.json();
+    if(!r.ok){ alert('✗ '+data.error); return; }
+    alert(`✓ Storno uspešan — vraćeno ${data.stavki_stornirano} stavki na prethodno stanje.`);
+    uvozIstorijaUcitaj();
+  }catch(e){ alert('✗ Greška pri storniranju.'); }
+}
+
 
 /* ═══ KALKULACIJA — prijem robe sa zavisnim troškovima (koristi esc/fm koji već postoje gore) ═══ */
 let kalkStavke=[]; // {roba_id, sifra, naziv, jed_mjera, kolicina, nabavna_cijena, prodajna_cijena}

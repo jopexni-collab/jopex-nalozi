@@ -779,7 +779,20 @@ router.post('/import', upload.single('file'), async (req, res) => {
     let ukupnaVrijednostFajla = 0; // suma (kolicina × cijena) SVIH validnih redova u fajlu — za poređenje sa stvarnim stanjem u bazi
 
     await pool.query('BEGIN');
+    let uvozBatchId = null;
     try {
+      // Kreira JEDAN "uvoz_batch" red koji predstavlja CIJELI ovaj upload kao cjelinu —
+      // svaka roba_kretanja stavka niže se taguje sa ovim ID-em, da se cijeli uvoz može
+      // kasnije pregledati/stornirati odjednom (umjesto stavku-po-stavku).
+      if (nacin !== 'metapodaci') {
+        const batchRes = await pool.query(
+          `INSERT INTO uvoz_batch (objekt_id, objekt_naziv, naziv_fajla, nacin, korisnik_id, korisnik_ime)
+           VALUES ($1,(SELECT naziv FROM prodajni_objekti WHERE id=$1),$2,$3,$4,$5) RETURNING id`,
+          [objektId, req.file.originalname || null, nacin, req.session.user.id, req.session.user.ime_prezime]
+        );
+        uvozBatchId = batchRes.rows[0].id;
+      }
+
       // ZAMJENA: prvo nuliraj stanje SVIH postojećih artikala za ovaj PJ — fajl koji slijedi
       // je nova kompletna istina. Cijena ostaje netaknuta ovim korakom (postavlja je fajl niže,
       // osim za Bluesoft gdje se cijena nikad ne dira).
@@ -875,10 +888,10 @@ router.post('/import', upload.single('file'), async (req, res) => {
           if (robaRes.rows[0].inserted || pjRes.rows[0].inserted) uneseno++; else azurirano++;
           if (stanjeFajl > 0) {
             await pool.query(
-              `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_nova, napomena, korisnik_id, korisnik_ime)
-               VALUES ($1,$2,'uvoz',$3,$4,$5,$6,$7)`,
+              `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_nova, napomena, korisnik_id, korisnik_ime, uvoz_batch_id)
+               VALUES ($1,$2,'uvoz',$3,$4,$5,$6,$7,$8)`,
               [robaId, objektId, stanjeFajl, cijenaFajl ?? 0, 'Uvoz (zamjena kompletnog lagera)',
-               req.session.user.id, req.session.user.ime_prezime]
+               req.session.user.id, req.session.user.ime_prezime, uvozBatchId]
             );
           }
         } else {
@@ -896,10 +909,10 @@ router.post('/import', upload.single('file'), async (req, res) => {
             uneseno++;
             if (stanjeFajl > 0) {
               await pool.query(
-                `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_nova, napomena, korisnik_id, korisnik_ime)
-                 VALUES ($1,$2,'uvoz',$3,$4,$5,$6,$7)`,
+                `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_nova, napomena, korisnik_id, korisnik_ime, uvoz_batch_id)
+                 VALUES ($1,$2,'uvoz',$3,$4,$5,$6,$7,$8)`,
                 [robaId, objektId, stanjeFajl, cijenaFajl ?? 0, 'Uvoz (nabavka — novi artikal za ovaj PJ)',
-                 req.session.user.id, req.session.user.ime_prezime]
+                 req.session.user.id, req.session.user.ime_prezime, uvozBatchId]
               );
             }
           } else {
@@ -918,14 +931,20 @@ router.post('/import', upload.single('file'), async (req, res) => {
             azurirano++;
             if (stanjeFajl > 0) {
               await pool.query(
-                `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_nova, napomena, korisnik_id, korisnik_ime)
-                 VALUES ($1,$2,'uvoz',$3,$4,$5,$6,$7)`,
+                `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_nova, napomena, korisnik_id, korisnik_ime, uvoz_batch_id)
+                 VALUES ($1,$2,'uvoz',$3,$4,$5,$6,$7,$8)`,
                 [robaId, objektId, stanjeFajl, novaCijena, 'Uvoz (nabavka — dodato na postojeće stanje)',
-                 req.session.user.id, req.session.user.ime_prezime]
+                 req.session.user.id, req.session.user.ime_prezime, uvozBatchId]
               );
             }
           }
         }
+      }
+      if (uvozBatchId) {
+        await pool.query(
+          `UPDATE uvoz_batch SET broj_stavki=$1, broj_novih=$2, broj_azuriranih=$3 WHERE id=$4`,
+          [uneseno + azurirano, uneseno, azurirano, uvozBatchId]
+        );
       }
       await pool.query('COMMIT');
     } catch (err) {
@@ -959,6 +978,89 @@ router.post('/import', upload.single('file'), async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Greška pri uvozu: ' + err.message });
+  }
+});
+
+// GET /api/roba/uvoz-batch?objekt_id=X — istorija uvoza (XLSX upload-a), grupisano po
+// cijelom fajlu (ne stavka-po-stavku) — za pregled i storniranje.
+router.get('/uvoz-batch', async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  try {
+    const { objekt_id } = req.query;
+    let where = '';
+    let vals = [];
+    if (objekt_id) { where = 'WHERE objekt_id=$1'; vals.push(objekt_id); }
+    const r = await pool.query(
+      `SELECT * FROM uvoz_batch ${where} ORDER BY kreirano DESC LIMIT 100`,
+      vals
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/roba/uvoz-batch/:id/storniraj — poništava CIJEL uvoz kao cjelinu: oduzima
+// nazad SVE količine koje je taj uvoz dodao (vraća stanje na ono prije uvoza), i markira
+// batch kao storniran. SIGURNOSNA PROVJERA: ako bi BILO KOJA stavka pala ispod nule
+// (znači da je dio te robe već prodat/premešten posle uvoza), CEO storno se odbija —
+// ništa se ne mijenja dok se ne razriješi ručno (ne dozvoljava djelimičan/nekonzistentan storno).
+router.post('/uvoz-batch/:id/storniraj', async (req, res) => {
+  const user = req.session?.user;
+  if (user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin može stornirati uvoz.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const batchRes = await client.query('SELECT * FROM uvoz_batch WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!batchRes.rows.length) throw Object.assign(new Error('Uvoz nije pronađen.'), { status: 404 });
+    const batch = batchRes.rows[0];
+    if (batch.stornirano) throw Object.assign(new Error('Ovaj uvoz je već storniran.'), { status: 400 });
+
+    const stavke = await client.query(
+      `SELECT roba_id, objekt_id, SUM(kolicina) AS kolicina
+       FROM roba_kretanja WHERE uvoz_batch_id=$1 GROUP BY roba_id, objekt_id`,
+      [req.params.id]
+    );
+    if (!stavke.rows.length) throw Object.assign(new Error('Nema stavki za ovaj uvoz (možda je star, prije uvođenja ove funkcije).'), { status: 400 });
+
+    // Provjeri PRVO da nijedna stavka ne bi pala ispod nule.
+    const problemi = [];
+    for (const s of stavke.rows) {
+      const trenutno = await client.query(
+        'SELECT r.sifra, r.naziv, rp.stanje FROM roba_pj rp JOIN roba r ON r.id=rp.roba_id WHERE rp.roba_id=$1 AND rp.objekt_id=$2',
+        [s.roba_id, s.objekt_id]
+      );
+      const stanje = trenutno.rows.length ? parseFloat(trenutno.rows[0].stanje) : 0;
+      if (stanje - parseFloat(s.kolicina) < -0.001) {
+        problemi.push(`${trenutno.rows[0]?.sifra || s.roba_id} (${trenutno.rows[0]?.naziv || ''}): na stanju ${stanje}, uvoz je dodao ${s.kolicina} — dio je već prodat/premešten, ne može se stornirati automatski.`);
+      }
+    }
+    if (problemi.length) throw Object.assign(new Error('Storno odbijen — sledeće stavke bi pale ispod nule:\n' + problemi.join('\n')), { status: 409 });
+
+    for (const s of stavke.rows) {
+      await client.query(
+        'UPDATE roba_pj SET stanje = stanje - $1, azurirano=now() WHERE roba_id=$2 AND objekt_id=$3',
+        [s.kolicina, s.roba_id, s.objekt_id]
+      );
+      await client.query(
+        `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, napomena, korisnik_id, korisnik_ime, uvoz_batch_id)
+         VALUES ($1,$2,'storno-uvoza',$3,$4,$5,$6,$7)`,
+        [s.roba_id, s.objekt_id, -s.kolicina, `Storno uvoza #${batch.id} (${batch.naziv_fajla || ''})`, user.id, user.ime_prezime, batch.id]
+      );
+    }
+
+    await client.query(
+      `UPDATE uvoz_batch SET stornirano=true, stornirao_id=$1, stornirao_ime=$2, stornirano_kada=now() WHERE id=$3`,
+      [user.id, user.ime_prezime, batch.id]
+    );
+
+    await client.query('COMMIT');
+    res.json({ ok: true, stavki_stornirano: stavke.rows.length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
