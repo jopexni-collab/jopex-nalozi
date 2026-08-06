@@ -211,6 +211,14 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
               <div id="skica_poruka" class="hint" style="margin-top:8px"></div>
             </div>
           </div>
+          <div id="digital_omot" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+            <div class="hint" style="margin-bottom:6px">
+              <b>Prepoznati oblik.</b> Dodirni <b>slovo strane</b> da upišeš njenu mjeru,
+              ili <b>ugao</b> da ga postaviš na pravi (90°). Ugao koji nije prav prikazan je narandžasto.
+            </div>
+            <svg id="digital" width="330" height="270" class="crtez" style="touch-action:manipulation"></svg>
+            <div id="digital_unos" style="margin-top:8px"></div>
+          </div>
         </div>
         <div id="strane_lista"></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
@@ -581,6 +589,7 @@ function primijeniSkicu() {
   const najduza = Math.max(Math.max(...xs)-Math.min(...xs), Math.max(...ys)-Math.min(...ys));
   const zeljena = Number(document.getElementById('skica_mjerilo').value) || 1200;
 
+  IZABRANA_STRANA = null;
   STRANE = tjemenaUStrane(tj, zeljena / najduza);
   crtajStrane(); osvjeziCrtez();
   skicaCrtaj(true, tj);
@@ -600,6 +609,137 @@ function primijeniSkicu() {
   c.addEventListener('mousemove', kroz);  c.addEventListener('touchmove', kroz, { passive: false });
   window.addEventListener('mouseup', kraj); c.addEventListener('touchend', kraj);
 })();
+
+/* ═══════════════ DIGITALNI CRTEŽ ═══════════════
+   Prepoznati oblik se crta ponovo, ali sada je crtež UNOS: slovo strane otvara polje
+   za njenu mjeru, a ugao se dodirom postavlja na pravi. Dužina sama ne određuje oblik —
+   tek dužina PLUS uglovi ga određuju. */
+
+let IZABRANA_STRANA = null;
+
+// Zatvaranje bez pravljenja novih kosina: razlika se upije u DUŽINE dvije strane
+// (jedne vodoravne i jedne uspravne po mreži), jer su dužine uvijek slobodne.
+// Odmaci se ne diraju — ono što je korisnik označio kao pravi ugao ostaje pravo.
+function zatvoriDuzinama(strane) {
+  let x = 0, y = 0, mreza = 0;
+  const mreze = [];
+  for (const s of strane) {
+    mreze.push(mreza);
+    const a = mreza * Math.PI/180, b = (mreza + 90) * Math.PI/180;
+    x += (Number(s.duzina)||0) * Math.cos(a) + (Number(s.odmak)||0) * Math.cos(b);
+    y += (Number(s.duzina)||0) * Math.sin(a) + (Number(s.odmak)||0) * Math.sin(b);
+    mreza += s.smjer === 'D' ? -90 : 90;
+  }
+  if (Math.hypot(x, y) < 0.01) return true;
+
+  const nadji = uspravna => {
+    let naj = -1, duz = -1;
+    for (let i = 0; i < strane.length; i++) {
+      const c = Math.cos(mreze[i] * Math.PI/180), s = Math.sin(mreze[i] * Math.PI/180);
+      const odgovara = uspravna ? Math.abs(s) > 0.5 : Math.abs(c) > 0.5;
+      if (odgovara && Math.abs(strane[i].duzina) > duz) { duz = Math.abs(strane[i].duzina); naj = i; }
+    }
+    return naj;
+  };
+  const iH = nadji(false), iV = nadji(true);
+  if (iH >= 0 && Math.abs(x) > 0.01) strane[iH].duzina -= x / Math.cos(mreze[iH] * Math.PI/180);
+  if (iV >= 0 && Math.abs(y) > 0.01) strane[iV].duzina -= y / Math.sin(mreze[iV] * Math.PI/180);
+  for (const s of strane) s.duzina = Math.round(s.duzina * 10) / 10;
+  return iH >= 0 && iV >= 0;
+}
+
+// Ugao je prav kada obje strane koje se u njemu sastaju leže po mreži (odmak 0).
+function ugaoJePrav(strane, v) {
+  const n = strane.length;
+  return (Number(strane[(v - 1 + n) % n].odmak) || 0) === 0 && (Number(strane[v % n].odmak) || 0) === 0;
+}
+
+function postaviPraviUgao(v) {
+  STRANE = citajStrane();
+  const n = STRANE.length;
+  const a = (v - 1 + n) % n, b = v % n;
+  if (ugaoJePrav(STRANE, v)) {
+    document.getElementById('skica_poruka').innerHTML = 'Ugao je već prav.';
+    return;
+  }
+  STRANE[a].odmak = 0;
+  STRANE[b].odmak = 0;
+  const uspjelo = zatvoriDuzinama(STRANE);
+  crtajStrane(); osvjeziCrtez();
+  document.getElementById('skica_poruka').innerHTML = uspjelo
+    ? 'Ugao postavljen na 90°. Dužine susjednih strana su doštimane da oblik ostane zatvoren.'
+    : '<b style="color:#c0392b">Ugao postavljen, ali oblik ne zatvara — provjeri mjere.</b>';
+}
+
+function izaberiStranu(i) {
+  IZABRANA_STRANA = i;
+  crtajStrane(); crtajDigitalno();
+  const red = document.querySelectorAll('#strane_lista .strana-red')[i];
+  if (red) {
+    red.style.background = '#eef4fc';
+    const polje = red.querySelector('.st-duz');
+    if (polje) { polje.focus(); polje.select(); }
+  }
+}
+
+function crtajDigitalno() {
+  const omot = document.getElementById('digital_omot');
+  const svg = document.getElementById('digital');
+  if (!svg) return;
+  const strane = citajStrane();
+  const t = tjemenaOdStrana(strane).tjemena;
+  if (!t || t.length < 3) { omot.style.display = 'none'; return; }
+  omot.style.display = 'block';
+
+  const w = 330, hh = 270, pad = 34;
+  const xs = t.map(p => p[0]), ys = t.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const sw = (maxX - minX) || 1, sh = (maxY - minY) || 1;
+  const k = Math.min((w - pad*2) / sw, (hh - pad*2) / sh);
+  const px = p => (w - sw*k)/2 + (p[0] - minX) * k;
+  const py = p => (hh - sh*k)/2 + (maxY - p[1]) * k;
+
+  const put = t.map((p, i) => (i ? 'L' : 'M') + px(p).toFixed(1) + ' ' + py(p).toFixed(1)).join(' ') + ' Z';
+  let s = '<path d="' + put + '" fill="#e8f0fa" stroke="#1a5fa8" stroke-width="1.5"/>';
+
+  // uglovi — dodir postavlja na 90°
+  t.forEach((p, v) => {
+    const prav = ugaoJePrav(strane, v);
+    const x = px(p), y = py(p);
+    s += '<g style="cursor:pointer" onclick="postaviPraviUgao(' + v + ')">' +
+      '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="11" fill="transparent"/>' +
+      (prav
+        ? '<rect x="' + (x-4.5).toFixed(1) + '" y="' + (y-4.5).toFixed(1) + '" width="9" height="9" ' +
+          'fill="#fff" stroke="#1f8a4c" stroke-width="1.8"/>'
+        : '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="5" fill="#e67e22"/>') +
+      '</g>';
+  });
+
+  // strane — dodir slova otvara unos mjere
+  strane.forEach((st, i) => {
+    const p = t[i], q = t[(i + 1) % t.length];
+    const mx = (px(p) + px(q)) / 2, my = (py(p) + py(q)) / 2;
+    const izabrana = IZABRANA_STRANA === i;
+    const kosa = Number(st.odmak) !== 0;
+    s += '<g style="cursor:pointer" onclick="izaberiStranu(' + i + ')">' +
+      '<circle cx="' + mx.toFixed(1) + '" cy="' + my.toFixed(1) + '" r="12" ' +
+        'fill="' + (izabrana ? '#1a5fa8' : '#fff') + '" stroke="' + (kosa ? '#e67e22' : '#1a5fa8') + '" stroke-width="1.5"/>' +
+      '<text x="' + mx.toFixed(1) + '" y="' + (my + 4).toFixed(1) + '" text-anchor="middle" ' +
+        'font-size="11" font-weight="800" fill="' + (izabrana ? '#fff' : '#134a85') + '">' + SLOVA[i] + '</text>' +
+      '<text x="' + mx.toFixed(1) + '" y="' + (my + 26).toFixed(1) + '" text-anchor="middle" ' +
+        'font-size="10" fill="#6b7a8d">' + Math.round(Math.hypot(q[0]-p[0], q[1]-p[1])) + '</text>' +
+      '</g>';
+  });
+
+  svg.innerHTML = s;
+
+  const kosih = strane.filter(x => Number(x.odmak) !== 0).length;
+  const nepravih = t.filter((p, v) => !ugaoJePrav(strane, v)).length;
+  document.getElementById('digital_unos').innerHTML =
+    '<span class="hint">' + strane.length + ' strana · ' + (t.length - nepravih) + ' pravih uglova' +
+    (kosih ? ' · ' + kosih + ' kosih strana' : '') + '</span>';
+}
 
 function citajStrane() {
   const red = [...document.querySelectorAll('#strane_lista .strana-red')];
@@ -621,7 +761,8 @@ function crtajStrane() {
     STRANE.map((s, i) => {
       const kosi = Number(s.odmak) !== 0;
       const stvarna = Math.round(Math.hypot(Number(s.duzina) || 0, Number(s.odmak) || 0));
-      return '<div class="strana-red" style="display:flex;gap:6px;align-items:center;margin-bottom:5px;flex-wrap:wrap">' +
+      return '<div class="strana-red" style="display:flex;gap:6px;align-items:center;margin-bottom:5px;flex-wrap:wrap' +
+        (IZABRANA_STRANA === i ? ';background:#eef4fc;border-radius:6px;padding:3px' : '') + '">' +
         '<span style="font-weight:800;color:#134a85;width:20px;font-size:13px">' + SLOVA[i] + '</span>' +
         '<input class="st-duz" type="number" value="' + s.duzina + '" oninput="straneIzmijenjene()" style="width:110px">' +
         '<input class="st-odmak" type="number" value="' + (s.odmak || 0) + '" oninput="straneIzmijenjene()" ' +
@@ -681,7 +822,7 @@ function osvjeziCrtez() {
   if (jeP && !document.querySelector('#strane_lista .strana-red')) crtajStrane();
   const a = document.getElementById('n_a').value, b = document.getElementById('n_b').value;
   const c = document.getElementById('n_c').value, d = document.getElementById('n_d').value;
-  if (oblik === 'poligon') provjeriZatvaranje();
+  if (oblik === 'poligon') { provjeriZatvaranje(); crtajDigitalno(); }
   nacrtaj(document.getElementById('crtez'), oblik, a, b, c, d);
   const p = oblik === 'poligon' ? povrsinaTjemena(citajTjemena()) : povrsinaOd(oblik, a, b, c, d);
   const cij = Number(document.getElementById('n_cijena').value) || 0;
