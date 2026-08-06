@@ -1078,8 +1078,12 @@ router.post('/naplate-log/:id/storniraj', async (req, res) => {
     }
     // Ako je izvor bio banka, briše se sam bankovni upis (nikad nije bio fizička gotovina,
     // pa nema smisla praviti reverzni "minus" red kao kod gotovine — jednostavno se
-    // uklanja, kao da naplata nikad nije ni stigla preko banke).
+    // uklanja, kao da naplata nikad nije ni stigla preko banke). NAPOMENA: prvo se mora
+    // ukloniti referenca (banka_uplata_id) sa OVOG log reda — inače foreign key ograničenje
+    // sprječava brisanje (banka_uplate red je i dalje "referenciran" sopstvenim log redom
+    // dok se explicitno ne ukloni ta veza).
     if (log.banka_uplata_id) {
+      await client.query('UPDATE naplate_duga_log SET banka_uplata_id=NULL WHERE id=$1', [log.id]);
       await client.query('DELETE FROM banka_uplate WHERE id=$1', [log.banka_uplata_id]);
     }
 
