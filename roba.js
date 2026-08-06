@@ -241,20 +241,42 @@ router.get('/lager/backup-postoji', async (req, res) => {
   }
 });
 
-// POST /api/roba/lager/undo?objekt_id=X - vraća poslednji backup (npr. nakon greškom obrisanog lagera)
+// GET /api/roba/lager/backup-lista?objekt_id=X - SVE dostupne tačke za vraćanje (ne samo
+// poslednja) — omogućava da se vrati VIŠE koraka unazad, ne samo jedan.
+router.get('/lager/backup-lista', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin.' });
+  const objektId = trebaObjekat(req.query.objekt_id);
+  if (!objektId) return res.status(400).json({ error: 'Nedostaje objekt_id.' });
+  try {
+    const r = await pool.query(
+      `SELECT id, kreiran, kreirao_ime, jsonb_array_length(podaci) AS broj_stavki
+       FROM roba_pj_backup WHERE objekt_id=$1 ORDER BY kreiran DESC LIMIT 20`,
+      [objektId]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/roba/lager/undo?objekt_id=X&backup_id=Y - vraća ODREĐENI backup (ako je
+// backup_id poslat) ili poslednji (ako nije) — omogućava vraćanje VIŠE koraka unazad, ne
+// samo na najsvežiji backup. Kad se vrati na stariji backup, SVI backupovi noviji od njega
+// se takođe brišu (postali bi nekonzistentni — "redoslijed" bi izgubio smisao).
 router.post('/lager/undo', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Samo admin može vršiti undo.' });
   const objektId = trebaObjekat(req.body.objekt_id || req.query.objekt_id);
   if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
+  const backupId = req.body.backup_id || req.query.backup_id || null;
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const bRes = await client.query(
-      `SELECT id, podaci FROM roba_pj_backup WHERE objekt_id=$1 ORDER BY kreiran DESC LIMIT 1 FOR UPDATE`,
-      [objektId]
-    );
+    const bRes = backupId
+      ? await client.query(`SELECT id, kreiran, podaci FROM roba_pj_backup WHERE id=$1 AND objekt_id=$2 FOR UPDATE`, [backupId, objektId])
+      : await client.query(`SELECT id, kreiran, podaci FROM roba_pj_backup WHERE objekt_id=$1 ORDER BY kreiran DESC LIMIT 1 FOR UPDATE`, [objektId]);
     if (!bRes.rows.length) throw Object.assign(new Error('Nema sačuvane rezervne kopije za ovaj objekat.'), { status: 404 });
 
     const stavke = bRes.rows[0].podaci;
@@ -266,7 +288,9 @@ router.post('/lager/undo', async (req, res) => {
         [s.roba_id, objektId, s.cijena, s.stanje]
       );
     }
-    await client.query('DELETE FROM roba_pj_backup WHERE id=$1', [bRes.rows[0].id]);
+    // Obriši ovaj backup i SVE novije od njega (postali bi besmisleni/nekonzistentni ako se
+    // sad vratimo na jednu tačku dublje unazad).
+    await client.query('DELETE FROM roba_pj_backup WHERE objekt_id=$1 AND kreiran >= $2', [objektId, bRes.rows[0].kreiran]);
 
     await client.query('COMMIT');
     res.json({ ok: true, vraceno: stavke.length });
@@ -1023,31 +1047,40 @@ router.post('/uvoz-batch/:id/storniraj', async (req, res) => {
     );
     if (!stavke.rows.length) throw Object.assign(new Error('Nema stavki za ovaj uvoz (možda je star, prije uvođenja ove funkcije).'), { status: 400 });
 
-    // Provjeri PRVO da nijedna stavka ne bi pala ispod nule.
+    // Performanse: umjesto 1 upita PO STAVCI (mogao je biti stotine kod velikog uvoza),
+    // sve tri operacije ispod (provjera stanja, umanjenje stanja, upis storno-tragova) se
+    // radi u JEDNOM upitu svaka, preko unnest() — baza upari niz sa svakom stavkom odjednom.
+    const robaIds = stavke.rows.map(s => s.roba_id);
+    const objektIds = stavke.rows.map(s => s.objekt_id);
+    const kolicine = stavke.rows.map(s => parseFloat(s.kolicina));
+
+    const provjera = await client.query(`
+      SELECT v.roba_id, v.objekt_id, v.kolicina AS uvoz_kolicina,
+             r.sifra, r.naziv, COALESCE(rp.stanje,0) AS stanje
+      FROM unnest($1::int[], $2::int[], $3::numeric[]) AS v(roba_id, objekt_id, kolicina)
+      JOIN roba r ON r.id = v.roba_id
+      LEFT JOIN roba_pj rp ON rp.roba_id = v.roba_id AND rp.objekt_id = v.objekt_id
+    `, [robaIds, objektIds, kolicine]);
+
     const problemi = [];
-    for (const s of stavke.rows) {
-      const trenutno = await client.query(
-        'SELECT r.sifra, r.naziv, rp.stanje FROM roba_pj rp JOIN roba r ON r.id=rp.roba_id WHERE rp.roba_id=$1 AND rp.objekt_id=$2',
-        [s.roba_id, s.objekt_id]
-      );
-      const stanje = trenutno.rows.length ? parseFloat(trenutno.rows[0].stanje) : 0;
-      if (stanje - parseFloat(s.kolicina) < -0.001) {
-        problemi.push(`${trenutno.rows[0]?.sifra || s.roba_id} (${trenutno.rows[0]?.naziv || ''}): na stanju ${stanje}, uvoz je dodao ${s.kolicina} — dio je već prodat/premešten, ne može se stornirati automatski.`);
+    for (const row of provjera.rows) {
+      if (parseFloat(row.stanje) - parseFloat(row.uvoz_kolicina) < -0.001) {
+        problemi.push(`${row.sifra} (${row.naziv}): na stanju ${row.stanje}, uvoz je dodao ${row.uvoz_kolicina} — dio je već prodat/premešten, ne može se stornirati automatski.`);
       }
     }
     if (problemi.length) throw Object.assign(new Error('Storno odbijen — sledeće stavke bi pale ispod nule:\n' + problemi.join('\n')), { status: 409 });
 
-    for (const s of stavke.rows) {
-      await client.query(
-        'UPDATE roba_pj SET stanje = stanje - $1, azurirano=now() WHERE roba_id=$2 AND objekt_id=$3',
-        [s.kolicina, s.roba_id, s.objekt_id]
-      );
-      await client.query(
-        `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, napomena, korisnik_id, korisnik_ime, uvoz_batch_id)
-         VALUES ($1,$2,'storno-uvoza',$3,$4,$5,$6,$7)`,
-        [s.roba_id, s.objekt_id, -s.kolicina, `Storno uvoza #${batch.id} (${batch.naziv_fajla || ''})`, user.id, user.ime_prezime, batch.id]
-      );
-    }
+    await client.query(`
+      UPDATE roba_pj SET stanje = stanje - v.kolicina, azurirano = now()
+      FROM unnest($1::int[], $2::int[], $3::numeric[]) AS v(roba_id, objekt_id, kolicina)
+      WHERE roba_pj.roba_id = v.roba_id AND roba_pj.objekt_id = v.objekt_id
+    `, [robaIds, objektIds, kolicine]);
+
+    await client.query(`
+      INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, napomena, korisnik_id, korisnik_ime, uvoz_batch_id)
+      SELECT v.roba_id, v.objekt_id, 'storno-uvoza', -v.kolicina, $4, $5, $6, $7
+      FROM unnest($1::int[], $2::int[], $3::numeric[]) AS v(roba_id, objekt_id, kolicina)
+    `, [robaIds, objektIds, kolicine, `Storno uvoza #${batch.id} (${batch.naziv_fajla || ''})`, user.id, user.ime_prezime, batch.id]);
 
     await client.query(
       `UPDATE uvoz_batch SET stornirano=true, stornirao_id=$1, stornirao_ime=$2, stornirano_kada=now() WHERE id=$3`,

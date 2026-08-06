@@ -128,107 +128,117 @@ router.get('/klijenti', async (req, res) => {
   const user = req.session?.user;
   if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });
   try {
-    // Dug iz maloprodaje (otpremnice) — nacin_placanja='banka' se odmah upisuje u
-    // banka_uplate (potpuno ili djelimično plaćeno), pa je preostali dug uvijek
-    // "nepoznat" način dok se stvarno ne naplati (bira se tek pri samoj naplati).
-    const dugMalo = await pool.query(`
-      SELECT
-        COALESCE(kupac_id::text, 'ime:'||LOWER(TRIM(kupac_naziv))) AS kljuc,
-        kupac_id, kupac_naziv,
-        SUM(ukupan_iznos - iznos_placeno) AS iznos
-      FROM otpremnice
-      WHERE status_placanja != 'placeno' AND status = 'potvrdjena' AND kupac_naziv IS NOT NULL
-      GROUP BY kljuc, kupac_id, kupac_naziv
-    `);
+    // Performanse: svih 9 upita ispod su MEĐUSOBNO NEZAVISNI (nijedan ne koristi rezultat
+    // prethodnog) — ranije su se izvršavali REDOM (sekvencijalno), sad se šalju ISTOVREMENO
+    // (Promise.all) — baza ih obradi paralelno, umjesto da čeka jedan pa drugi pa treći.
+    const [
+      dugMalo, nijeVerifikovano, dugNalozi, uplatioBanka, pretplate,
+      ocekivane, kategorizacija, kategStavkeOtp, kategStavkeNal,
+    ] = await Promise.all([
+      // Dug iz maloprodaje (otpremnice) — nacin_placanja='banka' se odmah upisuje u
+      // banka_uplate (potpuno ili djelimično plaćeno), pa je preostali dug uvijek
+      // "nepoznat" način dok se stvarno ne naplati (bira se tek pri samoj naplati).
+      pool.query(`
+        SELECT
+          COALESCE(kupac_id::text, 'ime:'||LOWER(TRIM(kupac_naziv))) AS kljuc,
+          kupac_id, kupac_naziv,
+          SUM(ukupan_iznos - iznos_placeno) AS iznos
+        FROM otpremnice
+        WHERE status_placanja != 'placeno' AND status = 'potvrdjena' AND kupac_naziv IS NOT NULL
+        GROUP BY kljuc, kupac_id, kupac_naziv
+      `),
 
-    // Koliko od tih dugovnih otpremnica JOŠ NIJE pregledao/potvrdio blagajnik ("kontrola")
-    // — brojač po klijentu, da "Klijenti finansije" pokaže i ovaj signal (bez otvaranja
-    // svake otpremnice pojedinačno).
-    const nijeVerifikovano = await pool.query(`
-      SELECT
-        COALESCE(o.kupac_id::text, 'ime:'||LOWER(TRIM(o.kupac_naziv))) AS kljuc,
-        o.kupac_id, o.kupac_naziv, COUNT(*) AS broj
-      FROM otpremnice o
-      LEFT JOIN gotovina g ON g.nalog_r_br = o.broj AND g.opis LIKE 'Dug po otpremnici%'
-      WHERE o.status_placanja != 'placeno' AND o.status = 'potvrdjena' AND o.kupac_naziv IS NOT NULL
-        AND (g.predao_blagajniku IS NULL OR g.predao_blagajniku = false)
-      GROUP BY kljuc, o.kupac_id, o.kupac_naziv
-    `);
+      // Koliko od tih dugovnih otpremnica JOŠ NIJE pregledao/potvrdio blagajnik ("kontrola")
+      // — brojač po klijentu, da "Klijenti finansije" pokaže i ovaj signal (bez otvaranja
+      // svake otpremnice pojedinačno).
+      pool.query(`
+        SELECT
+          COALESCE(o.kupac_id::text, 'ime:'||LOWER(TRIM(o.kupac_naziv))) AS kljuc,
+          o.kupac_id, o.kupac_naziv, COUNT(*) AS broj
+        FROM otpremnice o
+        LEFT JOIN gotovina g ON g.nalog_r_br = o.broj AND g.opis LIKE 'Dug po otpremnici%'
+        WHERE o.status_placanja != 'placeno' AND o.status = 'potvrdjena' AND o.kupac_naziv IS NOT NULL
+          AND (g.predao_blagajniku IS NULL OR g.predao_blagajniku = false)
+        GROUP BY kljuc, o.kupac_id, o.kupac_naziv
+      `),
 
-    // Dug iz radnih naloga (proizvodnja_jopex) — po naručiocu (slobodan tekst).
-    // KRITIČNO: checkbox "Naplaćeno" je ODLUČUJUĆI signal (isti koji koristi i blagajna
-    // za "Naplaćeno (nalozi)"/"Očekivano od naloga") — ako je nalog čekiran kao plaćen,
-    // NE SMIJE se prikazati kao dug, čak i ako se brojevi (ugovoreno-avans-naplaćeno) ne
-    // poklapaju savršeno (npr. zbog podataka iz uvoza koji nisu bili 100% precizni).
-    const dugNalozi = await pool.query(`
-      SELECT
-        'ime:'||LOWER(TRIM(narucilac)) AS kljuc,
-        NULL::int AS kupac_id, narucilac AS kupac_naziv,
-        SUM(GREATEST(ugovorena_suma - avans - naplaceno_iznos, 0)) AS iznos
-      FROM proizvodnja_jopex
-      WHERE COALESCE(stornirano,false)=false
-        AND COALESCE(naplaceno,false)=false
-        AND narucilac IS NOT NULL AND TRIM(narucilac) != ''
-        AND (ugovorena_suma - avans - naplaceno_iznos) > 0.01
-      GROUP BY kljuc, narucilac
-    `);
+      // Dug iz radnih naloga (proizvodnja_jopex) — po naručiocu (slobodan tekst).
+      // KRITIČNO: checkbox "Naplaćeno" je ODLUČUJUĆI signal (isti koji koristi i blagajna
+      // za "Naplaćeno (nalozi)"/"Očekivano od naloga") — ako je nalog čekiran kao plaćen,
+      // NE SMIJE se prikazati kao dug, čak i ako se brojevi (ugovoreno-avans-naplaćeno) ne
+      // poklapaju savršeno (npr. zbog podataka iz uvoza koji nisu bili 100% precizni).
+      pool.query(`
+        SELECT
+          'ime:'||LOWER(TRIM(narucilac)) AS kljuc,
+          NULL::int AS kupac_id, narucilac AS kupac_naziv,
+          SUM(GREATEST(ugovorena_suma - avans - naplaceno_iznos, 0)) AS iznos
+        FROM proizvodnja_jopex
+        WHERE COALESCE(stornirano,false)=false
+          AND COALESCE(naplaceno,false)=false
+          AND narucilac IS NOT NULL AND TRIM(narucilac) != ''
+          AND (ugovorena_suma - avans - naplaceno_iznos) > 0.01
+        GROUP BY kljuc, narucilac
+      `),
 
-    // Stvarno uplaćeno u banku (istorijski + iz prodaje) — po klijentu, iz banka_uplate.
-    // Samo POTVRĐENI zapisi se broje (istorijski unos od blagajnika čeka potvrdu).
-    const uplatioBanka = await pool.query(`
-      SELECT
-        COALESCE(kupac_id::text, 'ime:'||LOWER(TRIM(kupac_naziv))) AS kljuc,
-        kupac_id, kupac_naziv, SUM(iznos) AS iznos
-      FROM banka_uplate
-      WHERE kupac_naziv IS NOT NULL AND potvrdjeno = true
-      GROUP BY kljuc, kupac_id, kupac_naziv
-    `);
+      // Stvarno uplaćeno u banku (istorijski + iz prodaje) — po klijentu, iz banka_uplate.
+      // Samo POTVRĐENI zapisi se broje (istorijski unos od blagajnika čeka potvrdu).
+      pool.query(`
+        SELECT
+          COALESCE(kupac_id::text, 'ime:'||LOWER(TRIM(kupac_naziv))) AS kljuc,
+          kupac_id, kupac_naziv, SUM(iznos) AS iznos
+        FROM banka_uplate
+        WHERE kupac_naziv IS NOT NULL AND potvrdjeno = true
+        GROUP BY kljuc, kupac_id, kupac_naziv
+      `),
 
-    // Pretplata (avans/kredit) — SAMO za registrovane kupce (kupac_transakcije zahtijeva
-    // kupac_id), pozitivan saldo = kupac ima više uplaćeno nego što duguje.
-    const pretplate = await pool.query(`
-      SELECT t.kupac_id, k.naziv AS kupac_naziv, SUM(t.iznos) AS saldo
-      FROM kupac_transakcije t JOIN kupci k ON k.id = t.kupac_id
-      GROUP BY t.kupac_id, k.naziv
-      HAVING SUM(t.iznos) > 0.01
-    `);
+      // Pretplata (avans/kredit) — SAMO za registrovane kupce (kupac_transakcije zahtijeva
+      // kupac_id), pozitivan saldo = kupac ima više uplaćeno nego što duguje.
+      pool.query(`
+        SELECT t.kupac_id, k.naziv AS kupac_naziv, SUM(t.iznos) AS saldo
+        FROM kupac_transakcije t JOIN kupci k ON k.id = t.kupac_id
+        GROUP BY t.kupac_id, k.naziv
+        HAVING SUM(t.iznos) > 0.01
+      `),
 
-    // Aktivne (nije realizovano/otkazano) očekivane uplate — SOFT umanjuju prikazani dug
-    // (obećanje klijenta, još nije stvarno stiglo na račun).
-    const ocekivane = await pool.query(`
-      SELECT
-        COALESCE(kupac_id::text, 'ime:'||LOWER(TRIM(kupac_naziv))) AS kljuc,
-        kupac_id, kupac_naziv, SUM(iznos) AS iznos
-      FROM ocekivane_uplate
-      WHERE realizovano=false AND otkazano=false
-      GROUP BY kljuc, kupac_id, kupac_naziv
-    `);
+      // Aktivne (nije realizovano/otkazano) očekivane uplate — SOFT umanjuju prikazani dug
+      // (obećanje klijenta, još nije stvarno stiglo na račun).
+      pool.query(`
+        SELECT
+          COALESCE(kupac_id::text, 'ime:'||LOWER(TRIM(kupac_naziv))) AS kljuc,
+          kupac_id, kupac_naziv, SUM(iznos) AS iznos
+        FROM ocekivane_uplate
+        WHERE realizovano=false AND otkazano=false
+        GROUP BY kljuc, kupac_id, kupac_naziv
+      `),
 
-    // Ručna kategorizacija duga (admin odlučuje šta je "Očekivana naplata" a šta "Teško
-    // naplativo" — nezavisno od izvora, može se premeštati u bilo kom trenutku).
-    const kategorizacija = await pool.query(`SELECT * FROM dug_kategorizacija`);
+      // Ručna kategorizacija duga (admin odlučuje šta je "Očekivana naplata" a šta "Teško
+      // naplativo" — nezavisno od izvora, može se premeštati u bilo kom trenutku).
+      pool.query(`SELECT * FROM dug_kategorizacija`),
+
+      // Kategorizacija PO STAVCI (preciznija, po pojedinačnoj otpremnici/nalogu) — sabira se
+      // PO KLIJENTU i dodaje na ručnu (po klijentu) kategorizaciju iznad — oba mehanizma
+      // zajedno čine konačan prikaz (po dogovoru, oba ostaju aktivna).
+      pool.query(`
+        SELECT COALESCE(o.kupac_id::text, 'ime:'||LOWER(TRIM(o.kupac_naziv))) AS kljuc,
+               dks.kategorija, SUM(o.ukupan_iznos - o.iznos_placeno) AS iznos
+        FROM dug_kategorizacija_stavka dks
+        JOIN otpremnice o ON o.id = dks.stavka_id::integer AND dks.tip='otpremnica'
+        WHERE o.status_placanja != 'placeno' AND o.status='potvrdjena'
+        GROUP BY kljuc, dks.kategorija
+      `),
+      pool.query(`
+        SELECT 'ime:'||LOWER(TRIM(p.narucilac)) AS kljuc,
+               dks.kategorija, SUM(GREATEST(p.ugovorena_suma - p.avans - p.naplaceno_iznos, 0)) AS iznos
+        FROM dug_kategorizacija_stavka dks
+        JOIN proizvodnja_jopex p ON p.r_br = dks.stavka_id::integer AND dks.tip='radni_nalog'
+        WHERE COALESCE(p.stornirano,false)=false AND COALESCE(p.naplaceno,false)=false
+        GROUP BY kljuc, dks.kategorija
+      `),
+    ]);
+
     const kategMapaPoKljucu = {};
     kategorizacija.rows.forEach(k => { kategMapaPoKljucu[k.kljuc] = k; });
 
-    // Kategorizacija PO STAVCI (preciznija, po pojedinačnoj otpremnici/nalogu) — sabira se
-    // PO KLIJENTU i dodaje na ručnu (po klijentu) kategorizaciju iznad — oba mehanizma
-    // zajedno čine konačan prikaz (po dogovoru, oba ostaju aktivna).
-    const kategStavkeOtp = await pool.query(`
-      SELECT COALESCE(o.kupac_id::text, 'ime:'||LOWER(TRIM(o.kupac_naziv))) AS kljuc,
-             dks.kategorija, SUM(o.ukupan_iznos - o.iznos_placeno) AS iznos
-      FROM dug_kategorizacija_stavka dks
-      JOIN otpremnice o ON o.id::text = dks.stavka_id AND dks.tip='otpremnica'
-      WHERE o.status_placanja != 'placeno' AND o.status='potvrdjena'
-      GROUP BY kljuc, dks.kategorija
-    `);
-    const kategStavkeNal = await pool.query(`
-      SELECT 'ime:'||LOWER(TRIM(p.narucilac)) AS kljuc,
-             dks.kategorija, SUM(GREATEST(p.ugovorena_suma - p.avans - p.naplaceno_iznos, 0)) AS iznos
-      FROM dug_kategorizacija_stavka dks
-      JOIN proizvodnja_jopex p ON p.r_br::text = dks.stavka_id AND dks.tip='radni_nalog'
-      WHERE COALESCE(p.stornirano,false)=false AND COALESCE(p.naplaceno,false)=false
-      GROUP BY kljuc, dks.kategorija
-    `);
     const kategStavkePoKljucu = {}; // kljuc -> {ocekivana_naplata, tesko_naplativo}
     function dodajStavkuKateg(row) {
       if (!kategStavkePoKljucu[row.kljuc]) kategStavkePoKljucu[row.kljuc] = { ocekivana_naplata: 0, tesko_naplativo: 0 };
@@ -505,7 +515,24 @@ router.get('/vp-cekanje', async (req, res) => {
   const user = req.session?.user;
   if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });
   try {
+    // Performanse: CTE agregati (računaju se JEDNOM, iskorišćavaju indekse) umjesto
+    // korelisanih podupita po redu (koji bi se ponovo izvršavali za SVAKI red prije
+    // ograničavanja/sortiranja) — bitno na skali kad naplate_duga_log poraste.
     const r = await pool.query(`
+      WITH vp_bruto AS (
+        SELECT nalog_r_br, SUM(iznos) AS vp_iznos
+        FROM gotovina WHERE opis LIKE 'Prodaja (bruto)%'
+        GROUP BY nalog_r_br
+      ),
+      naplate_agg AS (
+        SELECT otpremnica_broj,
+          SUM(iznos) FILTER (WHERE izvor='gotovina') AS naplaceno_gotovina,
+          SUM(iznos) FILTER (WHERE izvor='banka') AS naplaceno_banka,
+          (array_agg(upisao_ime ORDER BY kreirano DESC))[1] AS naplatio_ime,
+          (array_agg(kreirano ORDER BY kreirano DESC))[1] AS naplatio_kada
+        FROM naplate_duga_log WHERE COALESCE(stornirano,false)=false
+        GROUP BY otpremnica_broj
+      )
       SELECT
         o.id, o.broj, o.datum, o.kupac_naziv, o.komercijalista_ime, o.objekt_naziv,
         o.ukupan_iznos, o.iznos_placeno, o.status_placanja,
@@ -513,24 +540,18 @@ router.get('/vp-cekanje', async (req, res) => {
         COUNT(g.id) AS broj_zapisa,
         BOOL_AND(g.predao_blagajniku) AS sve_potvrdjeno,
         MAX(g.preuzeo_ime) AS potvrdio_ime,
-        zn.upisao_ime AS naplatio_ime,
-        zn.kreirano AS naplatio_kada,
-        -- Struktura naplate: koliko je stiglo PRVOBITNO preko VP (u trenutku prodaje,
-        -- prije bilo koje docnije naplate duga), i koliko je docnije naplaćeno kroz
-        -- gotovinu vs banku (naplate_duga_log, po izvoru).
-        COALESCE((SELECT SUM(g2.iznos) FROM gotovina g2 WHERE g2.nalog_r_br=o.broj AND g2.opis LIKE 'Prodaja (bruto)%'),0) AS vp_iznos,
-        COALESCE((SELECT SUM(ndl.iznos) FROM naplate_duga_log ndl WHERE ndl.otpremnica_broj=o.broj AND ndl.izvor='gotovina' AND COALESCE(ndl.stornirano,false)=false),0) AS naplaceno_gotovina,
-        COALESCE((SELECT SUM(ndl.iznos) FROM naplate_duga_log ndl WHERE ndl.otpremnica_broj=o.broj AND ndl.izvor='banka' AND COALESCE(ndl.stornirano,false)=false),0) AS naplaceno_banka
+        na.naplatio_ime, na.naplatio_kada,
+        COALESCE(vb.vp_iznos,0) AS vp_iznos,
+        COALESCE(na.naplaceno_gotovina,0) AS naplaceno_gotovina,
+        COALESCE(na.naplaceno_banka,0) AS naplaceno_banka
       FROM otpremnice o
       JOIN gotovina g ON g.nalog_r_br = o.broj
         AND (g.opis LIKE 'Prodaja (bruto)%' OR g.opis LIKE 'Dug po otpremnici%')
-      LEFT JOIN LATERAL (
-        SELECT upisao_ime, kreirano FROM naplate_duga_log
-        WHERE otpremnica_broj = o.broj AND COALESCE(stornirano,false)=false
-        ORDER BY kreirano DESC LIMIT 1
-      ) zn ON true
+      LEFT JOIN vp_bruto vb ON vb.nalog_r_br = o.broj
+      LEFT JOIN naplate_agg na ON na.otpremnica_broj = o.broj
       GROUP BY o.id, o.broj, o.datum, o.kupac_naziv, o.komercijalista_ime, o.objekt_naziv,
-               o.ukupan_iznos, o.iznos_placeno, o.status_placanja, zn.upisao_ime, zn.kreirano
+               o.ukupan_iznos, o.iznos_placeno, o.status_placanja,
+               na.naplatio_ime, na.naplatio_kada, vb.vp_iznos, na.naplaceno_gotovina, na.naplaceno_banka
       ORDER BY o.datum DESC
       LIMIT 200
     `);
