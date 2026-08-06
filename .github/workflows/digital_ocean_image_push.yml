@@ -27,7 +27,7 @@ jobs:
       run: docker build . --file Dockerfile -t jopex-test:latest -t ${{ secrets.REGISTRY_NAME }}/jopex-test:latest
     
     - name: Log in to DigitalOcean Container Registry with short-lived credentials
-      run: doctl registries login --expiry-seconds 1200
+      run: doctl registries login ${{ secrets.REGISTRY_NAME }} --expiry-seconds 1200
 
     - name: Push image to DigitalOcean Container Registry
       run: docker push ${{ secrets.REGISTRY_NAME }}/jopex-test:latest
