@@ -514,7 +514,13 @@ router.get('/vp-cekanje', async (req, res) => {
         BOOL_AND(g.predao_blagajniku) AS sve_potvrdjeno,
         MAX(g.preuzeo_ime) AS potvrdio_ime,
         zn.upisao_ime AS naplatio_ime,
-        zn.kreirano AS naplatio_kada
+        zn.kreirano AS naplatio_kada,
+        -- Struktura naplate: koliko je stiglo PRVOBITNO preko VP (u trenutku prodaje,
+        -- prije bilo koje docnije naplate duga), i koliko je docnije naplaćeno kroz
+        -- gotovinu vs banku (naplate_duga_log, po izvoru).
+        COALESCE((SELECT SUM(g2.iznos) FROM gotovina g2 WHERE g2.nalog_r_br=o.broj AND g2.opis LIKE 'Prodaja (bruto)%'),0) AS vp_iznos,
+        COALESCE((SELECT SUM(ndl.iznos) FROM naplate_duga_log ndl WHERE ndl.otpremnica_broj=o.broj AND ndl.izvor='gotovina' AND COALESCE(ndl.stornirano,false)=false),0) AS naplaceno_gotovina,
+        COALESCE((SELECT SUM(ndl.iznos) FROM naplate_duga_log ndl WHERE ndl.otpremnica_broj=o.broj AND ndl.izvor='banka' AND COALESCE(ndl.stornirano,false)=false),0) AS naplaceno_banka
       FROM otpremnice o
       JOIN gotovina g ON g.nalog_r_br = o.broj
         AND (g.opis LIKE 'Prodaja (bruto)%' OR g.opis LIKE 'Dug po otpremnici%')

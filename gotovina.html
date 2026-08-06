@@ -1191,13 +1191,21 @@ async function ucitajVpCekanje(){
         akcija=`<span style="color:var(--green);font-weight:700;font-size:12px;white-space:nowrap;">✓ Plaćeno${o.naplatio_ime?' — '+esc(o.naplatio_ime):''}${o.naplatio_kada?' · '+fd(o.naplatio_kada):''}</span>`;
       }
       return `
-      <div style="display:flex;justify-content:space-between;align-items:center;${boja}border-radius:8px;padding:10px 12px;margin-bottom:8px;">
-        <div style="font-size:12.5px;">
-          <b>${esc(o.broj)}</b> — ${esc(o.kupac_naziv||'—')}
-          <span style="color:#8b96a5;"> · ${esc(o.objekt_naziv||'')} · ${fd(o.datum)} · Komercijalista: ${esc(o.komercijalista_ime||'—')}</span>
-          <div style="margin-top:2px;">Ukupno: ${fm(o.ukupan_iznos)}${!jePlaceno?` · Duguje: <b style="color:var(--red);">${fm(o.duguje)}</b>`:` · Plaćeno: <b>${fm(o.iznos_placeno)}</b>`}</div>
+      <div style="${boja}border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-size:12.5px;">
+            <b>${esc(o.broj)}</b> — ${esc(o.kupac_naziv||'—')}
+            <span style="color:#8b96a5;"> · ${esc(o.objekt_naziv||'')} · ${fd(o.datum)} · Komercijalista: ${esc(o.komercijalista_ime||'—')}</span>
+            <div style="margin-top:2px;">Ukupno: ${fm(o.ukupan_iznos)}${!jePlaceno?` · Duguje: <b style="color:var(--red);">${fm(o.duguje)}</b>`:` · Plaćeno: <b>${fm(o.iznos_placeno)}</b>`}</div>
+          </div>
+          ${akcija}
         </div>
-        ${akcija}
+        ${jePlaceno?`<div style="font-size:11px;color:#5a6b5f;margin-top:6px;padding-top:6px;border-top:1px dashed #a8d8b8;">
+          Struktura naplate:
+          ${parseFloat(o.vp_iznos)>0?` <b>VP (u trenutku prodaje):</b> ${fm(o.vp_iznos)} KM`:''}
+          ${parseFloat(o.naplaceno_gotovina)>0?` &middot; <b>Gotovina (docnije):</b> ${fm(o.naplaceno_gotovina)} KM`:''}
+          ${parseFloat(o.naplaceno_banka)>0?` &middot; <b>Banka (docnije):</b> ${fm(o.naplaceno_banka)} KM`:''}
+        </div>`:''}
       </div>
     `;}).join('');
   }catch(e){ cont.innerHTML='<div style="text-align:center;color:red;padding:20px;">Greška pri učitavanju.</div>'; }
