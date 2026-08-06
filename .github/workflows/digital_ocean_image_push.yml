@@ -18,7 +18,11 @@ jobs:
       uses: digitalocean/action-doctl@v2
       with:
         token: ${{ secrets.DIGITAL_OCEAN_TOKEN }}
-
+    - name: Create .env file
+      run: |
+        touch .env
+        echo "${{ secrets.ENV_FILE }}" > .env
+        
     - name: Build the Docker image
       run: docker build . --file Dockerfile -t jopex-test:latest -t ${{ secrets.REGISTRY_NAME }}/jopex-test:latest
     
