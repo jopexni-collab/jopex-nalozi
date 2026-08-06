@@ -137,16 +137,21 @@ router.get('/suma', async (req, res) => {
       }));
     } catch (e) { /* ne rušimo cijelu rutu zbog ovoga */ }
 
-    // Naloga — koristi STVARNU kolonu "naplaceno" (checkbox/štiklirano u lista.html), ne
-    // izračunato polje. "Naplaćeno" = zbir ugovorena_suma za sve naloge gdje JE štiklirano;
-    // "Očekivano od naloga" = zbir za_naplatu — ISTA formula kao proizvodnja.js/lista.html
-    // (ugovorena_suma - avans - naplaceno_iznos), da se cifra ovdje uvek slaže sa sumom
-    // dole u listi naloga. Isključuje STORNIRANE naloge (isto kao lista.html).
+    // Naloga — "Naplaćeno" sad uključuje SVE stvarno primljeno: za naloge oznacene
+    // "naplaćeno" (checkbox) = cijela ugovorena suma; za naloge JOŠ NE oznacene = ono što
+    // je već stvarno stiglo (avans + naplaceno_iznos), ne 0 — inače avans "nestaje" iz
+    // prikaza (ni u Naplaćeno ni u Očekivano). "Očekivano od naloga" ostaje nepromijenjeno
+    // (ugovorena_suma - avans - naplaceno_iznos za ne-naplaćene) — ISTA formula kao
+    // proizvodnja.js/lista.html, ovako se za svaki nalog Naplaćeno+Očekivano tačno slaže
+    // sa ugovorena_suma (ništa se ne gubi niti duplira). Isključuje STORNIRANE naloge.
     let naplacenoNalozi = 0, ocekivanoNalozi = 0;
     try {
       const rn = await pool.query(`
         SELECT
-          COALESCE(SUM(COALESCE(ugovorena_suma,0)) FILTER (WHERE naplaceno IS TRUE AND COALESCE(stornirano,false)=false), 0) AS naplaceno_ukupno,
+          COALESCE(SUM(
+            CASE WHEN naplaceno IS TRUE THEN COALESCE(ugovorena_suma,0)
+                 ELSE COALESCE(avans,0) + COALESCE(naplaceno_iznos,0) END
+          ) FILTER (WHERE COALESCE(stornirano,false)=false), 0) AS naplaceno_ukupno,
           COALESCE(SUM(COALESCE(ugovorena_suma,0) - COALESCE(avans,0) - COALESCE(naplaceno_iznos,0)) FILTER (WHERE naplaceno IS NOT TRUE AND COALESCE(stornirano,false)=false), 0) AS ocekivano_ukupno
         FROM proizvodnja_jopex
       `);
@@ -274,14 +279,19 @@ router.post('/:id/kontrola', async (req, res) => {
   }
 });
 
-// GET /api/gotovina/naplaceno-nalozi-detalji — struktura "Naplaćeno (nalozi)".
+// GET /api/gotovina/naplaceno-nalozi-detalji — struktura "Naplaćeno (nalozi)" — uključuje
+// i naloge koji NISU u potpunosti naplaćeni ali IMAJU već primljen avans/djelimičnu
+// naplatu (prikazuje TAJ primljeni deo, ne cijelu ugovorenu sumu za njih).
 router.get('/naplaceno-nalozi-detalji', async (req, res) => {
   if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
   try {
     const r = await pool.query(`
-      SELECT r_br, narucilac, zadatak, ugovorena_suma
+      SELECT r_br, narucilac, zadatak, naplaceno,
+        CASE WHEN naplaceno IS TRUE THEN COALESCE(ugovorena_suma,0)
+             ELSE COALESCE(avans,0) + COALESCE(naplaceno_iznos,0) END AS ugovorena_suma
       FROM proizvodnja_jopex
-      WHERE COALESCE(naplaceno,false) = true AND COALESCE(stornirano,false) = false
+      WHERE COALESCE(stornirano,false) = false
+        AND (COALESCE(naplaceno,false) = true OR COALESCE(avans,0) + COALESCE(naplaceno_iznos,0) > 0.01)
       ORDER BY ugovorena_suma DESC
       LIMIT 300
     `);

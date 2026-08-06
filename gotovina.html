@@ -1027,7 +1027,7 @@ async function otvoriDetaljiSume(tip){
     }else{
       cont.innerHTML=rows.map(n=>`
         <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #eee;font-size:12.5px;">
-          <div><b>#${n.r_br}</b> — ${esc(n.narucilac||'—')}<div style="color:#8b96a5;font-size:10.5px;">${esc(n.zadatak||'')}</div></div>
+          <div><b>#${n.r_br}</b> — ${esc(n.narucilac||'—')}<div style="color:#8b96a5;font-size:10.5px;">${esc(n.zadatak||'')}${tip==='naplaceno-nalozi'&&n.naplaceno!==true?' · <span style="color:var(--orange,#b8860b);">avans/djelimično</span>':''}</div></div>
           <b>${fm(tip==='ocekivano-nalozi'?n.za_naplatu:n.ugovorena_suma)} KM</b>
         </div>`).join('');
     }
