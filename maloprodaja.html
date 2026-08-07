@@ -536,6 +536,18 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 </div>
 
 <!-- ═══ OVERLAY: NAPLATA DUGA ═══ -->
+<div class="modal" id="modal-brzi-storno" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:22px;max-width:400px;width:92vw;text-align:center;">
+    <div style="font-size:15px;font-weight:700;color:var(--green,#1f8a4c);margin-bottom:10px;">✓ Naplata uspešna</div>
+    <div id="bs-poruka" style="font-size:13px;color:#3a4652;margin-bottom:18px;"></div>
+    <div style="font-size:11.5px;color:#8b96a5;margin-bottom:14px;">Ako je ovo bio dupli klik ili greška, možeš odmah poništiti — u suprotnom, samo zatvori.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button onclick="zadrziNaplatu()" style="padding:12px;border-radius:8px;border:1px solid var(--green,#1f8a4c);background:#e6f4ea;color:var(--green,#1f8a4c);font-weight:700;font-size:13px;cursor:pointer;">✓ Zadrži naplatu (sve je u redu)</button>
+      <button onclick="storniralNaplatu()" style="padding:12px;border-radius:8px;border:1px solid var(--red,#c0392b);background:#fce8e6;color:var(--red,#c0392b);font-weight:700;font-size:13px;cursor:pointer;">↩️ Ovo je bila greška — Storniraj odmah</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="ov-naplata-duga">
   <div class="ov-header">Naplata duga</div>
   <div class="ov-body">
@@ -1066,6 +1078,12 @@ function valutaOznaka(){
 // ali filtrira listu na Aleksandrovac (KM) — mora se prikazati KM, ne €).
 function fmMoneyZaObjekat(n, objektId){
   const valuta=window.__objektiPoId?.[objektId]?.valuta||'KM';
+  if(valuta==='EUR') return `${fm(n)} € (${fm(n*KURS_EUR_KM)} KM)`;
+  return `${fm(n)} KM`;
+}
+// Isto kao fmMoneyZaObjekat, ali kad VEĆ znamo valutu direktno (ne trebamo objekt_id
+// pretragu) — npr. kad backend vrati valutu direktno uz iznos.
+function fmValuta(n, valuta){
   if(valuta==='EUR') return `${fm(n)} € (${fm(n*KURS_EUR_KM)} KM)`;
   return `${fm(n)} KM`;
 }
@@ -1831,7 +1849,9 @@ async function ucitajSaldoPoKupcima(tiho){
   const totalDiv=document.getElementById('dug-total');
   if(!tiho) cont.innerHTML='<div class="spinner">Učitavanje...</div>';
   try{
-    const r=await fetch(`${API}/api/otpremnice/saldo-po-kupcima`);
+    const objekatId=document.getElementById('dug-fil-objekat').value;
+    const params=objekatId?`?objekt_id=${objekatId}`:'';
+    const r=await fetch(`${API}/api/otpremnice/saldo-po-kupcima${params}`);
     const rows=await r.json();
     if(!rows.length){
       cont.innerHTML='<div class="empty-msg">Svi kupci su saldirani (svi na nuli). 🎉</div>';
@@ -1849,13 +1869,14 @@ async function ucitajSaldoPoKupcima(tiho){
           </span>
         </div>
         <div class="otp-meta">${k.telefon?esc(k.telefon):''}${k.grad?' · '+esc(k.grad):''}</div>
-        <div class="otp-iznos" style="color:${pozitivan?'var(--green)':'var(--red)'};">${fm(Math.abs(k.saldo))} KM</div>
+        <div class="otp-iznos" style="color:${pozitivan?'var(--green)':'var(--red)'};">${fmValuta(Math.abs(k.saldo),k.valuta||'KM')}</div>
       </div>`;
     }).join('');
     totalDiv.style.display='block';
     const ukupnoNegativno=rows.filter(k=>k.saldo<0).reduce((s,k)=>s+Math.abs(k.saldo),0);
     const ukupnoPozitivno=rows.filter(k=>k.saldo>0).reduce((s,k)=>s+k.saldo,0);
-    totalDiv.innerHTML=`<span style="color:var(--red);">Duguju: ${fm(ukupnoNegativno)} KM</span><span class="cnt">Imaju avans: ${fm(ukupnoPozitivno)} KM &middot; ${rows.length} kupaca</span>`;
+    const valutaZaUkupno=objekatId?(rows[0]?.valuta||'KM'):'KM';
+    totalDiv.innerHTML=`<span style="color:var(--red);">Duguju: ${fmValuta(ukupnoNegativno,valutaZaUkupno)}</span><span class="cnt">Imaju avans: ${fmValuta(ukupnoPozitivno,valutaZaUkupno)} &middot; ${rows.length} kupaca</span>`;
   }catch(e){
     cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>';
     totalDiv.style.display='none';
@@ -1951,22 +1972,34 @@ async function potvrdiNaplatuDuga(){
     poruka+=(data.preostalo_duguje>0?` Preostalo duguje: ${fmMoney(data.preostalo_duguje)}.`:' Otpremnica je sad u potpunosti plaćena.');
     dugZaNaplatu=null;
     if(dugPrikaz==='kupci') ucitajSaldoPoKupcima(); else ucitajDugovanja();
-    // Odmah ponudi brz storno (najčešći slučaj greške — dupli klik na "Naplati") umjesto
-    // da se to traži kasnije kroz posebnu listu.
-    if(confirm(poruka+'\n\nAko je ovo bio DUPLI KLIK ili greška, klikni OK da ODMAH storniraš (novac se vraća). Klikni Otkaži da zadržiš naplatu kako jeste.')){
-      try{
-        const rs=await fetch(`${API}/api/otpremnice/naplate-log/${data.naplata_log_id}/storniraj`,{method:'POST'});
-        const ds=await rs.json();
-        if(!rs.ok) throw new Error(ds.error);
-        alert('✓ Naplata je stornirana.');
-        if(dugPrikaz==='kupci') ucitajSaldoPoKupcima(); else ucitajDugovanja();
-      }catch(e){ alert('✗ Greška pri storniranju: '+e.message); }
-    }
+    // Custom modal sa JASNIM dugmadima (ne OK/Otkaži confirm()) — ranije se OK klikao
+    // refleksno posle bilo koje poruke, pa je naplata ODMAH bivala stornirana slučajno,
+    // upravo suprotno od namere korisnika.
+    document.getElementById('bs-poruka').textContent=poruka;
+    zadnjaNaplataLogId=data.naplata_log_id;
+    document.getElementById('modal-brzi-storno').style.display='flex';
   }catch(e){
     alert(e.message);
   }finally{
     btn.disabled=false; btn.textContent='✓ Naplati';
   }
+}
+let zadnjaNaplataLogId=null;
+function zadrziNaplatu(){
+  document.getElementById('modal-brzi-storno').style.display='none';
+  zadnjaNaplataLogId=null;
+}
+async function storniralNaplatu(){
+  if(!zadnjaNaplataLogId) return;
+  try{
+    const rs=await fetch(`${API}/api/otpremnice/naplate-log/${zadnjaNaplataLogId}/storniraj`,{method:'POST'});
+    const ds=await rs.json();
+    if(!rs.ok) throw new Error(ds.error);
+    document.getElementById('modal-brzi-storno').style.display='none';
+    alert('✓ Naplata je stornirana.');
+    if(dugPrikaz==='kupci') ucitajSaldoPoKupcima(); else ucitajDugovanja();
+  }catch(e){ alert('✗ Greška pri storniranju: '+e.message); }
+  zadnjaNaplataLogId=null;
 }
 
 /* ── RUČNI UNOS ISTORIJSKOG DUGA (admin) ──────────────────────────────── */

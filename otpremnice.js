@@ -347,32 +347,58 @@ router.post('/pregled', async (req, res) => {
 router.get('/saldo-po-kupcima', async (req, res) => {
   try {
     const user = req.session?.user;
+    const { objekt_id } = req.query;
     const dozvoljeniPJ = await dozvoljeniPJZaPregled(user);
-    const where = dozvoljeniPJ ? 'WHERE t.objekt_id = ANY($1::int[])' : '';
-    const vals = dozvoljeniPJ ? [dozvoljeniPJ] : [];
+    let where = [];
+    let vals = [];
+    let i = 1;
+    if (objekt_id) { where.push(`t.objekt_id = $${i++}`); vals.push(objekt_id); }
+    if (dozvoljeniPJ) { where.push(`t.objekt_id = ANY($${i++}::int[])`); vals.push(dozvoljeniPJ); }
+    const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+    // Ako je filtrirano na JEDAN konkretan PJ, prikaži u NJEGOVOJ pravoj valuti (ne uvijek
+    // pretvoreno u KM) — inače (više PJ pomiješano) normalizacija u KM ostaje neophodna.
+    const iznosIzraz = objekt_id
+      ? `SUM(t.iznos)`
+      : `SUM(CASE WHEN p.valuta='EUR' THEN t.iznos*1.95 ELSE t.iznos END)`;
     const r = await pool.query(
       `SELECT k.id AS kupac_id, k.naziv, k.telefon, k.grad,
-              COALESCE(SUM(CASE WHEN p.valuta='EUR' THEN t.iznos*1.95 ELSE t.iznos END),0) AS saldo
+              COALESCE(${iznosIzraz},0) AS saldo,
+              MAX(p.valuta) AS valuta
        FROM kupac_transakcije t
        JOIN kupci k ON k.id = t.kupac_id
        LEFT JOIN prodajni_objekti p ON p.id = t.objekt_id
-       ${where}
+       ${whereClause}
        GROUP BY k.id, k.naziv, k.telefon, k.grad
-       HAVING COALESCE(SUM(CASE WHEN p.valuta='EUR' THEN t.iznos*1.95 ELSE t.iznos END),0) != 0
+       HAVING COALESCE(${iznosIzraz},0) != 0
        ORDER BY 5 ASC`,
       vals
     );
-    res.json(r.rows.map(row => ({ ...row, saldo: +parseFloat(row.saldo).toFixed(2) })));
+    res.json(r.rows.map(row => ({ ...row, saldo: +parseFloat(row.saldo).toFixed(2), valuta: objekt_id ? (row.valuta||'KM') : 'KM' })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/otpremnice/saldo-kupca/:kupacId - saldo JEDNOG kupca (za blagajnu, kad
-// blagajnik naplaćuje — treba brzo da vidi da li kupac duguje, bez povlačenja cijele
+// GET /api/otpremnice/saldo-kupca/:kupacId?objekt_id=X - saldo JEDNOG kupca (za blagajnu,
+// kad blagajnik naplaćuje — treba brzo da vidi da li kupac duguje, bez povlačenja cijele
 // liste svih kupaca). MORA biti prije "/:id" ispod — vidi napomenu gore.
+// Ako je objekt_id poslat, saldo se računa SAMO za taj PJ (u NJEGOVOJ valuti) — ne globalno
+// preko svih PJ pretvoreno u KM (blagajnik u PJ Niš treba da vidi dug IZ Niša u €, ne
+// mešano stanje svih PJ pretvoreno u KM).
 router.get('/saldo-kupca/:kupacId', async (req, res) => {
   try {
+    const { objekt_id } = req.query;
+    if (objekt_id) {
+      const objRes = await pool.query('SELECT valuta FROM prodajni_objekti WHERE id=$1', [objekt_id]);
+      const valuta = objRes.rows[0]?.valuta || 'KM';
+      const r = await pool.query(
+        `SELECT COALESCE(SUM(t.iznos),0) AS saldo
+         FROM kupac_transakcije t
+         WHERE t.kupac_id = $1 AND t.objekt_id = $2`,
+        [req.params.kupacId, objekt_id]
+      );
+      return res.json({ saldo: +parseFloat(r.rows[0]?.saldo || 0).toFixed(2), valuta });
+    }
     const r = await pool.query(
       `SELECT COALESCE(SUM(CASE WHEN p.valuta='EUR' THEN t.iznos*1.95 ELSE t.iznos END),0) AS saldo
        FROM kupac_transakcije t
@@ -380,7 +406,7 @@ router.get('/saldo-kupca/:kupacId', async (req, res) => {
        WHERE t.kupac_id = $1`,
       [req.params.kupacId]
     );
-    res.json({ saldo: +parseFloat(r.rows[0]?.saldo || 0).toFixed(2) });
+    res.json({ saldo: +parseFloat(r.rows[0]?.saldo || 0).toFixed(2), valuta: 'KM' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -850,7 +876,7 @@ router.get('/dugovanja/lista', async (req, res) => {
     const dozvoljeniPJ = await dozvoljeniPJZaPregled(user);
     if (dozvoljeniPJ) { where.push(`o.objekt_id = ANY($${i++}::int[])`); vals.push(dozvoljeniPJ); }
     const r = await pool.query(
-      `SELECT o.id, o.broj, o.datum, o.kupac_id, o.kupac_naziv, o.kupac_telefon, o.objekt_naziv,
+      `SELECT o.id, o.broj, o.datum, o.kupac_id, o.kupac_naziv, o.kupac_telefon, o.objekt_id, o.objekt_naziv,
               o.komercijalista_ime, o.ukupan_iznos, o.iznos_placeno, o.status_placanja,
               (o.ukupan_iznos - o.iznos_placeno) AS duguje,
               g.predao_blagajniku, g.preuzeo_ime AS blagajnik_ime, g.datum_predaje AS blagajnik_kada
@@ -1087,14 +1113,19 @@ router.post('/naplate-log/:id/storniraj', async (req, res) => {
       await client.query('DELETE FROM banka_uplate WHERE id=$1', [log.banka_uplata_id]);
     }
 
-    // Reverzni par u kartici kupca (ako je postojao kupac_id).
+    // Reverzni par u kartici kupca (ako je postojao kupac_id). KRITIČNO: mora biti
+    // NEGATIVAN iznos — originalna naplata je upisala POZITIVAN 'naplata_duga' (i,
+    // ako je bilo viška, poseban POZITIVAN 'visak_u_avans'). Storno mora PONIŠTITI taj
+    // efekat, ne ga UDVOSTRUČITI — otud minus ispred ukupnoZaVratiti. Ranija verzija je
+    // greškom upisivala isti pozitivan predznak, pa je svaka naplata+storno kombinacija
+    // NEPOVRATNO uvećavala klijentov avans, iako je otpremnica i dalje ostajala dužna.
     if (log.kupac_id) {
       await client.query(
         `INSERT INTO kupac_transakcije
            (kupac_id, tip, iznos, opis, otpremnica_id, otpremnica_broj, objekt_id, objekt_naziv,
             komercijalista_id, komercijalista_ime)
          VALUES ($1,'naplata_duga',$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [log.kupac_id, ukupnoZaVratiti, `STORNO naplate za ${otp.broj}`, otp.id, otp.broj,
+        [log.kupac_id, -ukupnoZaVratiti, `STORNO naplate za ${otp.broj}`, otp.id, otp.broj,
          otp.objekt_id, otp.objekt_naziv, user.id, user.ime_prezime]
       );
     }

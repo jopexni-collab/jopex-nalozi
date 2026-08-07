@@ -1293,14 +1293,16 @@ async function prikaziMaloprodajniDug(kupacId){
   const cont=document.getElementById('f-malo-dug');
   cont.innerHTML='';
   try{
-    const r=await fetch(`${API}/api/otpremnice/saldo-kupca/${kupacId}`);
+    const params=blagajnaObjektId?`?objekt_id=${blagajnaObjektId}`:'';
+    const r=await fetch(`${API}/api/otpremnice/saldo-kupca/${kupacId}${params}`);
     if(!r.ok) return;
     const d=await r.json();
     if(!d.saldo || d.saldo===0) return; // nema duga ni avansa — ništa se ne prikazuje
     const duguje=d.saldo<0;
+    const iznosPrikaz=fmValuta(Math.abs(d.saldo), d.valuta||'KM');
     cont.innerHTML=`
       <div style="background:${duguje?'#fce8e6':'#e6f4ea'};border:1px solid ${duguje?'#f3c7c2':'#b9e4c9'};border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px;">
-        <b style="color:${duguje?'var(--red)':'var(--green)'};">${duguje?'⚠ Duguje u maloprodaji: '+fm(Math.abs(d.saldo))+' KM':'✓ Ima avans u maloprodaji: '+fm(d.saldo)+' KM'}</b>
+        <b style="color:${duguje?'var(--red)':'var(--green)'};">${duguje?'⚠ Duguje u maloprodaji: '+iznosPrikaz:'✓ Ima avans u maloprodaji: '+iznosPrikaz}</b>
         <div style="color:#6b7a8d;margin-top:2px;">Unesena naplata ispod će se automatski pokriti ${duguje?'ovaj dug':'... (ako se doda još avansa)'}.</div>
       </div>`;
   }catch(e){ /* tiho — pomoćna informacija, ne blokira unos */ }
