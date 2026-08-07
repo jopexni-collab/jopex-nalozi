@@ -1694,9 +1694,114 @@ async function probniUvoz() {
   } catch (e) { cilj.innerHTML = '<div class="msg err">' + e.message + '</div>'; }
 }
 
+let UVOZ_FILTER = 'sporni';
+
+// Mali crtež oblika u redu — da se L-oblici mogu provjeriti pogledom, bez otvaranja
+function miniCrtez(poligon, w, hh) {
+  if (!poligon || poligon.length < 3) return '';
+  const xs = poligon.map(p => p[0]), ys = poligon.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const sw = (maxX - minX) || 1, sh = (maxY - minY) || 1;
+  const k = Math.min((w - 6) / sw, (hh - 6) / sh);
+  const px = p => (w - sw * k) / 2 + (p[0] - minX) * k;
+  const py = p => (hh - sh * k) / 2 + (maxY - p[1]) * k;
+  const put = poligon.map((p, i) => (i ? 'L' : 'M') + px(p).toFixed(1) + ' ' + py(p).toFixed(1)).join(' ') + ' Z';
+  return '<svg width="' + w + '" height="' + hh + '" style="vertical-align:middle">' +
+    '<path d="' + put + '" fill="#e8f0fa" stroke="#1a5fa8" stroke-width="1.2"/></svg>';
+}
+
+// Red je riješen kad ima šifru i debljinu — tada pozeleni i sam se skida sa preskakanja
+function redJeRijesen(st) {
+  if (st.rucno_ispravljen) return true;
+  const imaSifru = !!String(st.sifra || '').trim();
+  const imaDebljinu = !!st.debljina_cm;
+  const bezPravihGresaka = !st.greske.some(g => !/nema šifru|ne postoji u lager/.test(g));
+  return imaSifru && imaDebljinu && bezPravihGresaka;
+}
+
+function ispravioSam(i) {
+  UVOZ_STAVKE[i].rucno_ispravljen = true;
+  UVOZ_STAVKE[i].preskoci = false;
+  crtajSporne();
+}
+
+function postaviFilter(f) { UVOZ_FILTER = f; crtajSporne(); }
+
+function crtajSporne() {
+  const el = document.getElementById('u_sporni');
+  if (!el || !UVOZ_STAVKE) return;
+
+  const svi = UVOZ_STAVKE.map((st, i) => ({ st, i }));
+  const sporni = svi.filter(x => x.st.greske.length || x.st.upozorenja.length);
+  const lObici = svi.filter(x => x.st.oblik === 'L-oblik');
+  const rijeseni = sporni.filter(x => redJeRijesen(x.st)).length;
+
+  let redovi;
+  if (UVOZ_FILTER === 'l') redovi = lObici;
+  else if (UVOZ_FILTER === 'greske') redovi = sporni.filter(x => !redJeRijesen(x.st));
+  else redovi = sporni;
+
+  const dugme = (f, tekst, broj) =>
+    '<button type="button" class="btn ' + (UVOZ_FILTER === f ? '' : 'sec ') + 'mali" ' +
+    'onclick="postaviFilter(\'' + f + '\')">' + tekst + ' (' + broj + ')</button>';
+
+  let html =
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:12px 0 8px">' +
+    dugme('sporni', 'Za pregled', sporni.length) +
+    dugme('greske', 'Još nije riješeno', sporni.length - rijeseni) +
+    dugme('l', 'Samo L-oblici', lObici.length) +
+    '<span class="hint" style="margin:0">Riješeno: <b style="color:#1f8a4c">' + rijeseni + '</b> od ' + sporni.length + '</span>' +
+    '</div>';
+
+  if (!redovi.length) {
+    html += '<div class="msg ok">Nema redova u ovom izboru.</div>';
+    el.innerHTML = html;
+    return;
+  }
+
+  html += '<div class="tbl-wrap"><table><thead><tr>' +
+    '<th>Red</th><th>r.br</th><th>Oblik</th><th>Šifra (kol. G)</th><th>Materijal</th>' +
+    '<th>Mjere (mm)</th><th>Debljina (mm)</th><th>Šta nije jasno</th><th>Preskoči</th><th></th>' +
+    '</tr></thead><tbody>' +
+    redovi.map(({ st, i }) => {
+      const rijesen = redJeRijesen(st);
+      const boja = rijesen ? '#eefaf1' : (st.greske.length ? '#fdf0ef' : '');
+      const debMm = st.debljina_cm ? Math.round(st.debljina_cm * 10) : '';
+      return '<tr style="background:' + boja + '">' +
+        '<td>' + st.red + '</td><td>' + (st.rbr || '') + '</td>' +
+        '<td>' + (st.status === 'potrosen' ? '<span class="hint">potrošen</span>'
+                  : (st.oblik === 'L-oblik'
+                     ? miniCrtez(st.poligon, 44, 44) + '<div class="hint" style="margin:0">L</div>'
+                     : '<span class="hint">pravoug.</span>')) + '</td>' +
+        '<td><input value="' + (st.sifra || '') + '" style="width:92px' +
+          (String(st.sifra || '').trim() ? '' : ';border-color:#c0392b') + '" ' +
+          'onchange="UVOZ_STAVKE[' + i + '].sifra=this.value.trim();crtajSporne()"></td>' +
+        '<td>' + [st.materijal, st.tip].filter(Boolean).join(' ') + '</td>' +
+        '<td style="white-space:nowrap">' + (st.status === 'potrosen' ? '—'
+          : Math.round(st.sirina || 0) + '×' + Math.round(st.visina || 0)) + '</td>' +
+        '<td><input type="number" value="' + debMm + '" style="width:80px' +
+          (debMm ? '' : ';border-color:#c0392b') + '" placeholder="mm" ' +
+          'onchange="UVOZ_STAVKE[' + i + '].debljina_cm=(Number(this.value)||0)/10||null;crtajSporne()"></td>' +
+        '<td>' + st.greske.map(g => '<b style="color:#c0392b">' + g + '</b>')
+                   .concat(st.upozorenja).join('<br>') + '</td>' +
+        '<td style="text-align:center"><input type="checkbox"' + (st.preskoci ? ' checked' : '') +
+          ' onchange="UVOZ_STAVKE[' + i + '].preskoci=this.checked;crtajSporne()"></td>' +
+        '<td>' + (rijesen
+          ? '<span style="color:#1f8a4c;font-weight:700">✓ riješeno</span>'
+          : '<button type="button" class="btn sec mali" onclick="ispravioSam(' + i + ')">Ispravio sam</button>') +
+        '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+
+  el.innerHTML = html;
+}
+
 function crtajProbni(d) {
   const s = d.sazetak;
-  const sporni = UVOZ_STAVKE.map((st, i) => ({ st, i })).filter(x => x.st.greske.length || x.st.upozorenja.length);
+  const sporni = UVOZ_STAVKE.filter(st => st.greske.length || st.upozorenja.length);
+
+  // Redovi sa pravom greškom su unaprijed označeni za preskakanje — dok se ne isprave
+  UVOZ_STAVKE.forEach(st => { if (st.greske.length) st.preskoci = true; });
 
   let html =
     '<div class="kartice">' +
@@ -1710,31 +1815,14 @@ function crtajProbni(d) {
     '</div>';
 
   if (sporni.length) {
-    html += '<div class="msg err" style="margin-bottom:8px"><b>' + sporni.length +
-      ' redova nije potpuno jasno.</b> Za svaki piše šta nije u redu. Možeš dopuniti mjeru ili debljinu ' +
-      'ovdje, ili označiti „preskoči" pa da red ne uđe u uvoz. Ostali redovi se uvoze normalno.</div>' +
-      '<div class="tbl-wrap"><table><thead><tr><th>Red</th><th>r.br</th><th>Šifra (kolona G)</th>' +
-      '<th>Materijal</th><th>Mjere (mm)</th><th>Deb. cm</th><th>Šta nije jasno</th><th>Preskoči</th></tr></thead><tbody>' +
-      sporni.map(({ st, i }) =>
-        '<tr' + (st.greske.length ? ' style="background:#fdf0ef"' : '') + '>' +
-        '<td>' + st.red + '</td><td>' + (st.rbr || '') + '</td>' +
-        '<td><input value="' + (st.sifra || '') + '" style="width:92px' +
-          (st.sifra ? '' : ';border-color:#c0392b') + '" ' +
-          'onchange="UVOZ_STAVKE[' + i + '].sifra=this.value.trim()"></td>' +
-        '<td>' + [st.materijal, st.tip].filter(Boolean).join(' ') + '</td>' +
-        '<td style="white-space:nowrap">' + (st.status === 'potrosen' ? '<span class="hint">potrošen</span>' :
-          (Math.round(st.sirina || 0) + '×' + Math.round(st.visina || 0))) + '</td>' +
-        '<td><input type="number" step="0.1" value="' + (st.debljina_cm || '') + '" style="width:78px" ' +
-          'onchange="UVOZ_STAVKE[' + i + '].debljina_cm=Number(this.value)||null"></td>' +
-        '<td>' + st.greske.map(g => '<b style="color:#c0392b">' + g + '</b>').concat(st.upozorenja).join('<br>') + '</td>' +
-        '<td style="text-align:center"><input type="checkbox"' + (st.greske.length ? ' checked' : '') +
-          ' onchange="UVOZ_STAVKE[' + i + '].preskoci=this.checked"></td></tr>'
-      ).join('') + '</tbody></table></div>';
-    // redovi sa greškom su unaprijed označeni za preskakanje
-    sporni.forEach(({ st }) => { if (st.greske.length) st.preskoci = true; });
+    html += '<div class="msg err" style="margin-bottom:0"><b>' + sporni.length +
+      ' redova treba pregledati.</b> <b>Šifra iz kolone G je glavni ključ</b> — red bez nje ne ulazi u uvoz. ' +
+      'Ispravi šifru ili debljinu ovdje pa red <b style="color:#1f8a4c">pozeleni</b>, ili ga označi „preskoči". ' +
+      'Ako je red u redu ovakav kakav jeste, klikni „Ispravio sam".</div>';
   } else {
     html += '<div class="msg ok">Svi redovi su jasni — nema šta da se dopunjava.</div>';
   }
+  html += '<div id="u_sporni"></div>';
 
   html += '<div style="display:flex;gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap">' +
     '<button class="btn zelen" onclick="potvrdiUvoz()">✓ Uvezi u bazu</button>' +
@@ -1742,13 +1830,15 @@ function crtajProbni(d) {
     '<span class="hint" style="margin:0">Lager se ne mijenja — uvoz nikad ne dira lager listu.</span></div>';
 
   document.getElementById('u_rezultat').innerHTML = html;
+  UVOZ_FILTER = 'sporni';
+  crtajSporne();
 }
 
 async function potvrdiUvoz() {
   if (!UVOZ_STAVKE) return;
   const objekt = document.getElementById('u_objekt').value;
   if (!objekt) return poruka('Izaberi PJ.', 'greska');
-  const koliko = UVOZ_STAVKE.filter(s => !s.preskoci && s.status !== 'greska').length;
+  const koliko = UVOZ_STAVKE.filter(s => !s.preskoci && (s.status !== 'greska' || s.rucno_ispravljen)).length;
   if (!confirm('Uvozi se ' + koliko + ' redova u izabrani PJ. Nastaviti?')) return;
   try {
     const d = await api('/uvoz/potvrdi', { method: 'POST', body: JSON.stringify({

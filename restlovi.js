@@ -307,6 +307,12 @@ router.post('/uvoz/potvrdi', samoAdmin, async (req, res) => {
         odbijeni.push(`red ${s.red}: ` + (sifra ? `šifra ${sifra} ne postoji na lageru` : 'nema šifru'));
         continue;
       }
+      // Zaštita od reda koji je ručno označen kao ispravljen, a nema oblik.
+      // Bez ovoga bi ušao komad sa nultim mjerama.
+      if (s.status !== 'potrosen' && (!Array.isArray(s.poligon) || s.poligon.length < 3)) {
+        odbijeni.push(`red ${s.red}: nema upotrebljive mjere — oblik se ne može napraviti`);
+        continue;
+      }
       s.roba_id = artikal.id;
       s.cijena_m2 = String(artikal.jed_mjera).toLowerCase() === 'm2' ? Number(artikal.cijena) || 0 : 0;
       if (!s.debljina_cm && artikal.debljina_cm) s.debljina_cm = Number(artikal.debljina_cm);
