@@ -1541,6 +1541,7 @@ async function ucitajLagerListu(){
     if(!r.ok) throw new Error(data.error||'Greška.');
     lagerPodaci=data.stavke;
     lagerKolonaFilteri={sifra:'',naziv:'',grupa:'',debljina:'',jm:'',cijena:'',stanje:'',ukupno:''};
+    await ucitajLagerPragove(); // mora prije zaglavlja, legenda koristi lagerPragovi vrijednosti
     renderLagerZaglavlje(); // pravi tabelu + zaglavlje SAMO JEDNOM po učitavanju
     renderLagerRedovi();    // puni tbody (ovo se poziva ponovo pri svakom filteru/sortiranju)
     prikaziUndoDugmeAkoPostoji(objektId);
@@ -1614,20 +1615,69 @@ function renderLagerZaglavlje(){
   };
 
   wrap.innerHTML=`
-    <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+    <table style="width:100%;border-collapse:collapse;font-size:11px;">
       <thead>
         <tr style="background:#1f3864;color:#fff;">
           ${LAGER_KOLONE.map(c=>`
-            <th style="padding:6px 8px;text-align:${c.align};cursor:pointer;white-space:nowrap;" onclick="lagerKlikNaslov('${c.k}')">${c.lbl}${strelica(c.k)}</th>
+            <th style="padding:4px 6px;text-align:${c.align};cursor:pointer;white-space:nowrap;font-size:10.5px;" onclick="lagerKlikNaslov('${c.k}')">${c.lbl}${strelica(c.k)}</th>
           `).join('')}
         </tr>
         <tr style="background:#f0f2f5;">
-          ${LAGER_KOLONE.map(c=>`<th style="padding:3px 6px;">${filterPolje(c)}</th>`).join('')}
+          ${LAGER_KOLONE.map(c=>`<th style="padding:2px 4px;">${filterPolje(c)}</th>`).join('')}
         </tr>
       </thead>
       <tbody id="lager-tbody"></tbody>
     </table>
-    <div id="lager-prazno" class="empty-msg" style="display:none;">Nijedan red ne odgovara filterima kolona.</div>`;
+    <div id="lager-prazno" class="empty-msg" style="display:none;">Nijedan red ne odgovara filterima kolona.</div>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:10px;padding:8px 10px;background:#f7f8fa;border-radius:8px;font-size:11px;">
+      <b style="color:#6b7a8d;">Legenda "Stanje":</b>
+      <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#f26a5f;border-radius:3px;display:inline-block;"></span>Nema (0)</span>
+      <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#f5d35a;border-radius:3px;display:inline-block;"></span>Nisko (do
+        ${currentUser?.rola==='admin'
+          ? `<input type="number" id="lager-prag-zuto" value="${lagerPragovi.prag_zuto}" style="width:44px;padding:1px 3px;font-size:11px;border:1px solid var(--border);border-radius:4px;" onchange="sacuvajLagerPragove()">`
+          : lagerPragovi.prag_zuto})</span>
+      <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#f5b96a;border-radius:3px;display:inline-block;"></span>Osrednje (do
+        ${currentUser?.rola==='admin'
+          ? `<input type="number" id="lager-prag-narandzasto" value="${lagerPragovi.prag_narandzasto}" style="width:44px;padding:1px 3px;font-size:11px;border:1px solid var(--border);border-radius:4px;" onchange="sacuvajLagerPragove()">`
+          : lagerPragovi.prag_narandzasto})</span>
+      <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#c3cf7a;border-radius:3px;display:inline-block;"></span>Dobro stanje</span>
+      ${currentUser?.rola==='admin'?'<span id="lager-pragovi-msg" style="color:var(--green,#1f8a4c);"></span>':''}
+    </div>`;
+}
+
+async function sacuvajLagerPragove(){
+  const zuto=parseFloat(document.getElementById('lager-prag-zuto').value);
+  const narandzasto=parseFloat(document.getElementById('lager-prag-narandzasto').value);
+  const msg=document.getElementById('lager-pragovi-msg');
+  try{
+    const r=await fetch(`${API}/api/roba/lager-pragovi`,{
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({prag_zuto:zuto, prag_narandzasto:narandzasto}),
+    });
+    const data=await r.json();
+    if(!r.ok){ if(msg){msg.style.color='var(--red)';msg.textContent='✗ '+data.error;} return; }
+    lagerPragovi={prag_zuto:zuto, prag_narandzasto:narandzasto};
+    if(msg){ msg.style.color='var(--green)'; msg.textContent='✓ Sačuvano'; setTimeout(()=>msg.textContent='',2000); }
+    renderLagerRedovi();
+  }catch(e){ if(msg) msg.textContent='✗ Greška.'; }
+}
+
+// Boja pozadine kolone "Stanje" po nivou zaliha — brz vizuelni signal (crveno=nema,
+// žuto/narandžasto=nisko, maslinasto=dobro stanje). Pragovi se učitavaju iz baze
+// (lagerPragovi), podesivi kroz legendu ispod tabele (samo admin mijenja).
+let lagerPragovi={prag_zuto:15, prag_narandzasto:30};
+async function ucitajLagerPragove(){
+  try{
+    const r=await fetch(`${API}/api/roba/lager-pragovi`);
+    if(r.ok) lagerPragovi=await r.json();
+  }catch(e){}
+}
+function lagerBojaStanja(stanje){
+  const s=parseFloat(stanje)||0;
+  if(s<=0) return '#f26a5f'; // crveno — nema na stanju
+  if(s<=lagerPragovi.prag_zuto) return '#f5d35a'; // žuto — nisko
+  if(s<=lagerPragovi.prag_narandzasto) return '#f5b96a'; // narandžasto — osrednje nisko
+  return '#c3cf7a'; // maslinasto/zeleno — dobro stanje
 }
 
 function renderLagerRedovi(){
@@ -1640,20 +1690,20 @@ function renderLagerRedovi(){
 
   tbody.innerHTML=prikaz.map((s,i)=>`
     <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
-      <td style="padding:5px 8px;">${esc(s.sifra)}</td>
-      <td style="padding:5px 8px;">${esc(s.naziv)}</td>
-      <td style="padding:5px 8px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
-      <td style="padding:5px 8px;text-align:center;color:#6b7a8d;">${s.debljina_cm??'—'}</td>
-      <td style="padding:5px 8px;text-align:center;">
+      <td style="padding:3px 6px;">${esc(s.sifra)}</td>
+      <td style="padding:3px 6px;">${esc(s.naziv)}</td>
+      <td style="padding:3px 6px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
+      <td style="padding:3px 6px;text-align:center;color:#6b7a8d;">${s.debljina_cm??'—'}</td>
+      <td style="padding:3px 6px;text-align:center;">
         ${esc(s.jed_mjera)}
-        ${currentUser?.rola==='admin'?`<button onclick="otvoriIzmjenuJedinice(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}','${esc(s.jed_mjera)}')" title="Promijeni jedinicu mjere" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:11px;margin-left:2px;">✎</button>`:''}
+        ${currentUser?.rola==='admin'?`<button onclick="otvoriIzmjenuJedinice(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}','${esc(s.jed_mjera)}')" title="Promijeni jedinicu mjere" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
       </td>
-      <td style="padding:5px 8px;text-align:right;">
+      <td style="padding:3px 6px;text-align:right;">
         ${lagerFmMoney(s.cijena)}
-        ${currentUser?.rola==='admin'?`<button onclick="otvoriNivelaciju(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.cijena})" title="Promijeni cijenu (nivelacija)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:11px;margin-left:2px;">✎</button>`:''}
+        ${currentUser?.rola==='admin'?`<button onclick="otvoriNivelaciju(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.cijena})" title="Promijeni cijenu (nivelacija)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
       </td>
-      <td style="padding:5px 8px;text-align:right;text-decoration:underline;color:var(--blue);cursor:pointer;" onclick="otvoriRobnuKarticu(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')">${s.stanje}</td>
-      <td style="padding:5px 8px;text-align:right;font-weight:700;">${lagerFmMoney(s.ukupno)}</td>
+      <td style="padding:3px 6px;text-align:right;font-weight:700;background:${lagerBojaStanja(s.stanje)};text-decoration:underline;cursor:pointer;" onclick="otvoriRobnuKarticu(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')">${s.stanje}</td>
+      <td style="padding:3px 6px;text-align:right;font-weight:700;">${lagerFmMoney(s.ukupno)}</td>
     </tr>
   `).join('');
 
@@ -1716,29 +1766,58 @@ async function prikaziUndoDugmeAkoPostoji(objektId){
   const postojeceDugme=document.getElementById('lager-undo-btn');
   if(postojeceDugme) postojeceDugme.remove();
   try{
-    const r=await fetch(`${API}/api/roba/lager/backup-postoji?objekt_id=${objektId}`);
-    const backup=await r.json();
-    if(!backup) return;
+    const r=await fetch(`${API}/api/roba/lager/backup-lista?objekt_id=${objektId}`);
+    const backupi=await r.json();
+    if(!backupi.length) return;
     const dugme=document.createElement('button');
     dugme.id='lager-undo-btn';
     dugme.className='ce-tip-btn';
     dugme.style.color='var(--green)';
-    dugme.textContent=`↩️ Undo (vrati ${backup.broj_stavki} stavki, ${backup.kreirao_ime})`;
-    dugme.onclick=()=>vratiLagerIzBackupa(objektId);
+    dugme.textContent=`↩️ Vrati (${backupi.length} tačaka dostupno)`;
+    dugme.onclick=()=>prikaziListuBackupova(objektId, backupi);
     document.querySelector('#lager-lista-box .ce-row').appendChild(dugme);
   }catch(e){}
 }
 
-async function vratiLagerIzBackupa(objektId){
-  if(!confirm('Vratiti lager iz poslednje rezervne kopije? Ovo prepisuje trenutno stanje/cijene.')) return;
+// Prikazuje SVE dostupne tačke za vraćanje (ne samo poslednju) — admin bira TAČNO koliko
+// koraka unazad želi da ide, ne samo "jedan korak nazad".
+function prikaziListuBackupova(objektId, backupi){
+  const postojeci=document.getElementById('lager-backup-lista-overlay');
+  if(postojeci) postojeci.remove();
+  const overlay=document.createElement('div');
+  overlay.id='lager-backup-lista-overlay';
+  overlay.style='position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:400;display:flex;align-items:center;justify-content:center;';
+  overlay.onclick=e=>{ if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML=`
+    <div style="background:#fff;border-radius:12px;padding:18px;max-width:420px;width:92vw;max-height:80vh;overflow-y:auto;">
+      <h3 style="margin:0 0 6px;">Vrati lager na raniju tačku</h3>
+      <div style="font-size:11.5px;color:#8b96a5;margin-bottom:12px;">Biraj koliko koraka unazad ideš — vraćanje na stariju tačku briše sve novije rezervne kopije (postale bi besmislene).</div>
+      ${backupi.map((b,i)=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee;">
+          <div>
+            <b>${i===0?'Poslednja izmjena':'−'+(i+1)+' korak(a) unazad'}</b>
+            <div style="font-size:11px;color:#8b96a5;">${fd(b.kreiran)} · ${esc(b.kreirao_ime||'')} · ${b.broj_stavki} stavki</div>
+          </div>
+          <button class="ce-tip-btn" onclick="vratiLagerIzBackupa(${objektId},${b.id})">Vrati ovde</button>
+        </div>
+      `).join('')}
+      <button class="ce-tip-btn" onclick="document.getElementById('lager-backup-lista-overlay').remove()" style="width:100%;margin-top:12px;">Zatvori</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+async function vratiLagerIzBackupa(objektId, backupId){
+  if(!confirm('Vratiti lager na ovu tačku? Ovo prepisuje trenutno stanje/cijene, i briše sve rezervne kopije novije od ove.')) return;
   try{
     const r=await fetch(`${API}/api/roba/lager/undo`,{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({objekt_id:objektId}),
+      body:JSON.stringify({objekt_id:objektId, backup_id:backupId}),
     });
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška pri vraćanju.');
     alert(`✓ Vraćeno ${data.vraceno} artikala.`);
+    document.getElementById('lager-backup-lista-overlay')?.remove();
     document.getElementById('lager-undo-btn')?.remove();
     ucitajLagerListu();
   }catch(e){

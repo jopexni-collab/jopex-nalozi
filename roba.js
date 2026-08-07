@@ -1097,4 +1097,43 @@ router.post('/uvoz-batch/:id/storniraj', async (req, res) => {
   }
 });
 
+// GET /api/roba/lager-pragovi — pragovi za bojenje "Stanje" kolone u Lager listi.
+router.get('/lager-pragovi', async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  try {
+    const r = await pool.query(`SELECT kljuc, vrijednost FROM lager_postavke`);
+    const mapa = {};
+    r.rows.forEach(row => { mapa[row.kljuc] = parseFloat(row.vrijednost); });
+    res.json({
+      prag_zuto: mapa.prag_zuto ?? 15,
+      prag_narandzasto: mapa.prag_narandzasto ?? 30,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/roba/lager-pragovi — samo admin mijenja pragove.
+router.put('/lager-pragovi', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin.' });
+  const { prag_zuto, prag_narandzasto } = req.body || {};
+  if (!(parseFloat(prag_zuto) >= 0) || !(parseFloat(prag_narandzasto) >= 0))
+    return res.status(400).json({ error: 'Neispravne vrijednosti pragova.' });
+  if (parseFloat(prag_narandzasto) < parseFloat(prag_zuto))
+    return res.status(400).json({ error: 'Narandžasti prag mora biti veći ili jednak žutom.' });
+  try {
+    await pool.query(
+      `INSERT INTO lager_postavke (kljuc, vrijednost) VALUES ('prag_zuto',$1)
+       ON CONFLICT (kljuc) DO UPDATE SET vrijednost=$1`, [prag_zuto]
+    );
+    await pool.query(
+      `INSERT INTO lager_postavke (kljuc, vrijednost) VALUES ('prag_narandzasto',$1)
+       ON CONFLICT (kljuc) DO UPDATE SET vrijednost=$1`, [prag_narandzasto]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
