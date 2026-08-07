@@ -990,12 +990,20 @@ router.post('/:id/naplati-dug', async (req, res) => {
     }
 
     if (otp.kupac_id) {
+      // KRITIČNO: kad se dug plaća IZ AVANSA (izvor='avans'), taj iznos MORA biti
+      // NEGATIVAN — troši se postojeći avans (isti obrazac kao pri kreiranju otpremnice,
+      // vidi 'avans_iskoristen' iznad u ovoj datoteci). Kad dug plaća STVARNI novac
+      // (gotovina/banka), iznos ostaje POZITIVAN — to je nova, stvarno primljena naplata
+      // koja poništava negativan 'otpremnica_dug' zapis. Ranija verzija je greškom uvijek
+      // koristila POZITIVAN iznos, čak i za avans — to bi UVEĆAVALO saldo umjesto da ga
+      // ispravno troši (ista klasa greške kao i storno bag koji smo ranije ispravili).
+      const iznosZaKupcaTransakciju = izvor === 'avans' ? -iznosZaDug : iznosZaDug;
       await client.query(
         `INSERT INTO kupac_transakcije
            (kupac_id, tip, iznos, opis, otpremnica_id, otpremnica_broj, objekt_id, objekt_naziv,
             komercijalista_id, komercijalista_ime, gotovina_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-        [otp.kupac_id, izvor === 'avans' ? 'avans_iskoristen' : 'naplata_duga', iznosZaDug,
+        [otp.kupac_id, izvor === 'avans' ? 'avans_iskoristen' : 'naplata_duga', iznosZaKupcaTransakciju,
          `Naplata duga za ${otp.broj}`, otp.id, otp.broj, otp.objekt_id, otp.objekt_naziv,
          user.id, user.ime_prezime, gotovinaId]
       );
@@ -1113,19 +1121,22 @@ router.post('/naplate-log/:id/storniraj', async (req, res) => {
       await client.query('DELETE FROM banka_uplate WHERE id=$1', [log.banka_uplata_id]);
     }
 
-    // Reverzni par u kartici kupca (ako je postojao kupac_id). KRITIČNO: mora biti
-    // NEGATIVAN iznos — originalna naplata je upisala POZITIVAN 'naplata_duga' (i,
-    // ako je bilo viška, poseban POZITIVAN 'visak_u_avans'). Storno mora PONIŠTITI taj
-    // efekat, ne ga UDVOSTRUČITI — otud minus ispred ukupnoZaVratiti. Ranija verzija je
-    // greškom upisivala isti pozitivan predznak, pa je svaka naplata+storno kombinacija
-    // NEPOVRATNO uvećavala klijentov avans, iako je otpremnica i dalje ostajala dužna.
+    // Reverzni par u kartici kupca (ako je postojao kupac_id). KRITIČNO: predznak zavisi
+    // od IZVORA originalne naplate:
+    //  - gotovina/banka: originalno je bilo POZITIVNO (nova stvarna naplata) → storno NEGATIVNO
+    //  - avans: originalno je bilo NEGATIVNO (trošenje postojećeg avansa) → storno POZITIVNO
+    //           (vraća avans nazad, kao da nikad nije ni iskorišten)
+    // Ranija verzija je UVIJEK koristila negativan predznak bez obzira na izvor — ispravno
+    // za gotovinu/banku, ali POGREŠNO za avans (dupliralo bi trošenje umjesto da ga vrati).
     if (log.kupac_id) {
+      const ukupnoZaVratitiSaPredznakom = log.izvor === 'avans' ? ukupnoZaVratiti : -ukupnoZaVratiti;
       await client.query(
         `INSERT INTO kupac_transakcije
            (kupac_id, tip, iznos, opis, otpremnica_id, otpremnica_broj, objekt_id, objekt_naziv,
             komercijalista_id, komercijalista_ime)
-         VALUES ($1,'naplata_duga',$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [log.kupac_id, -ukupnoZaVratiti, `STORNO naplate za ${otp.broj}`, otp.id, otp.broj,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [log.kupac_id, log.izvor === 'avans' ? 'avans_iskoristen' : 'naplata_duga', ukupnoZaVratitiSaPredznakom,
+         `STORNO naplate za ${otp.broj}`, otp.id, otp.broj,
          otp.objekt_id, otp.objekt_naziv, user.id, user.ime_prezime]
       );
     }
