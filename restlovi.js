@@ -53,17 +53,51 @@ async function sljedecaOznaka(client) {
   return `R-${god}-${String(zadnji + 1).padStart(4, '0')}`;
 }
 
+// Prekidač za zaključavanje lagera. Podrazumijevano je ZAKLJUČAN — ako reda u
+// tabeli nema iz bilo kog razloga, ponašamo se kao da je zaključan, jer je tiho
+// mijenjanje tuđeg lagera gora greška od nemijenjanja.
+async function lagerZakljucan() {
+  try {
+    const r = await pool.query(`SELECT vrijednost FROM restlovi_postavke WHERE kljuc='lager_zakljucan'`);
+    return !r.rows.length || r.rows[0].vrijednost !== '0';
+  } catch (err) {
+    return true;
+  }
+}
+
 // Umanjuje (ili vraća, ako je m2 negativan) stanje na lageru za taj artikal i PJ,
 // i ostavlja trag u roba_kretanja — isti obrazac kao nivelacija u roba.js.
 // Vraća upozorenje umjesto greške ako artikal nije povezan ili ga nema u tom PJ,
 // da unos restla nikad ne padne samo zbog lagera.
 async function pomjeriLager(client, robaId, objektId, m2, opis, user) {
-  if (!robaId || !m2) return null;
+  const kvadrata = Math.abs(Number(m2) || 0);
+  const skida = Number(m2) > 0;
+  const rezultat = { primijenjeno: false, m2: kvadrata, skida, tekst: '', upozorenje: null };
+
+  if (!robaId) {
+    rezultat.tekst = 'Restl nije povezan sa artiklom iz lager liste — lager se ne mijenja.';
+    return rezultat;
+  }
+  if (!kvadrata) return rezultat;
+
+  const zakljucan = await lagerZakljucan();
+  const kolicina = kvadrata.toFixed(2).replace('.', ',') + ' m²';
+
+  if (zakljucan) {
+    // Radnja se izvršava, ali lager ostaje netaknut — samo se najavljuje efekat.
+    rezultat.tekst = 'Ovo bi ' + (skida ? 'skinulo ' : 'dodalo ') + kolicina +
+                     (skida ? ' sa lagera' : ' na lager') + ' — lager je zaključan, stanje nije mijenjano.';
+    return rezultat;
+  }
+
   const rp = await client.query(
     'SELECT stanje FROM roba_pj WHERE roba_id=$1 AND objekt_id=$2 FOR UPDATE',
     [robaId, objektId]
   );
-  if (!rp.rows.length) return 'Artikal nije na lageru tog PJ — lager nije mijenjan.';
+  if (!rp.rows.length) {
+    rezultat.tekst = 'Artikal nije na lageru tog PJ — lager nije mijenjan.';
+    return rezultat;
+  }
 
   const staro = Number(rp.rows[0].stanje) || 0;
   const novo = staro - Number(m2);
@@ -74,12 +108,16 @@ async function pomjeriLager(client, robaId, objektId, m2, opis, user) {
   await client.query(
     `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, napomena, korisnik_id, korisnik_ime)
      VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-    [robaId, objektId, m2 > 0 ? 'izlaz' : 'ulaz', Math.abs(Number(m2)), opis,
+    [robaId, objektId, skida ? 'izlaz' : 'ulaz', kvadrata, opis,
      user?.id || null, user?.ime_prezime || null]
   );
-  return novo < 0
-    ? `Pažnja: lager artikla je sada u minusu (${novo.toFixed(2)} m2) — provjeri stanje.`
-    : null;
+
+  rezultat.primijenjeno = true;
+  rezultat.tekst = 'Ovo ' + (skida ? 'skida ' : 'dodaje ') + kolicina +
+                   (skida ? ' sa lagera' : ' na lager') + ' — novo stanje ' +
+                   novo.toFixed(2).replace('.', ',') + ' m².';
+  if (novo < 0) rezultat.upozorenje = 'Pažnja: lager artikla je sada u minusu — provjeri stanje.';
+  return rezultat;
 }
 
 async function upisiLog(client, restlId, kolona, staro, novo, user) {
@@ -124,6 +162,36 @@ async function smijeUnositi(req, res, next) {
 router.get('/dozvole/moje', async (req, res) => {
   try {
     res.json(await dozvole(req.session?.user));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/restlovi/postavke — stanje prekidača, vidi ga svako ko ima pristup
+router.get('/postavke', smijeVidjeti, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT vrijednost, azurirao_ime, azurirano FROM restlovi_postavke WHERE kljuc='lager_zakljucan'`);
+    res.json({
+      lager_zakljucan: !r.rows.length || r.rows[0].vrijednost !== '0',
+      mijenjao: r.rows[0]?.azurirao_ime || null,
+      kada: r.rows[0]?.azurirano || null,
+      moze_mijenjati: req.session?.user?.rola === 'admin',
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /api/restlovi/postavke/lager — otključavanje i zaključavanje, samo admin
+router.put('/postavke/lager', async (req, res) => {
+  const user = req.session?.user;
+  if (user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin može otključati lager.' });
+  try {
+    const zakljucan = req.body.zakljucan !== false && req.body.zakljucan !== '0';
+    await pool.query(
+      `INSERT INTO restlovi_postavke (kljuc, vrijednost, azurirao_id, azurirao_ime, azurirano)
+       VALUES ('lager_zakljucan',$1,$2,$3,now())
+       ON CONFLICT (kljuc) DO UPDATE SET vrijednost=$1, azurirao_id=$2, azurirao_ime=$3, azurirano=now()`,
+      [zakljucan ? '1' : '0', user.id, user.ime_prezime]
+    );
+    res.json({ ok: true, lager_zakljucan: zakljucan });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -296,16 +364,18 @@ router.post('/', smijeUnositi, async (req, res) => {
 
     // Rezanje CIJELE TABLE: sa lagera odlazi isječeni komad + otpad. Sam restl OSTAJE
     // na lageru (fizički je i dalje u magacinu), pa se on NE skida.
-    let upozorenje = null;
+    let lager = null;
     const skini = Number(umanji_lager_m2) || 0;
-    if (skini > 0 && roba_id) {
-      upozorenje = await pomjeriLager(client, roba_id, objekt_id, skini,
+    if (skini > 0) {
+      lager = await pomjeriLager(client, roba_id, objekt_id, skini,
         `Rezanje table — nastao restl ${oznaka}` + (nastao_iz_naloga ? `, nalog ${nastao_iz_naloga}` : ''), user);
-      await client.query('UPDATE restlovi SET lager_umanjeno=$1 WHERE id=$2', [skini, r.rows[0].id]);
+      // Pamti se samo ono što je STVARNO skinuto — da storno kasnije vrati tačan iznos
+      await client.query('UPDATE restlovi SET lager_umanjeno=$1 WHERE id=$2',
+        [lager.primijenjeno ? skini : 0, r.rows[0].id]);
     }
 
     await client.query('COMMIT');
-    res.status(201).json({ ...r.rows[0], upozorenje });
+    res.status(201).json({ ...r.rows[0], lager });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ error: err.message });
@@ -380,7 +450,7 @@ router.post('/:id/koristi', smijeUnositi, async (req, res) => {
     const skinuto = Math.max(0, Number(r.povrsina) - ostatakPov);
     const otpad = Math.max(0, skinuto - uzetoPov);
 
-    const upozorenje = await pomjeriLager(client, r.roba_id, r.objekt_id, skinuto,
+    const lager = await pomjeriLager(client, r.roba_id, r.objekt_id, skinuto,
       `Restl ${r.oznaka} uzet za nalog ${nalog_r_br || '(bez naloga)'}`, user);
 
     await client.query(
@@ -389,13 +459,12 @@ router.post('/:id/koristi', smijeUnositi, async (req, res) => {
           lager_umanjeno, novi_restl_id, potrosen_do_kraja, korisnik_id, korisnik_ime, napomena)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
       [r.id, nalog_r_br || null, uzeto_a || null, uzeto_b || null, uzetoPov, otpad,
-       r.roba_id ? skinuto : 0, noviId, !!potrosen_do_kraja || !noviId,
+       lager.primijenjeno ? skinuto : 0, noviId, !!potrosen_do_kraja || !noviId,
        user.id, user.ime_prezime, napomena || null]
     );
 
     await client.query('COMMIT');
-    res.json({ ok: true, novi_restl_id: noviId, skinuto_sa_lagera: r.roba_id ? skinuto : 0,
-               upozorenje: upozorenje || (r.roba_id ? null : 'Restl nije povezan sa artiklom iz lager liste — lager nije mijenjan.') });
+    res.json({ ok: true, novi_restl_id: noviId, lager });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ error: err.message });
@@ -512,9 +581,9 @@ router.post('/koristenje/:korId/storno', smijeUnositi, async (req, res) => {
     await upisiLog(client, k.restl_id, 'status', 'potrosen', 'dostupan (storno)', user);
 
     // Vraćanje na lager — negativan iznos znači ULAZ
-    let upozorenje = null;
+    let lager = null;
     if (Number(k.lager_umanjeno) > 0 && rod.rows.length) {
-      upozorenje = await pomjeriLager(client, rod.rows[0].roba_id, rod.rows[0].objekt_id,
+      lager = await pomjeriLager(client, rod.rows[0].roba_id, rod.rows[0].objekt_id,
         -Number(k.lager_umanjeno), `Storno korišćenja restla ${rod.rows[0].oznaka}`, user);
     }
 
@@ -525,7 +594,7 @@ router.post('/koristenje/:korId/storno', smijeUnositi, async (req, res) => {
     );
 
     await client.query('COMMIT');
-    res.json({ ok: true, vraceno_na_lager: Number(k.lager_umanjeno) || 0, upozorenje });
+    res.json({ ok: true, lager });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ error: err.message });

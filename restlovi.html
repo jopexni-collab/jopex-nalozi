@@ -119,6 +119,7 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
 
 <div style="padding:12px;padding-bottom:40px;">
   <div id="poruka"></div>
+  <div id="lager_traka" style="display:none"></div>
 
   <div class="kartice" id="kartice"></div>
 
@@ -181,8 +182,8 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
         <label class="polje">Skini sa lagera (m²)<input type="number" step="0.01" id="n_lager" style="width:150px"></label>
       </div>
       <div class="hint" id="lager_pomoc" style="margin-top:8px">
-        Sam restl OSTAJE na lageru — sa lagera skidaš samo ono što je otišlo:
-        isječeni komad + otpad. Ostavi prazno ako lager ne treba dirati.
+        <span id="lager_najava">Sam restl OSTAJE na lageru — skidaš samo ono što je otišlo:
+        isječeni komad + otpad. Ostavi prazno ako lager ne treba dirati.</span>
       </div>
     </fieldset>
 
@@ -282,6 +283,54 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
 
 <script>
 /* ═══════════════ osnovno ═══════════════ */
+let LAGER_ZAKLJUCAN = true, MOGU_OTKLJUCATI = false;
+
+// Poruka o lageru se prikazuje ISTIM riječima koje vraća server, da nikad ne bude
+// razlike između onoga što je stvarno urađeno i onoga što piše na ekranu.
+function porukaLagera(lager) {
+  if (!lager || !lager.tekst) return '';
+  return ' ' + lager.tekst + (lager.upozorenje ? ' ' + lager.upozorenje : '');
+}
+function lagerJeProblem(lager) {
+  return !!(lager && (lager.upozorenje || (!lager.primijenjeno && lager.m2 > 0)));
+}
+
+async function ucitajPostavke() {
+  try {
+    const d = await api('/postavke');
+    LAGER_ZAKLJUCAN = !!d.lager_zakljucan;
+    MOGU_OTKLJUCATI = !!d.moze_mijenjati;
+    crtajLagerTraku(d);
+  } catch (e) { /* bez postavki ostaje zaključano */ }
+}
+
+function crtajLagerTraku(d) {
+  const el = document.getElementById('lager_traka');
+  if (!el) return;
+  el.style.display = 'block';
+  const kada = d && d.kada ? new Date(d.kada).toLocaleString('bs-BA') : null;
+  el.innerHTML = LAGER_ZAKLJUCAN
+    ? '<div class="msg" style="background:#e8eefc;color:#134a85;display:flex;gap:10px;' +
+      'align-items:center;flex-wrap:wrap"><span>🔒 <b>Lager je zaključan.</b> Restlovi se troše i ' +
+      'unose normalno, ali se glavna lager lista ne mijenja — samo piše koliko bi bilo skinuto ili dodato.</span>' +
+      (MOGU_OTKLJUCATI ? '<button type="button" class="btn sec mali" onclick="prebaciLager(false)">Otključaj lager</button>' : '') +
+      '</div>'
+    : '<div class="msg" style="background:#fff3e0;color:#8a5200;display:flex;gap:10px;' +
+      'align-items:center;flex-wrap:wrap"><span>🔓 <b>Lager je otključan.</b> Uzimanje restla ' +
+      'skida kvadraturu sa lager liste tog PJ.' + (d && d.mijenjao ? ' Otključao: ' + d.mijenjao + (kada ? ', ' + kada : '') + '.' : '') + '</span>' +
+      (MOGU_OTKLJUCATI ? '<button type="button" class="btn sec mali" onclick="prebaciLager(true)">Zaključaj lager</button>' : '') +
+      '</div>';
+}
+
+async function prebaciLager(zakljucaj) {
+  if (!zakljucaj && !confirm('Otključavanjem lagera svako uzimanje restla počinje da mijenja stanje u glavnoj lager listi. Nastaviti?')) return;
+  try {
+    await api('/postavke/lager', { method: 'PUT', body: JSON.stringify({ zakljucan: zakljucaj }) });
+    await ucitajPostavke();
+    poruka(zakljucaj ? 'Lager je zaključan — stanje se više ne mijenja.'
+                     : 'Lager je otključan — promjene se od sada upisuju.');
+  } catch (e) { poruka(e.message, 'greska'); }
+}
 let OBJEKTI = [], DOZVOLE = { vidi: false, unos: false }, JA = null;
 
 const fmt = n => (Number(n) || 0).toLocaleString('bs-BA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -897,7 +946,7 @@ document.addEventListener('keydown', e => {
 });
 
 /* ═══════════════ SKICIRANJE RUKOM ═══════════════ */
-let SKICA = [], SKICA_CRTA = false;
+let SKICA = [], SKICA_CRTA = false, PREPOZNATO = null;
 function skicaPlatno() { return document.getElementById('skica'); }
 
 // Platno se crta u stvarnoj rezoluciji ekrana — na tabletu i telefonu sa gustim
@@ -911,9 +960,16 @@ function podesiPlatno() {
   const gustina = Math.min(window.devicePixelRatio || 1, 2);
   const w = Math.round(r.width * gustina), hh = Math.round(r.height * gustina);
   if (c.width === w && c.height === hh) return;
+
+  // Tačke su u pikselima platna, pa se pri promjeni veličine PRERAČUNAJU umjesto
+  // da se brišu. Ranije se ovdje brisao potez, pa je ručni crtež nestajao čim se
+  // panel ponovo iscrta.
+  const kx = c.width ? w / c.width : 1, ky = c.height ? hh / c.height : 1;
+  if (SKICA.length && isFinite(kx) && isFinite(ky)) SKICA = SKICA.map(p => [p[0]*kx, p[1]*ky]);
+  if (PREPOZNATO && isFinite(kx) && isFinite(ky)) PREPOZNATO = PREPOZNATO.map(p => [p[0]*kx, p[1]*ky]);
+
   c.width = w; c.height = hh;
-  SKICA = [];                       // stare tačke pripadaju staroj veličini
-  skicaCrtaj(false, null);
+  skicaCrtaj(true, null);
 }
 
 function cijeliEkran() {
@@ -938,26 +994,34 @@ function skicaTacka(e) {
   return [(t.clientX - r.left) * (c.width / r.width), (t.clientY - r.top) * (c.height / r.height)];
 }
 function skicaCrtaj(zatvoreno, pojednostavljeno) {
+  // Prepoznati oblik se PAMTI — inače bi nestao pri svakom sljedećem crtanju,
+  // a ručni potez ispod njega je ono što daje osjećaj da je aplikacija razumjela
+  // šta si nacrtao.
+  if (pojednostavljeno) PREPOZNATO = pojednostavljeno;
+  else if (pojednostavljeno === null && !SKICA.length) PREPOZNATO = null;
+  const oblik = pojednostavljeno || PREPOZNATO;
   const c = skicaPlatno(), x = c.getContext('2d');
   x.clearRect(0, 0, c.width, c.height);
   if (SKICA.length > 1) {
     x.strokeStyle = '#c8d2dd'; x.lineWidth = 2; x.lineJoin = 'round'; x.lineCap = 'round';
     x.beginPath(); x.moveTo(SKICA[0][0], SKICA[0][1]);
-    for (const p of SKICA.slice(1)) x.lineTo(p[0], p[1]);
+    for (const t of SKICA.slice(1)) x.lineTo(t[0], t[1]);
     if (zatvoreno) x.closePath();
     x.stroke();
   }
-  if (pojednostavljeno && pojednostavljeno.length > 2) {
+  // Crta se ZAPAMĆENI oblik, ne samo onaj proslijeđen u ovom pozivu — zato
+  // poravnate linije ostaju preko ručnog poteza i poslije osvježavanja.
+  if (oblik && oblik.length > 2) {
     x.strokeStyle = '#1a5fa8'; x.lineWidth = 2.5;
-    x.beginPath(); x.moveTo(pojednostavljeno[0][0], pojednostavljeno[0][1]);
-    for (const p of pojednostavljeno.slice(1)) x.lineTo(p[0], p[1]);
+    x.beginPath(); x.moveTo(oblik[0][0], oblik[0][1]);
+    for (const q of oblik.slice(1)) x.lineTo(q[0], q[1]);
     x.closePath(); x.stroke();
     x.fillStyle = '#1a5fa8';
-    for (const p of pojednostavljeno) { x.beginPath(); x.arc(p[0], p[1], 3.5, 0, 7); x.fill(); }
+    for (const q of oblik) { x.beginPath(); x.arc(q[0], q[1], 3.5, 0, 7); x.fill(); }
   }
 }
 function ocistiSkicu() {
-  SKICA = [];
+  SKICA = []; PREPOZNATO = null;
   skicaCrtaj(false, null);
   poruka2('');
 }
@@ -1132,8 +1196,10 @@ function osvjeziCrtez() {
   document.getElementById('w_b').style.display = jeP ? 'none' : 'flex';
   document.getElementById('w_c').style.display = jeL ? 'flex' : 'none';
   document.getElementById('w_d').style.display = jeL ? 'flex' : 'none';
-  document.getElementById('skica_panel').style.display = imaSkicu() ? 'block' : 'none';
-  if (imaSkicu()) setTimeout(podesiPlatno, 0);
+  const panel = document.getElementById('skica_panel');
+  const bioSkriven = panel.style.display === 'none';
+  panel.style.display = imaSkicu() ? 'block' : 'none';
+  if (imaSkicu() && bioSkriven) setTimeout(podesiPlatno, 0);
   document.getElementById('w_poligon').style.display = jeP ? 'block' : 'none';
   document.getElementById('poligon_alati').style.display = jeP ? 'flex' : 'none';
   document.getElementById('u_nepravilan').style.display = jeP ? 'none' : 'inline-block';
@@ -1361,8 +1427,7 @@ async function posaljiKoristi(id) {
     const d = await api('/' + id + '/koristi', { method: 'POST', body: JSON.stringify(telo) });
     zatvoriModal();
     poruka((d.novi_restl_id ? 'Sačuvano — od ostatka je napravljen novi restl.' : 'Sačuvano — restl je potrošen.') +
-           (d.skinuto_sa_lagera ? ' Sa lagera skinuto ' + fmt(d.skinuto_sa_lagera) + ' m².' : '') +
-           (d.upozorenje ? ' ' + d.upozorenje : ''), d.upozorenje ? 'greska' : 'uspjeh');
+           porukaLagera(d.lager), lagerJeProblem(d.lager) ? 'greska' : 'uspjeh');
     ucitajListu(); ucitajSume();
   } catch (e) { poruka(e.message, 'greska'); }
 }
@@ -1423,7 +1488,7 @@ async function stornirajKoristenje(korId) {
   try {
     const d = await api('/koristenje/' + korId + '/storno', { method: 'POST' });
     zatvoriModal();
-    poruka('Stornirano.' + (d.vraceno_na_lager ? ' Na lager vraćeno ' + fmt(d.vraceno_na_lager) + ' m².' : ''));
+    poruka('Stornirano.' + porukaLagera(d.lager), lagerJeProblem(d.lager) ? 'greska' : 'uspjeh');
     ucitajListu(); ucitajSume();
   } catch (e) { poruka(e.message, 'greska'); }
 }
@@ -1458,13 +1523,32 @@ async function sacuvajNovi() {
     return poruka('Nacrtaj ili unesi oblik prije čuvanja.', 'greska');
   try {
     const d = await api('', { method: 'POST', body: JSON.stringify(telo) });
-    poruka('Restl ' + d.oznaka + ' je sačuvan.' + (d.upozorenje ? ' ' + d.upozorenje : ''),
-           d.upozorenje ? 'greska' : 'uspjeh');
+    poruka('Restl ' + d.oznaka + ' je sačuvan.' + porukaLagera(d.lager),
+           lagerJeProblem(d.lager) ? 'greska' : 'uspjeh');
     ['n_a','n_b','n_c','n_d','n_napomena','n_nalog','n_lager'].forEach(x => document.getElementById(x).value = '');
     FOTO_URL = null;
     document.getElementById('foto_pregled').innerHTML = '';
     osvjeziCrtez(); ucitajSume();
   } catch (e) { poruka(e.message, 'greska'); }
+}
+
+// Najava ispod polja: koliko bi bilo skinuto i hoće li se to stvarno desiti
+function najaviLager() {
+  const el = document.getElementById('lager_najava');
+  if (!el) return;
+  const m = Number(document.getElementById('n_lager').value) || 0;
+  const povezan = !!document.getElementById('n_roba').value;
+  if (!m) {
+    el.innerHTML = 'Sam restl OSTAJE na lageru — skidaš samo ono što je otišlo: isječeni komad + otpad.';
+    return;
+  }
+  if (!povezan) {
+    el.innerHTML = '<b style="color:#c0392b">Artikal nije izabran — lager se neće mijenjati.</b>';
+    return;
+  }
+  el.innerHTML = LAGER_ZAKLJUCAN
+    ? '<b style="color:#134a85">🔒 Ovo bi skinulo ' + fmt(m) + ' m² sa lagera — lager je zaključan, stanje se neće promijeniti.</b>'
+    : '<b style="color:#8a5200">🔓 Ovo skida ' + fmt(m) + ' m² sa lagera tog PJ.</b>';
 }
 
 /* ═══════════════ sume ═══════════════ */
@@ -1515,11 +1599,13 @@ document.getElementById('logout').onclick = async e => {
     document.getElementById('f_objekt').innerHTML += opcije;
   } catch (e) { poruka('PJ lista nije učitana: ' + e.message, 'greska'); }
 
+  document.getElementById('n_lager').addEventListener('input', najaviLager);
   document.getElementById('n_objekt').addEventListener('change', ucitajLager);
   document.getElementById('n_cijena').addEventListener('input', osvjeziCrtez);
   ucitajLager();
   osvjeziCrtez();
   ucitajSume();
+  ucitajPostavke();
 })();
 </script>
 </body>
