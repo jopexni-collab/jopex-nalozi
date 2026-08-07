@@ -144,8 +144,20 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
       <label class="polje">Grupa<input type="text" id="t_grupa" style="width:130px"></label>
       <label class="polje">PJ<select id="t_objekt" style="width:170px"><option value="">— sve PJ —</option></select></label>
       <label class="polje">Rez/rezerva (mm)<input type="number" id="t_rez" value="5" style="width:110px"></label>
+      <label class="polje">Ako ništa ne staje<select id="t_odstupanje" style="width:180px">
+        <option value="0">ne predlaži ništa</option>
+        <option value="10">pokaži one kojima fali do 10 mm</option>
+        <option value="20">…do 20 mm</option>
+        <option value="50" selected>…do 50 mm</option>
+        <option value="100">…do 100 mm</option>
+      </select></label>
       <button class="btn" onclick="trazi()">Traži</button>
     </div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;cursor:pointer;margin-top:10px">
+      <input type="checkbox" id="t_nacrtaj" onchange="prebaciEditorTrazi()">
+      <b>Komad nije pravougaonik</b> — nacrtaj ga isto kao kod novog restla
+    </label>
+    <div id="mjesto_trazi"></div>
     <div id="rezultat_trazi"></div>
   </div></div>
 
@@ -188,6 +200,48 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
       </div>
     </fieldset>
 
+    <div id="mjesto_novi"></div>
+
+    <fieldset>
+      <!-- 4. OSTALO -->
+      <div style="margin-top:14px;display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+        <div>
+          <div id="povrsina_info" class="hint" style="margin:0 0 10px;font-size:13px;font-weight:600;color:#134a85">Površina: —</div>
+          <button type="button" class="btn sec mali" id="u_nepravilan" onclick="uNepravilan()" style="margin-bottom:10px">Uredi kao nepravilan oblik →</button>
+          <label class="polje" style="margin-bottom:10px">Lokacija u magacinu
+            <input type="text" id="n_lokacija" placeholder="npr. regal 3, gore" style="width:220px"></label>
+          <label class="polje">Napomena
+            <textarea id="n_napomena" rows="2" style="width:230px"></textarea></label>
+        </div>
+        <div>
+          <label class="polje">Slika (telefon)
+            <input type="file" accept="image/*" capture="environment" id="n_foto" onchange="posaljiSliku(this)"></label>
+          <div id="foto_pregled" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </fieldset>
+
+    <button class="btn zelen" onclick="sacuvajNovi()">✓ Sačuvaj restl</button>
+  </div></div>
+</div>
+
+  <!-- ══════════════ UVOZ IZ XLSX ══════════════ -->
+  <div class="view" id="p-uvoz"><div class="panel">
+    <div class="hint" style="margin-bottom:10px">
+      Uvoz stare tabele restlova iz Excel fajla. Prvo ide <b>probni prolaz</b> — vidiš šta bi ušlo
+      i gdje ima problema, a u bazu ne ide ništa. <b>Uvoz nikad ne mijenja lager listu.</b>
+    </div>
+    <div class="red">
+      <label class="polje">Excel fajl (.xlsx)<input type="file" accept=".xlsx,.xls" id="u_fajl"></label>
+      <label class="polje">List<select id="u_list" style="width:170px"><option value="">— prvi list —</option></select></label>
+      <label class="polje">PJ<select id="u_objekt" style="width:200px"></select></label>
+      <button class="btn" onclick="probniUvoz()">Probni prolaz</button>
+    </div>
+    <div id="u_prijedlog" class="hint" style="margin-top:6px"></div>
+    <div id="u_rezultat" style="margin-top:14px"></div>
+  </div></div>
+
+<div id="editor_omot" style="display:none">
     <fieldset>
       <legend>Oblik i mjere (mm)</legend>
       <div class="red">
@@ -258,43 +312,8 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
         </div>
       </div>
 
-      <!-- 4. OSTALO -->
-      <div style="margin-top:14px;display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
-        <div>
-          <div id="povrsina_info" class="hint" style="margin:0 0 10px;font-size:13px;font-weight:600;color:#134a85">Površina: —</div>
-          <button type="button" class="btn sec mali" id="u_nepravilan" onclick="uNepravilan()" style="margin-bottom:10px">Uredi kao nepravilan oblik →</button>
-          <label class="polje" style="margin-bottom:10px">Lokacija u magacinu
-            <input type="text" id="n_lokacija" placeholder="npr. regal 3, gore" style="width:220px"></label>
-          <label class="polje">Napomena
-            <textarea id="n_napomena" rows="2" style="width:230px"></textarea></label>
-        </div>
-        <div>
-          <label class="polje">Slika (telefon)
-            <input type="file" accept="image/*" capture="environment" id="n_foto" onchange="posaljiSliku(this)"></label>
-          <div id="foto_pregled" style="margin-top:8px"></div>
-        </div>
-      </div>
     </fieldset>
-
-    <button class="btn zelen" onclick="sacuvajNovi()">✓ Sačuvaj restl</button>
-  </div></div>
 </div>
-
-  <!-- ══════════════ UVOZ IZ XLSX ══════════════ -->
-  <div class="view" id="p-uvoz"><div class="panel">
-    <div class="hint" style="margin-bottom:10px">
-      Uvoz stare tabele restlova iz Excel fajla. Prvo ide <b>probni prolaz</b> — vidiš šta bi ušlo
-      i gdje ima problema, a u bazu ne ide ništa. <b>Uvoz nikad ne mijenja lager listu.</b>
-    </div>
-    <div class="red">
-      <label class="polje">Excel fajl (.xlsx)<input type="file" accept=".xlsx,.xls" id="u_fajl"></label>
-      <label class="polje">List<select id="u_list" style="width:170px"><option value="">— prvi list —</option></select></label>
-      <label class="polje">PJ<select id="u_objekt" style="width:200px"></select></label>
-      <button class="btn" onclick="probniUvoz()">Probni prolaz</button>
-    </div>
-    <div id="u_prijedlog" class="hint" style="margin-top:6px"></div>
-    <div id="u_rezultat" style="margin-top:14px"></div>
-  </div></div>
 
 <div id="modal_host"></div>
 
@@ -377,6 +396,8 @@ document.querySelectorAll('.glavni-tab-btn').forEach(t => t.onclick = () => {
   document.getElementById('p-' + t.dataset.tab).classList.add('active');
   if (t.dataset.tab === 'lista') ucitajListu();
   if (t.dataset.tab === 'uvoz') { predloziPJ(); ucitajSerije(); }
+  if (t.dataset.tab === 'novi') premjestiEditor('novi');
+  if (t.dataset.tab === 'trazi' && document.getElementById('t_nacrtaj').checked) premjestiEditor('trazi');
 });
 
 /* ═══════════════ crtež oblika ═══════════════ */
@@ -1382,16 +1403,20 @@ function artikalIzabran() {
 /* ═══════════════ slika sa telefona ═══════════════ */
 /* ═══════════════ traženje komada ═══════════════ */
 async function trazi() {
+  const crta = document.getElementById('t_nacrtaj').checked;
   const sirina = document.getElementById('t_sirina').value;
   const visina = document.getElementById('t_visina').value;
-  if (!sirina || !visina) return poruka('Unesi širinu i visinu komada.', 'greska');
+  if (!crta && (!sirina || !visina)) return poruka('Unesi širinu i visinu komada, ili ga nacrtaj.', 'greska');
+  if (crta && (!TJEMENA || TJEMENA.length < 3)) return poruka('Nacrtaj oblik komada.', 'greska');
   const telo = {
     sirina, visina,
+    poligon: crta ? TJEMENA : null,
     materijal: document.getElementById('t_materijal').value || null,
     debljina_cm: document.getElementById('t_debljina').value || null,
     grupa: document.getElementById('t_grupa').value || null,
     objekt_id: document.getElementById('t_objekt').value || null,
-    rez: document.getElementById('t_rez').value || 0
+    rez: document.getElementById('t_rez').value || 0,
+    odstupanje: Number(document.getElementById('t_odstupanje').value) || 0
   };
   const cilj = document.getElementById('rezultat_trazi');
   cilj.innerHTML = '<div class="empty-msg">Tražim…</div>';
@@ -1408,7 +1433,8 @@ async function trazi() {
           '<td>' + (r.oblik === 'L' ? 'L ' : r.oblik === 'poligon' ? '⬟ ' : '') + r.dim_a + '×' + r.dim_b +
           (r.oblik === 'L' ? ' (izrez ' + r.dim_c + '×' + r.dim_d + ')' : '') + '</td>' +
           '<td class="hint">' + (r.polozaj ? 'na ' + Math.round(r.polozaj.x) + ',' + Math.round(r.polozaj.y) +
-            (r.polozaj.rotiran ? ' (okrenuto)' : '') : '') + '</td>' +
+            (r.polozaj.rotiran ? ' (okrenuto)' : '') +
+            (r.polozaj.okret ? ' (okret ' + r.polozaj.okret + '°)' : '') : '') + '</td>' +
           '<td>' + m2(r.povrsina) + '</td><td>' + m2(r.otpad_m2) + '</td>' +
           '<td>' + (r.objekt_naziv || '') + '</td>' +
           '<td>' + (DOZVOLE.unos ? '<button class="btn mali" onclick="otvoriKoristi(' + r.id + ',' + sirina + ',' + visina + ')">Uzmi za nalog</button>' : '') + '</td></tr>'
@@ -1668,6 +1694,71 @@ document.getElementById('logout').onclick = async e => {
   await fetch('/api/auth/logout', { method: 'POST' });
   location.href = 'login.html';
 };
+
+/* ═══════════════ ZAJEDNIČKI EDITOR OBLIKA ═══════════════
+   Jedan editor služi i za novi restl i za traženje komada. Da se dva oblika ne bi
+   miješala, svaki tab ima svoje stanje koje se snima pri odlasku i vraća pri dolasku. */
+let EDITOR_GDJE = 'novi';
+const STANJA = {
+  novi:  { t: [[0,0],[1200,0],[1200,800],[0,800]], p: [], z: [], r: { dolje:false, lijevo:false }, oblik: 'pravougaonik' },
+  trazi: { t: [[0,0],[600,0],[600,400],[0,400]],   p: [], z: [], r: { dolje:false, lijevo:false }, oblik: 'L' },
+};
+
+function snimiStanje(gdje) {
+  STANJA[gdje] = {
+    t: JSON.parse(JSON.stringify(TJEMENA)), p: [...PRAVI], z: [...ZAKLJUCANA],
+    r: { ...RAVNE }, oblik: document.getElementById('n_oblik').value,
+  };
+}
+
+function vratiStanje(gdje) {
+  const s = STANJA[gdje];
+  TJEMENA = JSON.parse(JSON.stringify(s.t));
+  PRAVI = new Set(s.p); ZAKLJUCANA = new Set(s.z); RAVNE = { ...s.r };
+  document.getElementById('n_oblik').value = s.oblik;
+  IZABRANA_STRANA = null; IZABRANO_TJEME = null;
+  ISTORIJA = []; osvjeziUndo();
+  SKICA = []; PREPOZNATO = null;
+  osvjeziSve();
+}
+
+// Premješta jedan te isti editor u tab koji ga traži
+function premjestiEditor(gdje) {
+  const omot = document.getElementById('editor_omot');
+  const cilj = document.getElementById(gdje === 'trazi' ? 'mjesto_trazi' : 'mjesto_novi');
+  if (!omot || !cilj) return;
+  if (EDITOR_GDJE !== gdje) { snimiStanje(EDITOR_GDJE); EDITOR_GDJE = gdje; }
+  omot.style.display = 'block';
+  cilj.appendChild(omot);
+  vratiStanje(gdje);
+  const naslov = omot.querySelector('legend');
+  if (naslov) naslov.textContent = gdje === 'trazi'
+    ? 'Oblik komada koji tražiš (mm)' : 'Oblik i mjere (mm)';
+}
+
+function sakrijEditor() {
+  const omot = document.getElementById('editor_omot');
+  if (!omot) return;
+  snimiStanje(EDITOR_GDJE);
+  omot.style.display = 'none';
+  document.body.appendChild(omot);
+}
+
+function prebaciEditorTrazi() {
+  const uklj = document.getElementById('t_nacrtaj').checked;
+  if (uklj) {
+    if (STANJA.trazi.oblik === 'pravougaonik') STANJA.trazi.oblik = 'L';
+    premjestiEditor('trazi');
+  } else {
+    sakrijEditor();
+  }
+  // kad se crta oblik, mjere iz polja se ne koriste
+  ['t_sirina','t_visina'].forEach(x => {
+    const el = document.getElementById(x);
+    el.disabled = uklj;
+    el.style.opacity = uklj ? .5 : 1;
+  });
+}
 
 /* ═══════════════ UVOZ ═══════════════ */
 let UVOZ_STAVKE = null, UVOZ_LIST = '', UVOZ_FAJL = '';
@@ -1932,6 +2023,7 @@ async function stornirajUvoz(id) {
   document.getElementById('n_objekt').addEventListener('change', ucitajLager);
   document.getElementById('n_cijena').addEventListener('input', osvjeziCrtez);
   ucitajLager();
+  premjestiEditor('novi');
   osvjeziCrtez();
   ucitajSume();
   ucitajPostavke();
