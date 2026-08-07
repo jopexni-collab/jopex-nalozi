@@ -10,6 +10,10 @@ const express = require('express');
 const router = express.Router();
 const pool = require('./db');
 const geo = require('./geometrija');
+const multer = require('multer');
+const uvoz = require('./restlovi-uvoz');
+
+const primiFajl = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 /* ─────────────────────────── pomoćne funkcije ─────────────────────────── */
 
@@ -193,6 +197,288 @@ router.put('/postavke/lager', async (req, res) => {
     );
     res.json({ ok: true, lager_zakljucan: zakljucan });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
+/* ─────────────────────────── UVOZ IZ XLSX ───────────────────────────
+   Dva koraka. Prvi je PROBNI — fajl se pročita i provjeri, vrati se sažetak i
+   spisak spornih redova, a u bazu ne ide ništa. Drugi je POTVRDA, koja prima
+   ispravljene redove nazad i tek tada upisuje.
+
+   Uvoz NIKAD ne dira lager. Restlovi koje uvozimo su ostaci ploča koje su ranije
+   već skinute sa lagera, a lager kod nas ionako sadrži i cijele table i restlove —
+   pa bi upis značio da tvrdimo kako je materijal potrošen dvaput. */
+
+function samoAdmin(req, res, next) {
+  if (req.session?.user?.rola !== 'admin') return res.status(403).json({ error: 'Uvoz može samo administrator.' });
+  next();
+}
+
+// POST /api/restlovi/uvoz/probni — čitanje i provjera, bez ijednog upisa
+router.post('/uvoz/probni', samoAdmin, primiFajl.single('fajl'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Nije poslan fajl.' });
+    const listovi = uvoz.listaListova(req.file.buffer);
+    const { ime, redovi } = uvoz.citajList(req.file.buffer, req.body.list);
+    const { greska, stavke } = uvoz.pripremi(redovi);
+    if (greska) return res.status(400).json({ error: greska, listovi, list: ime });
+
+    // Povezivanje na artikal ide preko šifre — jednim upitom za sve šifre odjednom
+    const sifre = [...new Set(stavke.map(s => s.sifra).filter(Boolean))];
+    const objektId = Number(req.body.objekt_id) || null;
+    let poSifri = new Map();
+    if (sifre.length) {
+      const r = await pool.query(
+        `SELECT ro.id, ro.sifra, ro.naziv, ro.grupa, ro.debljina_cm, ro.jed_mjera, rp.cijena
+           FROM roba ro
+           LEFT JOIN roba_pj rp ON rp.roba_id = ro.id AND rp.objekt_id = $2
+          WHERE ro.sifra = ANY($1::text[])`,
+        [sifre.map(String), objektId]
+      );
+      for (const a of r.rows) poSifri.set(String(a.sifra), a);
+    }
+
+    for (const st of stavke) {
+      const a = st.sifra ? poSifri.get(String(st.sifra)) : null;
+      st.roba_id = a ? a.id : null;
+      st.artikal = a ? a.naziv : null;
+      st.cijena_m2 = a && String(a.jed_mjera).toLowerCase() === 'm2' ? Number(a.cijena) || 0 : 0;
+
+      // Šifra je glavni ključ: ako je upisana ali je nema na lageru, red ne prolazi.
+      if (st.sifra && !a) {
+        st.greske.push(`šifra ${st.sifra} ne postoji u lager listi — ispravi je ili preskoči red`);
+        st.status = 'greska';
+      }
+      // Artikal je pouzdaniji od teksta u tabeli, pa dopunjava ono što nedostaje
+      if (a) {
+        if (!st.debljina_cm && a.debljina_cm) {
+          st.debljina_cm = Number(a.debljina_cm);
+          st.upozorenja.push(`debljina ${st.debljina_cm} cm preuzeta sa artikla`);
+        }
+        if (!st.materijal && a.grupa) st.materijal = a.grupa;
+        if (String(a.jed_mjera).toLowerCase() !== 'm2')
+          st.upozorenja.push(`artikal se vodi u "${a.jed_mjera}", ne u m² — cijena se ne preuzima`);
+      }
+      if (st.oblik === 'L-oblik')
+        st.upozorenja.push('L-oblik: strana kraka se iz tabele ne vidi, uvozi se sa krakom desno — provjeri komad');
+    }
+
+    const sporni = stavke.filter(s => s.greske.length || s.upozorenja.length);
+    res.json({
+      list: ime, listovi,
+      sazetak: uvoz.sazetak(stavke),
+      povezano: stavke.filter(s => s.roba_id).length,
+      stavke, sporni_broj: sporni.length,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/restlovi/uvoz/potvrdi — upisuje ispravljene redove
+router.post('/uvoz/potvrdi', samoAdmin, async (req, res) => {
+  const user = req.session.user;
+  const client = await pool.connect();
+  try {
+    const { objekt_id, naziv_fajla, list, stavke } = req.body;
+    if (!objekt_id) return res.status(400).json({ error: 'PJ nije izabran.' });
+    if (!Array.isArray(stavke) || !stavke.length) return res.status(400).json({ error: 'Nema redova za uvoz.' });
+
+    const kandidati = stavke.filter(s => !s.preskoci && s.status !== 'prazan');
+
+    // Šifra je glavni ključ, pa se veza gradi OVDJE, iz baze — ne iz onoga što je
+    // stigao sa ekrana. Tako izmjena šifre u spisku spornih redova ima efekta,
+    // a podmetnuti roba_id nema.
+    const sifre = [...new Set(kandidati.map(s => String(s.sifra || '').trim()).filter(Boolean))];
+    const poSifri = new Map();
+    if (sifre.length) {
+      const a = await pool.query(
+        `SELECT ro.id, ro.sifra, ro.naziv, ro.grupa, ro.debljina_cm, ro.jed_mjera, rp.cijena
+           FROM roba ro
+           LEFT JOIN roba_pj rp ON rp.roba_id = ro.id AND rp.objekt_id = $2
+          WHERE ro.sifra = ANY($1::text[])`, [sifre, objekt_id]);
+      for (const x of a.rows) poSifri.set(String(x.sifra), x);
+    }
+
+    const odbijeni = [];
+    const zaUpis = [];
+    for (const s of kandidati) {
+      const sifra = String(s.sifra || '').trim();
+      const artikal = sifra ? poSifri.get(sifra) : null;
+      if (!artikal) {
+        odbijeni.push(`red ${s.red}: ` + (sifra ? `šifra ${sifra} ne postoji na lageru` : 'nema šifru'));
+        continue;
+      }
+      s.roba_id = artikal.id;
+      s.cijena_m2 = String(artikal.jed_mjera).toLowerCase() === 'm2' ? Number(artikal.cijena) || 0 : 0;
+      if (!s.debljina_cm && artikal.debljina_cm) s.debljina_cm = Number(artikal.debljina_cm);
+      if (!s.materijal && artikal.grupa) s.materijal = artikal.grupa;
+      if (!s.tip && artikal.naziv) s.tip = artikal.naziv;
+      zaUpis.push(s);
+    }
+
+    const preskoceno = stavke.length - zaUpis.length;
+    if (!zaUpis.length) {
+      return res.status(400).json({
+        error: 'Nijedan red nema upotrebljivu šifru. ' + odbijeni.slice(0, 5).join('; '),
+      });
+    }
+
+    await client.query('BEGIN');
+
+    const serija = await client.query(
+      `INSERT INTO restl_uvoz (naziv_fajla, list, objekt_id, korisnik_id, korisnik_ime, preskoceno)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+      [naziv_fajla || null, list || null, objekt_id, user.id, user.ime_prezime, preskoceno]
+    );
+    const uvozId = serija.rows[0].id;
+
+    // Oznake se dodjeljuju u nizu, jednim čitanjem posljednje — bez upita po redu
+    const god = new Date().getFullYear();
+    const zadnja = await client.query(
+      `SELECT oznaka FROM restlovi WHERE oznaka LIKE $1 ORDER BY oznaka DESC LIMIT 1`, [`R-${god}-%`]);
+    let brojac = zadnja.rows.length ? parseInt(zadnja.rows[0].oznaka.split('-')[2], 10) : 0;
+
+    const redoviZaUpis = [];
+    for (const st of zaUpis) {
+      const komada = Math.max(1, Number(st.kom) || 1);
+      for (let i = 0; i < komada; i++) {
+        brojac++;
+        redoviZaUpis.push({
+          oznaka: `R-${god}-${String(brojac).padStart(4, '0')}`,
+          objekt_id, roba_id: st.roba_id || null,
+          materijal: st.tip || st.materijal || '(bez naziva)',
+          grupa: st.materijal || null,
+          debljina_cm: st.debljina_cm || null,
+          oblik: st.status === 'potrosen' ? 'pravougaonik' : (st.oblik === 'L-oblik' ? 'poligon' : 'pravougaonik'),
+          poligon: st.poligon ? JSON.stringify(st.poligon) : null,
+          dim_a: st.sirina || 0, dim_b: st.visina || 0,
+          povrsina: st.povrsina || 0,
+          cijena_m2: Number(st.cijena_m2) || 0,
+          lokacija: st.lokacija || null,
+          nastao_iz_naloga: st.nalog || null,
+          napomena: [st.napomena, st.rbr ? `iz tabele, r.br ${st.rbr}` : null].filter(Boolean).join(' · '),
+          status: st.status === 'potrosen' ? 'potrosen' : 'dostupan',
+          treba_provjeriti: st.oblik === 'L-oblik',
+          izvorni_rbr: String(st.rbr || ''),
+        });
+      }
+    }
+
+    // Upis u grupama od po 200 redova — jedan upit po grupi umjesto po komadu
+    let upisano = 0, ukupnaPovrsina = 0;
+    for (let p = 0; p < redoviZaUpis.length; p += 200) {
+      const grupa = redoviZaUpis.slice(p, p + 200);
+      const vals = [];
+      const mjesta = grupa.map((r, i) => {
+        const b = i * 18;
+        vals.push(r.oznaka, r.objekt_id, r.roba_id, r.materijal, r.grupa, r.debljina_cm,
+                  r.oblik, r.poligon, r.dim_a, r.dim_b, r.povrsina, r.cijena_m2,
+                  r.lokacija, r.nastao_iz_naloga, r.napomena, r.status, r.treba_provjeriti, r.izvorni_rbr);
+        return `($${b+1},$${b+2},$${b+3},$${b+4},$${b+5},$${b+6},$${b+7},$${b+8}::jsonb,$${b+9},$${b+10},
+                 $${b+11},$${b+12},$${b+13},$${b+14},$${b+15},$${b+16},$${b+17},$${b+18},
+                 ${uvozId}, 'tabla', ${user.id}, '${String(user.ime_prezime).replace(/'/g, "''")}')`;
+      }).join(',');
+      const r = await client.query(
+        `INSERT INTO restlovi
+           (oznaka, objekt_id, roba_id, materijal, grupa, debljina_cm, oblik, poligon,
+            dim_a, dim_b, povrsina, cijena_m2, lokacija, nastao_iz_naloga, napomena, status,
+            treba_provjeriti, izvorni_rbr, uvoz_id, izvor, kreirao_id, kreirao_ime)
+         VALUES ${mjesta} RETURNING povrsina`, vals);
+      upisano += r.rowCount;
+      for (const x of r.rows) ukupnaPovrsina += Number(x.povrsina) || 0;
+    }
+
+    await client.query(
+      `UPDATE restl_uvoz SET redova=$1, komada=$2, povrsina=$3 WHERE id=$4`,
+      [zaUpis.length, upisano, ukupnaPovrsina, uvozId]);
+
+    await client.query('COMMIT');
+    res.json({
+      ok: true, uvoz_id: uvozId, redova: zaUpis.length, komada: upisano,
+      povrsina: Math.round(ukupnaPovrsina * 10000) / 10000, preskoceno,
+      odbijeni: odbijeni.slice(0, 20), odbijenih: odbijeni.length,
+      napomena: 'Lager nije mijenjan — uvoz nikad ne dira lager listu.',
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+// GET /api/restlovi/uvoz/prijedlog — koji PJ ponuditi.
+// Ništa nije upisano u kod: prvo se gleda gdje je zadnji put uvoženo, pa gdje već
+// ima najviše restlova. Ako baza nema ništa, ne predlaže se ništa.
+router.get('/uvoz/prijedlog', samoAdmin, async (req, res) => {
+  try {
+    const zadnji = await pool.query(
+      `SELECT u.objekt_id, po.naziv FROM restl_uvoz u
+         LEFT JOIN prodajni_objekti po ON po.id = u.objekt_id
+        WHERE u.stornirano = false ORDER BY u.kada DESC LIMIT 1`);
+    if (zadnji.rows.length) {
+      return res.json({ objekt_id: zadnji.rows[0].objekt_id, naziv: zadnji.rows[0].naziv,
+                        razlog: 'ovdje je bio posljednji uvoz' });
+    }
+    const najvise = await pool.query(
+      `SELECT r.objekt_id, po.naziv, COUNT(*)::int AS koliko FROM restlovi r
+         LEFT JOIN prodajni_objekti po ON po.id = r.objekt_id
+        GROUP BY r.objekt_id, po.naziv ORDER BY koliko DESC LIMIT 1`);
+    if (najvise.rows.length) {
+      return res.json({ objekt_id: najvise.rows[0].objekt_id, naziv: najvise.rows[0].naziv,
+                        razlog: `ovdje već ima ${najvise.rows[0].koliko} restlova` });
+    }
+    res.json({ objekt_id: null, naziv: null, razlog: null });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/restlovi/uvoz/serije — istorija uvoza
+router.get('/uvoz/serije', samoAdmin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT u.*, po.naziv AS objekt_naziv,
+              (SELECT COUNT(*) FROM restlovi WHERE uvoz_id = u.id) AS ostalo
+         FROM restl_uvoz u LEFT JOIN prodajni_objekti po ON po.id = u.objekt_id
+        ORDER BY u.kada DESC LIMIT 50`);
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/restlovi/uvoz/:id/storniraj — briše SAMO netaknute komade iz te serije
+router.post('/uvoz/:id/storniraj', samoAdmin, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const u = await client.query('SELECT * FROM restl_uvoz WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!u.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Uvoz nije pronađen.' }); }
+    if (u.rows[0].stornirano) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Već je stornirano.' }); }
+
+    // Komad koji je već korišćen, prenesen ili je od njega nastao drugi restl se NE briše
+    const dirnuti = await client.query(
+      `SELECT r.oznaka FROM restlovi r
+        WHERE r.uvoz_id = $1 AND (
+              EXISTS (SELECT 1 FROM restl_koristenje k WHERE k.restl_id = r.id)
+           OR EXISTS (SELECT 1 FROM restl_prenosi p WHERE p.restl_id = r.id)
+           OR EXISTS (SELECT 1 FROM restlovi d WHERE d.roditelj_id = r.id))`,
+      [req.params.id]);
+    if (dirnuti.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        error: `Ne može: ${dirnuti.rows.length} komada iz ovog uvoza je već u upotrebi ` +
+               `(${dirnuti.rows.slice(0, 5).map(x => x.oznaka).join(', ')}${dirnuti.rows.length > 5 ? '…' : ''}). ` +
+               `Prvo storniraj njihova korišćenja.`,
+      });
+    }
+
+    await client.query('DELETE FROM restl_log WHERE restl_id IN (SELECT id FROM restlovi WHERE uvoz_id=$1)', [req.params.id]);
+    const obrisano = await client.query('DELETE FROM restlovi WHERE uvoz_id=$1', [req.params.id]);
+    await client.query(
+      `UPDATE restl_uvoz SET stornirano=true, stornirao_ime=$1, stornirano_kada=now() WHERE id=$2`,
+      [req.session.user.ime_prezime, req.params.id]);
+
+    await client.query('COMMIT');
+    res.json({ ok: true, obrisano: obrisano.rowCount });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
 });
 
 /* ─────────────────────────── lista i pretraga ─────────────────────────── */

@@ -71,9 +71,19 @@ const KOLONE = {
   napomena:  ['napomena (opc)', 'napomena'],
 };
 
+// Redoslijed kolona u tabeli, ako zaglavlje nije prepoznato po nazivu:
+// A r.br | B uneo | C lokacija | D nalog | E Materijal | F tip | G sifra
+// H duz A | I visna B | J duz C | K visin D | L kom | M debljina
+const PO_MJESTU = ['rbr','uneo','lokacija','nalog','materijal','tip','sifra','a','b','c','d','kom','debljina'];
+
 function mapaKolona(zaglavlja) {
   const m = {};
   for (const [kljuc, kandidati] of Object.entries(KOLONE)) m[kljuc] = nadjiKolonu(zaglavlja, kandidati);
+  // Šifra je GLAVNI KLJUČ uvoza — ako se zaglavlje ne prepozna po nazivu, uzima se
+  // sedma kolona (G), jer je to njeno mjesto u tabeli.
+  PO_MJESTU.forEach((kljuc, i) => {
+    if (!m[kljuc] && zaglavlja[i] !== undefined) m[kljuc] = zaglavlja[i];
+  });
   return m;
 }
 
@@ -136,7 +146,10 @@ function pripremiRed(red, m, indeks) {
     stavka.status = 'potrosen';
     stavka.poligon = null;
     stavka.povrsina = 0;
-    if (!stavka.materijal) stavka.upozorenja.push('nema materijal');
+    if (!stavka.sifra) {
+      stavka.greske.push('nema šifru (kolona G) — upiši je ili preskoči red');
+      stavka.status = 'greska';
+    }
     return stavka;
   }
 
@@ -168,7 +181,12 @@ function pripremiRed(red, m, indeks) {
     stavka.status = 'greska';
   }
 
-  if (!stavka.sifra) stavka.upozorenja.push('nema šifru — neće se povezati na artikal');
+  // Šifra je glavni ključ — bez nje se restl ne može vezati za artikal, pa red
+  // ne prolazi dok se ne dopuni.
+  if (!stavka.sifra) {
+    stavka.greske.push('nema šifru (kolona G) — upiši je ili preskoči red');
+    stavka.status = 'greska';
+  }
   if (!stavka.debljina_cm) stavka.upozorenja.push('nema debljinu');
   if (!stavka.materijal) stavka.upozorenja.push('nema materijal');
   return stavka;
@@ -180,7 +198,7 @@ function pripremi(redovi) {
   const zaglavlja = Object.keys(redovi[0]);
   const m = mapaKolona(zaglavlja);
 
-  const obavezne = ['a', 'b', 'materijal'];
+  const obavezne = ['sifra', 'a', 'b'];
   const fale = obavezne.filter(k => !m[k]);
   if (fale.length) {
     return {

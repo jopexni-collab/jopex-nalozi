@@ -127,6 +127,7 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
     <button type="button" class="glavni-tab-btn active" data-tab="trazi">🔍 Traži komad</button>
     <button type="button" class="glavni-tab-btn" data-tab="lista">🧩 Restlovi</button>
     <button type="button" class="glavni-tab-btn" data-tab="novi" id="tabNovi">➕ Novi restl</button>
+    <button type="button" class="glavni-tab-btn" data-tab="uvoz" id="tabUvoz" style="display:none">📥 Uvoz</button>
   </div>
 
   <!-- ══════════════ TRAŽI KOMAD ══════════════ -->
@@ -279,6 +280,22 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
   </div></div>
 </div>
 
+  <!-- ══════════════ UVOZ IZ XLSX ══════════════ -->
+  <div class="view" id="p-uvoz"><div class="panel">
+    <div class="hint" style="margin-bottom:10px">
+      Uvoz stare tabele restlova iz Excel fajla. Prvo ide <b>probni prolaz</b> — vidiš šta bi ušlo
+      i gdje ima problema, a u bazu ne ide ništa. <b>Uvoz nikad ne mijenja lager listu.</b>
+    </div>
+    <div class="red">
+      <label class="polje">Excel fajl (.xlsx)<input type="file" accept=".xlsx,.xls" id="u_fajl"></label>
+      <label class="polje">List<select id="u_list" style="width:170px"><option value="">— prvi list —</option></select></label>
+      <label class="polje">PJ<select id="u_objekt" style="width:200px"></select></label>
+      <button class="btn" onclick="probniUvoz()">Probni prolaz</button>
+    </div>
+    <div id="u_prijedlog" class="hint" style="margin-top:6px"></div>
+    <div id="u_rezultat" style="margin-top:14px"></div>
+  </div></div>
+
 <div id="modal_host"></div>
 
 <script>
@@ -359,6 +376,7 @@ document.querySelectorAll('.glavni-tab-btn').forEach(t => t.onclick = () => {
   t.classList.add('active');
   document.getElementById('p-' + t.dataset.tab).classList.add('active');
   if (t.dataset.tab === 'lista') ucitajListu();
+  if (t.dataset.tab === 'uvoz') { predloziPJ(); ucitajSerije(); }
 });
 
 /* ═══════════════ crtež oblika ═══════════════ */
@@ -1651,6 +1669,142 @@ document.getElementById('logout').onclick = async e => {
   location.href = 'login.html';
 };
 
+/* ═══════════════ UVOZ ═══════════════ */
+let UVOZ_STAVKE = null, UVOZ_LIST = '', UVOZ_FAJL = '';
+
+async function probniUvoz() {
+  const f = document.getElementById('u_fajl').files[0];
+  if (!f) return poruka('Izaberi Excel fajl.', 'greska');
+  const cilj = document.getElementById('u_rezultat');
+  cilj.innerHTML = '<div class="empty-msg">Čitam fajl…</div>';
+
+  const fd = new FormData();
+  fd.append('fajl', f);
+  fd.append('list', document.getElementById('u_list').value || '');
+  fd.append('objekt_id', document.getElementById('u_objekt').value || '');
+  try {
+    const r = await fetch('/api/restlovi/uvoz/probni', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Greška pri čitanju.');
+    UVOZ_STAVKE = d.stavke; UVOZ_LIST = d.list; UVOZ_FAJL = f.name;
+
+    const sel = document.getElementById('u_list');
+    sel.innerHTML = d.listovi.map(l => '<option' + (l === d.list ? ' selected' : '') + '>' + l + '</option>').join('');
+    crtajProbni(d);
+  } catch (e) { cilj.innerHTML = '<div class="msg err">' + e.message + '</div>'; }
+}
+
+function crtajProbni(d) {
+  const s = d.sazetak;
+  const sporni = UVOZ_STAVKE.map((st, i) => ({ st, i })).filter(x => x.st.greske.length || x.st.upozorenja.length);
+
+  let html =
+    '<div class="kartice">' +
+    '<div class="kartica"><div class="v">' + s.dostupni + '</div><div class="n">dostupnih redova</div></div>' +
+    '<div class="kartica"><div class="v">' + s.komada + '</div><div class="n">komada ukupno</div></div>' +
+    '<div class="kartica"><div class="v">' + fmt(s.povrsina) + ' m²</div><div class="n">površina</div></div>' +
+    '<div class="kartica"><div class="v">' + s.pravougaonici + ' / ' + s.l_oblici + '</div><div class="n">pravougaonika / L-oblika</div></div>' +
+    '<div class="kartica"><div class="v">' + s.potroseni + '</div><div class="n">potrošenih (istorija)</div></div>' +
+    '<div class="kartica"><div class="v">' + d.povezano + '</div><div class="n">povezano na artikal</div></div>' +
+    '<div class="kartica"><div class="v">' + s.greske + '</div><div class="n">redova sa greškom</div></div>' +
+    '</div>';
+
+  if (sporni.length) {
+    html += '<div class="msg err" style="margin-bottom:8px"><b>' + sporni.length +
+      ' redova nije potpuno jasno.</b> Za svaki piše šta nije u redu. Možeš dopuniti mjeru ili debljinu ' +
+      'ovdje, ili označiti „preskoči" pa da red ne uđe u uvoz. Ostali redovi se uvoze normalno.</div>' +
+      '<div class="tbl-wrap"><table><thead><tr><th>Red</th><th>r.br</th><th>Šifra (kolona G)</th>' +
+      '<th>Materijal</th><th>Mjere (mm)</th><th>Deb. cm</th><th>Šta nije jasno</th><th>Preskoči</th></tr></thead><tbody>' +
+      sporni.map(({ st, i }) =>
+        '<tr' + (st.greske.length ? ' style="background:#fdf0ef"' : '') + '>' +
+        '<td>' + st.red + '</td><td>' + (st.rbr || '') + '</td>' +
+        '<td><input value="' + (st.sifra || '') + '" style="width:92px' +
+          (st.sifra ? '' : ';border-color:#c0392b') + '" ' +
+          'onchange="UVOZ_STAVKE[' + i + '].sifra=this.value.trim()"></td>' +
+        '<td>' + [st.materijal, st.tip].filter(Boolean).join(' ') + '</td>' +
+        '<td style="white-space:nowrap">' + (st.status === 'potrosen' ? '<span class="hint">potrošen</span>' :
+          (Math.round(st.sirina || 0) + '×' + Math.round(st.visina || 0))) + '</td>' +
+        '<td><input type="number" step="0.1" value="' + (st.debljina_cm || '') + '" style="width:78px" ' +
+          'onchange="UVOZ_STAVKE[' + i + '].debljina_cm=Number(this.value)||null"></td>' +
+        '<td>' + st.greske.map(g => '<b style="color:#c0392b">' + g + '</b>').concat(st.upozorenja).join('<br>') + '</td>' +
+        '<td style="text-align:center"><input type="checkbox"' + (st.greske.length ? ' checked' : '') +
+          ' onchange="UVOZ_STAVKE[' + i + '].preskoci=this.checked"></td></tr>'
+      ).join('') + '</tbody></table></div>';
+    // redovi sa greškom su unaprijed označeni za preskakanje
+    sporni.forEach(({ st }) => { if (st.greske.length) st.preskoci = true; });
+  } else {
+    html += '<div class="msg ok">Svi redovi su jasni — nema šta da se dopunjava.</div>';
+  }
+
+  html += '<div style="display:flex;gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap">' +
+    '<button class="btn zelen" onclick="potvrdiUvoz()">✓ Uvezi u bazu</button>' +
+    '<button class="btn sec" onclick="document.getElementById(\'u_rezultat\').innerHTML=\'\'">Odustani</button>' +
+    '<span class="hint" style="margin:0">Lager se ne mijenja — uvoz nikad ne dira lager listu.</span></div>';
+
+  document.getElementById('u_rezultat').innerHTML = html;
+}
+
+async function potvrdiUvoz() {
+  if (!UVOZ_STAVKE) return;
+  const objekt = document.getElementById('u_objekt').value;
+  if (!objekt) return poruka('Izaberi PJ.', 'greska');
+  const koliko = UVOZ_STAVKE.filter(s => !s.preskoci && s.status !== 'greska').length;
+  if (!confirm('Uvozi se ' + koliko + ' redova u izabrani PJ. Nastaviti?')) return;
+  try {
+    const d = await api('/uvoz/potvrdi', { method: 'POST', body: JSON.stringify({
+      objekt_id: objekt, naziv_fajla: UVOZ_FAJL, list: UVOZ_LIST, stavke: UVOZ_STAVKE }) });
+    poruka('Uvezeno ' + d.komada + ' komada iz ' + d.redova + ' redova (' + fmt(d.povrsina) +
+           ' m²). Preskočeno ' + d.preskoceno +
+           (d.odbijenih ? ', od toga ' + d.odbijenih + ' zbog šifre' : '') + '. ' + d.napomena);
+    if (d.odbijenih) console.log('Odbijeni redovi:', d.odbijeni);
+    UVOZ_STAVKE = null;
+    document.getElementById('u_rezultat').innerHTML = '';
+    ucitajSerije(); ucitajSume();
+  } catch (e) { poruka(e.message, 'greska'); }
+}
+
+// Prijedlog PJ dolazi sa servera, iz samih podataka — u kodu nema nijednog imena PJ.
+async function predloziPJ() {
+  const el = document.getElementById('u_prijedlog');
+  const sel = document.getElementById('u_objekt');
+  if (!el || !sel) return;
+  try {
+    const d = await api('/uvoz/prijedlog');
+    if (d.objekt_id && [...sel.options].some(o => String(o.value) === String(d.objekt_id))) {
+      sel.value = d.objekt_id;
+      el.innerHTML = 'Predloženo: <b>' + d.naziv + '</b> — ' + d.razlog + '. Možeš izabrati drugi PJ.';
+    } else {
+      el.innerHTML = 'Izaberi PJ u koji idu uvezeni restlovi.';
+    }
+  } catch (e) { el.innerHTML = ''; }
+}
+
+async function ucitajSerije() {
+  try {
+    const red = await api('/uvoz/serije');
+    if (!red.length) return;
+    document.getElementById('u_rezultat').innerHTML +=
+      '<h3 style="margin-top:18px">Prethodni uvozi</h3><div class="tbl-wrap"><table><thead><tr>' +
+      '<th>Kada</th><th>Fajl</th><th>PJ</th><th>Komada</th><th>m²</th><th>Ko</th><th></th></tr></thead><tbody>' +
+      red.map(u => '<tr' + (u.stornirano ? ' style="opacity:.5;text-decoration:line-through"' : '') + '>' +
+        '<td>' + new Date(u.kada).toLocaleString('bs-BA') + '</td><td>' + (u.naziv_fajla || '') + '</td>' +
+        '<td>' + (u.objekt_naziv || '') + '</td><td>' + u.komada + '</td><td>' + fmt(u.povrsina) + '</td>' +
+        '<td>' + (u.korisnik_ime || '') + '</td><td>' +
+        (!u.stornirano ? '<button class="btn sec mali" onclick="stornirajUvoz(' + u.id + ')">Storno</button>' : '') +
+        '</td></tr>').join('') + '</tbody></table></div>';
+  } catch (e) { /* nema serija */ }
+}
+
+async function stornirajUvoz(id) {
+  if (!confirm('Stornirati cijeli uvoz? Brišu se samo komadi koji još nisu korišćeni.')) return;
+  try {
+    const d = await api('/uvoz/' + id + '/storniraj', { method: 'POST' });
+    poruka('Uvoz storniran — obrisano ' + d.obrisano + ' komada.');
+    document.getElementById('u_rezultat').innerHTML = '';
+    ucitajSerije(); ucitajSume();
+  } catch (e) { poruka(e.message, 'greska'); }
+}
+
 /* ═══════════════ start ═══════════════ */
 (async function start() {
   try {
@@ -1671,11 +1825,13 @@ document.getElementById('logout').onclick = async e => {
   if (!DOZVOLE.unos) {
     document.getElementById('tabNovi').style.display = 'none';
   }
+  if (me.rola === 'admin') document.getElementById('tabUvoz').style.display = '';
 
   try {
     OBJEKTI = await (await fetch('/api/prodajni-objekti')).json();
     const opcije = OBJEKTI.map(o => '<option value="' + o.id + '">' + o.naziv + '</option>').join('');
     document.getElementById('n_objekt').innerHTML = opcije;
+    document.getElementById('u_objekt').innerHTML = opcije;
     document.getElementById('t_objekt').innerHTML += opcije;
     document.getElementById('f_objekt').innerHTML += opcije;
   } catch (e) { poruka('PJ lista nije učitana: ' + e.message, 'greska'); }
