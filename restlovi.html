@@ -83,6 +83,22 @@ td.num{text-align:right;white-space:nowrap;}
 .modal-btns{display:flex;gap:8px;margin-top:16px;}
 
 fieldset{border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px;}
+
+/* ── PRILAGOĐAVANJE EKRANU ─────────────────────────────────── */
+#skica{width:100%;max-width:440px;aspect-ratio:320/250;height:auto;}
+#digital{width:100%;max-width:440px;height:auto;}
+@media (min-width:820px){            /* tablet uspravno i veće */
+  #skica,#digital{max-width:600px;}
+  body{font-size:15px;}
+  input,select,textarea{font-size:15px;min-height:44px;}
+  .btn{font-size:14px;min-height:44px;}
+  .btn.mali{font-size:13px;min-height:36px;}
+}
+@media (min-width:1200px){           /* tablet položeno i desktop */
+  #skica,#digital{max-width:720px;}
+}
+:fullscreen #digital, :-webkit-full-screen #digital{max-width:none;max-height:88vh;}
+:fullscreen #digital_omot{background:#fff;padding:16px;}
 legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
 .crtez{border:1px solid var(--border);border-radius:8px;background:#fafbfc;}
 .foto{max-width:150px;border-radius:8px;border:1px solid var(--border);}
@@ -208,11 +224,13 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
       <!-- 2. GENERISANI CRTEŽ — odmah ispod ručnog -->
       <div id="digital_omot" style="margin-top:12px">
         <div class="hint" id="pregled_uputstvo" style="margin-bottom:6px"></div>
-        <svg id="digital" width="380" height="320" class="crtez" style="touch-action:none"></svg>
+        <svg id="digital" viewBox="0 0 380 320" preserveAspectRatio="xMidYMid meet"
+          class="crtez" style="touch-action:none"></svg>
         <div id="poligon_alati" style="display:none;gap:6px;flex-wrap:wrap;margin-top:8px">
           <button type="button" class="btn sec mali" onclick="izravnaj('lijevo')">⌐ Izravnaj lijevu stranu</button>
           <button type="button" class="btn sec mali" onclick="izravnaj('dolje')">⌐ Izravnaj donju stranu</button>
           <button type="button" class="btn sec mali" id="undo_btn" onclick="ponisti()" disabled>↶ Poništi</button>
+          <button type="button" class="btn sec mali" onclick="cijeliEkran()">⛶ Cijeli ekran</button>
         </div>
         <div id="tjeme_meni" style="display:none;margin-top:8px"></div>
         <div id="digital_unos" style="margin-top:8px"></div>
@@ -792,8 +810,11 @@ function pocniVucenje(e) {
   }
   ZADNJI_DODIR = { v: naj, kada: sada };
 
-  zapamti();
-  VUCEM = { v: naj, pomjereno: false };
+  // Tjeme se NE pomjera samim dodirom. Čeka se da prst pređe prag od 8 piksela —
+  // tako prvi dodir dvostrukog dodira ne pomakne komad, a ni sitan trzaj ruke.
+  const q = e.touches ? e.touches[0] : e;
+  VUCEM = { v: naj, pomjereno: false, uhvaceno: false, krenulo: false,
+            pocX: q.clientX, pocY: q.clientY };
   IZABRANO_TJEME = naj; IZABRANA_STRANA = null;
   // Dugi dodir HVATA tjeme: poslije 350 ms bez pomjeranja tjeme se podebljava i
   // telefon kratko zavibrira, pa znaš da si ga uhvatio prije nego počneš vući.
@@ -802,14 +823,28 @@ function pocniVucenje(e) {
   DUGI_DODIR = setTimeout(() => {
     if (VUCEM && !VUCEM.pomjereno) {
       VUCEM.uhvaceno = true;
+      poruka2('Tjeme ' + SLOVA_T[VUCEM.v] + ' uhvaćeno — vuci ga.');
       if (navigator.vibrate) navigator.vibrate(15);
       crtajDigitalno();
     }
   }, 350);
 }
 
+const PRAG_POMJERAJA = 8;   // piksela
+
 function vuci(e) {
   if (!VUCEM) return;
+  const q = e.touches ? e.touches[0] : e;
+
+  // Dok se ne pređe prag, ništa se ne dešava. Ako je tjeme namjerno uhvaćeno
+  // dugim dodirom, praga nema — tada korisnik već zna da drži tjeme.
+  if (!VUCEM.krenulo) {
+    const put = Math.hypot(q.clientX - VUCEM.pocX, q.clientY - VUCEM.pocY);
+    if (!VUCEM.uhvaceno && put < PRAG_POMJERAJA) return;
+    VUCEM.krenulo = true;
+    clearTimeout(DUGI_DODIR);
+    zapamti();                 // pamti se tek kad vučenje stvarno počne
+  }
   e.preventDefault();
   let [mx, my] = tackaUMm(e);
   mx = Math.round(mx/5)*5; my = Math.round(my/5)*5;
@@ -834,7 +869,7 @@ function zavrsiVucenje() {
   if (!VUCEM) return;
   const { v, pomjereno } = VUCEM;
   VUCEM = null;
-  if (!pomjereno) { ISTORIJA.pop(); osvjeziUndo(); return; }
+  if (!pomjereno) return;    // samo dodir — istorija netaknuta
   normalizuj();
   osvjeziSve();
   poruka2('Tjeme ' + SLOVA_T[v] + ' pomjereno' + (bio && bio.uhvaceno ? '' : '') +
@@ -864,6 +899,39 @@ document.addEventListener('keydown', e => {
 /* ═══════════════ SKICIRANJE RUKOM ═══════════════ */
 let SKICA = [], SKICA_CRTA = false;
 function skicaPlatno() { return document.getElementById('skica'); }
+
+// Platno se crta u stvarnoj rezoluciji ekrana — na tabletu i telefonu sa gustim
+// ekranom inače izgleda mutno. Koordinate ostaju tačne jer se svuda računa
+// odnos (backing / prikazana širina).
+function podesiPlatno() {
+  const c = skicaPlatno();
+  if (!c) return;
+  const r = c.getBoundingClientRect();
+  if (!r.width) return;
+  const gustina = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.round(r.width * gustina), hh = Math.round(r.height * gustina);
+  if (c.width === w && c.height === hh) return;
+  c.width = w; c.height = hh;
+  SKICA = [];                       // stare tačke pripadaju staroj veličini
+  skicaCrtaj(false, null);
+}
+
+function cijeliEkran() {
+  const el = document.getElementById('digital_omot');
+  if (!el) return;
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  } else {
+    (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el);
+  }
+}
+
+let PODESAVANJE = null;
+window.addEventListener('resize', () => {
+  clearTimeout(PODESAVANJE);
+  PODESAVANJE = setTimeout(() => { podesiPlatno(); crtajDigitalno(); }, 150);
+});
+document.addEventListener('fullscreenchange', () => crtajDigitalno());
 function skicaTacka(e) {
   const c = skicaPlatno(), r = c.getBoundingClientRect();
   const t = e.touches ? e.touches[0] : e;
@@ -1065,6 +1133,7 @@ function osvjeziCrtez() {
   document.getElementById('w_c').style.display = jeL ? 'flex' : 'none';
   document.getElementById('w_d').style.display = jeL ? 'flex' : 'none';
   document.getElementById('skica_panel').style.display = imaSkicu() ? 'block' : 'none';
+  if (imaSkicu()) setTimeout(podesiPlatno, 0);
   document.getElementById('w_poligon').style.display = jeP ? 'block' : 'none';
   document.getElementById('poligon_alati').style.display = jeP ? 'flex' : 'none';
   document.getElementById('u_nepravilan').style.display = jeP ? 'none' : 'inline-block';
