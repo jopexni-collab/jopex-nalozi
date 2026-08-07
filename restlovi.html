@@ -173,44 +173,52 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
     <fieldset>
       <legend>Oblik i mjere (mm)</legend>
       <div class="red">
-        <label class="polje">Oblik<select id="n_oblik" onchange="osvjeziCrtez()" style="width:160px">
+        <label class="polje">Oblik<select id="n_oblik" onchange="promijenjenOblik()" style="width:190px">
           <option value="pravougaonik">Pravougaonik</option>
           <option value="L">L-oblik</option>
-          <option value="poligon">Kosi rez / trapez / nepravilan</option>
+          <option value="trapez">Kosi rez / trapez</option>
+          <option value="nepravilan">Nepravilan</option>
         </select></label>
-        <label class="polje">A — širina *<input type="number" id="n_a" oninput="osvjeziCrtez()" style="width:110px"></label>
-        <label class="polje">B — visina *<input type="number" id="n_b" oninput="osvjeziCrtez()" style="width:110px"></label>
+        <label class="polje" id="w_a">A — širina *<input type="number" id="n_a" oninput="osvjeziCrtez()" style="width:110px"></label>
+        <label class="polje" id="w_b">B — visina *<input type="number" id="n_b" oninput="osvjeziCrtez()" style="width:110px"></label>
         <label class="polje" id="w_c" style="display:none">C — izrez šir.<input type="number" id="n_c" oninput="osvjeziCrtez()" style="width:110px"></label>
         <label class="polje" id="w_d" style="display:none">D — izrez vis.<input type="number" id="n_d" oninput="osvjeziCrtez()" style="width:110px"></label>
       </div>
 
-      <div id="w_poligon" style="display:none;margin-top:12px">
-        <div class="hint" style="margin-bottom:8px">
-          Skiciraj komad prstom, pa ispravi mjere. Unosi se samo dvoje:
-          <b>dužina strane</b> (mala slova) i <b>položaj tjemena</b> (velika slova) —
-          odstojanje od bočne ivice i visina od baze. Uglovi se računaju sami;
-          dodirom na tjeme možeš zaključati ugao na 90°.
-        </div>
-        <div id="skica_panel" style="border:1px dashed var(--border);border-radius:10px;padding:10px;margin-bottom:12px;background:#fafbfc">
-          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">
-            <canvas id="skica" width="320" height="250"
-              style="border:1px solid var(--border);border-radius:8px;background:#fff;touch-action:none;cursor:crosshair"></canvas>
-            <div style="flex:1;min-width:190px">
-              <div class="hint" style="margin:0 0 8px">
-                Prstom obiđi oblik komada — ne mora biti uredno, ravnaće se samo.
-              </div>
-              <label class="polje" style="margin-bottom:8px">Najduža strana je otprilike (mm)
-                <input type="number" id="skica_mjerilo" value="1200" style="width:130px"></label>
-              <div style="display:flex;gap:6px;flex-wrap:wrap">
-                <button type="button" class="btn sec mali" onclick="ocistiSkicu()">Očisti</button>
-                <button type="button" class="btn mali" onclick="primijeniSkicu()">Pretvori u oblik</button>
-              </div>
-              <div id="skica_poruka" class="hint" style="margin-top:8px"></div>
+      <!-- 1. CRTEŽ RUKOM -->
+      <div id="skica_panel" style="display:none;border:1px dashed var(--border);border-radius:10px;padding:10px;margin-top:12px;background:#fafbfc">
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">
+          <canvas id="skica" width="320" height="250"
+            style="border:1px solid var(--border);border-radius:8px;background:#fff;touch-action:none;cursor:crosshair"></canvas>
+          <div style="flex:1;min-width:190px">
+            <div class="hint" style="margin:0 0 8px">
+              Prstom obiđi oblik komada — ne mora biti uredno, ravnaće se samo.
             </div>
+            <label class="polje" style="margin-bottom:8px">Najduža strana je otprilike (mm)
+              <input type="number" id="skica_mjerilo" value="1200" style="width:130px"></label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button type="button" class="btn sec mali" onclick="ocistiSkicu()">Očisti</button>
+              <button type="button" class="btn mali" onclick="primijeniSkicu()">Pretvori u oblik</button>
+            </div>
+            <div id="skica_poruka" class="hint" style="margin-top:8px"></div>
           </div>
-
         </div>
+      </div>
 
+      <!-- 2. GENERISANI CRTEŽ — odmah ispod ručnog -->
+      <div id="digital_omot" style="margin-top:12px">
+        <div class="hint" id="pregled_uputstvo" style="margin-bottom:6px"></div>
+        <svg id="digital" width="380" height="320" class="crtez" style="touch-action:none"></svg>
+        <div id="tjeme_meni" style="display:none;margin-top:8px"></div>
+        <div id="poligon_alati" style="display:none;gap:6px;flex-wrap:wrap;margin-top:8px">
+          <button type="button" class="btn sec mali" onclick="izravnaj('dolje')">⌐ Izravnaj donju stranu</button>
+          <button type="button" class="btn sec mali" onclick="izravnaj('lijevo')">⌐ Izravnaj lijevu stranu</button>
+        </div>
+        <div id="digital_unos" style="margin-top:8px"></div>
+      </div>
+
+      <!-- 3. TABELE STRANA I TJEMENA -->
+      <div id="w_poligon" style="display:none;margin-top:14px">
         <div style="display:flex;gap:16px;flex-wrap:wrap">
           <div style="flex:1;min-width:210px">
             <div style="font-size:11px;font-weight:700;color:#6b7a8d;margin-bottom:6px">STRANE — dužina (mm)</div>
@@ -231,29 +239,21 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
         </div>
       </div>
 
-      <!-- PREGLED — isti crtež za sve oblike -->
-      <div id="digital_omot" style="margin-top:14px">
-        <div class="hint" id="pregled_uputstvo" style="margin-bottom:6px"></div>
-        <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
-          <svg id="digital" width="380" height="320" class="crtez" style="touch-action:none"></svg>
-          <div style="flex:1;min-width:200px">
-            <div id="povrsina_info" class="hint" style="margin:0 0 10px;font-size:13px;font-weight:600;color:#134a85">Površina: —</div>
-            <div id="poligon_alati" style="display:none;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-              <button type="button" class="btn sec mali" onclick="izravnaj('dolje')">⌐ Izravnaj donju stranu</button>
-              <button type="button" class="btn sec mali" onclick="izravnaj('lijevo')">⌐ Izravnaj lijevu stranu</button>
-            </div>
-            <button type="button" class="btn sec mali" id="u_nepravilan" onclick="uNepravilan()"
-              style="margin-bottom:10px">Uredi kao nepravilan oblik →</button>
-            <label class="polje" style="margin-bottom:10px">Lokacija u magacinu
-              <input type="text" id="n_lokacija" placeholder="npr. regal 3, gore" style="width:220px"></label>
-            <label class="polje" style="margin-bottom:10px">Napomena
-              <textarea id="n_napomena" rows="2" style="width:230px"></textarea></label>
-            <label class="polje">Slika (telefon)
-              <input type="file" accept="image/*" capture="environment" id="n_foto" onchange="posaljiSliku(this)"></label>
-            <div id="foto_pregled" style="margin-top:8px"></div>
-          </div>
+      <!-- 4. OSTALO -->
+      <div style="margin-top:14px;display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+        <div>
+          <div id="povrsina_info" class="hint" style="margin:0 0 10px;font-size:13px;font-weight:600;color:#134a85">Površina: —</div>
+          <button type="button" class="btn sec mali" id="u_nepravilan" onclick="uNepravilan()" style="margin-bottom:10px">Uredi kao nepravilan oblik →</button>
+          <label class="polje" style="margin-bottom:10px">Lokacija u magacinu
+            <input type="text" id="n_lokacija" placeholder="npr. regal 3, gore" style="width:220px"></label>
+          <label class="polje">Napomena
+            <textarea id="n_napomena" rows="2" style="width:230px"></textarea></label>
         </div>
-        <div id="digital_unos" style="margin-top:8px"></div>
+        <div>
+          <label class="polje">Slika (telefon)
+            <input type="file" accept="image/*" capture="environment" id="n_foto" onchange="posaljiSliku(this)"></label>
+          <div id="foto_pregled" style="margin-top:8px"></div>
+        </div>
       </div>
     </fieldset>
 
@@ -377,14 +377,15 @@ function povrsinaOd(oblik, a, b, c, d) {
    Unosi se samo dvoje: dužina strane i položaj tjemena. */
 
 let TJEMENA = [[0,0],[1200,0],[1200,800],[0,800]];
-let PRAVI = new Set();          // tjemena zaključana na 90°
+let PRAVI = new Set();          // tjemena kojima je ugao postavljen na 90°
+let ZAKLJUCANA = new Set();     // tjemena koja se NE smiju pomjerati
 let IZABRANA_STRANA = null, IZABRANO_TJEME = null;
 let ISTORIJA = [];
 const SLOVA_T = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const SLOVA_S = 'abcdefghijklmnopqrstuvwxyz';
 
 function zapamti() {
-  ISTORIJA.push(JSON.stringify({ t: TJEMENA, p: [...PRAVI] }));
+  ISTORIJA.push(JSON.stringify({ t: TJEMENA, p: [...PRAVI], z: [...ZAKLJUCANA] }));
   if (ISTORIJA.length > 40) ISTORIJA.shift();
   osvjeziUndo();
 }
@@ -399,7 +400,7 @@ function osvjeziUndo() {
 function ponisti() {
   if (!ISTORIJA.length) return;
   const s = JSON.parse(ISTORIJA.pop());
-  TJEMENA = s.t; PRAVI = new Set(s.p);
+  TJEMENA = s.t; PRAVI = new Set(s.p); ZAKLJUCANA = new Set(s.z || []);
   IZABRANA_STRANA = null; IZABRANO_TJEME = null;
   osvjeziSve();
   osvjeziUndo();
@@ -441,7 +442,17 @@ function postaviDuzinuStrane(i, nova) {
   const a = TJEMENA[i1], b = TJEMENA[i2];
   const o = okvirT();
   const daljina = p => Math.hypot(p[0] - o.minX, p[1] - o.minY);
-  const pomjeriDrugi = daljina(b) >= daljina(a);
+  // Zaključano tjeme se ne pomjera — mijenja se ono drugo, bez obzira na ravnalo.
+  // Ako su oba zaključana, ne diramo ništa.
+  let pomjeriDrugi;
+  if (ZAKLJUCANA.has(i1) && ZAKLJUCANA.has(i2)) {
+    poruka2('<b style="color:#c0392b">Oba tjemena strane ' + SLOVA_S[i] +
+            ' su zaključana — otključaj jedno pa promijeni dužinu.</b>');
+    crtajStrane();
+    return;
+  } else if (ZAKLJUCANA.has(i1)) pomjeriDrugi = true;
+  else if (ZAKLJUCANA.has(i2)) pomjeriDrugi = false;
+  else pomjeriDrugi = daljina(b) >= daljina(a);
   const stoji = pomjeriDrugi ? a : b;
   const ide = pomjeriDrugi ? i2 : i1;
   const trenutna = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -452,11 +463,17 @@ function postaviDuzinuStrane(i, nova) {
                   Math.round((stoji[1] + smjer[1] * nova) * 10) / 10];
   normalizuj();
   osvjeziSve();
-  poruka2('Strana ' + SLOVA_S[i] + ' postavljena na ' + nova + ' mm — pomjereno tjeme ' + SLOVA_T[ide] + '.');
+  poruka2('Strana ' + SLOVA_S[i] + ' postavljena na ' + nova + ' mm — pomjereno tjeme ' + SLOVA_T[ide] +
+          (ZAKLJUCANA.has(pomjeriDrugi ? i1 : i2) ? ' (drugo je zaključano).' : '.'));
 }
 
 /* ── unos POLOŽAJA TJEMENA ── */
 function postaviTjeme(v, x, y) {
+  if (ZAKLJUCANA.has(v)) {
+    poruka2('<b style="color:#c0392b">Tjeme ' + SLOVA_T[v] + ' je zaključano — prvo ga otključaj.</b>');
+    crtajStrane();
+    return;
+  }
   zapamti();
   const o = okvirT();
   if (x !== null) TJEMENA[v][0] = o.minX + Number(x);
@@ -604,6 +621,39 @@ function izaberiStranu(i) {
   IZABRANO_TJEME = null;
   osvjeziSve();
 }
+function meniTjemena(v) {
+  const el = document.getElementById('tjeme_meni');
+  if (!el) return;
+  IZABRANO_TJEME = v; IZABRANA_STRANA = null;
+  const zakljucano = ZAKLJUCANA.has(v);
+  el.style.display = 'block';
+  el.innerHTML =
+    '<div class="panel" style="margin:0;padding:10px">' +
+    '<div style="font-size:12px;font-weight:700;color:#134a85;margin-bottom:8px">Tjeme ' + SLOVA_T[v] +
+      ' — ugao ' + ugaoUTjemenu(v) + '°' + (zakljucano ? ' · <span style="color:#1a5fa8">zaključano</span>' : '') + '</div>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+    '<button type="button" class="btn mali" onclick="postaviPraviUgao(' + v + ');zatvoriMeniTjemena()">Postavi 90°</button>' +
+    '<button type="button" class="btn sec mali" onclick="prebaciZakljucavanje(' + v + ')">' +
+      (zakljucano ? '🔓 Otključaj poziciju' : '🔒 Zaključaj poziciju') + '</button>' +
+    '<button type="button" class="btn sec mali" onclick="zatvoriMeniTjemena()">Zatvori</button>' +
+    '</div>' +
+    '<div class="hint" style="margin-top:6px">Zaključano tjeme ostaje na mjestu kad mijenjaš dužinu strane — pomjera se ono drugo.</div>' +
+    '</div>';
+  crtajDigitalno();
+}
+
+function zatvoriMeniTjemena() {
+  const el = document.getElementById('tjeme_meni');
+  if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+}
+
+function prebaciZakljucavanje(v) {
+  zapamti();
+  if (ZAKLJUCANA.has(v)) ZAKLJUCANA.delete(v); else ZAKLJUCANA.add(v);
+  osvjeziSve();
+  meniTjemena(v);
+}
+
 function izaberiTjeme(v) {
   if (!samoPoligon()) return;
   IZABRANO_TJEME = (IZABRANO_TJEME === v ? null : v);
@@ -663,10 +713,13 @@ function crtajDigitalno() {
   // tjemena — velika slova
   t.forEach((p, v) => {
     const x = px(p), y = py(p), prav = jePrav(v);
-    s += '<g style="cursor:pointer" onclick="postaviPraviUgao(' + v + ')">' +
+    s += '<g style="cursor:pointer" onclick="izaberiTjeme(' + v + ')">' +
       '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="13" fill="transparent"/>' +
       (prav ? '<rect x="' + (x-4.5).toFixed(1) + '" y="' + (y-4.5).toFixed(1) + '" width="9" height="9" fill="#fff" stroke="#1f8a4c" stroke-width="1.8"/>'
             : '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="5" fill="#e67e22"/>') +
+      (ZAKLJUCANA.has(v) ? '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="9" fill="none" ' +
+        'stroke="#1a5fa8" stroke-width="2"/><text x="' + (x-3.5).toFixed(1) + '" y="' + (y+16).toFixed(1) +
+        '" font-size="9">🔒</text>' : '') +
       (IZABRANO_TJEME === v ? '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="11" fill="none" stroke="#1a5fa8" stroke-width="1.5"/>' : '') +
       '<text x="' + (x+9).toFixed(1) + '" y="' + (y-7).toFixed(1) + '" font-size="12" font-weight="800" fill="#134a85">' + SLOVA_T[v] + '</text>' +
       '</g>';
@@ -711,6 +764,8 @@ function samoPoligon() {
   return i && i.value === 'poligon';
 }
 
+let DUGI_DODIR = null;
+
 function pocniVucenje(e) {
   if (!samoPoligon() || !PRESLIKA || TJEMENA.length < 3) return;
   const [mx, my] = tackaUMm(e);
@@ -725,11 +780,22 @@ function pocniVucenje(e) {
   zapamti();
   VUCEM = { v: naj, pomjereno: false };
   IZABRANO_TJEME = naj; IZABRANA_STRANA = null;
+  // dugi dodir (600 ms bez pomjeranja) otvara izbor: 90° ili zaključavanje
+  clearTimeout(DUGI_DODIR);
+  DUGI_DODIR = setTimeout(() => {
+    if (VUCEM && !VUCEM.pomjereno) {
+      const v = VUCEM.v;
+      VUCEM = null;
+      ISTORIJA.pop(); osvjeziUndo();
+      meniTjemena(v);
+    }
+  }, 600);
 }
 
 function vuci(e) {
   if (!VUCEM) return;
   e.preventDefault();
+  clearTimeout(DUGI_DODIR);
   let [mx, my] = tackaUMm(e);
   mx = Math.round(mx/5)*5; my = Math.round(my/5)*5;
   const blizu = 12 / PRESLIKA.k;
@@ -738,12 +804,17 @@ function vuci(e) {
     if (Math.abs(p[0]-mx) < blizu) mx = p[0];
     if (Math.abs(p[1]-my) < blizu) my = p[1];
   });
+  if (ZAKLJUCANA.has(VUCEM.v)) {
+    poruka2('Tjeme ' + SLOVA_T[VUCEM.v] + ' je zaključano — otključaj ga dugim dodirom.');
+    return;
+  }
   TJEMENA[VUCEM.v] = [mx, my];
   VUCEM.pomjereno = true;
   crtajStrane(); crtajDigitalno();
 }
 
 function zavrsiVucenje() {
+  clearTimeout(DUGI_DODIR);
   if (!VUCEM) return;
   const { v, pomjereno } = VUCEM;
   VUCEM = null;
@@ -766,7 +837,7 @@ function zavrsiVucenje() {
 
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && ISTORIJA.length) {
-    if (document.getElementById('n_oblik') && document.getElementById('n_oblik').value === 'poligon') {
+    if (samoPoligon()) {
       e.preventDefault();
       ponisti();
     }
@@ -851,6 +922,31 @@ function skicaUTjemena() {
   t = ocistiTjemena(t, dijag);
   return t.length >= 3 ? t : null;
 }
+// Iz nacrtanog L-oblika izvlači A, B, C, D. Izrez može biti u bilo kom uglu, pa se
+// oblik prvo zaokrene tako da izrez padne gore desno — kanonski položaj.
+function ABCDizTjemena() {
+  if (TJEMENA.length !== 6) return null;
+  for (let z = 0; z < 4; z++) {
+    const ug = z * 90 * Math.PI / 180;
+    const c = Math.cos(ug), s = Math.sin(ug);
+    let t = TJEMENA.map(p => [p[0]*c - p[1]*s, p[0]*s + p[1]*c]);
+    const minX = Math.min(...t.map(p => p[0])), minY = Math.min(...t.map(p => p[1]));
+    t = t.map(p => [Math.round(p[0]-minX), Math.round(p[1]-minY)]);
+    const A = Math.max(...t.map(p => p[0])), B = Math.max(...t.map(p => p[1]));
+    // ulegnuto tjeme = jedino koje nije ni na jednoj ivici okvira
+    const unutra = t.filter(p => p[0] > 0 && p[0] < A && p[1] > 0 && p[1] < B);
+    if (unutra.length !== 1) continue;
+    const [ux, uy] = unutra[0];
+    const C = A - ux, D = B - uy;
+    if (C <= 0 || D <= 0 || C >= A || D >= B) continue;
+    // provjera: da li se poklapa sa kanonskim L
+    const ocekivano = [[0,0],[A,0],[A,B-D],[A-C,B-D],[A-C,B],[0,B]];
+    const ima = p => ocekivano.some(q => Math.abs(q[0]-p[0]) < 6 && Math.abs(q[1]-p[1]) < 6);
+    if (t.every(ima)) return { A, B, C, D };
+  }
+  return null;
+}
+
 function primijeniSkicu() {
   const tj = skicaUTjemena();
   if (!tj) { poruka2('<b style="color:#c0392b">Nacrtaj oblik na platnu — potez je prekratak.</b>'); return; }
@@ -868,8 +964,25 @@ function primijeniSkicu() {
   }
   if (pov < 0) t.reverse();
   TJEMENA = t.map(p => [Math.round(p[0]/5)*5, Math.round(p[1]/5)*5]);
-  PRAVI = new Set(); IZABRANA_STRANA = null; IZABRANO_TJEME = null;
+  PRAVI = new Set(); ZAKLJUCANA = new Set();
+  IZABRANA_STRANA = null; IZABRANO_TJEME = null;
   normalizuj();
+
+  // U L-obliku skica popunjava A, B, C, D — jer su tamo one izvor istine
+  if (vrstaOblika() === 'L') {
+    const abcd = ABCDizTjemena();
+    if (!abcd) {
+      poruka2('<b style="color:#c0392b">Nacrtani oblik nije L (' + TJEMENA.length +
+              ' strana). Izaberi „Nepravilan" da ga zadržiš kakav jeste.</b>');
+      skicaCrtaj(true, tj);
+      return;
+    }
+    document.getElementById('n_a').value = abcd.A;
+    document.getElementById('n_b').value = abcd.B;
+    document.getElementById('n_c').value = abcd.C;
+    document.getElementById('n_d').value = abcd.D;
+  }
+
   osvjeziSve();
   skicaCrtaj(true, tj);
   const nepravih = TJEMENA.filter((p, v) => !jePrav(v)).length;
@@ -910,24 +1023,43 @@ async function posaljiSliku(input) {
   } catch (e) { poruka('Slika nije poslana: ' + e.message, 'greska'); }
 }
 
+// Četiri vrste oblika. Prve dvije se opisuju mjerama A/B/C/D, druge dvije
+// tjemenima — ali obje posljednje idu u bazu kao 'poligon'.
+function vrstaOblika() { return document.getElementById('n_oblik').value; }
+function samoPoligon() { return ['trapez', 'nepravilan'].includes(vrstaOblika()); }
+function imaSkicu() { return vrstaOblika() !== 'pravougaonik'; }
+
+function promijenjenOblik() {
+  const v = vrstaOblika();
+  // Trapez i nepravilan kreću od smislenog predloška, ako oblik još nije zadat
+  if (v === 'trapez' && TJEMENA.length === 4 && jePrav(1)) TJEMENA = [[0,0],[1200,0],[700,600],[0,600]];
+  if (samoPoligon()) { PRAVI = new Set(); ZAKLJUCANA = new Set(); }
+  IZABRANA_STRANA = null; IZABRANO_TJEME = null;
+  zatvoriMeniTjemena();
+  ocistiSkicu();
+  osvjeziSve();
+}
+
 function osvjeziCrtez() {
-  const oblik = document.getElementById('n_oblik').value;
-  const jeL = oblik === 'L', jeP = oblik === 'poligon';
+  const v = vrstaOblika();
+  const jeL = v === 'L', jeP = samoPoligon();
+  document.getElementById('w_a').style.display = jeP ? 'none' : 'flex';
+  document.getElementById('w_b').style.display = jeP ? 'none' : 'flex';
   document.getElementById('w_c').style.display = jeL ? 'flex' : 'none';
   document.getElementById('w_d').style.display = jeL ? 'flex' : 'none';
+  document.getElementById('skica_panel').style.display = imaSkicu() ? 'block' : 'none';
   document.getElementById('w_poligon').style.display = jeP ? 'block' : 'none';
   document.getElementById('poligon_alati').style.display = jeP ? 'flex' : 'none';
   document.getElementById('u_nepravilan').style.display = jeP ? 'none' : 'inline-block';
   document.getElementById('pregled_uputstvo').innerHTML = jeP
-    ? '<b>Povuci tjeme prstom</b> da grubo namjestiš oblik, pa upiši tačne mjere u tabele iznad. ' +
-      'Dodir na <b>veliko slovo</b> zaključava ugao na 90°.'
-    : 'Pregled se osvježava dok unosiš mjere. Za kosi rez ili nepravilan komad koristi dugme desno.';
+    ? '<b>Povuci tjeme prstom</b> da grubo namjestiš oblik, pa upiši tačne mjere u tabele ispod. ' +
+      '<b>Dugi dodir na tjeme</b> nudi 90° ili zaključavanje pozicije.'
+    : (jeL ? 'Skiciraj L-oblik prstom ili upiši A, B, C, D — crtež se osvježava odmah.'
+           : 'Pregled se osvježava dok unosiš mjere.');
 
   const a = document.getElementById('n_a').value, b = document.getElementById('n_b').value;
   const c = document.getElementById('n_c').value, d = document.getElementById('n_d').value;
 
-  // Pravougaonik i L se pretvaraju u tjemena, pa se crtaju ISTIM crtežom kao
-  // nepravilan oblik — sa slovima, kotama i ravnalima. Jedan crtež za sve oblike.
   if (!jeP) {
     const A = Number(a) || 0, B = Number(b) || 0, C = Number(c) || 0, D = Number(d) || 0;
     if (A > 0 && B > 0) {
@@ -950,8 +1082,8 @@ function osvjeziCrtez() {
 // Prelazak sa pravougaonika/L na nepravilan oblik, uz zadržane mjere
 function uNepravilan() {
   const izbor = document.getElementById('n_oblik');
-  if (izbor.value === 'poligon') return;
-  izbor.value = 'poligon';
+  if (samoPoligon()) return;
+  izbor.value = 'nepravilan';
   ISTORIJA = [];
   osvjeziUndo();
   osvjeziSve();
@@ -1217,12 +1349,12 @@ async function sacuvajNovi() {
     debljina_cm: document.getElementById('n_debljina').value || null,
     grupa: document.getElementById('n_grupa').value || null,
     cijena_m2: document.getElementById('n_cijena').value || 0,
-    oblik: document.getElementById('n_oblik').value,
+    oblik: samoPoligon() ? 'poligon' : vrstaOblika(),
     dim_a: document.getElementById('n_a').value,
     dim_b: document.getElementById('n_b').value,
     dim_c: document.getElementById('n_c').value || 0,
     dim_d: document.getElementById('n_d').value || 0,
-    poligon: document.getElementById('n_oblik').value === 'poligon' ? citajTjemena() : null,
+    poligon: samoPoligon() ? citajTjemena() : null,
     nastao_iz_naloga: document.getElementById('n_nalog').value || null,
     lokacija: document.getElementById('n_lokacija').value || null,
     napomena: document.getElementById('n_napomena').value || null,
