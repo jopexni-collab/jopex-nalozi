@@ -1825,7 +1825,9 @@ async function stornirajUvoz(id) {
   if (!DOZVOLE.unos) {
     document.getElementById('tabNovi').style.display = 'none';
   }
-  if (me.rola === 'admin') document.getElementById('tabUvoz').style.display = '';
+  // JA je globalna promjenljiva; 'me' postoji SAMO unutar try bloka iznad, pa bi
+  // ovdje bacilo ReferenceError i prekinulo cijelo učitavanje stranice.
+  if (JA && JA.rola === 'admin') document.getElementById('tabUvoz').style.display = '';
 
   try {
     OBJEKTI = await (await fetch('/api/prodajni-objekti')).json();
