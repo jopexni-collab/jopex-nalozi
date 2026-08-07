@@ -209,18 +209,6 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
             </div>
           </div>
 
-          <div id="digital_omot" style="display:none;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-            <div class="hint" style="margin-bottom:6px">
-              <b>Povuci tjeme prstom</b> da grubo namjestiš oblik, pa upiši tačne mjere ispod.
-              Dodir na <b>veliko slovo</b> zaključava ugao na 90°.
-            </div>
-            <svg id="digital" width="380" height="320" class="crtez" style="touch-action:none"></svg>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-              <button type="button" class="btn sec mali" onclick="izravnaj('dolje')">⌐ Izravnaj donju stranu</button>
-              <button type="button" class="btn sec mali" onclick="izravnaj('lijevo')">⌐ Izravnaj lijevu stranu</button>
-            </div>
-            <div id="digital_unos" style="margin-top:8px"></div>
-          </div>
         </div>
 
         <div style="display:flex;gap:16px;flex-wrap:wrap">
@@ -241,6 +229,31 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
           <button type="button" class="btn sec mali" onclick="predlozak('L')">L-oblik</button>
           <button type="button" class="btn sec mali" onclick="predlozak('trapez')">Trapez</button>
         </div>
+      </div>
+
+      <!-- PREGLED — isti crtež za sve oblike -->
+      <div id="digital_omot" style="margin-top:14px">
+        <div class="hint" id="pregled_uputstvo" style="margin-bottom:6px"></div>
+        <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+          <svg id="digital" width="380" height="320" class="crtez" style="touch-action:none"></svg>
+          <div style="flex:1;min-width:200px">
+            <div id="povrsina_info" class="hint" style="margin:0 0 10px;font-size:13px;font-weight:600;color:#134a85">Površina: —</div>
+            <div id="poligon_alati" style="display:none;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+              <button type="button" class="btn sec mali" onclick="izravnaj('dolje')">⌐ Izravnaj donju stranu</button>
+              <button type="button" class="btn sec mali" onclick="izravnaj('lijevo')">⌐ Izravnaj lijevu stranu</button>
+            </div>
+            <button type="button" class="btn sec mali" id="u_nepravilan" onclick="uNepravilan()"
+              style="margin-bottom:10px">Uredi kao nepravilan oblik →</button>
+            <label class="polje" style="margin-bottom:10px">Lokacija u magacinu
+              <input type="text" id="n_lokacija" placeholder="npr. regal 3, gore" style="width:220px"></label>
+            <label class="polje" style="margin-bottom:10px">Napomena
+              <textarea id="n_napomena" rows="2" style="width:230px"></textarea></label>
+            <label class="polje">Slika (telefon)
+              <input type="file" accept="image/*" capture="environment" id="n_foto" onchange="posaljiSliku(this)"></label>
+            <div id="foto_pregled" style="margin-top:8px"></div>
+          </div>
+        </div>
+        <div id="digital_unos" style="margin-top:8px"></div>
       </div>
     </fieldset>
 
@@ -335,35 +348,21 @@ function nacrtajTjemena(svgEl, t, w, h) {
       Math.round(sirina) + ' × ' + Math.round(visina) + ' mm</text>';
 }
 
+
+// Mali pregled u prozoru "Uzmi restl za nalog" — A/B/C/D pretvori u tjemena
+// pa koristi isti crtač.
 function nacrtaj(svgEl, oblik, a, b, c, d, w, h) {
-  if (oblik === 'poligon') return nacrtajTjemena(svgEl, citajTjemena(), w || 340, h || 260);
-  w = w || 300; h = h || 220;
-  const A = Number(a) || 0, B = Number(b) || 0;
-  const C = Number(c) || 0, D = Number(d) || 0;
-  svgEl.setAttribute('width', w); svgEl.setAttribute('height', h);
-  if (!A || !B) { svgEl.innerHTML = '<text x="' + (w/2) + '" y="' + (h/2) + '" text-anchor="middle" font-size="12" fill="#8b949e">unesi mjere</text>'; return; }
-  const pad = 30;
-  const k = Math.min((w - pad * 2) / A, (h - pad * 2) / B);
-  const sa = A * k, sb = B * k, sc = C * k, sd = D * k;
-  const x0 = (w - sa) / 2, y0 = (h - sb) / 2;
-  let put;
-  if (oblik === 'L' && C > 0 && D > 0) {
-    put = 'M' + x0 + ' ' + y0 + ' L' + (x0 + sa - sc) + ' ' + y0 +
-          ' L' + (x0 + sa - sc) + ' ' + (y0 + sd) +
-          ' L' + (x0 + sa) + ' ' + (y0 + sd) +
-          ' L' + (x0 + sa) + ' ' + (y0 + sb) + ' L' + x0 + ' ' + (y0 + sb) + ' Z';
-  } else {
-    put = 'M' + x0 + ' ' + y0 + ' L' + (x0 + sa) + ' ' + y0 +
-          ' L' + (x0 + sa) + ' ' + (y0 + sb) + ' L' + x0 + ' ' + (y0 + sb) + ' Z';
+  const A = Number(a) || 0, B = Number(b) || 0, C = Number(c) || 0, D = Number(d) || 0;
+  if (!A || !B) {
+    svgEl.setAttribute('width', w || 260); svgEl.setAttribute('height', h || 170);
+    svgEl.innerHTML = '<text x="' + ((w||260)/2) + '" y="' + ((h||170)/2) +
+      '" text-anchor="middle" font-size="12" fill="#8b96a5">unesi mjere</text>';
+    return;
   }
-  svgEl.innerHTML =
-    '<path d="' + put + '" fill="#dbeafe" stroke="#2b6cb0" stroke-width="1.5"/>' +
-    '<text x="' + (x0 + sa / 2) + '" y="' + (y0 + sb + 16) + '" text-anchor="middle" font-size="11" fill="#57606a">A ' + A + '</text>' +
-    '<text x="' + (x0 - 6) + '" y="' + (y0 + sb / 2) + '" text-anchor="end" font-size="11" fill="#57606a">B ' + B + '</text>' +
-    (oblik === 'L' && C > 0 && D > 0
-      ? '<text x="' + (x0 + sa - sc / 2) + '" y="' + (y0 - 6) + '" text-anchor="middle" font-size="11" fill="#57606a">C ' + C + '</text>' +
-        '<text x="' + (x0 + sa + 6) + '" y="' + (y0 + sd / 2) + '" font-size="11" fill="#57606a">D ' + D + '</text>'
-      : '');
+  const t = (oblik === 'L' && C > 0 && D > 0)
+    ? [[0,0],[A,0],[A,B-D],[A-C,B-D],[A-C,B],[0,B]]
+    : [[0,0],[A,0],[A,B],[0,B]];
+  nacrtajTjemena(svgEl, t, w || 260, h || 170);
 }
 
 function povrsinaOd(oblik, a, b, c, d) {
@@ -474,6 +473,10 @@ function postaviTjeme(v, x, y) {
 function postaviPraviUgao(v) {
   const n = TJEMENA.length;
   if (n < 3) return;
+  if (!samoPoligon()) {
+    poruka2('Kod pravougaonika i L-oblika uglovi su ionako pravi. Za kosi rez izaberi nepravilan oblik.');
+    return;
+  }
   zapamti();
   const a = TJEMENA[(v - 1 + n) % n], p = TJEMENA[v], b = TJEMENA[(v + 1) % n];
   const dolazi = Math.atan2(p[1] - a[1], p[0] - a[0]);
@@ -596,11 +599,13 @@ function crtajStrane() {
 function osvjeziSve() { crtajStrane(); osvjeziCrtez(); }
 
 function izaberiStranu(i) {
+  if (!samoPoligon()) return;
   IZABRANA_STRANA = (IZABRANA_STRANA === i ? null : i);
   IZABRANO_TJEME = null;
   osvjeziSve();
 }
 function izaberiTjeme(v) {
+  if (!samoPoligon()) return;
   IZABRANO_TJEME = (IZABRANO_TJEME === v ? null : v);
   IZABRANA_STRANA = null;
   osvjeziSve();
@@ -701,8 +706,13 @@ function tackaUMm(e) {
           PRESLIKA.minY + (PRESLIKA.hh - PRESLIKA.dolje - y) / PRESLIKA.k];
 }
 
+function samoPoligon() {
+  const i = document.getElementById('n_oblik');
+  return i && i.value === 'poligon';
+}
+
 function pocniVucenje(e) {
-  if (!PRESLIKA || TJEMENA.length < 3) return;
+  if (!samoPoligon() || !PRESLIKA || TJEMENA.length < 3) return;
   const [mx, my] = tackaUMm(e);
   const domet = 18 / PRESLIKA.k;
   let naj = -1, najD = domet;
@@ -906,16 +916,46 @@ function osvjeziCrtez() {
   document.getElementById('w_c').style.display = jeL ? 'flex' : 'none';
   document.getElementById('w_d').style.display = jeL ? 'flex' : 'none';
   document.getElementById('w_poligon').style.display = jeP ? 'block' : 'none';
-  ['n_a','n_b'].forEach(x => { document.getElementById(x).closest('label').style.display = jeP ? 'none' : 'flex'; });
-  if (jeP && !document.querySelector('#strane_lista .strana-red')) crtajStrane();
+  document.getElementById('poligon_alati').style.display = jeP ? 'flex' : 'none';
+  document.getElementById('u_nepravilan').style.display = jeP ? 'none' : 'inline-block';
+  document.getElementById('pregled_uputstvo').innerHTML = jeP
+    ? '<b>Povuci tjeme prstom</b> da grubo namjestiš oblik, pa upiši tačne mjere u tabele iznad. ' +
+      'Dodir na <b>veliko slovo</b> zaključava ugao na 90°.'
+    : 'Pregled se osvježava dok unosiš mjere. Za kosi rez ili nepravilan komad koristi dugme desno.';
+
   const a = document.getElementById('n_a').value, b = document.getElementById('n_b').value;
   const c = document.getElementById('n_c').value, d = document.getElementById('n_d').value;
-  if (oblik === 'poligon') crtajDigitalno();
-  nacrtaj(document.getElementById('crtez'), oblik, a, b, c, d);
-  const p = oblik === 'poligon' ? povrsinaTjemena(citajTjemena()) : povrsinaOd(oblik, a, b, c, d);
+
+  // Pravougaonik i L se pretvaraju u tjemena, pa se crtaju ISTIM crtežom kao
+  // nepravilan oblik — sa slovima, kotama i ravnalima. Jedan crtež za sve oblike.
+  if (!jeP) {
+    const A = Number(a) || 0, B = Number(b) || 0, C = Number(c) || 0, D = Number(d) || 0;
+    if (A > 0 && B > 0) {
+      TJEMENA = (jeL && C > 0 && D > 0)
+        ? [[0,0],[A,0],[A,B-D],[A-C,B-D],[A-C,B],[0,B]]
+        : [[0,0],[A,0],[A,B],[0,B]];
+      IZABRANA_STRANA = null; IZABRANO_TJEME = null;
+    }
+  }
+
+  if (jeP) crtajStrane();
+  crtajDigitalno();
+
+  const p = povrsinaTjemena(TJEMENA);
   const cij = Number(document.getElementById('n_cijena').value) || 0;
   document.getElementById('povrsina_info').textContent =
     'Površina: ' + m2(p) + (cij ? '  ·  vrijednost: ' + fmt(p * cij) + ' KM' : '');
+}
+
+// Prelazak sa pravougaonika/L na nepravilan oblik, uz zadržane mjere
+function uNepravilan() {
+  const izbor = document.getElementById('n_oblik');
+  if (izbor.value === 'poligon') return;
+  izbor.value = 'poligon';
+  ISTORIJA = [];
+  osvjeziUndo();
+  osvjeziSve();
+  poruka2('Oblik prebačen u nepravilan — sad možeš vući tjemena i mijenjati pojedine strane.');
 }
 
 /* ═══════════════ lager artikli za izabrani PJ ═══════════════ */
