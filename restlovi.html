@@ -209,11 +209,12 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
       <div id="digital_omot" style="margin-top:12px">
         <div class="hint" id="pregled_uputstvo" style="margin-bottom:6px"></div>
         <svg id="digital" width="380" height="320" class="crtez" style="touch-action:none"></svg>
-        <div id="tjeme_meni" style="display:none;margin-top:8px"></div>
         <div id="poligon_alati" style="display:none;gap:6px;flex-wrap:wrap;margin-top:8px">
-          <button type="button" class="btn sec mali" onclick="izravnaj('dolje')">⌐ Izravnaj donju stranu</button>
           <button type="button" class="btn sec mali" onclick="izravnaj('lijevo')">⌐ Izravnaj lijevu stranu</button>
+          <button type="button" class="btn sec mali" onclick="izravnaj('dolje')">⌐ Izravnaj donju stranu</button>
+          <button type="button" class="btn sec mali" id="undo_btn" onclick="ponisti()" disabled>↶ Poništi</button>
         </div>
+        <div id="tjeme_meni" style="display:none;margin-top:8px"></div>
         <div id="digital_unos" style="margin-top:8px"></div>
       </div>
 
@@ -230,8 +231,6 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
           </div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center">
-          <button type="button" class="btn sec mali" id="undo_btn" onclick="ponisti()" disabled>↶ Poništi</button>
-          <span style="width:12px"></span>
           <span class="hint" style="margin:0">Predlošci:</span>
           <button type="button" class="btn sec mali" onclick="predlozak('pravougaonik')">Pravougaonik</button>
           <button type="button" class="btn sec mali" onclick="predlozak('L')">L-oblik</button>
@@ -713,10 +712,15 @@ function crtajDigitalno() {
   // tjemena — velika slova
   t.forEach((p, v) => {
     const x = px(p), y = py(p), prav = jePrav(v);
-    s += '<g style="cursor:pointer" onclick="izaberiTjeme(' + v + ')">' +
+    s += '<g style="cursor:pointer" onclick="izaberiTjeme(' + v + ')" ' +
+      'ondblclick="event.preventDefault();meniTjemena(' + v + ')">' +
       '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="13" fill="transparent"/>' +
       (prav ? '<rect x="' + (x-4.5).toFixed(1) + '" y="' + (y-4.5).toFixed(1) + '" width="9" height="9" fill="#fff" stroke="#1f8a4c" stroke-width="1.8"/>'
             : '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="5" fill="#e67e22"/>') +
+      (VUCEM && VUCEM.v === v && VUCEM.uhvaceno
+        ? '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="15" fill="#1a5fa8" opacity=".18"/>' +
+          '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="8" fill="none" stroke="#1a5fa8" stroke-width="2.5"/>'
+        : '') +
       (ZAKLJUCANA.has(v) ? '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="9" fill="none" ' +
         'stroke="#1a5fa8" stroke-width="2"/><text x="' + (x-3.5).toFixed(1) + '" y="' + (y+16).toFixed(1) +
         '" font-size="9">🔒</text>' : '') +
@@ -764,7 +768,7 @@ function samoPoligon() {
   return i && i.value === 'poligon';
 }
 
-let DUGI_DODIR = null;
+let DUGI_DODIR = null, ZADNJI_DODIR = { v: -1, kada: 0 };
 
 function pocniVucenje(e) {
   if (!samoPoligon() || !PRESLIKA || TJEMENA.length < 3) return;
@@ -777,25 +781,36 @@ function pocniVucenje(e) {
   });
   if (naj < 0) return;
   e.preventDefault();
+
+  // dvostruki dodir prstom — isto što i dvoklik mišem
+  const sada = Date.now();
+  if (ZADNJI_DODIR.v === naj && sada - ZADNJI_DODIR.kada < 400) {
+    ZADNJI_DODIR = { v: -1, kada: 0 };
+    VUCEM = null;
+    meniTjemena(naj);
+    return;
+  }
+  ZADNJI_DODIR = { v: naj, kada: sada };
+
   zapamti();
   VUCEM = { v: naj, pomjereno: false };
   IZABRANO_TJEME = naj; IZABRANA_STRANA = null;
-  // dugi dodir (600 ms bez pomjeranja) otvara izbor: 90° ili zaključavanje
+  // Dugi dodir HVATA tjeme: poslije 350 ms bez pomjeranja tjeme se podebljava i
+  // telefon kratko zavibrira, pa znaš da si ga uhvatio prije nego počneš vući.
+  // Meni je namjerno na dvoklik — da se dugi dodir i povlačenje ne sudaraju.
   clearTimeout(DUGI_DODIR);
   DUGI_DODIR = setTimeout(() => {
     if (VUCEM && !VUCEM.pomjereno) {
-      const v = VUCEM.v;
-      VUCEM = null;
-      ISTORIJA.pop(); osvjeziUndo();
-      meniTjemena(v);
+      VUCEM.uhvaceno = true;
+      if (navigator.vibrate) navigator.vibrate(15);
+      crtajDigitalno();
     }
-  }, 600);
+  }, 350);
 }
 
 function vuci(e) {
   if (!VUCEM) return;
   e.preventDefault();
-  clearTimeout(DUGI_DODIR);
   let [mx, my] = tackaUMm(e);
   mx = Math.round(mx/5)*5; my = Math.round(my/5)*5;
   const blizu = 12 / PRESLIKA.k;
@@ -815,13 +830,15 @@ function vuci(e) {
 
 function zavrsiVucenje() {
   clearTimeout(DUGI_DODIR);
+  const bio = VUCEM;
   if (!VUCEM) return;
   const { v, pomjereno } = VUCEM;
   VUCEM = null;
   if (!pomjereno) { ISTORIJA.pop(); osvjeziUndo(); return; }
   normalizuj();
   osvjeziSve();
-  poruka2('Tjeme ' + SLOVA_T[v] + ' pomjereno — sad upiši tačne mjere u tabelu.');
+  poruka2('Tjeme ' + SLOVA_T[v] + ' pomjereno' + (bio && bio.uhvaceno ? '' : '') +
+          ' — sad upiši tačne mjere u tabelu.');
 }
 
 (function vezeVucenja() {
@@ -1053,7 +1070,8 @@ function osvjeziCrtez() {
   document.getElementById('u_nepravilan').style.display = jeP ? 'none' : 'inline-block';
   document.getElementById('pregled_uputstvo').innerHTML = jeP
     ? '<b>Povuci tjeme prstom</b> da grubo namjestiš oblik, pa upiši tačne mjere u tabele ispod. ' +
-      '<b>Dugi dodir na tjeme</b> nudi 90° ili zaključavanje pozicije.'
+      '<b>Dugi dodir hvata tjeme</b> pa ga vučeš. <b>Dvoklik</b> (ili dvostruki dodir) ' +
+      'nudi 90° ili zaključavanje pozicije.'
     : (jeL ? 'Skiciraj L-oblik prstom ili upiši A, B, C, D — crtež se osvježava odmah.'
            : 'Pregled se osvježava dok unosiš mjere.');
 
