@@ -520,9 +520,15 @@ router.get('/vp-cekanje', async (req, res) => {
     // ograničavanja/sortiranja) — bitno na skali kad naplate_duga_log poraste.
     const r = await pool.query(`
       WITH vp_bruto AS (
-        SELECT nalog_r_br, SUM(iznos) AS vp_iznos
-        FROM gotovina WHERE opis LIKE 'Prodaja (bruto)%'
-        GROUP BY nalog_r_br
+        -- "Prodaja (bruto)" bilježi CIJELU vrijednost prodaje (uključujući dio koji je
+        -- ostao kao dug) — VP iznos treba da bude SAMO gotovina koja je STVARNO primljena
+        -- u trenutku prodaje, dakle bruto UMANJEN za dug koji je tada nastao. Bez ovoga se
+        -- "Struktura naplate" duplirala (VP=cijeli bruto + docnija naplata duga = više od
+        -- stvarnog ukupnog iznosa otpremnice).
+        SELECT b.nalog_r_br, (b.bruto - COALESCE(d.dug,0)) AS vp_iznos
+        FROM (SELECT nalog_r_br, SUM(iznos) AS bruto FROM gotovina WHERE opis LIKE 'Prodaja (bruto)%' GROUP BY nalog_r_br) b
+        LEFT JOIN (SELECT nalog_r_br, SUM(iznos) AS dug FROM gotovina WHERE opis LIKE 'Dug po otpremnici%' GROUP BY nalog_r_br) d
+          ON d.nalog_r_br = b.nalog_r_br
       ),
       naplate_agg AS (
         SELECT otpremnica_broj,
