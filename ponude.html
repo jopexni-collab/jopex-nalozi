@@ -773,7 +773,9 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       </div>
       <div style="font-size:11px;color:#6b7a8d;margin-bottom:8px;line-height:1.5">
         Tjemena <b>A B C</b> &middot; strane <b>a b c</b>.
-        <b>Povuci tjeme</b> da ga pomjeriš &middot; dodirni stranu da je izabereš.
+        <b>Povuci tjeme</b> da ga pomjeriš &middot; dodirni stranu da je izabereš.<br>
+        <b>Poravnavanje</b> zaokreće cijeli oblik da izabrana strana legne ravno —
+        ostale mjere se onda čitaju u odnosu na nju.
       </div>
       <svg id="sk-veliki" viewBox="0 0 900 620"
         style="width:100%;background:#fff;border:1px solid #dde2ea;border-radius:8px;
@@ -1036,29 +1038,33 @@ function stranaPostaviDuzinu(t,i,novaMM){
   r[(i+1)%n]=[a[0]+dx/L*novaMM, a[1]+dy/L*novaMM];
   return _normalizujTjemena(r);
 }
-// Izravnaj stranu i: rotira je oko SREDINE tako da postane tacno vodoravna
-// ili uspravna. Pomjeraju se oba njena tjemena podjednako, pa oblik ostaje
-// na mjestu i susjedne strane se samo blago prilagode.
+// Izravnaj stranu i: ROTIRA CIJELI OBLIK tako da ta strana legne tacno
+// vodoravno ili uspravno. Time strana postaje referentna osa - sve ostale
+// mjere se citaju u odnosu na nju, sto je i smisao kod nepravilnog oblika.
+// Oblik se NE deformise: svi uglovi i duzine ostaju isti, samo se zaokrene.
 // smjer: 'vodoravno' | 'uspravno' | 'auto' (bira blizi)
 function stranaIzravnaj(t,i,smjer){
   var n=t.length;
   if(n<3) return t;
   var a=t[i], b=t[(i+1)%n];
-  var dx=b[0]-a[0], dy=b[1]-a[1], L=Math.hypot(dx,dy);
-  if(L<1e-9) return t;
+  var dx=b[0]-a[0], dy=b[1]-a[1];
+  if(Math.hypot(dx,dy)<1e-9) return t;
+  var ugao=Math.atan2(dy,dx);          // trenutni pravac strane
   if(!smjer||smjer==='auto') smjer=(Math.abs(dx)>=Math.abs(dy))?'vodoravno':'uspravno';
-  var mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2;
-  var r=t.map(function(q){return [q[0],q[1]];});
-  if(smjer==='vodoravno'){
-    // zadrzi duzinu i redoslijed (lijevo-desno), izjednaci Y na sredinu
-    var zn=(dx>=0)?1:-1;
-    r[i]=[mx-zn*L/2,my];
-    r[(i+1)%n]=[mx+zn*L/2,my];
-  } else {
-    var zn2=(dy>=0)?1:-1;
-    r[i]=[mx,my-zn2*L/2];
-    r[(i+1)%n]=[mx,my+zn2*L/2];
-  }
+  // Ciljni pravac: najblizi visekratnik od 90 stepeni u trazenom smjeru,
+  // da se oblik zaokrene sto manje (ne prevrne naopako).
+  var cilj;
+  if(smjer==='vodoravno') cilj=(Math.abs(((ugao%(2*Math.PI))+2*Math.PI)%(2*Math.PI)-Math.PI)<Math.PI/2)?Math.PI:0;
+  else                    cilj=(dy>=0)?Math.PI/2:-Math.PI/2;
+  var rot=cilj-ugao;
+  // normalizuj na [-PI, PI], da uvijek ide kracim putem
+  rot=((rot+Math.PI)%(2*Math.PI)+2*Math.PI)%(2*Math.PI)-Math.PI;
+  var cos=Math.cos(rot), sin=Math.sin(rot);
+  // rotacija oko pocetnog tjemena strane
+  var r=t.map(function(q){
+    var qx=q[0]-a[0], qy=q[1]-a[1];
+    return [a[0]+qx*cos-qy*sin, a[1]+qx*sin+qy*cos];
+  });
   return _normalizujTjemena(r);
 }
 // Da li je strana vec vodoravna / uspravna (tolerancija 0.5 stepena)
@@ -2764,6 +2770,9 @@ function skicaPrimijeni(){
 var SLOVA_T='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 var SLOVA_S='abcdefghijklmnopqrstuvwxyz';
 var SK_IZABRANO_TJEME=null, SK_IZABRANA_STRANA=null;
+var SK_IZABRAN_OTVOR=null;   // {vrsta:'sud'|'plo'|'custom'|'slavina', idx}
+var SK_CRTAM_OTVOR=false;    // rezim ucrtavanja novog otvora
+var _skNoviOtvor=null;       // {a:[mm], b:[mm]} dok se vuce
 var _skVucem=null, _skPreslika=null, _skPreslikaVelika=null;
 // Crta digitalizovani oblik u dati SVG. Koristi se za DVA prozora:
 //  - mali (lijevi panel, sk-digital)  - pregled dok se rade brojke
@@ -2821,6 +2830,29 @@ function _crtajOblikUSvg(svgId, W, H, R){
     s+='<line x1="'+px(p).toFixed(1)+'" y1="'+py(p).toFixed(1)+'" x2="'+px(q).toFixed(1)
       +'" y2="'+py(q).toFixed(1)+'" stroke="#c0392b" stroke-width="'+f(3)+'" stroke-dasharray="'+f(6)+' '+f(4)+'"/>';
   });
+  // OTVORI - crtaju se preko ploce, prije tjemena da tjemena ostanu na vrhu
+  _sviOtvoriMM().forEach(function(o,oi){
+    var izb=(SK_IZABRAN_OTVOR&&SK_IZABRAN_OTVOR.vrsta===o.vrsta&&SK_IZABRAN_OTVOR.idx===o.idx);
+    if(o.krug){
+      var cx=px([o.krug.x,0]), cy=py([0,o.krug.y]), rr=Math.max(3,o.krug.fi/2*k);
+      s+='<g style="cursor:move" onclick="skIzaberiOtvor(\''+o.vrsta+'\','+(o.idx==null?'null':o.idx)+')">'
+        +'<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="'+rr.toFixed(1)+'" fill="#fff" stroke="'+o.boja
+        +'" stroke-width="'+f(izb?2.5:1.5)+'"/>'
+        +'<line x1="'+(cx-rr*0.7).toFixed(1)+'" y1="'+cy.toFixed(1)+'" x2="'+(cx+rr*0.7).toFixed(1)+'" y2="'+cy.toFixed(1)+'" stroke="'+o.boja+'" stroke-width="'+f(1)+'"/>'
+        +'<line x1="'+cx.toFixed(1)+'" y1="'+(cy-rr*0.7).toFixed(1)+'" x2="'+cx.toFixed(1)+'" y2="'+(cy+rr*0.7).toFixed(1)+'" stroke="'+o.boja+'" stroke-width="'+f(1)+'"/>'
+        +(izb?'<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="'+(rr+6*R).toFixed(1)+'" fill="none" stroke="'+o.boja+'" stroke-width="'+f(1.5)+'" stroke-dasharray="'+f(4)+' '+f(3)+'"/>':'')
+        +'</g>';
+    } else if(o.pts){
+      var pth=o.pts.map(function(q,qi){return (qi?'L':'M')+px(q).toFixed(1)+' '+py(q).toFixed(1);}).join(' ')+' Z';
+      var cxo=0,cyo=0; o.pts.forEach(function(q){cxo+=px(q);cyo+=py(q);});
+      cxo/=o.pts.length; cyo/=o.pts.length;
+      s+='<g style="cursor:move" onclick="skIzaberiOtvor(\''+o.vrsta+'\','+(o.idx==null?'null':o.idx)+')">'
+        +'<path d="'+pth+'" fill="'+o.boja+'22" stroke="'+o.boja+'" stroke-width="'+f(izb?2.5:1.5)
+        +(izb?'" stroke-dasharray="'+f(6)+' '+f(3):'')+'"/>'
+        +'<text x="'+cxo.toFixed(1)+'" y="'+cyo.toFixed(1)+'" text-anchor="middle" font-size="'+f(9)
+        +'" font-weight="700" fill="'+o.boja+'">'+o.naziv+'</text></g>';
+    }
+  });
   // TJEMENA - velika slova
   t.forEach(function(p,v){
     var x=px(p), y=py(p), prav=tjemeJePrav(t,v);
@@ -2847,9 +2879,54 @@ function _crtajOblikUSvg(svgId, W, H, R){
       +'<text x="'+mx.toFixed(1)+'" y="'+(my+24*R).toFixed(1)+'" text-anchor="middle" font-size="'+f(9.5)+'" '
       +'fill="#6b7a8d">'+Math.round(stranaDuzina(t,i))+'</text></g>';
   });
+  // Pravougaonik koji se upravo vuce (rezim ucrtavanja otvora)
+  if(_skNoviOtvor&&svgId==='sk-veliki'){
+    var _A=_skNoviOtvor.a, _B=_skNoviOtvor.b;
+    var _x1=Math.min(px(_A),px(_B)), _y1=Math.min(py(_A),py(_B));
+    var _w2=Math.abs(px(_B)-px(_A)), _h3=Math.abs(py(_B)-py(_A));
+    s+='<rect x="'+_x1.toFixed(1)+'" y="'+_y1.toFixed(1)+'" width="'+_w2.toFixed(1)+'" height="'+_h3.toFixed(1)
+      +'" fill="#7a4fa022" stroke="#7a4fa0" stroke-width="'+f(2)+'" stroke-dasharray="'+f(6)+' '+f(4)+'"/>'
+      +'<text x="'+(_x1+_w2/2).toFixed(1)+'" y="'+(_y1+_h3/2).toFixed(1)+'" text-anchor="middle" font-size="'+f(10)
+      +'" font-weight="700" fill="#7a4fa0">'+Math.round(Math.abs(_B[0]-_A[0]))+'\u00d7'+Math.round(Math.abs(_B[1]-_A[1]))+'</text>';
+  }
   svg.innerHTML=s;
   return {presl:presl, sw:sw, sh:sh2, n:t.length,
           nepravih:t.filter(function(_,v){return !tjemeJePrav(t,v);}).length};
+}
+// Skuplja SVE otvore trenutne stavke sa njihovim tackama u mm - za crtanje
+// i hvatanje u velikom prozoru. Vraca [{vrsta,idx,naziv,boja,pts,r}]
+function _sviOtvoriMM(){
+  var out=[];
+  if(tip!=='k') return out;
+  if(gc('cb-sud')){
+    var rs=getOtvorRectMM('sud');
+    if(rs.pts) out.push({vrsta:'sud',naziv:'Sudopera',boja:'#1a5fa8',pts:rs.pts,r:rs});
+  }
+  if(gc('cb-plo')){
+    var rp=getOtvorRectMM('plo');
+    if(rp.pts) out.push({vrsta:'plo',naziv:'Plo\u010da kuvanje',boja:'#c0392b',pts:rp.pts,r:rp});
+  }
+  (customOtvori||[]).forEach(function(c,ci){
+    if(c.sides!==4||(c.loc&&c.loc!=='plate')) return;
+    var rc=getCustomOtvorRectMM(c);
+    if(rc.pts) out.push({vrsta:'custom',idx:ci,naziv:c.name||('Otvor '+(ci+1)),boja:'#7a4fa0',pts:rc.pts,r:rc});
+  });
+  (slavine||[]).forEach(function(sl,si){
+    var ps=getSlavinaPosMM(sl);
+    out.push({vrsta:'slavina',idx:si,naziv:'Slavina '+(si+1),boja:'#e74c3c',
+      krug:{x:ps.x,y:ps.y,fi:sl.fi||35}, r:ps});
+  });
+  return out;
+}
+// Iz apsolutne tacke u mm nazad u (duz, odmak) za datu stranu - koristi se
+// pri povlacenju otvora, da se upisu ISTE vrijednosti koje stoje u poljima.
+function _mmUDuzOdmak(stranaIdx,P){
+  var t=(dims&&dims._tj)||[];
+  if(t.length<3) return {duz:0,odmak:0};
+  var f=_stranaOkvir(t,Math.max(0,Math.min(stranaIdx,t.length-1)));
+  var vx=P[0]-f.ax, vy=P[1]-f.ay;
+  return {duz:Math.round((vx*f.ux+vy*f.uy)/5)*5,
+          odmak:Math.round((vx*f.nx+vy*f.ny)/5)*5};
 }
 function crtajDigitalno(){
   var omot=ge('sk-digital-omot');
@@ -2888,11 +2965,15 @@ function buildVelikiAlati(){
   };
   // Izravnavanje po polozaju - uvijek dostupno
   var h='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
-    +'<span style="font-size:11px;color:#6b7a8d;font-weight:600">Izravnaj:</span>'
-    +d('\u2b13 donju',  "skicaIzravnajPolozaj('dolje')", null,'Najni\u017eu vodoravnu stranu')
-    +d('\u2b13 gornju', "skicaIzravnajPolozaj('gore')",  null,'Najvi\u0161u vodoravnu stranu')
-    +d('\u2b13 lijevu', "skicaIzravnajPolozaj('lijevo')",null,'Najlijevu uspravnu stranu')
-    +d('\u2b13 desnu',  "skicaIzravnajPolozaj('desno')", null,'Najdesnu uspravnu stranu')
+    +'<span style="font-size:11px;color:#6b7a8d;font-weight:600" '
+    +'title="Zaokre\u0107e CIJELI oblik tako da izabrana strana legne ravno">Poravnaj po strani:</span>'
+    +d('\u2b13 donjoj',  "skicaIzravnajPolozaj('dolje')", null,'Najni\u017eu vodoravnu stranu')
+    +d('\u2b13 gornjoj', "skicaIzravnajPolozaj('gore')",  null,'Najvi\u0161u vodoravnu stranu')
+    +d('\u2b13 lijevoj', "skicaIzravnajPolozaj('lijevo')",null,'Najlijevu uspravnu stranu')
+    +d('\u2b13 desnoj',  "skicaIzravnajPolozaj('desno')", null,'Zaokreni oblik da desna strana bude uspravna')
+    +'<span style="width:1px;height:22px;background:#dde2ea;margin:0 2px"></span>'
+    +d((SK_CRTAM_OTVOR?'\u2715 Prekini crtanje':'\u2b1a Ucrtaj otvor'),'skPocniCrtanjeOtvora()',
+       SK_CRTAM_OTVOR?'#c0392b':'#7a4fa0','Povuci pravougaonik po plo\u010di da napravi\u0161 otvor')
     +'</div>';
   // Alati za izabranu stranu / tjeme
   if(SK_IZABRANA_STRANA!=null){
@@ -2908,8 +2989,10 @@ function buildVelikiAlati(){
             +'<input type="number" min="1" value="'+Math.round(stranaDuzina(t,i))+'" style="width:88px;'
             +'font:inherit;font-size:12px;padding:5px 7px;border:1px solid #dde2ea;border-radius:4px"'
             +' oninput="fixComma(this);skicaDuzina('+i+',this.value)"> <span style="font-size:10px;color:#8a93a3">mm</span>'
-            +d('\u2194 vodoravno',"skicaIzravnaj("+i+",'vodoravno')",ravna==='vodoravno'?'#1f8a4c':null)
-            +d('\u2195 uspravno',"skicaIzravnaj("+i+",'uspravno')",ravna==='uspravno'?'#1f8a4c':null))
+            +d('\u21ba poravnaj vodoravno',"skicaIzravnaj("+i+",'vodoravno')",ravna==='vodoravno'?'#1f8a4c':null,
+               'Zaokre\u0107e cijeli oblik da OVA strana bude vodoravna')
+            +d('\u21bb poravnaj uspravno',"skicaIzravnaj("+i+",'uspravno')",ravna==='uspravno'?'#1f8a4c':null,
+               'Zaokre\u0107e cijeli oblik da OVA strana bude uspravna'))
       +d((zak?'\ud83d\udd13 Otklju\u010daj stranu':'\ud83d\udd12 Zaklju\u010daj stranu'),'skToggleZakStranu('+i+')',zak?'#c0392b':null)
       +'</div></div>';
   } else if(SK_IZABRANO_TJEME!=null){
@@ -2924,11 +3007,98 @@ function buildVelikiAlati(){
             :d('\u2220 Zaklju\u010daj 90\u00b0','skicaPrav('+v+')'))
       +d((zakT?'\ud83d\udd13 Otklju\u010daj tjeme':'\ud83d\udd12 Zaklju\u010daj tjeme'),'skToggleZakTjeme('+v+')',zakT?'#c0392b':null)
       +'</div></div>';
+  } else if(SK_IZABRAN_OTVOR){
+    var _oo=_sviOtvoriMM().filter(function(x){
+      return x.vrsta===SK_IZABRAN_OTVOR.vrsta&&x.idx===SK_IZABRAN_OTVOR.idx; })[0];
+    var _pol=_oo?_otvorPolja(_oo):null;
+    h+='<div style="background:#f3eef8;border-radius:6px;padding:8px 10px">'
+      +'<div style="font-size:11px;font-weight:700;color:#7a4fa0;margin-bottom:6px">'
+      +(_oo?_oo.naziv:'Otvor')+(_pol?(' — uz stranu <b>'+SLOVA_S[_pol.strana]+'</b>'):'')+'</div>'
+      +'<span style="font-size:11px;color:#6b7a8d">Povuci otvor po ploči da ga pomjeriš. '
+      +'Tačne mjere unesi u lijevom panelu.</span></div>';
   } else {
     h+='<div style="font-size:11px;color:#8a93a3;text-align:center;padding:6px">'
       +'Dodirni tjeme ili stranu da je uredi\u0161.</div>';
   }
   con.innerHTML=h;
+}
+// ── OTVORI U VELIKOM PROZORU ─────────────────────────────────────
+function skIzaberiOtvor(vrsta,idx){
+  var isti=(SK_IZABRAN_OTVOR&&SK_IZABRAN_OTVOR.vrsta===vrsta&&SK_IZABRAN_OTVOR.idx===idx);
+  SK_IZABRAN_OTVOR=isti?null:{vrsta:vrsta,idx:idx};
+  SK_IZABRANO_TJEME=null; SK_IZABRANA_STRANA=null;
+  crtajDigitalno();
+}
+// Koja strana i koje polje pripadaju kojem otvoru
+function _otvorPolja(o){
+  if(o.vrsta==='sud') return {strana:_otvorStrana('sud'),setDuz:function(v){var e=ge('sud-duz');if(e)e.value=v;},
+                              setOdm:function(v){var e=ge('sud-odmak');if(e)e.value=v;}};
+  if(o.vrsta==='plo') return {strana:_otvorStrana('plo'),setDuz:function(v){var e=ge('plo-duz');if(e)e.value=v;},
+                              setOdm:function(v){var e=ge('plo-odmak');if(e)e.value=v;}};
+  if(o.vrsta==='custom'){
+    var c=customOtvori[o.idx];
+    return c?{strana:c.strana||0,setDuz:function(v){c.x=v;},setOdm:function(v){c.y=v;}}:null;
+  }
+  if(o.vrsta==='slavina'){
+    var sl=slavine[o.idx];
+    return sl?{strana:sl.strana||0,setDuz:function(v){sl.x=v;},setOdm:function(v){sl.yz=v;}}:null;
+  }
+  return null;
+}
+// Pomjeri izabrani otvor tako da mu gornji-lijevi ugao (ili centar, kod
+// slavine) dodje na datu tacku u mm. Upisuje nazad u duz/odmak te strane,
+// pa brojevi u panelu ostaju tacni.
+function _pomjeriOtvorNa(o,P){
+  var pol=_otvorPolja(o); if(!pol) return;
+  var v=_mmUDuzOdmak(pol.strana,P);
+  pol.setDuz(Math.max(0,v.duz));
+  pol.setOdm(Math.max(0,v.odmak));
+}
+// Ucrtavanje NOVOG otvora povlacenjem pravougaonika po ploci
+function skPocniCrtanjeOtvora(){
+  SK_CRTAM_OTVOR=!SK_CRTAM_OTVOR;
+  SK_IZABRAN_OTVOR=null; SK_IZABRANO_TJEME=null; SK_IZABRANA_STRANA=null;
+  crtajDigitalno();
+  _skPoruka(SK_CRTAM_OTVOR
+    ? '<b style="color:#7a4fa0">Povuci pravougaonik po plo\u010di</b> \u2014 otvor \u0107e se vezati za najbli\u017eu stranu.'
+    : '');
+}
+// Najbliza strana datoj tacki (za automatsko vezivanje novog otvora)
+function _najblizaStranaTacki(P){
+  var t=(dims&&dims._tj)||[];
+  var naj=0, najD=Infinity;
+  for(var i=0;i<t.length;i++){
+    var a=t[i], b=t[(i+1)%t.length];
+    var dx=b[0]-a[0], dy=b[1]-a[1], L2=dx*dx+dy*dy;
+    var u=L2>0?((P[0]-a[0])*dx+(P[1]-a[1])*dy)/L2:0;
+    u=Math.max(0,Math.min(1,u));
+    var d=Math.hypot(P[0]-(a[0]+dx*u),P[1]-(a[1]+dy*u));
+    if(d<najD){najD=d;naj=i;}
+  }
+  return naj;
+}
+function _napraviOtvorIzPravougaonika(A,B){
+  var w=Math.abs(B[0]-A[0]), h=Math.abs(B[1]-A[1]);
+  if(w<50||h<50){ _skPoruka('<b style="color:#c0392b">Premali otvor \u2014 povuci ve\u0107i pravougaonik.</b>'); return; }
+  var P=[Math.min(A[0],B[0]),Math.min(A[1],B[1])];
+  var si=_najblizaStranaTacki([(A[0]+B[0])/2,(A[1]+B[1])/2]);
+  var v=_mmUDuzOdmak(si,P);
+  _saveUndo();
+  customOtvori=customOtvori||[];
+  customOtvori.push({
+    id:'co'+Date.now()+Math.floor(Math.random()*1000),
+    name:'Otvor '+(customOtvori.length+1),
+    loc:'plate', sides:4,
+    strana:si, x:Math.max(0,v.duz), y:Math.max(0,v.odmak),
+    w:Math.round(w/5)*5, h:Math.round(h/5)*5,
+    edgeIdx:0,pos:200,cornerIdx:0,d1:200,d2:200,
+    cost:0, r:[0,0,0,0], vrsta:'bez', dub:5, step:5
+  });
+  getAct().customOtvori=JSON.parse(JSON.stringify(customOtvori));
+  SK_CRTAM_OTVOR=false;
+  SK_IZABRAN_OTVOR={vrsta:'custom',idx:customOtvori.length-1};
+  buildCustomOtvoriUI(); crtajDigitalno(); refresh();
+  _skPoruka('Otvor <b>'+Math.round(w)+'\u00d7'+Math.round(h)+' mm</b> ucrtan uz stranu <b>'+SLOVA_S[si]+'</b>.');
 }
 function skResetIzbor(){ SK_IZABRANO_TJEME=null; SK_IZABRANA_STRANA=null; }
 function skIzaberiTjeme(v){
@@ -2963,34 +3133,91 @@ function _skTackaMMVelika(e){
 function _skVeziVeliki(){
   var svg=ge('sk-veliki'); if(!svg||svg._vezano) return;
   svg._vezano=true;
+  // Da li je tacka unutar nekog otvora (za hvatanje i povlacenje)
+  function _otvorPodTackom(mm){
+    var lista=_sviOtvoriMM();
+    for(var i=lista.length-1;i>=0;i--){
+      var o=lista[i];
+      if(o.krug){
+        if(Math.hypot(mm[0]-o.krug.x,mm[1]-o.krug.y)<=Math.max(o.krug.fi/2,40)) return o;
+      } else if(o.pts){
+        if(_pointInPolygon(mm[0],mm[1],o.pts)) return o;
+      }
+    }
+    return null;
+  }
   var poc=function(e){
     var mm=_skTackaMMVelika(e); if(!mm) return;
+    // 1) Rezim ucrtavanja novog otvora
+    if(SK_CRTAM_OTVOR){
+      e.preventDefault();
+      _skNoviOtvor={a:mm,b:mm};
+      return;
+    }
     var t=(dims&&dims._tj)||[];
+    // 2) Tjeme ima prednost - manja meta, lakse se promasi
     var naj=-1, najD=Infinity;
     t.forEach(function(p,v){
       var d=Math.hypot(p[0]-mm[0],p[1]-mm[1]);
       if(d<najD){najD=d;naj=v;}
     });
     var prag=26/(_skPreslikaVelika?_skPreslikaVelika.k:1);
-    if(naj<0||najD>prag) return;
-    if(skTjemeZakljucano(naj)){ SK_IZABRANO_TJEME=naj; crtajDigitalno(); return; }
-    e.preventDefault();
-    _skVucem={v:naj,veliki:true};
-    SK_IZABRANO_TJEME=naj; SK_IZABRANA_STRANA=null;
-    crtajDigitalno();
+    if(naj>=0&&najD<=prag){
+      e.preventDefault();
+      if(skTjemeZakljucano(naj)){ SK_IZABRANO_TJEME=naj; SK_IZABRAN_OTVOR=null; crtajDigitalno(); return; }
+      _skVucem={v:naj,veliki:true};
+      SK_IZABRANO_TJEME=naj; SK_IZABRANA_STRANA=null; SK_IZABRAN_OTVOR=null;
+      crtajDigitalno();
+      return;
+    }
+    // 3) Otvor - povlacenje po ploci
+    var o=_otvorPodTackom(mm);
+    if(o){
+      e.preventDefault();
+      var ref=o.krug?[o.krug.x,o.krug.y]:o.pts[0];
+      _skVucem={otvor:{vrsta:o.vrsta,idx:o.idx},veliki:true,
+                pom:[mm[0]-ref[0],mm[1]-ref[1]]};
+      SK_IZABRAN_OTVOR={vrsta:o.vrsta,idx:o.idx};
+      SK_IZABRANO_TJEME=null; SK_IZABRANA_STRANA=null;
+      crtajDigitalno();
+    }
   };
   var pom=function(e){
+    if(SK_CRTAM_OTVOR&&_skNoviOtvor){
+      var mmn=_skTackaMMVelika(e); if(!mmn) return;
+      e.preventDefault();
+      _skNoviOtvor.b=mmn;
+      crtajDigitalno();
+      return;
+    }
     if(!_skVucem||!_skVucem.veliki) return;
     var mm=_skTackaMMVelika(e); if(!mm) return;
     e.preventDefault();
+    if(_skVucem.otvor){
+      // pomjeranje otvora - upisuje se u duz/odmak njegove strane
+      _pomjeriOtvorNa(_skVucem.otvor,[mm[0]-_skVucem.pom[0],mm[1]-_skVucem.pom[1]]);
+      crtajDigitalno();
+      return;
+    }
     var t=dims._tj.map(function(q){return [q[0],q[1]];});
     t[_skVucem.v]=[Math.round(mm[0]/5)*5, Math.round(mm[1]/5)*5];
     dims._tj=t; getAct().dims=dims;
     crtajDigitalno();
   };
   var kraj=function(){
+    if(SK_CRTAM_OTVOR&&_skNoviOtvor){
+      var A=_skNoviOtvor.a, B=_skNoviOtvor.b;
+      _skNoviOtvor=null;
+      _napraviOtvorIzPravougaonika(A,B);
+      return;
+    }
     if(!_skVucem||!_skVucem.veliki) return;
+    var bioOtvor=!!_skVucem.otvor;
     _skVucem=null;
+    if(bioOtvor){
+      buildCustomOtvoriUI(); buildSlavinaUI(); crtajDigitalno(); refresh();
+      return;
+    }
     dims._tj=_normalizujTjemena(dims._tj); getAct().dims=dims;
     buildSkicaPanel(); crtajDigitalno(); osvjeziOtvorRezim(); buildIvice(); refresh();
   };
@@ -3180,7 +3407,8 @@ function skicaIzravnajPolozaj(gdje){
   getAct().dims=dims;
   buildSkicaPanel(); crtajDigitalno(); osvjeziOtvorRezim(); buildIvice(); refresh();
   var naziv={dolje:'donja',gore:'gornja',lijevo:'lijeva',desno:'desna'}[gdje]||gdje;
-  _skPoruka('Izravnata <b>'+naziv+'</b> strana \u2014 to je strana <b>'+SLOVA_S[i]+'</b>.');
+  _skPoruka('Oblik zaokrenut tako da je <b>'+naziv+'</b> strana (strana <b>'+SLOVA_S[i]
+    +'</b>) sada ravna. Sve mjere se \u010ditaju u odnosu na nju.');
 }
 // Izravnaj JEDNU stranu - vodoravno ili uspravno
 function skicaIzravnaj(i,smjer){
