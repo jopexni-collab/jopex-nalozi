@@ -938,9 +938,19 @@ router.get('/:r_br/ponuda-json', async (req, res) => {
     const r = await pool.query('SELECT link_ponuda FROM proizvodnja_jopex WHERE r_br=$1', [req.params.r_br]);
     const link = r.rows[0]?.link_ponuda;
     if (!link) return res.status(404).json({ error: 'Ovaj nalog nema povezanu ponudu.' });
+    // Kod uveženih (starih) naloga link_ponuda ponekad NE vodi ka JSON fajlu (npr. stara
+    // slika, PDF, ili polomljen link iz uvoza) — provjeri sadržaj PRIJE pokušaja parsiranja
+    // kao JSON, da poruka bude jasna umjesto generičkog "Unexpected token '<'".
     const odgovor = await fetch(link);
-    if (!odgovor.ok) return res.status(502).json({ error: `Ponuda nije dostupna na skladištu (status ${odgovor.status}).` });
-    const json = await odgovor.json();
+    if (!odgovor.ok) return res.status(502).json({ error: `Ponuda nije dostupna na skladištu (status ${odgovor.status}). Link: ${link}` });
+    const tip = odgovor.headers.get('content-type') || '';
+    const tekst = await odgovor.text();
+    if (!tip.includes('json') && !tekst.trim().startsWith('{')) {
+      return res.status(422).json({ error: `Link ne vodi ka JSON fajlu (izgleda kao ${tip || 'nepoznat sadržaj'}) — vjerovatno stariji/uveženi nalog bez prave digitalne ponude. Link: ${link}` });
+    }
+    let json;
+    try { json = JSON.parse(tekst); }
+    catch { return res.status(422).json({ error: `Sadržaj na linku nije ispravan JSON. Link: ${link}` }); }
     res.json(json);
   } catch (err) {
     res.status(500).json({ error: 'Greška pri čitanju ponude: ' + err.message });
