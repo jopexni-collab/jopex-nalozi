@@ -982,7 +982,9 @@ router.get('/:r_br/ponuda-json', async (req, res) => {
           .replace(/\s+/g, ' ')
           .trim();
         // Ograniči dužinu — ovo ide na malu labelu, ne treba cijeli dokument.
-        if (cistTekst.length > 400) cistTekst = cistTekst.slice(0, 400) + '…';
+        // Labela je FIKSNE, male veličine (100×50mm) — ne sme rasti sa dužinom teksta.
+        // 400 znakova je bilo previše (cela stranica ispisa naloga), skraćeno na 70.
+        if (cistTekst.length > 70) cistTekst = cistTekst.slice(0, 70) + '…';
         return res.json({ nijeStrukturirano: true, tekst: cistTekst });
       }
       return res.status(422).json({ error: `Link u polju "Link ponuda" ne vodi ka JSON fajlu sa pozicijama — sadržaj je ${tip || 'nepoznatog tipa'}, i nije prepoznat kao tekst koji se može čitati. Link: ${link}` });

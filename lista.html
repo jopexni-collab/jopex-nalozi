@@ -1308,6 +1308,30 @@ function ucitajQrLib(){
   return qrLibPromise;
 }
 
+// Kod "malih" (brzo unesenih) ponuda često fale materijal/dimenzije — umjesto praznog
+// prostora na labeli, nudi se ODMAH polje za ručni unos. "Zapiši" ne samo da popuni
+// TRENUTNU labelu, nego i UPIŠE tekst nazad u Napomenu naloga (PATCH) — da sledeći put
+// kad se labela otvori, podatak već postoji i ne mora se ponovo kucati.
+async function zapisiPodatkeNaLabeli(rBr, idBaza){
+  const mat=document.getElementById(`mat-${idBaza}`).value.trim();
+  const dim=document.getElementById(`dim-${idBaza}`).value.trim();
+  if(!mat && !dim){ alert('Unesi bar materijal ili dimenzije.'); return; }
+  const tekst=[mat,dim].filter(Boolean).join(' — ');
+  try{
+    const nalog=all.find(r=>r.r_br===rBr);
+    const novaNapomena=[nalog.napomena, tekst].filter(Boolean).join(' | ');
+    const r=await fetch(`${API}/api/proizvodnja/${rBr}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({napomena:novaNapomena}),
+    });
+    if(!r.ok){ alert('✗ Greška pri čuvanju.'); return; }
+    nalog.napomena=novaNapomena;
+    // Zamijeni formu za unos direktno sa upisanim tekstom, bez ponovnog otvaranja modala.
+    document.getElementById(`mat-${idBaza}`).closest('div').outerHTML=
+      `<div contenteditable="true" spellcheck="false" style="font-size:10.5px;color:#333;cursor:text;border-top:1px solid #eee;padding-top:3px;">${esc(tekst)}</div>`;
+  }catch(e){ alert('✗ Greška pri čuvanju.'); }
+}
+
 async function otvoriLabele(rBr){
   const nalog=all.find(r=>r.r_br===rBr);
   if(!nalog) return;
@@ -1325,20 +1349,14 @@ async function otvoriLabele(rBr){
       // su ranije uzrokovali TIHO vraćanje na osnovnu labelu (bez ijedne vidljive greške).
       const r=await fetch(`${API}/api/proizvodnja/${rBr}/ponuda-json`);
       const ponuda=await r.json();
-      if(!r.ok) throw new Error(ponuda.error||'Ponuda nije dostupna.');
-      if(ponuda.nijeStrukturirano){
-        // Link nije vodio ka strukturiranom JSON-u (npr. HTML ispis naloga) — server je
-        // izvukao čist tekst iz njega umjesto da jednostavno odustane. Koristi TAJ tekst
-        // kao dims na osnovnoj labeli (bolje nešto korisno nego prazno).
-        pozicije=[{broj:1, opis:nalog.zadatak||'Nalog', dims:ponuda.tekst||'', materijal:nalog.materijal||''}];
-      }else{
+      if(!r.ok || ponuda.nijeStrukturirano) throw new Error('nestrukturirano');
       const STO_OBLICI={okrugao:'Okrugao',jajasto:'Elipsa',oblutak:'Oblutak',radijus:'Sa radijusom',bure:'Bure',fbure:'Full bure'};
       pozicije=(ponuda.items||[]).map((it,i)=>{
         const okrugao=it.tip==='sto' && it.shape==='okrugao';
         const oblikDodatak=it.tip==='sto' && STO_OBLICI[it.shape] ? ' — '+STO_OBLICI[it.shape] : '';
         return {
           broj:i+1,
-          opis:(TIP_NAZIVI[it.tip]||it.tip||'Komad')+oblikDodatak,
+          vrsta:(TIP_NAZIVI[it.tip]||it.tip||'Komad')+oblikDodatak,
           dims:okrugao&&it.dims?.A ? `⌀ ${it.dims.A} mm` : (it.dims?.A&&it.dims?.B ? `${it.dims.A}×${it.dims.B} mm` : ''),
           // "vrsta" (Kvarc/Granit/...) i "naziv" (konkretan proizvod, npr. "Calacatta Gold")
           // su DVA odvojena polja u ponudi — ranije se koristila samo vrsta (OR logika),
@@ -1346,32 +1364,45 @@ async function otvoriLabele(rBr){
           materijal:[it.inputs?.['mat-v-sel'], it.inputs?.['mat-naziv']].filter(Boolean).join(' — '),
         };
       });
-      }
-    }catch(e){ greskaPonude=e.message; }
+    }catch(e){ /* Nema strukturirane (velike) ponude — pada na osnovnu labelu ispod, sa
+                  napomenom kao izvorom (najčešće za "male" ponude, unesene na brzinu). */ }
   }
-  // Nema ponude (ili nije uspelo učitavanje) — jedna osnovna labela sa podacima naloga.
+  // Nema ponude (mala ponuda unesena na brzinu, ili nije uspelo učitavanje) — osnovna
+  // labela sa podacima sa samog naloga. Tekst iz Napomene se direktno kopira (bez
+  // komplikovanog izvlačenja) kao dims, ako materijal/dims fale.
   if(!pozicije.length){
-    // Nema ponude — napomena je najvjerovatnije mjesto gde bi mjere/dimenzije bile ručno
-    // zapisane (nema posebnog "dimenzije" polja na samom nalogu), pa se prikazuje ako postoji.
-    pozicije=[{broj:1, opis:nalog.zadatak||'Nalog', dims:nalog.napomena||'', materijal:nalog.materijal||''}];
+    pozicije=[{broj:1, vrsta:nalog.zadatak||'', dims:nalog.napomena||'', materijal:nalog.materijal||''}];
   }
 
   const qrLink=`${location.origin}/lista.html?r_br=${rBr}`;
-  cont.innerHTML=(greskaPonude?`<div class="samo-ekran" style="background:#fce8e6;color:var(--red,#c0392b);padding:8px 10px;border-radius:6px;font-size:11.5px;margin-bottom:10px;">⚠ Ponuda nije učitana (${esc(greskaPonude)}) — prikazana je osnovna labela sa podacima naloga.</div>`:'')
-    +`<div id="labele-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;"></div>`;
+  cont.innerHTML=`<div id="labele-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;"></div>`;
   const grid=document.getElementById('labele-grid');
   pozicije.forEach(p=>{
     const label=document.createElement('div');
     label.className='labela-komad';
-    label.style='border:1px solid #333;border-radius:6px;padding:8px;display:flex;gap:8px;align-items:center;background:#fff;aspect-ratio:2/1;box-sizing:border-box;';
+    label.style='border:1px solid #333;border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:4px;background:#fff;aspect-ratio:2/1;box-sizing:border-box;overflow:hidden;max-height:190px;';
+    const idBaza=`${rBr}-${p.broj}`;
+    // Materijal i dimenzije su NAJČEŠĆE ono što fali kod "malih" (brzo unesenih) ponuda —
+    // ako oba fale, umjesto praznog prostora nudi se odmah polje za ručni unos + dugme
+    // "Zapiši" (upisuje u Napomenu naloga, da se ne izgubi za sledeći put).
+    const nedostajuPodaci = !p.materijal && !p.dims;
     label.innerHTML=`
-      <div id="qr-${rBr}-${p.broj}" style="flex-shrink:0;"></div>
-      <div id="txt-${rBr}-${p.broj}" contenteditable="true" spellcheck="false" style="font-size:11px;line-height:1.4;overflow:hidden;outline:none;cursor:text;border-radius:4px;padding:2px;transition:background .15s;" title="Klikni i izmeni tekst prije štampe" onfocus="this.style.background='#fff8d6'" onblur="this.style.background='transparent'">
-        <b style="font-size:13px;">R.Br ${rBr}${pozicije.length>1?' — Poz. '+p.broj:''}</b><br>
-        ${esc(nalog.narucilac||'')}<br>
-        ${esc(p.opis)}${p.dims?' — '+esc(p.dims):''}<br>
-        ${p.materijal?esc(p.materijal):''}
-      </div>`;
+      <div style="display:flex;gap:8px;align-items:flex-start;flex:1;min-height:0;">
+        <div id="qr-${idBaza}" style="flex-shrink:0;"></div>
+        <div style="font-size:11px;line-height:1.5;overflow:hidden;flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:13px;">R.Br ${rBr}${pozicije.length>1?' · Poz.'+p.broj:''}</div>
+          <div contenteditable="true" spellcheck="false" title="Klikni da izmeniš" style="cursor:text;">${esc(nalog.narucilac||'(bez kupca)')}</div>
+          <div contenteditable="true" spellcheck="false" title="Klikni da izmeniš" style="cursor:text;color:#555;">${esc(p.vrsta||'')}</div>
+        </div>
+      </div>
+      ${nedostajuPodaci ? `
+        <div style="display:flex;gap:4px;align-items:center;border-top:1px dashed #ccc;padding-top:4px;">
+          <input id="mat-${idBaza}" placeholder="Materijal..." style="flex:1;min-width:0;font-size:10px;padding:2px 4px;border:1px solid #ccc;border-radius:3px;">
+          <input id="dim-${idBaza}" placeholder="Dimenzije..." style="flex:1;min-width:0;font-size:10px;padding:2px 4px;border:1px solid #ccc;border-radius:3px;">
+          <button onclick="zapisiPodatkeNaLabeli(${rBr},'${idBaza}')" style="font-size:10px;padding:3px 6px;background:var(--blue,#1a5fa8);color:#fff;border:none;border-radius:3px;cursor:pointer;white-space:nowrap;">💾 Zapiši</button>
+        </div>`
+      : `<div contenteditable="true" spellcheck="false" title="Klikni da izmeniš" style="font-size:10.5px;color:#333;cursor:text;border-top:1px solid #eee;padding-top:3px;">${esc(p.materijal||'')}${p.materijal&&p.dims?' — ':''}${esc(p.dims||'')}</div>`}
+    `;
     grid.appendChild(label);
   });
   // QR kodovi se generišu POSLE ubacivanja u DOM (biblioteka crta u postojeći element) —
@@ -1380,7 +1411,7 @@ async function otvoriLabele(rBr){
     await ucitajQrLib();
     pozicije.forEach(p=>{
       const el=document.getElementById(`qr-${rBr}-${p.broj}`);
-      if(el) new QRCode(el, {text:qrLink, width:64, height:64});
+      if(el) new QRCode(el, {text:qrLink, width:56, height:56});
     });
   }catch(e){ /* QR biblioteka nije uspjela da se učita (npr. bez interneta) — labela ostaje bez QR-a, ostatak i dalje radi */ }
 }
