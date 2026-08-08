@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="bs">
 <head>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Radni nalozi – JoPeX</title>
@@ -162,7 +161,7 @@ a.lk{color:var(--blue);text-decoration:none;}
 
 <div id="labele-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:12px;padding:20px;max-width:480px;width:92vw;max-height:82vh;overflow-y:auto;">
-    <h3 style="margin:0 0 12px;">🏷️ Labele za štampu</h3>
+    <h3 style="margin:0 0 12px;">JoPeX — <span id="labele-datum"></span></h3>
     <div id="labele-sadrzaj"></div>
     <div style="display:flex;gap:8px;margin-top:16px;">
       <button onclick="zatvoriLabele()" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border,#ddd);background:#fff;cursor:pointer;">Zatvori</button>
@@ -354,7 +353,7 @@ function getCols(){
     {k:'broj_dana',l:'Dana',w:70,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>daniC(r),edit:null},
     {k:'nova_procjena',l:'Razlog kašnjenja',w:180,filter:'text',render:r=>`<td class="note-cell${r.nova_procjena?' has-note':''}" data-note="${esc(r.nova_procjena)}">${esc(r.nova_procjena)||''}</td>`,edit:{type:'textarea',field:'nova_procjena',label:'Razlog kašnjenja'}},
     {k:'gotovo',l:'Gotovo',w:65,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.gotovo?'<span style="color:#1f8a4c;font-size:18px;font-weight:900;line-height:1">✓</span>':''}</td>`,edit:{type:'check',field:'gotovo',label:'Gotovo'}},
-    {k:'labele',l:'Labele',w:60,filter:null,render:r=>`<td class="center">${r.gotovo?`<button onclick="otvoriLabele(${r.r_br})" title="Printaj labele za ovaj nalog" style="background:none;border:none;cursor:pointer;font-size:16px;">🏷️</button>`:''}</td>`},
+    {k:'labele',l:'Labele',w:60,filter:null,render:r=>`<td class="center"><button onclick="otvoriLabele(${r.r_br})" title="Printaj labele za ovaj nalog" style="background:none;border:none;cursor:pointer;font-size:16px;">🏷️</button></td>`},
     {k:'reklamacija_dodatni_rad',l:'Rek.',w:60,filter:'sel',opts:['DA','NE'],render:r=>`<td class="center">${chipR(r.reklamacija_dodatni_rad)}</td>`,edit:{type:'select',opts:['','NE','DA'],field:'reklamacija_dodatni_rad',label:'Reklamacija'}},
     {k:'napomena',l:'Napomena',w:220,filter:'text',render:r=>`<td class="note-cell${r.napomena?' has-note':''}" data-note="${esc(r.napomena)}"><div class="clamp2-inner">${esc(r.napomena)}</div></td>`,edit:{type:'textarea',field:'napomena',label:'Napomena / upute operateru'}},
     {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center">${lk(r.link_skica)}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
@@ -1277,39 +1276,66 @@ async function checkAuth(){
 /* ═══ LABELE — printanje pri završetku naloga, čita pozicije iz ponude (ako postoji) ═══
    Arhitekturna napomena: link_ponuda je URL ka STATIČNOM JSON fajlu u skladištu (ne poziv
    ka drugoj "živoj" aplikaciji) — zato je ovo običan fetch(), bez prave međumodulske veze. */
+// QR biblioteka se učitava LENJO — tek pri prvom kliku na "Labele", ne odmah pri
+// otvaranju cele liste (koja je i onako velika/spora) — ako niko nikad ne otvori labele,
+// ovih ~20kb se nikad ni ne preuzmu.
+let qrLibPromise=null;
+function ucitajQrLib(){
+  if(window.QRCode) return Promise.resolve();
+  if(qrLibPromise) return qrLibPromise;
+  qrLibPromise=new Promise((resolve,reject)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+    s.onload=resolve; s.onerror=reject;
+    document.head.appendChild(s);
+  });
+  return qrLibPromise;
+}
+
 async function otvoriLabele(rBr){
   const nalog=all.find(r=>r.r_br===rBr);
   if(!nalog) return;
   const modal=document.getElementById('labele-modal');
   const cont=document.getElementById('labele-sadrzaj');
+  document.getElementById('labele-datum').textContent=new Date().toLocaleDateString('sr-Latn-BA');
   cont.innerHTML='<div style="text-align:center;color:#999;padding:30px;">Učitavanje...</div>';
   modal.style.display='flex';
 
   let pozicije=[];
+  let greskaPonude=null;
   if(nalog.link_ponuda){
     try{
-      const r=await fetch(nalog.link_ponuda);
-      if(r.ok){
-        const ponuda=await r.json();
-        pozicije=(ponuda.items||[]).map((it,i)=>({
+      // Ide preko servera (proxy), ne direktno iz pregledača — izbjegava CORS probleme koji
+      // su ranije uzrokovali TIHO vraćanje na osnovnu labelu (bez ijedne vidljive greške).
+      const r=await fetch(`${API}/api/proizvodnja/${rBr}/ponuda-json`);
+      const ponuda=await r.json();
+      if(!r.ok) throw new Error(ponuda.error||'Ponuda nije dostupna.');
+      const STO_OBLICI={okrugao:'Okrugao',jajasto:'Elipsa',oblutak:'Oblutak',radijus:'Sa radijusom',bure:'Bure',fbure:'Full bure'};
+      pozicije=(ponuda.items||[]).map((it,i)=>{
+        const okrugao=it.tip==='sto' && it.shape==='okrugao';
+        const oblikDodatak=it.tip==='sto' && STO_OBLICI[it.shape] ? ' — '+STO_OBLICI[it.shape] : '';
+        return {
           broj:i+1,
-          opis:TIP_NAZIVI[it.tip]||it.tip||'Komad',
-          dims:it.dims?.A&&it.dims?.B ? `${it.dims.A}×${it.dims.B} mm` : '',
+          opis:(TIP_NAZIVI[it.tip]||it.tip||'Komad')+oblikDodatak,
+          dims:okrugao&&it.dims?.A ? `⌀ ${it.dims.A} mm` : (it.dims?.A&&it.dims?.B ? `${it.dims.A}×${it.dims.B} mm` : ''),
           // "vrsta" (Kvarc/Granit/...) i "naziv" (konkretan proizvod, npr. "Calacatta Gold")
           // su DVA odvojena polja u ponudi — ranije se koristila samo vrsta (OR logika),
           // pa je labela pokazivala samo "Kvarc" bez konkretnog imena kamena.
           materijal:[it.inputs?.['mat-v-sel'], it.inputs?.['mat-naziv']].filter(Boolean).join(' — '),
-        }));
-      }
-    }catch(e){ /* ponuda nije dostupna — koristi se osnovna labela ispod */ }
+        };
+      });
+    }catch(e){ greskaPonude=e.message; }
   }
   // Nema ponude (ili nije uspelo učitavanje) — jedna osnovna labela sa podacima naloga.
   if(!pozicije.length){
-    pozicije=[{broj:1, opis:nalog.zadatak||'Nalog', dims:'', materijal:nalog.materijal||''}];
+    // Nema ponude — napomena je najvjerovatnije mjesto gde bi mjere/dimenzije bile ručno
+    // zapisane (nema posebnog "dimenzije" polja na samom nalogu), pa se prikazuje ako postoji.
+    pozicije=[{broj:1, opis:nalog.zadatak||'Nalog', dims:nalog.napomena||'', materijal:nalog.materijal||''}];
   }
 
   const qrLink=`${location.origin}/lista.html?r_br=${rBr}`;
-  cont.innerHTML=`<div id="labele-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;"></div>`;
+  cont.innerHTML=(greskaPonude?`<div style="background:#fce8e6;color:var(--red,#c0392b);padding:8px 10px;border-radius:6px;font-size:11.5px;margin-bottom:10px;">⚠ Ponuda nije učitana (${esc(greskaPonude)}) — prikazana je osnovna labela sa podacima naloga.</div>`:'')
+    +`<div id="labele-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;"></div>`;
   const grid=document.getElementById('labele-grid');
   pozicije.forEach(p=>{
     const label=document.createElement('div');
@@ -1325,13 +1351,17 @@ async function otvoriLabele(rBr){
       </div>`;
     grid.appendChild(label);
   });
-  // QR kodovi se generišu POSLE ubacivanja u DOM (biblioteka crta u postojeći element).
-  pozicije.forEach(p=>{
-    const el=document.getElementById(`qr-${rBr}-${p.broj}`);
-    if(el && window.QRCode) new QRCode(el, {text:qrLink, width:64, height:64});
-  });
+  // QR kodovi se generišu POSLE ubacivanja u DOM (biblioteka crta u postojeći element) —
+  // prvo se sačeka lenjo učitavanje biblioteke (ako se ovo prvi put otvara u ovoj posjeti).
+  try{
+    await ucitajQrLib();
+    pozicije.forEach(p=>{
+      const el=document.getElementById(`qr-${rBr}-${p.broj}`);
+      if(el) new QRCode(el, {text:qrLink, width:64, height:64});
+    });
+  }catch(e){ /* QR biblioteka nije uspjela da se učita (npr. bez interneta) — labela ostaje bez QR-a, ostatak i dalje radi */ }
 }
-const TIP_NAZIVI={k:'Kuhinjska ploča', kl:'Klupica', st:'Stepenice', sto:'Sto'};
+const TIP_NAZIVI={k:'Kuhinjska ploča', kl:'Klupica', st:'Stepenice', sto:'Stol'};
 function zatvoriLabele(){ document.getElementById('labele-modal').style.display='none'; }
 function stampajLabele(){ window.print(); }
 

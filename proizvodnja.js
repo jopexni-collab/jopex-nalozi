@@ -929,4 +929,22 @@ router.delete('/:r_br/komentar/:kolona', async (req, res) => {
   }
 });
 
+// GET /api/proizvodnja/:r_br/ponuda-json — proxy čitanje JSON-a ponude (sa R2/FTP
+// skladišta) PREKO SERVERA, umjesto direktno iz pregledača. Bez ovoga pregledač često
+// odbija fetch preko drugog domena (CORS), pa se labele tiho vraćaju na osnovni prikaz
+// bez pozicija/mjera, bez ijedne vidljive greške.
+router.get('/:r_br/ponuda-json', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT link_ponuda FROM proizvodnja_jopex WHERE r_br=$1', [req.params.r_br]);
+    const link = r.rows[0]?.link_ponuda;
+    if (!link) return res.status(404).json({ error: 'Ovaj nalog nema povezanu ponudu.' });
+    const odgovor = await fetch(link);
+    if (!odgovor.ok) return res.status(502).json({ error: `Ponuda nije dostupna na skladištu (status ${odgovor.status}).` });
+    const json = await odgovor.json();
+    res.json(json);
+  } catch (err) {
+    res.status(500).json({ error: 'Greška pri čitanju ponude: ' + err.message });
+  }
+});
+
 module.exports = router;
