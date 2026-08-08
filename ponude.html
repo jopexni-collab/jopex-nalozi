@@ -315,6 +315,28 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <div class="shp-grid" id="shp-grid"></div>
       <button class="orient-btn" id="obtn" style="display:none" onclick="toggleOrient()">⇄ Okreni orijentaciju</button>
       <div id="dim-wrap"></div>
+    <!-- SKICA: crtanje rukom + dotjerivanje tjemena -->
+    <div id="skica-wrap" style="display:none">
+      <div class="hint">Nacrtaj oblik prstom ili mišem — sistem prepoznaje uglove.
+        Crtež je <b>samo polazna tačka</b>: poslije ispravi mjere i zaključaj prave uglove.</div>
+      <div class="r2" style="margin-bottom:6px">
+        <div class="fg"><label>Najduža strana (mm)</label>
+          <input type="number" id="sk-najduza" value="3000" min="100" step="10"></div>
+        <div class="fg" style="display:flex;align-items:flex-end">
+          <button type="button" onclick="skicaOcisti()"
+            style="width:100%;font:inherit;font-size:11px;padding:7px;border:1px solid #dde2ea;
+                   background:#fafbfc;border-radius:5px;cursor:pointer">✕ Obriši crtež</button></div>
+      </div>
+      <canvas id="sk-platno" width="360" height="260"
+        style="width:100%;border:2px dashed #1a5fa8;border-radius:8px;background:#fff;
+               touch-action:none;cursor:crosshair;display:block"></canvas>
+      <button type="button" onclick="skicaPrimijeni()"
+        style="width:100%;margin-top:6px;padding:9px;background:#1a5fa8;color:#fff;border:none;
+               border-radius:6px;font:inherit;font-size:12px;font-weight:700;cursor:pointer">
+        ✓ Prepoznaj oblik sa crteža</button>
+      <div id="sk-poruka" style="font-size:11px;margin-top:6px;line-height:1.5"></div>
+      <div id="sk-tjemena"></div>
+    </div>
       <div class="hint" style="margin-top:10px;font-weight:600;color:#1d8a6e">Obrada ivica ploče</div>
       <div class="hint">Cijene profila (KM/m)</div>
       <div class="r3">
@@ -358,7 +380,15 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
           <div class="fg"><label>Dubina upuštanja (mm)</label><input type="text" inputmode="decimal" id="sud-dub" value="5" oninput="fixComma(this);refresh()"></div>
           <div class="fg"><label>Širina upuštanja (mm)</label><input type="text" inputmode="decimal" id="sud-step" value="5" oninput="fixComma(this);refresh()"></div>
         </div>
-        <div class="hint">Pozicija otvora — biraj od koje se STVARNE ivice kraka mjeri</div>
+        <div id="sud-strana-red" style="display:none">
+          <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Slobodan oblik — otvor se mjeri OD IZABRANE STRANE (okomito na nju)</div>
+          <div class="r2">
+            <div class="fg"><label>Uz stranu</label><select id="sud-strana" onchange="refresh()"></select></div>
+            <div class="fg"><label>Odmak od strane (mm)</label><input type="number" id="sud-odmak" value="50" min="0" oninput="fixComma(this);refresh()"></div>
+          </div>
+          <div class="fg"><label>Pomak duž strane, od početnog tjemena (mm)</label><input type="number" id="sud-duz" value="200" min="0" oninput="fixComma(this);refresh()"></div>
+        </div>
+        <div id="sud-osa-red"><div class="hint">Pozicija otvora — biraj od koje se STVARNE ivice kraka mjeri</div>
         <div class="r2">
           <div class="fg"><label>Vodoravno</label>
             <select id="sud-xref" onchange="refresh()">
@@ -376,6 +406,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
             </select>
           </div>
           <div class="fg"><label>Rastojanje (mm)</label><input type="number" id="sud-y" value="50" min="0" oninput="fixComma(this);refresh()"></div>
+        </div>
         </div>
         <div class="hint">Radijus uglova otvora (R mm)</div>
         <div class="r2">
@@ -421,7 +452,15 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
           <div class="fg"><label>Dubina upuštanja (mm)</label><input type="text" inputmode="decimal" id="plo-dub" value="5" oninput="fixComma(this);refresh()"></div>
           <div class="fg"><label>Širina upuštanja (mm)</label><input type="text" inputmode="decimal" id="plo-step" value="5" oninput="fixComma(this);refresh()"></div>
         </div>
-        <div class="hint">Pozicija otvora — biraj od koje se STVARNE ivice kraka mjeri</div>
+        <div id="plo-strana-red" style="display:none">
+          <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Slobodan oblik — otvor se mjeri OD IZABRANE STRANE (okomito na nju)</div>
+          <div class="r2">
+            <div class="fg"><label>Uz stranu</label><select id="plo-strana" onchange="refresh()"></select></div>
+            <div class="fg"><label>Odmak od strane (mm)</label><input type="number" id="plo-odmak" value="50" min="0" oninput="fixComma(this);refresh()"></div>
+          </div>
+          <div class="fg"><label>Pomak duž strane, od početnog tjemena (mm)</label><input type="number" id="plo-duz" value="1000" min="0" oninput="fixComma(this);refresh()"></div>
+        </div>
+        <div id="plo-osa-red"><div class="hint">Pozicija otvora — biraj od koje se STVARNE ivice kraka mjeri</div>
         <div class="r2">
           <div class="fg"><label>Vodoravno</label>
             <select id="plo-xref" onchange="refresh()">
@@ -439,6 +478,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
             </select>
           </div>
           <div class="fg"><label>Rastojanje (mm)</label><input type="number" id="plo-y" value="50" min="0" oninput="fixComma(this);refresh()"></div>
+        </div>
         </div>
         <div class="hint">Radijus uglova otvora (R mm)</div>
         <div class="r2">
@@ -774,6 +814,20 @@ var SHAPES=[
    def:{A:3000,B:600,C:600},
    area:function(d){return d.A*Math.max(d.B||0,d.C||0);},
    hasOrient:false},
+  {id:'SK', lbl:'Skica (crtaj)',
+   dims:[],                       // nema imenovanih mjera - izvor istine su TJEMENA
+   def:{},
+   area:function(d){              // povrsina = bounding box (max sirina x max visina)
+     var t=(d&&d._tj)||[];
+     if(t.length<3) return 0;
+     var mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
+     t.forEach(function(q){
+       if(q[0]<mnx)mnx=q[0]; if(q[0]>mxx)mxx=q[0];
+       if(q[1]<mny)mny=q[1]; if(q[1]>mxy)mxy=q[1];
+     });
+     return (mxx-mnx)*(mxy-mny);
+   },
+   hasOrient:false, slobodan:true},
   {id:'G', lbl:'G oblik',
    dims:[{l:'A',h:'Gornja dužina'},{l:'B',h:'Lijeva visina'},{l:'C',h:'Desna visina'},{l:'D',h:'Donja dužina'},{l:'E',h:'Gorn. unutar. pomak'},{l:'F',h:'Lijeva unutar. širina'},{l:'G',h:'Donja unutar. dužina'},{l:'H',h:'Donja unutar. širina'}],
    def:{A:3000,B:3000,C:2000,D:2000,E:635,F:635,G:635,H:635},
@@ -788,6 +842,12 @@ var SHAPES=[
 function getShapeOutline(sh,d,vOrientArg){
   d=d||{};
   var vo=vOrientArg||0;
+  // Slobodan (rucno nacrtan) oblik - kontura SU sama tjemena, bez izvodjenja
+  // iz imenovanih mjera. Normalizovana su tako da pocinju u (0,0).
+  if(sh==='SK'){
+    var t=d._tj||[];
+    return (t.length>=3)?t.map(function(q){return [q[0],q[1]];}):[];
+  }
   if(sh==='I'){
     return [[0,0],[d.A||0,0],[d.A||0,d.B||0],[0,d.B||0]];
   }
@@ -830,6 +890,161 @@ function getShapeOutline(sh,d,vOrientArg){
     return [[0,0],[A5,0],[A5,C5],[A5-G5,C5],[A5-G5,C5-H5],[E5,C5-H5],[E5,F5],[0,F5]];
   }
   return [];
+}
+
+// ══ SLOBODAN OBLIK: crtanje rukom → tjemena ═══════════════════════
+// Isti pristup kao "nepravilan oblik" u restlovima: potez se prorijedi
+// (Ramer-Douglas-Peucker), pa se izbace preblizu tjemena i preblagi uglovi.
+// Crtez je SAMO polazna tacka - mjere se poslije ispravljaju rucno.
+function _udaljOdPrave(p,a,b){
+  var dx=b[0]-a[0], dy=b[1]-a[1], L=Math.hypot(dx,dy);
+  if(L<1e-9) return Math.hypot(p[0]-a[0],p[1]-a[1]);
+  return Math.abs(dy*p[0]-dx*p[1]+b[0]*a[1]-b[1]*a[0])/L;
+}
+function _rdp(tacke,eps){
+  if(tacke.length<3) return tacke;
+  var maxD=0, idx=0;
+  for(var i=1;i<tacke.length-1;i++){
+    var d=_udaljOdPrave(tacke[i],tacke[0],tacke[tacke.length-1]);
+    if(d>maxD){maxD=d;idx=i;}
+  }
+  if(maxD<=eps) return [tacke[0],tacke[tacke.length-1]];
+  return _rdp(tacke.slice(0,idx+1),eps).slice(0,-1).concat(_rdp(tacke.slice(idx),eps));
+}
+function _ocistiTjemena(tacke,dijag){
+  var t=tacke.slice();
+  for(var prolaz=0;prolaz<6 && t.length>3;prolaz++){
+    var prije=t.length;
+    t=t.filter(function(p,i){
+      var q=t[(i+1)%t.length];
+      return Math.hypot(q[0]-p[0],q[1]-p[1])>dijag*0.06;   // preblizu tjemena
+    });
+    if(t.length<3) break;
+    var zadrzi=t.map(function(p,i){
+      var a=t[(i-1+t.length)%t.length], b=t[(i+1)%t.length];
+      var u1=Math.atan2(p[1]-a[1],p[0]-a[0]), u2=Math.atan2(b[1]-p[1],b[0]-p[0]);
+      // Prag 30 stepeni: sve blaze od toga je drhtaj ruke, ne stvarni ugao.
+      // Sa 22 stepena su se na kosim stranama pojavljivala lazna tjemena.
+      return Math.abs(((u2-u1)*180/Math.PI%360+540)%360-180)>30;
+    });
+    if(zadrzi.some(function(z){return !z;}) && t.length>3) t=t.filter(function(p,i){return zadrzi[i];});
+    if(t.length===prije) break;
+  }
+  return t;
+}
+// Potez (px) → tjemena (mm), skalirano tako da najduza strana bude zadata.
+function skicaUTjemena(potez,najduzaMM){
+  if(!potez||potez.length<8) return null;
+  var xs=potez.map(function(p){return p[0];}), ys=potez.map(function(p){return p[1];});
+  var dijag=Math.hypot(Math.max.apply(null,xs)-Math.min.apply(null,xs),
+                       Math.max.apply(null,ys)-Math.min.apply(null,ys));
+  if(dijag<40) return null;
+  var t=_rdp(potez,dijag*0.045);
+  // Kraj blizu pocetka = zatvoren oblik, pa se posljednja tacka izbacuje
+  if(t.length>3 && Math.hypot(t[0][0]-t[t.length-1][0],t[0][1]-t[t.length-1][1])<dijag*0.12) t.pop();
+  t=_ocistiTjemena(t,dijag);
+  if(t.length<3) return null;
+  var raspon=Math.max(Math.max.apply(null,xs)-Math.min.apply(null,xs),
+                      Math.max.apply(null,ys)-Math.min.apply(null,ys));
+  var mjerilo=(najduzaMM||3000)/Math.max(raspon,1);
+  var mm=t.map(function(p){return [p[0]*mjerilo,p[1]*mjerilo];});
+  // NE poravnavamo uglove automatski: tjemePostaviPrav rotira susjednu stranu,
+  // pa lancano primijenjen na sva tjemena razbije oblik (pravougaonik postane
+  // peterougao). Crtez je polazna tacka - korisnik zakljucava 90 tamo gdje
+  // stvarno treba, dugmetom u panelu.
+  return _normalizujTjemena(mm);
+}
+// Pomjeri u (0,0), zaokruzi na 5 mm i osiguraj smjer kazaljke - isti smjer
+// kao ostali oblici, da normale ivica i produzeci rade ispravno.
+function _normalizujTjemena(t){
+  if(!t||t.length<3) return t||[];
+  var mnx=Infinity,mny=Infinity;
+  t.forEach(function(p){ if(p[0]<mnx)mnx=p[0]; if(p[1]<mny)mny=p[1]; });
+  var r=t.map(function(p){
+    return [Math.round((p[0]-mnx)/5)*5, Math.round((p[1]-mny)/5)*5];
+  });
+  var pov=0;
+  for(var i=0;i<r.length;i++){
+    var a=r[i], b=r[(i+1)%r.length];
+    pov+=a[0]*b[1]-b[0]*a[1];
+  }
+  if(pov<0) r.reverse();   // y je nadolje: pozitivna povrsina = smjer kazaljke
+  return r;
+}
+// Ugao u tjemenu i (stepeni)
+function tjemeUgao(t,i){
+  var n=t.length;
+  if(n<3) return 0;
+  var a=t[(i-1+n)%n], p=t[i], b=t[(i+1)%n];
+  var u1=Math.atan2(a[1]-p[1],a[0]-p[0]), u2=Math.atan2(b[1]-p[1],b[0]-p[0]);
+  var d=Math.abs((u2-u1)*180/Math.PI)%360;
+  return d>180?360-d:d;
+}
+function tjemeJePrav(t,i){ return Math.abs(tjemeUgao(t,i)-90)<0.5; }
+// Zakljucaj 90° u tjemenu: drzi IZLAZNU stranu, zaokreni ULAZNU oko tjemena.
+function tjemePostaviPrav(t,i){
+  var n=t.length;
+  if(n<3) return t;
+  var p=t[i], a=t[(i-1+n)%n], b=t[(i+1)%n];
+  var drzi=Math.atan2(b[1]-p[1],b[0]-p[0]);
+  var duz=Math.hypot(a[0]-p[0],a[1]-p[1]);
+  var sada=Math.atan2(a[1]-p[1],a[0]-p[0]);
+  var kand=[drzi+Math.PI/2, drzi-Math.PI/2];
+  var razlika=function(u){return Math.abs(((u-sada)%(2*Math.PI)+3*Math.PI)%(2*Math.PI)-Math.PI);};
+  var novi=razlika(kand[0])<=razlika(kand[1])?kand[0]:kand[1];
+  var r=t.map(function(q){return [q[0],q[1]];});
+  r[(i-1+n)%n]=[p[0]+Math.cos(novi)*duz, p[1]+Math.sin(novi)*duz];
+  return _normalizujTjemena(r);
+}
+// Postavi duzinu strane i (od tjemena i do i+1) - pomjera SAMO kraj strane,
+// zadrzavajuci njen pravac. Ostala tjemena ostaju gdje jesu.
+function stranaPostaviDuzinu(t,i,novaMM){
+  var n=t.length;
+  if(n<3||!(novaMM>0)) return t;
+  var a=t[i], b=t[(i+1)%n];
+  var dx=b[0]-a[0], dy=b[1]-a[1], L=Math.hypot(dx,dy);
+  if(L<1e-9) return t;
+  var r=t.map(function(q){return [q[0],q[1]];});
+  r[(i+1)%n]=[a[0]+dx/L*novaMM, a[1]+dy/L*novaMM];
+  return _normalizujTjemena(r);
+}
+// Izravnaj stranu i: rotira je oko SREDINE tako da postane tacno vodoravna
+// ili uspravna. Pomjeraju se oba njena tjemena podjednako, pa oblik ostaje
+// na mjestu i susjedne strane se samo blago prilagode.
+// smjer: 'vodoravno' | 'uspravno' | 'auto' (bira blizi)
+function stranaIzravnaj(t,i,smjer){
+  var n=t.length;
+  if(n<3) return t;
+  var a=t[i], b=t[(i+1)%n];
+  var dx=b[0]-a[0], dy=b[1]-a[1], L=Math.hypot(dx,dy);
+  if(L<1e-9) return t;
+  if(!smjer||smjer==='auto') smjer=(Math.abs(dx)>=Math.abs(dy))?'vodoravno':'uspravno';
+  var mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2;
+  var r=t.map(function(q){return [q[0],q[1]];});
+  if(smjer==='vodoravno'){
+    // zadrzi duzinu i redoslijed (lijevo-desno), izjednaci Y na sredinu
+    var zn=(dx>=0)?1:-1;
+    r[i]=[mx-zn*L/2,my];
+    r[(i+1)%n]=[mx+zn*L/2,my];
+  } else {
+    var zn2=(dy>=0)?1:-1;
+    r[i]=[mx,my-zn2*L/2];
+    r[(i+1)%n]=[mx,my+zn2*L/2];
+  }
+  return _normalizujTjemena(r);
+}
+// Da li je strana vec vodoravna / uspravna (tolerancija 0.5 stepena)
+function stranaJeRavna(t,i){
+  var n=t.length, a=t[i], b=t[(i+1)%n];
+  var dx=Math.abs(b[0]-a[0]), dy=Math.abs(b[1]-a[1]);
+  var L=Math.hypot(dx,dy)||1;
+  // 0.0009 ~ 0.05 stepeni. Sa labavijim pragom je strana od 91 stepen
+  // prijavljivana kao "vec uspravna", pa dugme nije nudilo izravnavanje.
+  return (dy/L<0.0009)?'vodoravno':((dx/L<0.0009)?'uspravno':null);
+}
+function stranaDuzina(t,i){
+  var n=t.length, a=t[i], b=t[(i+1)%n];
+  return Math.hypot(b[0]-a[0],b[1]-a[1]);
 }
 
 function getCornerRadiusMM(i){
@@ -1415,6 +1630,7 @@ var PREV={
   C:'<path d="M28,8 L82,8 L82,22 L50,22 L36,34 L82,34 L82,46 L18,46 L18,34 L28,34 L28,22 L18,22 Z" fill="none" stroke="#1a5fa8" stroke-width="1.5"/><text x="55" y="5" text-anchor="middle" font-size="7" fill="#1a5fa8" font-weight="bold">A</text><text x="13" y="30" text-anchor="end" font-size="7" fill="#1a5fa8" font-weight="bold">B</text><text x="86" y="16" text-anchor="start" font-size="7" fill="#1a5fa8" font-weight="bold">C</text><text x="50" y="50" text-anchor="middle" font-size="7" fill="#1a5fa8" font-weight="bold">F</text>',
   II:'<rect x="14" y="8" width="66" height="13" fill="none" stroke="#1a5fa8" stroke-width="1.5"/><rect x="14" y="26" width="52" height="13" fill="none" stroke="#1a5fa8" stroke-width="1.5"/><text x="47" y="5" text-anchor="middle" font-size="7" fill="#1a5fa8" font-weight="bold">A</text><text x="10" y="16" text-anchor="end" font-size="7" fill="#1a5fa8" font-weight="bold">B</text><text x="40" y="46" text-anchor="middle" font-size="7" fill="#1a5fa8" font-weight="bold">C</text><text x="10" y="35" text-anchor="end" font-size="7" fill="#1a5fa8" font-weight="bold">D</text>',
   N:'<polygon points="14,36 86,36 86,14 30,14" fill="none" stroke="#1a5fa8" stroke-width="1.5"/><text x="50" y="43" text-anchor="middle" font-size="7" fill="#1a5fa8" font-weight="bold">A</text><text x="10" y="28" text-anchor="end" font-size="7" fill="#1a5fa8" font-weight="bold">B</text><text x="90" y="27" text-anchor="start" font-size="7" fill="#1a5fa8" font-weight="bold">C</text>',
+  SK:'<path d="M14,40 L26,12 L58,8 L84,26 L74,44 L40,46 Z" fill="none" stroke="#1a5fa8" stroke-width="1.5" stroke-linejoin="round"/><circle cx="14" cy="40" r="2.5" fill="#1a5fa8"/><circle cx="26" cy="12" r="2.5" fill="#1a5fa8"/><circle cx="58" cy="8" r="2.5" fill="#1a5fa8"/><circle cx="84" cy="26" r="2.5" fill="#1a5fa8"/><circle cx="74" cy="44" r="2.5" fill="#1a5fa8"/><circle cx="40" cy="46" r="2.5" fill="#1a5fa8"/>',
   G:'<path d="M12,8 L88,8 L88,42 L54,42 L54,30 L82,30 L82,20 L28,20 L28,42 L12,42 Z" fill="none" stroke="#1a5fa8" stroke-width="1.5"/><text x="50" y="5" text-anchor="middle" font-size="7" fill="#1a5fa8" font-weight="bold">A</text><text x="8" y="26" text-anchor="end" font-size="7" fill="#1a5fa8" font-weight="bold">B</text><text x="92" y="20" text-anchor="start" font-size="7" fill="#1a5fa8" font-weight="bold">C</text><text x="35" y="46" text-anchor="middle" font-size="7" fill="#1a5fa8" font-weight="bold">D</text>'
 };
 
@@ -1664,6 +1880,7 @@ function getItemInputIds(t){
               'k-ugr','k-mer','cb-sud','cb-plo',
               'sud-t','plo-t','sud-dub','sud-step','plo-dub','plo-step','k-nap','k-narucilac','k-ugovorio','mat-naziv','mat-c',
               'sud-xref','sud-yref','plo-xref','plo-yref',
+              'sud-strana','sud-duz','sud-odmak','plo-strana','plo-duz','plo-odmak',
               'sud-r-tl-sel','sud-r-tl-inp','sud-r-tr-sel','sud-r-tr-inp',
               'sud-r-br-sel','sud-r-br-inp','sud-r-bl-sel','sud-r-bl-inp',
               'plo-r-tl-sel','plo-r-tl-inp','plo-r-tr-sel','plo-r-tr-inp',
@@ -1933,8 +2150,19 @@ function _backEdgeMM(sh,d,vo,x0,x1){
 // box cijele ploce), i korisnik bira od koje se mjeri:
 //   xref: 'lijeva' | 'desna'      yref: 'prednja' | 'zadnja'
 // Vraca {x,y,w,h, left,right,front,back} - sve u mm, y je GORNJA ivica otvora.
-function _rjesiOtvorMM(w,h,ux,uy,xref,yref){
+function _rjesiOtvorMM(w,h,ux,uy,xref,yref,stranaIdx){
   var sh=shape, d=dims, vo=vOrient;
+  // Slobodan oblik: otvor je vezan ZA STRANU, ne za osu ploce.
+  if(sh==='SK'){
+    var t=(d&&d._tj)||[];
+    if(t.length<3) return {x:0,y:0,w:w,h:h,left:0,right:0,front:0,back:0,pts:null};
+    var si=Math.max(0,Math.min(stranaIdx||0,t.length-1));
+    var pts=otvorUzStranu(t,si,ux,uy,w,h);
+    var bb=_bbPoly(pts);
+    var f=_stranaOkvir(t,si);
+    return {x:bb.x,y:bb.y,w:bb.w,h:bb.h, pts:pts, strana:si,
+            left:0,right:f.len,front:0,back:0};
+  }
   var outl=getShapeOutline(sh,d,vo), flip=_isYFlipped(sh,vo);
   var bb=_bbMM(sh,d,vo);
   // 1) Gruba X pozicija - dovoljna da se odredi u kojem je kraku otvor.
@@ -1955,26 +2183,78 @@ function _rjesiOtvorMM(w,h,ux,uy,xref,yref){
   var x=(xref==='desna')?(sp[1]-ux-w):(sp[0]+ux);
   return {x:x,y:y,w:w,h:h,left:sp[0],right:sp[1],front:front,back:back};
 }
+// ══ OTVORI NA SLOBODNOM OBLIKU ═══════════════════════════════════
+// Kod kosih strana "od lijeve/prednje ivice" gubi smisao, pa se otvor vezuje
+// ZA KONKRETNU STRANU (A, B, C...) i mjeri OKOMITO na nju. Druga koordinata
+// ide DUZ te strane, od njenog pocetnog tjemena.
+function _stranaOkvir(t,i){
+  var n=t.length, a=t[i], b=t[(i+1)%n];
+  var dx=b[0]-a[0], dy=b[1]-a[1], L=Math.hypot(dx,dy)||1;
+  var ux=dx/L, uy=dy/L;          // duz strane
+  var nx=-uy, ny=ux;             // okomito
+  // Normala mora gledati U unutrasnjost (kontura je u smjeru kazaljke)
+  var cx=0,cy=0; t.forEach(function(q){cx+=q[0];cy+=q[1];});
+  cx/=n; cy/=n;
+  var mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2;
+  if((cx-mx)*nx+(cy-my)*ny<0){ nx=-nx; ny=-ny; }
+  return {ax:a[0],ay:a[1],ux:ux,uy:uy,nx:nx,ny:ny,len:L};
+}
+// Pravougaoni otvor uz stranu i: duz = pomak duz strane, odmak = okomito.
+// Vraca 4 ugla u mm (moze biti zarotiran ako je strana kosa).
+function otvorUzStranu(t,i,duz,odmak,w,h){
+  var f=_stranaOkvir(t,i);
+  var ox=f.ax+f.ux*duz+f.nx*odmak;
+  var oy=f.ay+f.uy*duz+f.ny*odmak;
+  return [[ox,oy],
+          [ox+f.ux*w, oy+f.uy*w],
+          [ox+f.ux*w+f.nx*h, oy+f.uy*w+f.ny*h],
+          [ox+f.nx*h, oy+f.ny*h]];
+}
+// Bounding box tog (moguce zarotiranog) otvora - za crtanje i provjere.
+function _bbPoly(pts){
+  var mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
+  pts.forEach(function(p){
+    if(p[0]<mnx)mnx=p[0]; if(p[0]>mxx)mxx=p[0];
+    if(p[1]<mny)mny=p[1]; if(p[1]>mxy)mxy=p[1];
+  });
+  return {x:mnx,y:mny,w:mxx-mnx,h:mxy-mny};
+}
+function jeSlobodan(){ return shape==='SK'; }
+// Koja je strana izabrana za dati otvor (indeks), uz zastitu od nepostojece.
+function _otvorStrana(prefix){
+  var t=(dims&&dims._tj)||[];
+  var v=parseInt(gs(prefix+'-strana'),10);
+  if(isNaN(v)||v<0||v>=t.length) return 0;
+  return v;
+}
+
 function _otvorRef(prefix,osa){
   var v=gs(prefix+'-'+osa+'ref');
   if(osa==='x') return (v==='desna')?'desna':'lijeva';
   return (v==='zadnja')?'zadnja':'prednja';
 }
 function getOtvorRectMM(prefix){
+  if(jeSlobodan()){
+    // duz = pomak duz strane, odmak = okomito od strane
+    return _rjesiOtvorMM(gi(prefix+'-w'),gi(prefix+'-h'),
+      gi(prefix+'-duz'),gi(prefix+'-odmak'),'lijeva','prednja',_otvorStrana(prefix));
+  }
   return _rjesiOtvorMM(gi(prefix+'-w'),gi(prefix+'-h'),
     gi(prefix+'-x'),gi(prefix+'-y'),
-    _otvorRef(prefix,'x'),_otvorRef(prefix,'y'));
+    _otvorRef(prefix,'x'),_otvorRef(prefix,'y'),0);
 }
 function getCustomOtvorRectMM(c){
   return _rjesiOtvorMM(c.w||0,c.h||0,c.x||0,c.y||0,
     (c.xref==='desna')?'desna':'lijeva',
-    (c.yref==='zadnja')?'zadnja':'prednja');
+    (c.yref==='zadnja')?'zadnja':'prednja',
+    c.strana||0);
 }
 function getSlavinaPosMM(s){
   // Slavina je tacka - w/h = 0, pa vazi ista logika referentnih ivica.
   var r=_rjesiOtvorMM(0,0,s.x||0,s.yz||0,
     (s.xref==='desna')?'desna':'lijeva',
-    (s.yref==='prednja')?'prednja':'zadnja');
+    (s.yref==='prednja')?'prednja':'zadnja',
+    s.strana||0);
   return {x:r.x,y:r.y,left:r.left,right:r.right,front:r.front,back:r.back};
 }
 
@@ -2230,6 +2510,10 @@ function itemLabel(it,i){
   // Kuhinja: pokazuje oblik
   var sh=SHAPES.find(function(x){return x.id===it.shape;});
   var shLbl=sh?sh.lbl:it.shape;
+  if(it.shape==='SK'){
+    var _n=((it.dims&&it.dims._tj)||[]).length;
+    return n+'. Kuhinja – slobodan oblik'+(_n?(' ('+_n+' strana)'):'');
+  }
   return n+'. Kuhinja – '+shLbl;
 }
 
@@ -2339,6 +2623,11 @@ function setShape(s){
   // Postavi dims na stavki direktno
   var newDims={};
   sh.dims.forEach(function(dd){ newDims[dd.l]=sh.def[dd.l]!==undefined?sh.def[dd.l]:600; });
+  if(s==='SK'){
+    // Zadani pravougaonik dok korisnik ne nacrta svoj oblik
+    newDims._tj=[[0,0],[3000,0],[3000,600],[0,600]];
+    SKICA=[];
+  }
   getAct().dims=newDims;
   dims=newDims; // globalna var pokazuje na novu kopiju
   applyComputedDims(sh);
@@ -2352,6 +2641,199 @@ function setShape(s){
   buildCornerR();buildCustomOtvoriUI();buildSlavinaUI();
   buildItemList();
   refresh();
+}
+
+// ══ SKICA: platno, crtanje, panel strana ═════════════════════════
+var SKICA=[];          // sirovi potez u px
+var _skCrta=false;
+function _skPlatno(){ return ge('sk-platno'); }
+function _skTacka(e){
+  var cv=_skPlatno(), r=cv.getBoundingClientRect();
+  var t=(e.touches&&e.touches[0])||e;
+  return [(t.clientX-r.left)*cv.width/r.width, (t.clientY-r.top)*cv.height/r.height];
+}
+function _skCrtaj(zatvoreno,tjemena){
+  var cv=_skPlatno(); if(!cv) return;
+  var c=cv.getContext('2d');
+  c.clearRect(0,0,cv.width,cv.height);
+  c.fillStyle='#fff'; c.fillRect(0,0,cv.width,cv.height);
+  if(SKICA.length>1){
+    c.strokeStyle=tjemena?'#c9d3e0':'#1a5fa8';
+    c.lineWidth=tjemena?1.5:2.5;
+    c.lineCap='round'; c.lineJoin='round';
+    c.beginPath(); c.moveTo(SKICA[0][0],SKICA[0][1]);
+    for(var i=1;i<SKICA.length;i++) c.lineTo(SKICA[i][0],SKICA[i][1]);
+    if(zatvoreno) c.closePath();
+    c.stroke();
+  }
+  if(tjemena&&tjemena.length>2){
+    c.strokeStyle='#1a5fa8'; c.lineWidth=2.5; c.fillStyle='rgba(26,95,168,.08)';
+    c.beginPath(); c.moveTo(tjemena[0][0],tjemena[0][1]);
+    for(var k=1;k<tjemena.length;k++) c.lineTo(tjemena[k][0],tjemena[k][1]);
+    c.closePath(); c.fill(); c.stroke();
+    tjemena.forEach(function(p,k){
+      c.beginPath(); c.arc(p[0],p[1],5,0,Math.PI*2);
+      c.fillStyle='#fff'; c.fill();
+      c.strokeStyle='#1a5fa8'; c.lineWidth=2; c.stroke();
+      c.fillStyle='#1a5fa8'; c.font='bold 10px Segoe UI,Arial';
+      c.textAlign='center'; c.textBaseline='middle';
+      c.fillText(String.fromCharCode(65+k),p[0],p[1]-12);
+    });
+  }
+  if(!SKICA.length&&!tjemena){
+    c.fillStyle='#b9c4d2'; c.font='13px Segoe UI,Arial';
+    c.textAlign='center'; c.textBaseline='middle';
+    c.fillText('Nacrtaj oblik ovdje',cv.width/2,cv.height/2);
+  }
+}
+function skicaOcisti(){
+  SKICA=[]; _skCrtaj(false,null);
+  var m=ge('sk-poruka'); if(m) m.innerHTML='';
+}
+function _skVezi(){
+  var cv=_skPlatno(); if(!cv||cv._vezano) return;
+  cv._vezano=true;
+  var poc=function(e){ e.preventDefault(); _skCrta=true; SKICA=[_skTacka(e)]; _skCrtaj(false,null); };
+  var pom=function(e){ if(!_skCrta) return; e.preventDefault(); SKICA.push(_skTacka(e)); _skCrtaj(false,null); };
+  var kraj=function(){ if(!_skCrta) return; _skCrta=false; _skCrtaj(true,null); };
+  cv.addEventListener('mousedown',poc); cv.addEventListener('mousemove',pom);
+  cv.addEventListener('mouseup',kraj);  cv.addEventListener('mouseleave',kraj);
+  cv.addEventListener('touchstart',poc,{passive:false});
+  cv.addEventListener('touchmove',pom,{passive:false});
+  cv.addEventListener('touchend',kraj);
+  _skCrtaj(false,null);
+}
+function _skPoruka(t){ var m=ge('sk-poruka'); if(m) m.innerHTML=t||''; }
+function skicaPrimijeni(){
+  var najduza=parseFloat((ge('sk-najduza')||{}).value)||3000;
+  var tj=skicaUTjemena(SKICA,najduza);
+  if(!tj){ _skPoruka('<b style="color:#c0392b">Potez je prekratak — nacrtaj veći oblik.</b>'); return; }
+  if(tj.length>12){ _skPoruka('<b style="color:#c0392b">Previše uglova ('+tj.length+') — crtaj mirnije.</b>'); return; }
+  _saveUndo();
+  dims._tj=tj;
+  getAct().dims=dims;
+  cornerR={};
+  // Prikaz prepoznatih tjemena preko poteza (u px, isto mjerilo kao crtez)
+  var mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
+  tj.forEach(function(p){ if(p[0]<mnx)mnx=p[0]; if(p[0]>mxx)mxx=p[0];
+                          if(p[1]<mny)mny=p[1]; if(p[1]>mxy)mxy=p[1]; });
+  var cv=_skPlatno();
+  var sc=Math.min((cv.width-40)/Math.max(mxx-mnx,1),(cv.height-40)/Math.max(mxy-mny,1));
+  _skCrtaj(true,tj.map(function(p){return [20+(p[0]-mnx)*sc,20+(p[1]-mny)*sc];}));
+  var pravih=tj.filter(function(_,i){return tjemeJePrav(tj,i);}).length;
+  _skPoruka('Prepoznato <b>'+tj.length+' strana</b>, '+pravih+' pravih uglova. '
+    +'<b>Sad ispravi mjere ispod</b> — brojevi su procjena sa crteža.');
+  buildSkicaPanel(); osvjeziOtvorRezim();
+  buildIvice(); buildCornerR(); buildCustomOtvoriUI(); buildSlavinaUI();
+  buildItemList(); refresh();
+}
+// Panel: po jedan red za svaku stranu (dužina) i ugao u tjemenu
+// Kod slobodnog oblika otvor se vezuje za stranu, pa se skriva blok sa
+// lijeva/desna/prednja/zadnja i prikazuje izbor strane.
+function osvjeziOtvorRezim(){
+  var slob=jeSlobodan();
+  var t=(dims&&dims._tj)||[];
+  ['sud','plo'].forEach(function(pref){
+    var sr=ge(pref+'-strana-red'), or=ge(pref+'-osa-red');
+    if(sr) sr.style.display=slob?'':'none';
+    if(or) or.style.display=slob?'none':'';
+    if(!slob) return;
+    var sel=ge(pref+'-strana');
+    if(!sel) return;
+    var tren=sel.value;
+    sel.innerHTML=t.map(function(_,i){
+      var a=String.fromCharCode(65+i), b=String.fromCharCode(65+((i+1)%t.length));
+      return '<option value="'+i+'">Strana '+a+' ('+a+'\u2192'+b+', '+Math.round(stranaDuzina(t,i))+' mm)</option>';
+    }).join('');
+    if(tren!==''&&Number(tren)<t.length) sel.value=tren;
+  });
+}
+function buildSkicaPanel(){
+  var con=ge('sk-tjemena'); if(!con) return;
+  var t=(dims&&dims._tj)||[];
+  if(shape!=='SK'||t.length<3){ con.innerHTML=''; return; }
+  var h='<div class="hint" style="margin-top:8px">Ispravi mjere — strana <b>A</b> ide od tjemena A do B, itd.</div>'
+    +'<button type="button" onclick="skicaIzravnajSve()" style="width:100%;margin-bottom:6px;'
+    +'padding:7px;border:1px solid #1f8a4c;background:#e6f4ea;color:#1f8a4c;border-radius:5px;'
+    +'font:inherit;font-size:11px;font-weight:700;cursor:pointer">'
+    +'⇥ Izravnaj sve skoro-ravne strane</button>';
+  t.forEach(function(p,i){
+    var slovo=String.fromCharCode(65+i);
+    var sljed=String.fromCharCode(65+((i+1)%t.length));
+    var duz=Math.round(stranaDuzina(t,i));
+    var ug=Math.round(tjemeUgao(t,i));
+    var prav=tjemeJePrav(t,i);
+    var ravna=stranaJeRavna(t,i);
+    var dugmeIzr=function(sm,txt,akt){
+      return '<button type="button" onclick="skicaIzravnaj('+i+',\''+sm+'\')"'
+        +' style="font:inherit;font-size:10px;padding:3px 8px;border-radius:4px;cursor:pointer;'
+        +(akt?'border:1px solid #1f8a4c;background:#e6f4ea;color:#1f8a4c;font-weight:700'
+             :'border:1px solid #dde2ea;background:#fafbfc;color:#6b7a8d')+'">'+txt+'</button>';
+    };
+    h+='<div class="ivrow" style="flex-wrap:wrap">'
+      +'<b style="color:#1a5fa8;min-width:52px">'+slovo+'\u2192'+sljed+'</b>'
+      +'<input type="number" min="1" step="1" value="'+duz+'" style="width:82px"'
+      +' oninput="fixComma(this);skicaDuzina('+i+',this.value)">'
+      +'<span style="font-size:10px;color:#8a93a3">mm</span>'
+      +'<div style="flex-basis:100%;display:flex;align-items:center;gap:6px;margin-top:4px;'
+      +'padding-top:4px;border-top:1px dashed #e2e6ef">'
+      +'<span style="font-size:10px;color:#6b7a8d;min-width:52px">Ugao '+slovo+'</span>'
+      +'<b style="font-size:11px;color:'+(prav?'#1f8a4c':'#c0392b')+'">'+ug+'\u00b0</b>'
+      +(prav?'<span style="font-size:10px;color:#1f8a4c">prav</span>'
+            :'<button type="button" onclick="skicaPrav('+i+')" style="font:inherit;font-size:10px;'
+             +'padding:3px 8px;border:1px solid #1a5fa8;background:#eef4fb;color:#1a5fa8;'
+             +'border-radius:4px;cursor:pointer">Zaključaj 90\u00b0</button>')
+      +'</div>'
+      +'<div style="flex-basis:100%;display:flex;align-items:center;gap:6px;margin-top:4px">'
+      +'<span style="font-size:10px;color:#6b7a8d;min-width:52px">Izravnaj</span>'
+      +dugmeIzr('vodoravno','\u2194 vodoravno',ravna==='vodoravno')
+      +dugmeIzr('uspravno','\u2195 uspravno',ravna==='uspravno')
+      +'</div></div>';
+  });
+  con.innerHTML=h;
+}
+function skicaDuzina(i,val){
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
+  if(v<=0) return;
+  dims._tj=stranaPostaviDuzinu(dims._tj,i,v);
+  getAct().dims=dims;
+  refresh();   // panel se NE rebuilda, da fokus ostane u polju
+}
+// Izravnava SVE strane koje su vec blizu vodoravne/uspravne (do 8 stepeni).
+// Kose strane se NE diraju - one su namjerne (kosi zid).
+function skicaIzravnajSve(){
+  var t=dims._tj||[];
+  if(t.length<3) return;
+  _saveUndo();
+  var n=t.length, promijenjeno=0;
+  for(var i=0;i<n;i++){
+    if(stranaJeRavna(dims._tj,i)) continue;
+    var a=dims._tj[i], b=dims._tj[(i+1)%n];
+    var dx=b[0]-a[0], dy=b[1]-a[1], L=Math.hypot(dx,dy)||1;
+    var odVodo=Math.abs(Math.asin(Math.min(1,Math.abs(dy)/L))*180/Math.PI);
+    var odUspr=Math.abs(Math.asin(Math.min(1,Math.abs(dx)/L))*180/Math.PI);
+    if(odVodo<=8){ dims._tj=stranaIzravnaj(dims._tj,i,'vodoravno'); promijenjeno++; }
+    else if(odUspr<=8){ dims._tj=stranaIzravnaj(dims._tj,i,'uspravno'); promijenjeno++; }
+  }
+  getAct().dims=dims;
+  buildSkicaPanel(); osvjeziOtvorRezim(); buildIvice(); refresh();
+  _skPoruka(promijenjeno
+    ? ('Izravnato <b>'+promijenjeno+'</b> strana. Kose strane su ostavljene kakve jesu.')
+    : 'Nema skoro-ravnih strana za izravnavanje.');
+}
+// Izravnaj JEDNU stranu - vodoravno ili uspravno
+function skicaIzravnaj(i,smjer){
+  _saveUndo();
+  dims._tj=stranaIzravnaj(dims._tj,i,smjer);
+  getAct().dims=dims;
+  buildSkicaPanel(); osvjeziOtvorRezim(); buildIvice(); refresh();
+}
+
+function skicaPrav(i){
+  _saveUndo();
+  dims._tj=tjemePostaviPrav(dims._tj,i);
+  getAct().dims=dims;
+  buildSkicaPanel(); buildIvice(); refresh();
 }
 
 // ═══ SHAPE GRID ════════════════════════════════════
@@ -2429,6 +2911,18 @@ function saveTableDim(key,val){
 // ═══ DIM TABLE ════════════════════════════════════
 function buildDimTable(){
   var con=ge('dim-wrap');if(!con)return;
+  // Slobodan oblik nema imenovane mjere (A/B/C...) - umjesto tabele se
+  // prikazuje platno za crtanje i popis strana.
+  var skw=ge('skica-wrap');
+  if(shape==='SK'){
+    con.innerHTML='';
+    if(skw){ skw.style.display=''; _skVezi(); }
+    buildSkicaPanel();
+    osvjeziOtvorRezim();
+    return;
+  }
+  if(skw) skw.style.display='none';
+  osvjeziOtvorRezim();
   // dims se čuva via saveDim() oninput
   var sh=getShape(shape);
   // Izracunaj computed
@@ -2565,6 +3059,15 @@ function setExt(sideId,optId){
 
 // ═══ IVICE SEGS ════════════════════════════════════
 function getIvSegs(sh,d){
+  // Slobodan oblik: svaka strana poligona dobija slovo po redu obilaska,
+  // pa obrada ivica i rezanje rade bez ijedne dodatne izmjene.
+  if(sh==='SK'){
+    var t=(d&&d._tj)||[];
+    if(t.length<3) return [];
+    return t.map(function(_,i){
+      return {id:'sk'+i, lbl:String.fromCharCode(65+i), len:stranaDuzina(t,i)};
+    });
+  }
   if(sh==='I') return [
     {id:'A-zad', lbl:'A',len:d.A||0},{id:'B-lev',lbl:'B',len:d.B||0},
     {id:'C-des', lbl:'C',len:d.B||0},{id:'D-pred',lbl:'D',len:d.A||0}
@@ -3329,7 +3832,9 @@ function calcItemCost(){
     iv=ivT;
     usl=gi('k-ugr')+gi('k-mer');
     uk=mat+iv+otv+slav+usl;
-    var shLbl=shape+(vOrient===1?' (zrcaljeno)':'');
+    var shLbl=(shape==='SK')
+      ? ('slobodan oblik, '+(((dims._tj)||[]).length)+' strana')
+      : (shape+(vOrient===1?' (zrcaljeno)':''));
     rows+=trow('Kuhinjska radna ploča – '+shLbl+' ('+ms+')',m.toFixed(4)+' m²',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
     (slavine||[]).forEach(function(s,si){
       rows+=trow('Bušenje slavine #'+(si+1)+' fi'+(s.fi||35)+' mm','1 kom',_editableUnitPrice(parseFloat(s.cost)||0,'','setSlavinaCost',[activeIdx,si]),f(parseFloat(s.cost)||0));
@@ -4245,6 +4750,53 @@ function drawOtvor(ctx,x,y,w,h,col,lbl,dw,dh,radMM,stepPx,cornerSelArr,cornerEdi
   });
 }
 
+// Otvor na slobodnom obliku moze biti ZAROTIRAN (uz kosu stranu), pa se crta
+// kao poligon od 4 ugla umjesto pravougaonika poravnatog sa osama.
+function drawOtvorPoly(ctx,pts,sc,col,lbl,dw,dh,clickSel,editDesc){
+  if(!pts||pts.length<4) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0]*sc,pts[0][1]*sc);
+  for(var i=1;i<pts.length;i++) ctx.lineTo(pts[i][0]*sc,pts[i][1]*sc);
+  ctx.closePath();
+  ctx.fillStyle=col+'28'; ctx.fill();
+  ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.stroke();
+  var cx=0,cy=0; pts.forEach(function(p){cx+=p[0];cy+=p[1];});
+  cx=cx/pts.length*sc; cy=cy/pts.length*sc;
+  ctx.fillStyle='#000'; ctx.font='bold 9px Segoe UI,Arial';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(lbl,cx,cy-5);
+  ctx.font='bold 8px Segoe UI,Arial';
+  ctx.fillText(dw+'\u00d7'+dh+' mm',cx,cy+6);
+  ctx.restore();
+  if(clickSel){
+    var bb=_bbPoly(pts);
+    _regClickRect(bb.x*sc,bb.y*sc,bb.w*sc,bb.h*sc,clickSel,editDesc);
+  }
+}
+// Kote otvora uz stranu: pomak DUZ strane i odmak OKOMITO na nju.
+function _koteOtvoraUzStranu(ctx,sc,r,prefix,boja){
+  var t=(dims&&dims._tj)||[];
+  if(!r.pts||t.length<3) return;
+  var f=_stranaOkvir(t,r.strana||0);
+  var duz=gi(prefix+'-duz'), odm=gi(prefix+'-odmak');
+  // Kota pomaka duz strane - lezi NA strani
+  var p0=[f.ax*sc,f.ay*sc];
+  var p1=[(f.ax+f.ux*duz)*sc,(f.ay+f.uy*duz)*sc];
+  if(duz>1) kota(ctx,p0[0],p0[1],p1[0],p1[1],Math.round(duz)+' mm',
+    _inputEditDesc(prefix+'-duz','Pomak du\u017e strane'),'#'+prefix+'-duz');
+  // Kota odmaka - od strane do otvora, okomito
+  var q0=[(f.ax+f.ux*duz)*sc,(f.ay+f.uy*duz)*sc];
+  var q1=[r.pts[0][0]*sc,r.pts[0][1]*sc];
+  if(odm>1) kota(ctx,q0[0],q0[1],q1[0],q1[1],Math.round(odm)+' mm',
+    _inputEditDesc(prefix+'-odmak','Odmak od strane'),'#'+prefix+'-odmak');
+  ctx.save();
+  ctx.strokeStyle=boja;ctx.lineWidth=0.6;ctx.setLineDash([4,3]);
+  ctx.beginPath();ctx.moveTo(f.ax*sc,f.ay*sc);
+  ctx.lineTo((f.ax+f.ux*f.len)*sc,(f.ay+f.uy*f.len)*sc);ctx.stroke();
+  ctx.setLineDash([]);ctx.restore();
+}
+
 // Crta kote polozaja otvora OD IZABRANE REFERENTNE IVICE. r je rezultat
 // getOtvorRectMM (sadrzi left/right/front/back tog kraka, u mm).
 // Crta kote polozaja otvora OD IZABRANE REFERENTNE IVICE.
@@ -4345,6 +4897,13 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
     // Pozicija se racuna u MM preko zajednicke funkcije (ista koju koristi DXF),
     // pa se tek onda skalira - tako crtez i DXF ne mogu razici.
     var _rS=getOtvorRectMM('sud');
+    if(_rS.pts){
+      // Slobodan oblik - otvor prati stranu (moze biti zarotiran).
+      // NE koristimo return: ispod slijedi ploca za kuvanje i ostali otvori.
+      drawOtvorPoly(ctx,_rS.pts,sc,'#1a5fa8','Sudopera',gi('sud-w'),gi('sud-h'),
+        '#sub-sud',_vrstaObradeEditDesc('sud'));
+      _koteOtvoraUzStranu(ctx,sc,_rS,'sud','#1a5fa8');
+    } else {
     var ssw=_rS.w*sc, ssh=_rS.h*sc, sx=_rS.x*sc, sy=_rS.y*sc;
     var _sudR={
       tl:getSinkRadius('tl'),tr:getSinkRadius('tr'),br:getSinkRadius('br'),bl:getSinkRadius('bl')
@@ -4363,12 +4922,18 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
     // Kote pozicije IDU OD STVARNE REFERENTNE IVICE tog kraka (ne od
     // bounding boxa) i prate izbor lijeva/desna odnosno prednja/zadnja.
     _kotePozicijeOtvora(ctx,sc,_rS,'sud','#1a5fa8',22,38);
+    }
   }
 
   // ── PLOČA ZA KUVANJE ─────────────────────────────────────
   if(gc('cb-plo')){
     var _fbb2=_getFbb(shape,dims,_lastSc), _fbbW=_fbb2.w, _fbbH=_fbb2.h;
     var _rP=getOtvorRectMM('plo');
+    if(_rP.pts){
+      drawOtvorPoly(ctx,_rP.pts,sc,'#c0392b','Ploča kuvanje',gi('plo-w'),gi('plo-h'),
+        '#sub-plo',_vrstaObradeEditDesc('plo'));
+      _koteOtvoraUzStranu(ctx,sc,_rP,'plo','#c0392b');
+    } else {
     var ppw=_rP.w*sc, pph=_rP.h*sc, px2=_rP.x*sc, py2=_rP.y*sc;
     var _ploR={
       tl:getPloRadius('tl'),tr:getPloRadius('tr'),br:getPloRadius('br'),bl:getPloRadius('bl')
@@ -4385,6 +4950,7 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
     kota(ctx,px2,py2+pph+18,px2+ppw,py2+pph+18,gi('plo-w')+' mm',_inputEditDesc('plo-w','Širina ploče za kuvanje'),'#plo-w');
     kota(ctx,px2-22,py2,px2-22,py2+pph,gi('plo-h')+' mm',_inputEditDesc('plo-h','Visina ploče za kuvanje'),'#plo-h');
     _kotePozicijeOtvora(ctx,sc,_rP,'plo','#c0392b',42,58);
+    }
   }
 
   // ── PROVJERA PREKLAPANJA sudopere i ploče za kuvanje ─────
@@ -4588,6 +5154,7 @@ function getCanvasSizeForItem(){
       else if(shape==='U'){_bbW=(dims.E||0)+(dims.A||0)+(dims.F||0);_bbH=dims.B||1200;}
       else if(shape==='V'){_bbW=dims.A||2500;_bbH=dims.B||1500;}
       else if(shape==='G'){_bbW=dims.A||2000;_bbH=dims.C||1500;}
+      else if(shape==='SK'){var _b2=_bbMM('SK',dims,0);_bbW=_b2.w||2000;_bbH=_b2.h||1000;}
       else{_bbW=dims.A||2000;_bbH=dims.B||1000;}
     }
     // Dodaj stvarni prostor za aktivne produžetke (po smjeru, ne samo bool)
@@ -4637,6 +5204,7 @@ function drawK(ctx,W,H){
   else if(sh==='U'){bbW=(d.E||0)+(d.A||0)+(d.F||0);bbH=d.B||1;}
   else if(sh==='II'){bbW=Math.max(d.A||0,d.C||0);bbH=(d.B||0)*2+300;}
   else if(sh==='N'){bbW=d.A||1;bbH=Math.max(d.B||0,d.C||0);}
+  else if(sh==='SK'){var _bs=_bbMM('SK',d,0);bbW=_bs.w||1;bbH=_bs.h||1;}
   else{bbW=d.A||1;bbH=d.B||1;}
   // Prosjeri bb za produzece
   // Bounding box s produžecima - tačan po smjeru (robusna geometrija)
@@ -4730,6 +5298,32 @@ function drawK(ctx,W,H){
     ctx.fillText('II oblik · '+getMatV()+(gs('mat-naziv')?' – '+gs('mat-naziv'):'')+' · '+getMatD()+'mm',0,-(PAD-18));
     _flushKotes();
     ctx.restore();return;
+  } else if(sh==='SK'){
+    var _finSKc=getFinalOutline('SK',d,0);
+    var _outSK=drawOutlineFinal(ctx,_finSKc.outline,_finSKc.radii,sc);
+    var _bsk=_bbMM('SK',d,0);
+    aX=0;aY=0;aW=_bsk.w*sc;aH=_bsk.h*sc;
+    plateF(ctx);plateS(ctx);
+    drawCornerLabels(ctx,_outSK.pts,_outSK.radiiMM,sc,'#corner-con',true,function(i){return {kind:'number',label:'Radijus ugla (mm)',unit:'mm',min:0,step:1,get:function(){return getCornerRadiusMM(i);},set:function(v){cornerR[i]=v;buildCornerR();refresh();}};});
+    // Slovo + simbol obrade na sredini SVAKE strane, malo uvuceno ka centru,
+    // pa radi i na kosim stranama (gdje 'h'/'v' orijentacija nema smisla).
+    var _tj=(d._tj)||[];
+    var _cx=0,_cy=0; _tj.forEach(function(q){_cx+=q[0];_cy+=q[1];});
+    _cx/=Math.max(_tj.length,1); _cy/=Math.max(_tj.length,1);
+    _tj.forEach(function(_,i){
+      var a1=_tj[i], b1=_tj[(i+1)%_tj.length];
+      var mx=(a1[0]+b1[0])/2*sc, my=(a1[1]+b1[1])/2*sc;
+      var dx=_cx*sc-mx, dy=_cy*sc-my, dl=Math.hypot(dx,dy)||1;
+      edgeLbl(ctx,mx+dx/dl*16,my+dy/dl*16,String.fromCharCode(65+i),'sk'+i,
+        Math.abs(b1[0]-a1[0])>=Math.abs(b1[1]-a1[1])?'h':'v');
+      // Kota duzine strane, izmaknuta na suprotnu stranu od centra
+      kota(ctx,a1[0]*sc-dx/dl*14,a1[1]*sc-dy/dl*14,b1[0]*sc-dx/dl*14,b1[1]*sc-dy/dl*14,
+        Math.round(stranaDuzina(_tj,i))+' mm');
+    });
+    // Ukupne mjere (bounding box) - to je i osnova za obracun povrsine
+    kota(ctx,0,-34,_bsk.w*sc,-34,Math.round(_bsk.w)+' mm');
+    kota(ctx,-44,0,-44,_bsk.h*sc,Math.round(_bsk.h)+' mm');
+    _skipSharedContour=true;
   } else if(sh==='N'){
     var tallH=Math.max(B,C);
     var _finN=getFinalOutline('N',d,0);
@@ -4968,7 +5562,7 @@ function drawK(ctx,W,H){
 
   // Title
   ctx.fillStyle='#333';ctx.font='bold 16px Segoe UI,Arial';ctx.textAlign='left';ctx.textBaseline='alphabetic';
-  var tit=(sh==='L'?(vOrient===0?'L oblik':'L oblik (zrcaljeno)'):(sh==='V'?(vOrient===0?'V oblik':'V oblik (zrcaljeno)'):(sh==='N'?'Nepravilan oblik':sh+' oblik')))+' · '+getMatV()+(gs('mat-naziv')?' – '+gs('mat-naziv'):'')+' · '+getMatD()+' mm';
+  var tit=(sh==='L'?(vOrient===0?'L oblik':'L oblik (zrcaljeno)'):(sh==='V'?(vOrient===0?'V oblik':'V oblik (zrcaljeno)'):(sh==='N'?'Nepravilan oblik':(sh==='SK'?('Slobodan oblik · '+(((d._tj)||[]).length)+' strana'):sh+' oblik'))))+' · '+getMatV()+(gs('mat-naziv')?' – '+gs('mat-naziv'):'')+' · '+getMatD()+' mm';
   // Naslov u apsolutnim koordinatama - ne gubi se iza produzaka
   ctx.save();
   ctx.setTransform(1,0,0,1,0,0);
@@ -6304,6 +6898,23 @@ function genDXF(){
         dHY(0,tallH,d.A,'A='+d.A+' mm',55);
         dVY(-55,tallH-d.B,tallH,'B='+d.B+' mm');
         bbox_h=tallH;
+      } else if(sh==='SK'){
+        // Slobodan oblik: kontura su sama tjemena. Kotira se bounding box,
+        // jer pojedinacne strane mogu biti kose pa im kote nemaju smisla ovdje
+        // (duzine strana idu u tekstualni popis ispod).
+        var _finSK=getFinalOutline('SK',d,0);
+        dxfRoundedPoly(outlineToPts(_finSK.outline),_finSK.radii,'KONTURA',yOff);
+        dxfCornerLabels(outlineToPts(_finSK.outline),_finSK.radii);
+        var _bbSK=_bbMM('SK',d,0);
+        dHY(0,0,_bbSK.w,'\u0160='+Math.round(_bbSK.w)+' mm',55);
+        dVY(-65,0,_bbSK.h,'V='+Math.round(_bbSK.h)+' mm');
+        // Duzine strana sa slovima - da CNC operater zna koja je koja
+        var _tSK=(d._tj)||[];
+        _tSK.forEach(function(_,i){
+          var a=_tSK[i], b=_tSK[(i+1)%_tSK.length];
+          txY((a[0]+b[0])/2,(a[1]+b[1])/2,14,String.fromCharCode(65+i),'TEKST');
+        });
+        bbox_h=_bbSK.h;
       } else if(sh==='G'){
         var _finG=getFinalOutline('G',d,0);
         dxfRoundedPoly(outlineToPts(_finG.outline),_finG.radii,'KONTURA',yOff);
@@ -6324,13 +6935,25 @@ function genDXF(){
       // krak ima dubinu D, a bocni B odnosno C.
       if(gc('cb-sud')){
         var _rSD=getOtvorRectMM('sud');
-        dxfRoundedRect(_rSD.x,_rSD.y,_rSD.w,_rSD.h,
-          getSinkRadius('tl'),getSinkRadius('tr'),getSinkRadius('br'),getSinkRadius('bl'),'OTVORI',yOff);
+        if(_rSD.pts){
+          // Slobodan oblik: otvor prati stranu, moze biti zarotiran -
+          // pise se kao poligon, ne kao pravougaonik uz ose.
+          dxfRoundedPoly(_rSD.pts.map(function(q){return {x:q[0],y:q[1]};}),
+            [getSinkRadius('tl'),getSinkRadius('tr'),getSinkRadius('br'),getSinkRadius('bl')],'OTVORI',yOff);
+        } else {
+          dxfRoundedRect(_rSD.x,_rSD.y,_rSD.w,_rSD.h,
+            getSinkRadius('tl'),getSinkRadius('tr'),getSinkRadius('br'),getSinkRadius('bl'),'OTVORI',yOff);
+        }
       }
       if(gc('cb-plo')){
         var _rPD=getOtvorRectMM('plo');
-        dxfRoundedRect(_rPD.x,_rPD.y,_rPD.w,_rPD.h,
-          getPloRadius('tl'),getPloRadius('tr'),getPloRadius('br'),getPloRadius('bl'),'OTVORI',yOff);
+        if(_rPD.pts){
+          dxfRoundedPoly(_rPD.pts.map(function(q){return {x:q[0],y:q[1]};}),
+            [getPloRadius('tl'),getPloRadius('tr'),getPloRadius('br'),getPloRadius('bl')],'OTVORI',yOff);
+        } else {
+          dxfRoundedRect(_rPD.x,_rPD.y,_rPD.w,_rPD.h,
+            getPloRadius('tl'),getPloRadius('tr'),getPloRadius('br'),getPloRadius('bl'),'OTVORI',yOff);
+        }
       }
       (customOtvori||[]).forEach(function(c){
         if(c.sides!==4||(c.loc&&c.loc!=='plate')) return;

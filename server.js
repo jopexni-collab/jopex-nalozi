@@ -67,6 +67,7 @@ app.use('/api/finansije',   requireLoginOrApiKey, require('./finansije'));
 app.use('/api/plate',       requireLoginOrApiKey, require('./plate'));
 app.use('/api/kalkulacije', requireLoginOrApiKey, require('./kalkulacije'));
 app.use('/api/roba',        requireLoginOrApiKey, require('./roba'));
+app.use('/api/analitika',   requireLoginOrApiKey, require('./analitika'));
 const otpremniceRouter = require('./otpremnice');
 app.use('/api/otpremnice',  requireLoginOrApiKey, otpremniceRouter);
 app.use('/api/kupci',       requireLoginOrApiKey, require('./kupci'));
@@ -77,7 +78,6 @@ app.use('/api/isplate', requireLoginOrApiKey, require('./isplate'));
 app.use('/api/terenske-ponude', requireLoginOrApiKey, require('./terenske-ponude'));
 app.use('/api/uplate', requireLoginOrApiKey, require('./uplate'));
 app.use('/api/blagajna-razduzenja', requireLoginOrApiKey, require('./blagajna-razduzenja'));
-app.use('/api/restlovi',    requireLoginOrApiKey, require('./restlovi'));
 // ─── Statički fajlovi ─────────────────────────────────────────────────────
 app.use((req, res, next) => {
   if (req.path.endsWith('.html')) {

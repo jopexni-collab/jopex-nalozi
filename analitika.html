@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analitika – JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f0f2f5;--border:#d0d7de;--red:#c0392b;--green:#1f8a4c;}
+*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
+body{background:var(--bg);color:#222;}
+header{background:var(--dark);color:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+header h1{font-size:18px;font-weight:700;}
+header a{color:#fff;text-decoration:none;background:rgba(255,255,255,.15);padding:6px 12px;border-radius:6px;font-size:13px;}
+.wrap{max-width:1200px;margin:0 auto;padding:14px;}
+.tabovi{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.tab-btn{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:13px;font-weight:600;color:#555;}
+.tab-btn.active{background:var(--blue);color:#fff;border-color:var(--blue);}
+.box{background:#fff;border-radius:10px;padding:16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+.box h3{font-size:15px;margin-bottom:12px;color:var(--dark);}
+.filteri{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+.filteri select,.filteri input{padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;}
+.period-chip{padding:6px 12px;border-radius:16px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:12.5px;}
+.period-chip.active{background:var(--blue);color:#fff;border-color:var(--blue);}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+thead tr{background:#1f3864;color:#fff;}
+th{padding:6px 8px;text-align:left;white-space:nowrap;}
+td{padding:5px 8px;border-bottom:1px solid #eee;}
+tbody tr:nth-child(even){background:#f7f8fa;}
+.num{text-align:right;font-variant-numeric:tabular-nums;}
+.kpi-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+.kpi{flex:1;min-width:150px;background:#fff;border-radius:10px;padding:14px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+.kpi .broj{font-size:22px;font-weight:800;color:var(--dark);}
+.kpi .lbl{font-size:11.5px;color:#8b96a5;margin-top:2px;}
+.spinner,.empty-msg{text-align:center;color:#999;padding:24px;}
+.strelica-gore{color:var(--green);}
+.strelica-dolje{color:var(--red);}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📊 Analitika</h1>
+  <a href="home.html">← Početna</a>
+</header>
+
+<div class="wrap">
+
+  <div class="tabovi">
+    <button class="tab-btn active" data-tab="protok" onclick="prebaciTab('protok')">📦 Protok robe</button>
+    <button class="tab-btn" data-tab="usloizaslo" onclick="prebaciTab('usloizaslo')">↔️ Ušlo / Izašlo</button>
+    <button class="tab-btn" data-tab="kupci" onclick="prebaciTab('kupci')">👤 Top kupci</button>
+    <button class="tab-btn" data-tab="prodavano" onclick="prebaciTab('prodavano')">🏆 Top prodavano</button>
+  </div>
+
+  <!-- ═══ PROTOK ROBE PO ARTIKLU ═══ -->
+  <div id="tab-protok">
+    <div class="box">
+      <h3>Protok jednog artikla — hronologija</h3>
+      <div class="filteri">
+        <select id="protok-objekat"><option value="">— izaberi prodajni objekat —</option></select>
+        <input type="text" id="protok-sifra" placeholder="Šifra artikla (npr. 8129)" style="width:180px;">
+        <button class="tab-btn" style="padding:7px 14px;" onclick="ucitajProtok()">🔍 Prikaži</button>
+      </div>
+      <div id="protok-sadrzaj"></div>
+    </div>
+  </div>
+
+  <!-- ═══ UŠLO / IZAŠLO ═══ -->
+  <div id="tab-usloizaslo" style="display:none;">
+    <div class="box">
+      <h3>Ušlo / Izašlo — zbirni pregled za period</h3>
+      <div class="filteri">
+        <span class="period-chip active" data-p="7" onclick="postaviPeriod(this,7)">7 dana</span>
+        <span class="period-chip" data-p="30" onclick="postaviPeriod(this,30)">30 dana</span>
+        <span class="period-chip" data-p="90" onclick="postaviPeriod(this,90)">3 meseca</span>
+        <span class="period-chip" data-p="0" onclick="postaviPeriod(this,0)">Sve</span>
+        <select id="ui-objekat" onchange="ucitajUsloIzaslo()"><option value="">— svi PJ —</option></select>
+      </div>
+      <div id="usloizaslo-sadrzaj"></div>
+    </div>
+  </div>
+
+  <!-- ═══ TOP KUPCI ═══ -->
+  <div id="tab-kupci" style="display:none;">
+    <div class="box">
+      <h3>Najbolji kupci</h3>
+      <div class="filteri">
+        <span class="period-chip" data-p="30" onclick="postaviPeriodKupci(this,30)">30 dana</span>
+        <span class="period-chip" data-p="90" onclick="postaviPeriodKupci(this,90)">3 meseca</span>
+        <span class="period-chip active" data-p="0" onclick="postaviPeriodKupci(this,0)">Sve</span>
+        <select id="kupci-objekat" onchange="ucitajTopKupci()"><option value="">— svi PJ —</option></select>
+      </div>
+      <div id="kupci-sadrzaj"></div>
+    </div>
+  </div>
+
+  <!-- ═══ TOP PRODAVANO ═══ -->
+  <div id="tab-prodavano" style="display:none;">
+    <div class="box">
+      <h3>Najprodavaniji artikli</h3>
+      <div class="filteri">
+        <span class="period-chip" data-p="30" onclick="postaviPeriodProd(this,30)">30 dana</span>
+        <span class="period-chip" data-p="90" onclick="postaviPeriodProd(this,90)">3 meseca</span>
+        <span class="period-chip active" data-p="0" onclick="postaviPeriodProd(this,0)">Sve</span>
+        <select id="prod-objekat" onchange="ucitajTopProdavano()"><option value="">— svi PJ —</option></select>
+      </div>
+      <div id="prodavano-sadrzaj"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API=location.origin;
+function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fm(n){return (+n||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fd(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('sr-Latn-BA')+' '+dt.toLocaleTimeString('sr-Latn-BA',{hour:'2-digit',minute:'2-digit'});}
+function fdKratko(d){if(!d)return'';return new Date(d).toLocaleDateString('sr-Latn-BA');}
+
+async function checkAuth(){
+  try{ const r=await fetch(`${API}/api/auth/me`); if(!r.ok) location.href='login.html'; }
+  catch(e){ location.href='login.html'; }
+}
+checkAuth();
+
+function prebaciTab(tab){
+  document.querySelectorAll('.tab-btn[data-tab]').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  ['protok','usloizaslo','kupci','prodavano'].forEach(t=>{
+    document.getElementById('tab-'+t).style.display = t===tab ? 'block' : 'none';
+  });
+  if(tab==='usloizaslo' && !uiObjektiUcitani) ucitajObjekteZa('ui-objekat', ()=>{uiObjektiUcitani=true; ucitajUsloIzaslo();});
+  if(tab==='kupci' && !kupciObjektiUcitani) ucitajObjekteZa('kupci-objekat', ()=>{kupciObjektiUcitani=true; ucitajTopKupci();});
+  if(tab==='prodavano' && !prodObjektiUcitani) ucitajObjekteZa('prod-objekat', ()=>{prodObjektiUcitani=true; ucitajTopProdavano();});
+  if(tab==='protok' && !protokObjektiUcitani) ucitajObjekteZa('protok-objekat', ()=>{protokObjektiUcitani=true;});
+}
+let uiObjektiUcitani=false, kupciObjektiUcitani=false, prodObjektiUcitani=false, protokObjektiUcitani=false;
+
+async function ucitajObjekteZa(selectId, callback){
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`);
+    const objekti=await r.json();
+    const el=document.getElementById(selectId);
+    const zadrziPrvu=el.options[0]?.outerHTML||'';
+    el.innerHTML=zadrziPrvu+objekti.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');
+  }catch(e){}
+  if(callback) callback();
+}
+
+/* ═══ PROTOK ROBE ═══ */
+async function ucitajProtok(){
+  const objektId=document.getElementById('protok-objekat').value;
+  const sifra=document.getElementById('protok-sifra').value.trim();
+  const cont=document.getElementById('protok-sadrzaj');
+  if(!objektId || !sifra){ cont.innerHTML='<div class="empty-msg">Izaberi objekat i unesi šifru.</div>'; return; }
+  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/analitika/protok-robe?sifra=${encodeURIComponent(sifra)}&objekt_id=${objektId}`);
+    const data=await r.json();
+    if(!r.ok){ cont.innerHTML=`<div class="empty-msg" style="color:var(--red);">${esc(data.error)}</div>`; return; }
+    if(!data.hronologija.length){
+      cont.innerHTML=`<div class="empty-msg">Nema zabilježenih kretanja za ${esc(data.roba.naziv)}. Trenutno stanje: ${data.trenutno_stanje??'—'} ${esc(data.roba.jed_mjera||'')}.</div>`;
+      return;
+    }
+    cont.innerHTML=`
+      <div style="margin-bottom:10px;font-size:13px;"><b>${esc(data.roba.naziv)}</b> (šifra ${esc(sifra)}) — trenutno stanje: <b>${data.trenutno_stanje} ${esc(data.roba.jed_mjera||'')}</b>, cena ${fm(data.trenutna_cijena)} KM</div>
+      <table>
+        <thead><tr><th>Kada</th><th>Tip</th><th>Ko</th><th>Napomena</th><th class="num">Promena</th><th class="num">Stanje posle</th></tr></thead>
+        <tbody>${data.hronologija.map(h=>`
+          <tr>
+            <td>${fd(h.kada)}</td>
+            <td>${esc(h.tip)}</td>
+            <td>${esc(h.korisnik_ime||'—')}</td>
+            <td>${esc(h.napomena||'')}</td>
+            <td class="num ${h.kolicina>=0?'strelica-gore':'strelica-dolje'}">${h.kolicina>=0?'+':''}${h.kolicina}</td>
+            <td class="num">${h.stanje_poslije}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }catch(e){ cont.innerHTML='<div class="empty-msg" style="color:var(--red);">Greška pri učitavanju.</div>'; }
+}
+
+/* ═══ UŠLO / IZAŠLO ═══ */
+let uiPeriod=7;
+function postaviPeriod(el,dana){
+  document.querySelectorAll('#tab-usloizaslo .period-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  uiPeriod=dana;
+  ucitajUsloIzaslo();
+}
+async function ucitajUsloIzaslo(){
+  const cont=document.getElementById('usloizaslo-sadrzaj');
+  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
+  const params=new URLSearchParams();
+  if(uiPeriod>0){
+    const danas=new Date(); const od=new Date(); od.setDate(od.getDate()-uiPeriod);
+    params.set('od', od.toISOString().split('T')[0]);
+    params.set('do', danas.toISOString().split('T')[0]);
+  }
+  const objektId=document.getElementById('ui-objekat').value;
+  if(objektId) params.set('objekt_id', objektId);
+  try{
+    const r=await fetch(`${API}/api/analitika/uslo-izaslo?${params}`);
+    const d=await r.json();
+    if(!r.ok){ cont.innerHTML=`<div class="empty-msg" style="color:var(--red);">${esc(d.error)}</div>`; return; }
+    cont.innerHTML=`
+      <div class="kpi-row">
+        <div class="kpi"><div class="broj strelica-gore">${d.uslo.broj_dogadjaja}</div><div class="lbl">Događaja ušlo (uvoz/korekcije)</div></div>
+        <div class="kpi"><div class="broj strelica-dolje">${d.izaslo.broj_otpremnica}</div><div class="lbl">Otpremnica (izašlo)</div></div>
+        <div class="kpi"><div class="broj">${fm(d.izaslo.vrijednost)} KM</div><div class="lbl">Vrednost prodatog</div></div>
+        <div class="kpi"><div class="broj">${fm(d.izaslo.kolicina)}</div><div class="lbl">Ukupna prodata količina</div></div>
+      </div>`;
+  }catch(e){ cont.innerHTML='<div class="empty-msg" style="color:var(--red);">Greška pri učitavanju.</div>'; }
+}
+
+/* ═══ TOP KUPCI ═══ */
+let kupciPeriod=0;
+function postaviPeriodKupci(el,dana){
+  document.querySelectorAll('#tab-kupci .period-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  kupciPeriod=dana;
+  ucitajTopKupci();
+}
+async function ucitajTopKupci(){
+  const cont=document.getElementById('kupci-sadrzaj');
+  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
+  const params=new URLSearchParams({limit:30});
+  if(kupciPeriod>0){
+    const danas=new Date(); const od=new Date(); od.setDate(od.getDate()-kupciPeriod);
+    params.set('od', od.toISOString().split('T')[0]);
+    params.set('do', danas.toISOString().split('T')[0]);
+  }
+  const objektId=document.getElementById('kupci-objekat').value;
+  if(objektId) params.set('objekt_id', objektId);
+  try{
+    const r=await fetch(`${API}/api/analitika/top-kupci?${params}`);
+    const rows=await r.json();
+    if(!r.ok){ cont.innerHTML=`<div class="empty-msg" style="color:var(--red);">${esc(rows.error)}</div>`; return; }
+    if(!rows.length){ cont.innerHTML='<div class="empty-msg">Nema podataka za ovaj period.</div>'; return; }
+    cont.innerHTML=`
+      <table>
+        <thead><tr><th>#</th><th>Kupac</th><th class="num">Broj otpremnica</th><th class="num">Ukupno kupio</th><th>Zadnja kupovina</th></tr></thead>
+        <tbody>${rows.map((k,i)=>`
+          <tr>
+            <td>${i+1}${i<3?' 🏆':''}</td>
+            <td><b>${esc(k.kupac_naziv)}</b></td>
+            <td class="num">${k.broj_otpremnica}</td>
+            <td class="num"><b>${fm(k.ukupno_kupio)} KM</b></td>
+            <td>${fdKratko(k.zadnja_kupovina)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }catch(e){ cont.innerHTML='<div class="empty-msg" style="color:var(--red);">Greška pri učitavanju.</div>'; }
+}
+
+/* ═══ TOP PRODAVANO ═══ */
+let prodPeriod=0;
+function postaviPeriodProd(el,dana){
+  document.querySelectorAll('#tab-prodavano .period-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  prodPeriod=dana;
+  ucitajTopProdavano();
+}
+async function ucitajTopProdavano(){
+  const cont=document.getElementById('prodavano-sadrzaj');
+  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
+  const params=new URLSearchParams({limit:30});
+  if(prodPeriod>0){
+    const danas=new Date(); const od=new Date(); od.setDate(od.getDate()-prodPeriod);
+    params.set('od', od.toISOString().split('T')[0]);
+    params.set('do', danas.toISOString().split('T')[0]);
+  }
+  const objektId=document.getElementById('prod-objekat').value;
+  if(objektId) params.set('objekt_id', objektId);
+  try{
+    const r=await fetch(`${API}/api/analitika/top-prodavano?${params}`);
+    const rows=await r.json();
+    if(!r.ok){ cont.innerHTML=`<div class="empty-msg" style="color:var(--red);">${esc(rows.error)}</div>`; return; }
+    if(!rows.length){ cont.innerHTML='<div class="empty-msg">Nema podataka za ovaj period.</div>'; return; }
+    cont.innerHTML=`
+      <table>
+        <thead><tr><th>#</th><th>Šifra</th><th>Naziv</th><th class="num">Prodato (kol.)</th><th class="num">Vrednost</th><th class="num">Br. otpremnica</th></tr></thead>
+        <tbody>${rows.map((p,i)=>`
+          <tr>
+            <td>${i+1}${i<3?' 🏆':''}</td>
+            <td>${esc(p.sifra)}</td>
+            <td>${esc(p.naziv)}</td>
+            <td class="num">${fm(p.ukupna_kolicina)}</td>
+            <td class="num"><b>${fm(p.ukupna_vrijednost)} KM</b></td>
+            <td class="num">${p.broj_otpremnica}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }catch(e){ cont.innerHTML='<div class="empty-msg" style="color:var(--red);">Greška pri učitavanju.</div>'; }
+}
+
+// Prvi tab (Protok robe) treba objekte odmah, ne čeka klik na taj tab jer je već aktivan.
+ucitajObjekteZa('protok-objekat', ()=>{protokObjektiUcitani=true;});
+</script>
+</body>
+</html>

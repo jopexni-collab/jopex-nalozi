@@ -77,6 +77,13 @@ main{max-width:700px;margin:32px auto;padding:0 16px;}
       <div class="card-arrow">→</div>
     </a>
 
+    <a href="analitika.html" class="card hidden" id="card-analitika" style="border-left:4px solid #6b4fa0;">
+      <div class="card-icon">📊</div>
+      <div class="card-title">Analitika</div>
+      <div class="card-desc">Protok robe po artiklu, ušlo/izašlo pregled, najbolji kupci, najprodavaniji artikli.</div>
+      <div class="card-arrow">→</div>
+    </a>
+
     <a href="restlovi.html" class="card hidden" id="card-restlovi" style="border-left:4px solid #8d6e63;">
       <div class="card-icon">🧩</div>
       <div class="card-title">Restlovi</div>
@@ -155,6 +162,7 @@ async function checkAuth(){
     // ima_prodaju_pj sa backend-a) — provjereno uživo preko /api/auth/me.
     if(admin || (u.moze_prodavati && u.ima_prodaju_pj)) show('card-maloprodaja');
     if(admin || u.moze_roba_magacin) show('card-roba-magacin');
+    if(admin) show('card-analitika'); // obuhvata sve PJ i sve kupce — namjerno samo admin za sada
 
     // Restlovi — gledanje ili unos (dozvole su odvojene)
     if(admin || u.moze_restlovi || u.moze_restlovi_unos) show('card-restlovi');
