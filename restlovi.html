@@ -1142,6 +1142,13 @@ function skicaCrtaj(zatvoreno, pojednostavljeno) {
 }
 function ocistiSkicu() {
   SKICA = []; PREPOZNATO = null;
+  // KRITIČNO: ranije se ovdje brisala SAMO gornja skica (platno), a TJEMENA (donji,
+  // digitalni/precizan crtež) je ostajao netaknut — zato je "Očisti" izgledalo kao da ne
+  // radi na donjem delu, ostajao je stari oblik "zaglavljen" tamo dok se ne nacrta nešto
+  // novo (a i tad bi se mogao pomiješati sa starim podatkom).
+  TJEMENA = [];
+  const svgDigital = document.getElementById('digital');
+  if (svgDigital) nacrtaj(svgDigital, null, null, null, null, null, svgDigital.getAttribute('width'), svgDigital.getAttribute('height'));
   skicaCrtaj(false, null);
   poruka2('');
 }
