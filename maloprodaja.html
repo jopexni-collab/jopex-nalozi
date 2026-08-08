@@ -3210,6 +3210,7 @@ async function loadOtpremnice(brojOverride, tiho){
                 <span style="color:var(--green);">✓ ${fmMoneyZaObjekat(o.iznos_placeno, o.objekt_id)}</span>
                 <span style="color:var(--red);">⏳ dug ${fmMoneyZaObjekat(o.ukupan_iznos-o.iznos_placeno, o.objekt_id)}</span>
               </div>`}
+          ${o.placeno_iz_avansa?`<div style="font-size:10px;color:#9a7b1f;margin-top:2px;">💳 dio naplaćeno iz avansa kupca (umanjen postojeći avans, ne stvarna nova uplata)</div>`:''}
         </div>
         <div class="otp-actions">
           <button class="btn-otp-posalji" onclick="event.stopPropagation();togglePosaljiKartica(${o.id})">📤 Pošalji kupcu</button>

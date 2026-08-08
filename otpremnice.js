@@ -281,7 +281,14 @@ router.get('/', async (req, res) => {
       ) AS novac_predat,
       EXISTS(SELECT 1 FROM otpremnica_stavke s WHERE s.otpremnica_id=o.id AND s.cijena_niza) AS ima_cijenu_nizu,
       EXISTS(SELECT 1 FROM otpremnica_stavke s WHERE s.otpremnica_id=o.id AND s.jm_promijenjena AND NOT s.cijena_niza) AS ima_jm_promjenu,
-      EXISTS(SELECT 1 FROM otpremnica_stavke s WHERE s.otpremnica_id=o.id AND s.cijena_visa) AS ima_cijenu_visu
+      EXISTS(SELECT 1 FROM otpremnica_stavke s WHERE s.otpremnica_id=o.id AND s.cijena_visa) AS ima_cijenu_visu,
+      -- Da li je BAR DIO naplate ove otpremnice pokriven iz postojećeg avansa kupca
+      -- (umjesto stvarno primljene gotovine/banke) — prikazuje se kao napomena pored
+      -- iznosa u dnevnom/nedeljnom pregledu, da se zna odakle je stvarno pokriveno.
+      EXISTS(
+        SELECT 1 FROM naplate_duga_log ndl
+        WHERE ndl.otpremnica_broj = o.broj AND ndl.izvor = 'avans' AND COALESCE(ndl.stornirano,false)=false
+      ) AS placeno_iz_avansa
       FROM otpremnice o
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY datum DESC LIMIT 300`;
@@ -299,7 +306,7 @@ router.get('/', async (req, res) => {
       rows = rows.map(row => {
         const datumReda = new Date(row.datum);
         if (datumReda >= juce) return row; // Danas/Juče — bez izmjena
-        const { ukupan_iznos, iznos_placeno, duguje, ...ostatak } = row;
+        const { ukupan_iznos, iznos_placeno, duguje, placeno_iz_avansa, ...ostatak } = row;
         return ostatak;
       });
     }
