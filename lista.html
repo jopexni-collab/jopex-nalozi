@@ -615,7 +615,7 @@ function render(){
     // "nema logike" — prikazuje se SVIMA (i adminu, koji tehnički i dalje smije da mijenja
     // za ispravke), ne samo onima kojima je funkcionalno zaključano.
     if(r.naplaceno && (c.k==='ugovorena_suma' || c.k==='avans')){
-      cell=cell.replace('<td', '<td style="opacity:.45;filter:grayscale(60%);"');
+      cell=cell.replace('<td', '<td style="background:#fffde7;"');
     }
     cell=dodajKomentarAtribut(cell, r.r_br, c.k, c.edit?.field);
     return cell;
