@@ -161,7 +161,8 @@ a.lk{color:var(--blue);text-decoration:none;}
 
 <div id="labele-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:12px;padding:20px;max-width:480px;width:92vw;max-height:82vh;overflow-y:auto;">
-    <h3 style="margin:0 0 12px;">JoPeX — <span id="labele-datum"></span></h3>
+    <h3 class="samo-ekran" style="margin:0 0 12px;">JoPeX — <span id="labele-datum"></span></h3>
+    <div class="samo-ekran" style="font-size:11px;color:#8b96a5;margin:-8px 0 10px;">Klikni na tekst bilo koje labele da ga izmeniš pre štampe.</div>
     <div id="labele-sadrzaj"></div>
     <div style="display:flex;gap:8px;margin-top:16px;">
       <button onclick="zatvoriLabele()" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--border,#ddd);background:#fff;cursor:pointer;">Zatvori</button>
@@ -179,6 +180,7 @@ a.lk{color:var(--blue);text-decoration:none;}
   #labele-modal{position:absolute;inset:0;background:#fff;}
   #labele-modal > div{max-width:none;max-height:none;box-shadow:none;padding:0;}
   #labele-modal button{display:none;}
+  .samo-ekran{display:none!important;}
   #labele-grid{grid-template-columns:repeat(2,100mm)!important;gap:5mm!important;}
   .labela-komad{width:100mm;height:50mm;box-sizing:border-box;page-break-inside:avoid;}
 }
@@ -353,9 +355,9 @@ function getCols(){
     {k:'broj_dana',l:'Dana',w:70,filter:'sel',opts:['Kasni','Danas i sutra','Ova sedmica','Ovaj mjesec','Više od mjesec','Bez datuma'],render:r=>daniC(r),edit:null},
     {k:'nova_procjena',l:'Razlog kašnjenja',w:180,filter:'text',render:r=>`<td class="note-cell${r.nova_procjena?' has-note':''}" data-note="${esc(r.nova_procjena)}">${esc(r.nova_procjena)||''}</td>`,edit:{type:'textarea',field:'nova_procjena',label:'Razlog kašnjenja'}},
     {k:'gotovo',l:'Gotovo',w:65,filter:'sel',opts:['Da','Ne'],render:r=>`<td class="center">${r.gotovo?'<span style="color:#1f8a4c;font-size:18px;font-weight:900;line-height:1">✓</span>':''}</td>`,edit:{type:'check',field:'gotovo',label:'Gotovo'}},
-    {k:'labele',l:'Labele',w:60,filter:null,render:r=>`<td class="center"><button onclick="otvoriLabele(${r.r_br})" title="Printaj labele za ovaj nalog" style="background:none;border:none;cursor:pointer;font-size:16px;">🏷️</button></td>`},
     {k:'reklamacija_dodatni_rad',l:'Rek.',w:60,filter:'sel',opts:['DA','NE'],render:r=>`<td class="center">${chipR(r.reklamacija_dodatni_rad)}</td>`,edit:{type:'select',opts:['','NE','DA'],field:'reklamacija_dodatni_rad',label:'Reklamacija'}},
     {k:'napomena',l:'Napomena',w:220,filter:'text',render:r=>`<td class="note-cell${r.napomena?' has-note':''}" data-note="${esc(r.napomena)}"><div class="clamp2-inner">${esc(r.napomena)}</div></td>`,edit:{type:'textarea',field:'napomena',label:'Napomena / upute operateru'}},
+    {k:'labele',l:'Labele',w:60,filter:null,render:r=>`<td class="center"><button onclick="otvoriLabele(${r.r_br})" title="Printaj labele za ovaj nalog" style="background:none;border:none;cursor:pointer;font-size:16px;">🏷️</button></td>`},
     {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center">${lk(r.link_skica)}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
     {k:'link_ponuda',l:'R.Nalog',w:50,filter:null,render:r=>`<td class="center">${lk(r.link_ponuda)}</td>`,edit:{type:'text',field:'link_ponuda',label:'Link radni nalog'}},
   ];
@@ -757,7 +759,10 @@ function renderStatusLogTooltip(log, polje){
   // Log dolazi sortiran najnovije-prvo — najstariji zapis (poslednji u nizu) nosi
   // "staru vrijednost" koja je zapravo ORIGINALNA vrijednost prije bilo koje promjene.
   const naziv=STATUS_LOG_NAZIVI[polje]||polje;
-  const originalna=log[log.length-1].stara_vrijednost;
+  const najstariji=log[log.length-1];
+  // Ako je najstariji zapis "kreiranje" (stara_vrijednost=NULL), prava originalna
+  // vrijednost je NOVA iz TOG reda (šta je uneseno pri pravljenju naloga) — ne prazno.
+  const originalna = najstariji.stara_vrijednost===null ? najstariji.nova_vrijednost : najstariji.stara_vrijednost;
   let html=`<div style="margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #b8d0f0;"><b>Originalno:</b> ${esc(statusLogVrijednostText(polje,originalna))}</div>`;
   html+=log.map((l,i)=>{
     const inicijali=(l.korisnik_ime||'?').split(/\s+/).map(x=>x[0]).join('').toUpperCase().slice(0,2);
@@ -767,7 +772,11 @@ function renderStatusLogTooltip(log, polje){
     // van reda bi preskočilo međukorake i zbunilo istoriju. Backend i onako ovo ponovo
     // provjerava (409 ako je nešto promijenjeno u međuvremenu).
     const undoDugme = i===0 ? `<button onclick="undoPromjenu(${komentarMeta.rBr},${l.id},'${polje}')" style="font-size:10px;padding:2px 6px;margin-left:6px;border:1px solid var(--blue,#1a5fa8);color:var(--blue,#1a5fa8);background:#fff;border-radius:4px;cursor:pointer;">↩️ Undo</button>` : '';
-    return `<div style="margin-bottom:4px;"><b>${esc(inicijali)}</b> · ${datum} · ${vrijeme}${undoDugme}<br>${esc(statusLogVrijednostText(polje,l.stara_vrijednost))} → <b>${esc(statusLogVrijednostText(polje,l.nova_vrijednost))}</b></div>`;
+    const jeKreiranje = l.stara_vrijednost===null && i===log.length-1;
+    const tekstPromjene = jeKreiranje
+      ? `✨ <b>Kreirano</b> sa: ${esc(statusLogVrijednostText(polje,l.nova_vrijednost))}`
+      : `${esc(statusLogVrijednostText(polje,l.stara_vrijednost))} → <b>${esc(statusLogVrijednostText(polje,l.nova_vrijednost))}</b>`;
+    return `<div style="margin-bottom:4px;"><b>${esc(inicijali)}</b> · ${datum} · ${vrijeme}${undoDugme}<br>${tekstPromjene}</div>`;
   }).join('');
   tip.innerHTML=`<div style="font-weight:700;margin-bottom:4px;">${esc(naziv)} — istorija</div>`+html;
   tip.style.display='block';
@@ -1334,7 +1343,7 @@ async function otvoriLabele(rBr){
   }
 
   const qrLink=`${location.origin}/lista.html?r_br=${rBr}`;
-  cont.innerHTML=(greskaPonude?`<div style="background:#fce8e6;color:var(--red,#c0392b);padding:8px 10px;border-radius:6px;font-size:11.5px;margin-bottom:10px;">⚠ Ponuda nije učitana (${esc(greskaPonude)}) — prikazana je osnovna labela sa podacima naloga.</div>`:'')
+  cont.innerHTML=(greskaPonude?`<div class="samo-ekran" style="background:#fce8e6;color:var(--red,#c0392b);padding:8px 10px;border-radius:6px;font-size:11.5px;margin-bottom:10px;">⚠ Ponuda nije učitana (${esc(greskaPonude)}) — prikazana je osnovna labela sa podacima naloga.</div>`:'')
     +`<div id="labele-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;"></div>`;
   const grid=document.getElementById('labele-grid');
   pozicije.forEach(p=>{
@@ -1343,7 +1352,7 @@ async function otvoriLabele(rBr){
     label.style='border:1px solid #333;border-radius:6px;padding:8px;display:flex;gap:8px;align-items:center;background:#fff;aspect-ratio:2/1;box-sizing:border-box;';
     label.innerHTML=`
       <div id="qr-${rBr}-${p.broj}" style="flex-shrink:0;"></div>
-      <div style="font-size:11px;line-height:1.4;overflow:hidden;">
+      <div id="txt-${rBr}-${p.broj}" contenteditable="true" spellcheck="false" style="font-size:11px;line-height:1.4;overflow:hidden;outline:none;cursor:text;border-radius:4px;padding:2px;transition:background .15s;" title="Klikni i izmeni tekst prije štampe" onfocus="this.style.background='#fff8d6'" onblur="this.style.background='transparent'">
         <b style="font-size:13px;">R.Br ${rBr}${pozicije.length>1?' — Poz. '+p.broj:''}</b><br>
         ${esc(nalog.narucilac||'')}<br>
         ${esc(p.opis)}${p.dims?' — '+esc(p.dims):''}<br>

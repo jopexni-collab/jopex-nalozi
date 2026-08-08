@@ -336,6 +336,28 @@ router.post('/', async (req, res) => {
       ];
     }
     const r = await pool.query(insertQuery, insertVals);
+    if (r.rows.length) {
+      // KRITIČNO: bez ovoga, istorija za polje koje NIKO nikad nije naknadno menjao
+      // ostaje potpuno PRAZNA — nema traga ni ko je originalno uneo tu vrednost. Ovo
+      // upisuje POČETNO stanje za sva polja koja audit trag prati (uključujući
+      // finansijska), tretirano kao "promena" od praznog ka unesenoj vrednosti — tako da
+      // "Istorija promjena" UVEK ima bar jedan red: ko je nalog napravio i sa čim.
+      const rBrNovi = r.rows[0].r_br;
+      const pocetnaPolja = {
+        zadatak, prioritet: prioritet || 'Normal', narucilac, materijal,
+        status: status || 'Nije Započeto', pocetak, planirani_zavrsetak, napomena,
+        gotovo: gotovo || false, reklamacija_dodatni_rad,
+        ugovorena_suma: ugovorena_suma ?? 0, avans: avans ?? 0,
+      };
+      for (const [kolona, vrijednost] of Object.entries(pocetnaPolja)) {
+        if (vrijednost === null || vrijednost === undefined || vrijednost === '') continue;
+        await pool.query(
+          `INSERT INTO status_promjene_log (r_br, kolona, stara_vrijednost, nova_vrijednost, korisnik_id, korisnik_ime)
+           VALUES ($1,$2,NULL,$3,$4,$5)`,
+          [rBrNovi, kolona, String(vrijednost), user?.id || null, user?.ime_prezime || (r_br_import ? 'Uvoz' : null)]
+        );
+      }
+    }
     res.status(201).json(r.rows[0]);
   } catch (err) {
     console.error(err);
