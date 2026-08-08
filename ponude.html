@@ -335,6 +335,18 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
                border-radius:6px;font:inherit;font-size:12px;font-weight:700;cursor:pointer">
         ✓ Prepoznaj oblik sa crteža</button>
       <div id="sk-poruka" style="font-size:11px;margin-top:6px;line-height:1.5"></div>
+      <!-- DONJI PROZOR: digitalizovani oblik -->
+      <div id="sk-digital-omot" style="display:none;margin-top:10px">
+        <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#1a5fa8;
+                    font-weight:700;border-bottom:1px solid #dde2ea;padding-bottom:4px;margin-bottom:6px">
+          Digitalni oblik</div>
+        <div class="hint">Tjemena <b>A B C</b> (velika) &middot; strane <b>a b c</b> (mala).
+          Dodirni tjeme ili stranu da je izabereš — povuci tjeme da ga pomjeriš.</div>
+        <svg id="sk-digital" viewBox="0 0 380 320"
+          style="width:100%;background:#fff;border:1px solid #dde2ea;border-radius:8px;
+                 touch-action:none;display:block"></svg>
+        <div id="sk-info" style="font-size:10.5px;color:#6b7a8d;margin-top:5px;text-align:center"></div>
+      </div>
       <div id="sk-tjemena"></div>
     </div>
       <div class="hint" style="margin-top:10px;font-weight:600;color:#1d8a6e">Obrada ivica ploče</div>
@@ -2677,7 +2689,7 @@ function _skCrtaj(zatvoreno,tjemena){
       c.strokeStyle='#1a5fa8'; c.lineWidth=2; c.stroke();
       c.fillStyle='#1a5fa8'; c.font='bold 10px Segoe UI,Arial';
       c.textAlign='center'; c.textBaseline='middle';
-      c.fillText(String.fromCharCode(65+k),p[0],p[1]-12);
+      c.fillText(SLOVA_T[k],p[0],p[1]-12);
     });
   }
   if(!SKICA.length&&!tjemena){
@@ -2723,10 +2735,157 @@ function skicaPrimijeni(){
   var pravih=tj.filter(function(_,i){return tjemeJePrav(tj,i);}).length;
   _skPoruka('Prepoznato <b>'+tj.length+' strana</b>, '+pravih+' pravih uglova. '
     +'<b>Sad ispravi mjere ispod</b> — brojevi su procjena sa crteža.');
-  buildSkicaPanel(); osvjeziOtvorRezim();
+  buildSkicaPanel(); crtajDigitalno(); osvjeziOtvorRezim();
   buildIvice(); buildCornerR(); buildCustomOtvoriUI(); buildSlavinaUI();
   buildItemList(); refresh();
 }
+// ══ DONJI PROZOR: digitalizovani oblik ══════════════════════════════
+// Odvojen od platna za crtanje. Tjemena su VELIKA slova (A,B,C...), strane
+// MALA (a,b,c...) - isto kao u restlovima, da se lakse dogovara sa pogonom.
+var SLOVA_T='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+var SLOVA_S='abcdefghijklmnopqrstuvwxyz';
+var SK_IZABRANO_TJEME=null, SK_IZABRANA_STRANA=null;
+var _skVucem=null, _skPreslika=null;
+function crtajDigitalno(){
+  var omot=ge('sk-digital-omot'), svg=ge('sk-digital');
+  if(!svg||!omot) return;
+  var t=(dims&&dims._tj)||[];
+  if(shape!=='SK'||t.length<3){ omot.style.display='none'; return; }
+  omot.style.display='block';
+
+  var w=380, hh=320, lijevo=54, dolje=46, gore=18, desno=46;
+  var mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
+  t.forEach(function(q){ if(q[0]<mnx)mnx=q[0]; if(q[0]>mxx)mxx=q[0];
+                         if(q[1]<mny)mny=q[1]; if(q[1]>mxy)mxy=q[1]; });
+  var sw=(mxx-mnx)||1, sh2=(mxy-mny)||1;
+  var k=Math.min((w-lijevo-desno)/sw,(hh-dolje-gore)/sh2);
+  // y se NE okrece: ostaje isti smjer kao na crtezu ploce, da se poklapa
+  var px=function(p){ return lijevo+(p[0]-mnx)*k; };
+  var py=function(p){ return gore+(p[1]-mny)*k; };
+  _skPreslika={lijevo:lijevo,gore:gore,k:k,mnx:mnx,mny:mny};
+
+  var L=px([mnx,0]), D=px([mxx,0]), G=py([0,mny]), B=py([0,mxy]);
+  var s='';
+  // pomocna ravnala - zamisljene ivice bounding boxa
+  s+='<g stroke="#b8c4d0" stroke-width="1" stroke-dasharray="4 4" fill="none">'
+    +'<line x1="'+(L-10)+'" y1="'+(B+26)+'" x2="'+(D+10)+'" y2="'+(B+26)+'"/>'
+    +'<line x1="'+(L-34)+'" y1="'+(G-10)+'" x2="'+(L-34)+'" y2="'+(B+10)+'"/></g>';
+  // kote tjemena prema ravnalima
+  t.forEach(function(p,v){
+    var x=px(p), y=py(p), izb=(SK_IZABRANO_TJEME===v);
+    s+='<g stroke="'+(izb?'#1a5fa8':'#c8d2dd')+'" stroke-width="'+(izb?1.2:0.6)
+      +'" stroke-dasharray="3 3" fill="none">'
+      +'<line x1="'+(L-34)+'" y1="'+y+'" x2="'+x+'" y2="'+y+'"/>'
+      +'<line x1="'+x+'" y1="'+y+'" x2="'+x+'" y2="'+(B+26)+'"/></g>';
+    if(izb||t.length<=8){
+      s+='<text x="'+(L-37)+'" y="'+(y-3)+'" text-anchor="end" font-size="9" fill="'
+        +(izb?'#134a85':'#9aa5b1')+'">'+Math.round(p[1]-mny)+'</text>'
+        +'<text x="'+x+'" y="'+(B+38)+'" text-anchor="middle" font-size="9" fill="'
+        +(izb?'#134a85':'#9aa5b1')+'">'+Math.round(p[0]-mnx)+'</text>';
+    }
+  });
+  // kontura
+  s+='<path d="'+t.map(function(p,i){return (i?'L':'M')+px(p).toFixed(1)+' '+py(p).toFixed(1);}).join(' ')
+    +' Z" fill="#e8f0fa" stroke="#1a5fa8" stroke-width="1.5"/>';
+  // izravnate strane - deblje i zelene, da se vidi da su fiksne
+  t.forEach(function(p,i){
+    if(!stranaJeRavna(t,i)) return;
+    var q=t[(i+1)%t.length];
+    s+='<line x1="'+px(p).toFixed(1)+'" y1="'+py(p).toFixed(1)+'" x2="'+px(q).toFixed(1)
+      +'" y2="'+py(q).toFixed(1)+'" stroke="#1f8a4c" stroke-width="4" opacity=".7"/>';
+  });
+  // TJEMENA - velika slova; prav ugao = kvadratic, kosi = narandzasti krug
+  t.forEach(function(p,v){
+    var x=px(p), y=py(p), prav=tjemeJePrav(t,v);
+    s+='<g style="cursor:pointer" onclick="skIzaberiTjeme('+v+')">'
+      +'<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="13" fill="transparent"/>'
+      +(prav?'<rect x="'+(x-4.5).toFixed(1)+'" y="'+(y-4.5).toFixed(1)+'" width="9" height="9" fill="#fff" stroke="#1f8a4c" stroke-width="1.8"/>'
+            :'<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="5" fill="#e67e22"/>')
+      +(SK_IZABRANO_TJEME===v?'<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="11" fill="none" stroke="#1a5fa8" stroke-width="1.5"/>':'')
+      +'<text x="'+(x+9).toFixed(1)+'" y="'+(y-7).toFixed(1)+'" font-size="12" font-weight="800" fill="#134a85">'+SLOVA_T[v]+'</text>'
+      +'</g>';
+  });
+  // STRANE - mala slova u krugu, ispod duzina
+  t.forEach(function(p,i){
+    var q=t[(i+1)%t.length];
+    var mx=(px(p)+px(q))/2, my=(py(p)+py(q))/2;
+    var izb=(SK_IZABRANA_STRANA===i);
+    s+='<g style="cursor:pointer" onclick="skIzaberiStranu('+i+')">'
+      +'<circle cx="'+mx.toFixed(1)+'" cy="'+my.toFixed(1)+'" r="11" fill="'+(izb?'#1a5fa8':'#fff')
+      +'" stroke="#1a5fa8" stroke-width="1.5"/>'
+      +'<text x="'+mx.toFixed(1)+'" y="'+(my+4).toFixed(1)+'" text-anchor="middle" font-size="12" '
+      +'font-weight="800" fill="'+(izb?'#fff':'#134a85')+'">'+SLOVA_S[i]+'</text>'
+      +'<text x="'+mx.toFixed(1)+'" y="'+(my+24).toFixed(1)+'" text-anchor="middle" font-size="9.5" '
+      +'fill="#6b7a8d">'+Math.round(stranaDuzina(t,i))+'</text></g>';
+  });
+  svg.innerHTML=s;
+
+  var nepravih=t.filter(function(_,v){return !tjemeJePrav(t,v);}).length;
+  var inf=ge('sk-info');
+  if(inf) inf.innerHTML=t.length+' strana &middot; '+(t.length-nepravih)+' pravih uglova &middot; '
+    +Math.round(sw)+' \u00d7 '+Math.round(sh2)+' mm &middot; povr\u0161ina '+((sw*sh2)/1e6).toFixed(3)+' m\u00b2';
+  _skVeziDigital();
+}
+function skIzaberiTjeme(v){
+  SK_IZABRANO_TJEME=(SK_IZABRANO_TJEME===v)?null:v;
+  SK_IZABRANA_STRANA=null;
+  crtajDigitalno(); buildSkicaPanel();
+}
+function skIzaberiStranu(i){
+  SK_IZABRANA_STRANA=(SK_IZABRANA_STRANA===i)?null:i;
+  SK_IZABRANO_TJEME=null;
+  crtajDigitalno(); buildSkicaPanel();
+}
+// Povlacenje tjemena prstom/misem po donjem prozoru
+function _skTackaMM(e){
+  var svg=ge('sk-digital'); if(!svg||!_skPreslika) return null;
+  var r=svg.getBoundingClientRect();
+  var t=(e.touches&&e.touches[0])||e;
+  var x=(t.clientX-r.left)*380/r.width, y=(t.clientY-r.top)*320/r.height;
+  return [(x-_skPreslika.lijevo)/_skPreslika.k+_skPreslika.mnx,
+          (y-_skPreslika.gore)/_skPreslika.k+_skPreslika.mny];
+}
+function _skVeziDigital(){
+  var svg=ge('sk-digital'); if(!svg||svg._vezano) return;
+  svg._vezano=true;
+  var poc=function(e){
+    var mm=_skTackaMM(e); if(!mm) return;
+    var t=(dims&&dims._tj)||[];
+    var naj=-1, najD=Infinity;
+    t.forEach(function(p,v){
+      var d=Math.hypot(p[0]-mm[0],p[1]-mm[1]);
+      if(d<najD){najD=d;naj=v;}
+    });
+    // hvatamo samo ako je prst dovoljno blizu tjemena
+    var prag=30/(_skPreslika?_skPreslika.k:1);
+    if(naj<0||najD>prag) return;
+    e.preventDefault();
+    _skVucem={v:naj};
+    SK_IZABRANO_TJEME=naj; SK_IZABRANA_STRANA=null;
+    crtajDigitalno();
+  };
+  var pom=function(e){
+    if(!_skVucem) return;
+    var mm=_skTackaMM(e); if(!mm) return;
+    e.preventDefault();
+    var t=dims._tj.map(function(q){return [q[0],q[1]];});
+    t[_skVucem.v]=[Math.round(mm[0]/5)*5, Math.round(mm[1]/5)*5];
+    dims._tj=t; getAct().dims=dims;
+    crtajDigitalno();
+  };
+  var kraj=function(){
+    if(!_skVucem) return;
+    _skVucem=null;
+    dims._tj=_normalizujTjemena(dims._tj); getAct().dims=dims;
+    buildSkicaPanel(); osvjeziOtvorRezim(); buildIvice(); crtajDigitalno(); refresh();
+  };
+  svg.addEventListener('mousedown',poc); svg.addEventListener('mousemove',pom);
+  svg.addEventListener('mouseup',kraj);  svg.addEventListener('mouseleave',kraj);
+  svg.addEventListener('touchstart',poc,{passive:false});
+  svg.addEventListener('touchmove',pom,{passive:false});
+  svg.addEventListener('touchend',kraj);
+}
+
 // Panel: po jedan red za svaku stranu (dužina) i ugao u tjemenu
 // Kod slobodnog oblika otvor se vezuje za stranu, pa se skriva blok sa
 // lijeva/desna/prednja/zadnja i prikazuje izbor strane.
@@ -2742,8 +2901,8 @@ function osvjeziOtvorRezim(){
     if(!sel) return;
     var tren=sel.value;
     sel.innerHTML=t.map(function(_,i){
-      var a=String.fromCharCode(65+i), b=String.fromCharCode(65+((i+1)%t.length));
-      return '<option value="'+i+'">Strana '+a+' ('+a+'\u2192'+b+', '+Math.round(stranaDuzina(t,i))+' mm)</option>';
+      var a=SLOVA_T[i], b=SLOVA_T[(i+1)%t.length];
+      return '<option value="'+i+'">Strana '+SLOVA_S[i]+' ('+a+'\u2192'+b+', '+Math.round(stranaDuzina(t,i))+' mm)</option>';
     }).join('');
     if(tren!==''&&Number(tren)<t.length) sel.value=tren;
   });
@@ -2758,8 +2917,9 @@ function buildSkicaPanel(){
     +'font:inherit;font-size:11px;font-weight:700;cursor:pointer">'
     +'⇥ Izravnaj sve skoro-ravne strane</button>';
   t.forEach(function(p,i){
-    var slovo=String.fromCharCode(65+i);
-    var sljed=String.fromCharCode(65+((i+1)%t.length));
+    var slovoS=SLOVA_S[i];                       // strana - malo slovo
+    var slovo=SLOVA_T[i];                        // tjeme na pocetku strane
+    var sljed=SLOVA_T[(i+1)%t.length];           // tjeme na kraju strane
     var duz=Math.round(stranaDuzina(t,i));
     var ug=Math.round(tjemeUgao(t,i));
     var prav=tjemeJePrav(t,i);
@@ -2770,8 +2930,11 @@ function buildSkicaPanel(){
         +(akt?'border:1px solid #1f8a4c;background:#e6f4ea;color:#1f8a4c;font-weight:700'
              :'border:1px solid #dde2ea;background:#fafbfc;color:#6b7a8d')+'">'+txt+'</button>';
     };
-    h+='<div class="ivrow" style="flex-wrap:wrap">'
-      +'<b style="color:#1a5fa8;min-width:52px">'+slovo+'\u2192'+sljed+'</b>'
+    var _izb=(SK_IZABRANA_STRANA===i||SK_IZABRANO_TJEME===i);
+    h+='<div class="ivrow" style="flex-wrap:wrap'
+      +(_izb?';background:#eef4fb;border-color:#1a5fa8':'')+'">'
+      +'<b style="color:#1a5fa8;min-width:58px">'+slovoS+' <small style="font-weight:400;color:#8a93a3">('
+      +slovo+'\u2192'+sljed+')</small></b>'
       +'<input type="number" min="1" step="1" value="'+duz+'" style="width:82px"'
       +' oninput="fixComma(this);skicaDuzina('+i+',this.value)">'
       +'<span style="font-size:10px;color:#8a93a3">mm</span>'
@@ -2797,7 +2960,8 @@ function skicaDuzina(i,val){
   if(v<=0) return;
   dims._tj=stranaPostaviDuzinu(dims._tj,i,v);
   getAct().dims=dims;
-  refresh();   // panel se NE rebuilda, da fokus ostane u polju
+  crtajDigitalno();   // donji prozor prati promjenu odmah
+  refresh();          // panel se NE rebuilda, da fokus ostane u polju
 }
 // Izravnava SVE strane koje su vec blizu vodoravne/uspravne (do 8 stepeni).
 // Kose strane se NE diraju - one su namjerne (kosi zid).
@@ -2816,7 +2980,7 @@ function skicaIzravnajSve(){
     else if(odUspr<=8){ dims._tj=stranaIzravnaj(dims._tj,i,'uspravno'); promijenjeno++; }
   }
   getAct().dims=dims;
-  buildSkicaPanel(); osvjeziOtvorRezim(); buildIvice(); refresh();
+  buildSkicaPanel(); crtajDigitalno(); osvjeziOtvorRezim(); buildIvice(); refresh();
   _skPoruka(promijenjeno
     ? ('Izravnato <b>'+promijenjeno+'</b> strana. Kose strane su ostavljene kakve jesu.')
     : 'Nema skoro-ravnih strana za izravnavanje.');
@@ -2826,14 +2990,14 @@ function skicaIzravnaj(i,smjer){
   _saveUndo();
   dims._tj=stranaIzravnaj(dims._tj,i,smjer);
   getAct().dims=dims;
-  buildSkicaPanel(); osvjeziOtvorRezim(); buildIvice(); refresh();
+  buildSkicaPanel(); crtajDigitalno(); osvjeziOtvorRezim(); buildIvice(); refresh();
 }
 
 function skicaPrav(i){
   _saveUndo();
   dims._tj=tjemePostaviPrav(dims._tj,i);
   getAct().dims=dims;
-  buildSkicaPanel(); buildIvice(); refresh();
+  buildSkicaPanel(); crtajDigitalno(); buildIvice(); refresh();
 }
 
 // ═══ SHAPE GRID ════════════════════════════════════
@@ -2917,11 +3081,12 @@ function buildDimTable(){
   if(shape==='SK'){
     con.innerHTML='';
     if(skw){ skw.style.display=''; _skVezi(); }
-    buildSkicaPanel();
+    buildSkicaPanel(); crtajDigitalno();
     osvjeziOtvorRezim();
     return;
   }
   if(skw) skw.style.display='none';
+  var _dom=ge('sk-digital-omot'); if(_dom) _dom.style.display='none';
   osvjeziOtvorRezim();
   // dims se čuva via saveDim() oninput
   var sh=getShape(shape);
@@ -3065,7 +3230,7 @@ function getIvSegs(sh,d){
     var t=(d&&d._tj)||[];
     if(t.length<3) return [];
     return t.map(function(_,i){
-      return {id:'sk'+i, lbl:String.fromCharCode(65+i), len:stranaDuzina(t,i)};
+      return {id:'sk'+i, lbl:SLOVA_S[i], len:stranaDuzina(t,i)};
     });
   }
   if(sh==='I') return [
@@ -5314,7 +5479,7 @@ function drawK(ctx,W,H){
       var a1=_tj[i], b1=_tj[(i+1)%_tj.length];
       var mx=(a1[0]+b1[0])/2*sc, my=(a1[1]+b1[1])/2*sc;
       var dx=_cx*sc-mx, dy=_cy*sc-my, dl=Math.hypot(dx,dy)||1;
-      edgeLbl(ctx,mx+dx/dl*16,my+dy/dl*16,String.fromCharCode(65+i),'sk'+i,
+      edgeLbl(ctx,mx+dx/dl*16,my+dy/dl*16,SLOVA_S[i],'sk'+i,
         Math.abs(b1[0]-a1[0])>=Math.abs(b1[1]-a1[1])?'h':'v');
       // Kota duzine strane, izmaknuta na suprotnu stranu od centra
       kota(ctx,a1[0]*sc-dx/dl*14,a1[1]*sc-dy/dl*14,b1[0]*sc-dx/dl*14,b1[1]*sc-dy/dl*14,
@@ -6912,7 +7077,7 @@ function genDXF(){
         var _tSK=(d._tj)||[];
         _tSK.forEach(function(_,i){
           var a=_tSK[i], b=_tSK[(i+1)%_tSK.length];
-          txY((a[0]+b[0])/2,(a[1]+b[1])/2,14,String.fromCharCode(65+i),'TEKST');
+          txY((a[0]+b[0])/2,(a[1]+b[1])/2,14,SLOVA_S[i],'TEKST');
         });
         bbox_h=_bbSK.h;
       } else if(sh==='G'){
