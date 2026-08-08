@@ -680,10 +680,20 @@ router.patch('/:r_br', async (req, res) => {
     ...(smijeStatus ? STATUS_POLJA : []),
     ...(smijeFinansije ? ALLOWED_ADMIN : []),
   ];
+  // Kad je nalog VEĆ naplaćen, mijenjanje ugovorene sume/avansa POSLIJE toga nema smisla
+  // — naplata je izvršena na osnovu STARIH brojeva, mijenjanje ih sad bi pokvarilo sumu
+  // bez logike (izgledalo bi kao da je nešto naplaćeno više/manje nego što stvarno jeste).
+  // Admin i dalje SMIJE, za ispravke grešaka — svi ostali su zaključani.
+  const vecNaplaceno = staroSvaPolja.naplaceno === true;
+  const zakljucanaPoljaZbogNaplate = ['ugovorena_suma', 'avans'];
+  const konacnoAllowed = (vecNaplaceno && !isAdmin)
+    ? allowed.filter(f => !zakljucanaPoljaZbogNaplate.includes(f))
+    : allowed;
+
   const sets = [], vals = [];
   let i = 1;
 
-  for (const key of allowed) {
+  for (const key of konacnoAllowed) {
     if (key in req.body) { sets.push(`${key} = $${i++}`); vals.push(req.body[key]); }
   }
 

@@ -256,6 +256,10 @@ async function undoZadnje(e){
 function mozeEditovati(field, row){
   if(!trenutniUser) return false;
   if(isAdmin) return true;
+  // Kad je nalog VEĆ naplaćen, ugovorena suma/avans se zaključavaju (mijenjanje posle
+  // naplate bi pokvarilo sumu bez logike — naplata je izvršena na osnovu starih brojeva).
+  // Admin i dalje smije, za ispravke grešaka.
+  if(row?.naplaceno && ['ugovorena_suma','avans'].includes(field)) return false;
   const finPolja=['ugovorena_suma','avans','avans_opis','za_naplatu','naplata_detalji','naplaceno','naplaceno_opis'];
   if(finPolja.includes(field)){
     // "Ponude" dozvola (moze_ugovarati) vidi/uređuje finansije SVIH naloga. Inače, samo
@@ -379,7 +383,10 @@ function getCols(){
       // Kad je plaćeno (naplaceno_iznos>0, za_naplatu palo na 0), prikaži ORIGINALNI iznos
       // koji je bio za naplatu (ugovoreno - avans, prije nego je naplaceno_iznos primijenjen)
       // precrtan linijom — jasno se vidi ŠTA je naplaćeno, ne samo prazna nula.
-      const placeno=parseFloat(r.naplaceno_iznos||0)>0.005 && parseFloat(r.za_naplatu||0)<=0.005;
+      // Precrtaj i ako je checkbox "Naplaćeno" štikliran RUČNO (npr. posle uvoza, gde
+      // naplaceno_iznos možda nikad nije stvarno upisan kroz sistem) — ne samo kad postoji
+      // stvaran naplaceno_iznos trag.
+      const placeno=r.naplaceno || (parseFloat(r.naplaceno_iznos||0)>0.005 && parseFloat(r.za_naplatu||0)<=0.005);
       const iznosPrikaz=placeno
         ? `<span style="text-decoration:line-through;text-decoration-color:#000;text-decoration-thickness:1.5px;">${fm(parseFloat(r.ugovorena_suma||0)-parseFloat(r.avans||0))}</span>`
         : fm(r.za_naplatu);
@@ -558,7 +565,11 @@ function filterRows(){
         }
         continue;
       }
-      const rv=String(r[c.k]||'');
+      // Bulean polja (naplaceno, gotovo) se u bazi čuvaju kao true/false, ali filter
+      // dropdown nudi tekst "Da"/"Ne" — String(true||'')==="true" nikad ne odgovara "Da",
+      // pa filter nikad ništa nije vraćao. Prevodi se PRIJE poređenja.
+      const buleanPolja=['naplaceno','gotovo'];
+      const rv=buleanPolja.includes(c.k) ? (r[c.k]?'Da':'Ne') : String(r[c.k]||'');
       if(c.filter==='sel'&&rv!==fv) return false;
       if(c.filter==='text'&&!rv.toLowerCase().includes(fv.toLowerCase())) return false;
     }
@@ -600,7 +611,14 @@ function render(){
     }else if(c.edit&&mozeEditovati(c.edit.field,r)){
       cell=addTdClass(cell,'editable');
     }
-    return dodajKomentarAtribut(cell, r.r_br, c.k, c.edit?.field);
+    // Vizuelni signal (sivo/izbledelo) da je nalog VEĆ naplaćen, pa ugovoreno/avans mijenjati
+    // "nema logike" — prikazuje se SVIMA (i adminu, koji tehnički i dalje smije da mijenja
+    // za ispravke), ne samo onima kojima je funkcionalno zaključano.
+    if(r.naplaceno && (c.k==='ugovorena_suma' || c.k==='avans')){
+      cell=cell.replace('<td', '<td style="opacity:.45;filter:grayscale(60%);"');
+    }
+    cell=dodajKomentarAtribut(cell, r.r_br, c.k, c.edit?.field);
+    return cell;
   }).join('')}</tr>`).join('');
 
   // Suma za "Ugovoreno" i "Za naplatu" — SAMO za redove koji NISU stornirani i za koje
