@@ -968,7 +968,24 @@ router.get('/:r_br/ponuda-json', async (req, res) => {
     const tip = odgovor.headers.get('content-type') || '';
     const tekst = await odgovor.text();
     if (!tip.includes('json') && !tekst.trim().startsWith('{')) {
-      return res.status(422).json({ error: `Link ne vodi ka JSON fajlu (izgleda kao ${tip || 'nepoznat sadržaj'}) — vjerovatno stariji/uveženi nalog bez prave digitalne ponude. Link: ${link}` });
+      // Nije JSON — ALI ako je HTML (npr. ispis naloga), izvuci ČIST TEKST umjesto da
+      // jednostavno odustanemo. Bolje nešto korisno na labeli nego prazno "nije podržano".
+      if (tip.includes('html')) {
+        // Skini <script>/<style> blokove kompletno (njihov sadržaj nije za čitanje), pa
+        // sve ostale HTML tagove, pa sažmi višestruke razmake/nove redove u jedan.
+        let cistTekst = tekst
+          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/\s+/g, ' ')
+          .trim();
+        // Ograniči dužinu — ovo ide na malu labelu, ne treba cijeli dokument.
+        if (cistTekst.length > 400) cistTekst = cistTekst.slice(0, 400) + '…';
+        return res.json({ nijeStrukturirano: true, tekst: cistTekst });
+      }
+      return res.status(422).json({ error: `Link u polju "Link ponuda" ne vodi ka JSON fajlu sa pozicijama — sadržaj je ${tip || 'nepoznatog tipa'}, i nije prepoznat kao tekst koji se može čitati. Link: ${link}` });
     }
     let json;
     try { json = JSON.parse(tekst); }
