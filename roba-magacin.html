@@ -301,6 +301,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <button type="button" class="glavni-tab-btn active" data-tab="kalkulacija" onclick="prebaciGlavniTabRM('kalkulacija')">📦 Kalkulacija</button>
   <button type="button" class="glavni-tab-btn" data-tab="lager" onclick="prebaciGlavniTabRM('lager')">📋 Lager lista</button>
   <button type="button" class="glavni-tab-btn" data-tab="uvoz-istorija" onclick="prebaciGlavniTabRM('uvoz-istorija')">🗂️ Istorija uvoza</button>
+  <button type="button" class="glavni-tab-btn" data-tab="presek" onclick="prebaciGlavniTabRM('presek')">⚖️ Presek / Usaglašavanje</button>
   <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
   <button type="button" class="glavni-tab-btn" data-tab="kretanje" onclick="prebaciGlavniTabRM('kretanje')">📈 Kretanje robe</button>
 </div>
@@ -518,6 +519,29 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <div class="uzorak-hint">Svaki red predstavlja JEDAN cijeli uvoz fajla — ne pojedinačnu stavku. Ako si nekim slučajem uvezao/la isti fajl dva puta (dupliralo stanje), klikni "Storniraj" na tom uvozu — vraća stanje robe tačno na ono što je bilo pre tog uvoza.</div>
     <select id="uvoz-ist-objekt" onchange="uvozIstorijaUcitaj()" style="margin-bottom:12px;"><option value="">— svi PJ —</option></select>
     <div id="uvoz-ist-lista"></div>
+  </div>
+</div>
+
+<div id="tab-presek" style="display:none;">
+  <div class="import-box">
+    <h3>⚖️ Presek / Usaglašavanje lagera</h3>
+    <div class="uzorak-hint">Za kad postoji PARALELNI sistem koji je duže korišćen, pa treba SVE dovesti na stvarno stanje — ne dodaje na postojeće (kao obični uvoz), nego <b>ispravlja NA tačnu vrednost</b> iz preseka, u oba smera. Ništa se ne upisuje dok ne pregledaš i eksplicitno potvrdiš svaki red.</div>
+    <select id="presek-objekat" style="margin-bottom:10px;"><option value="">— izaberi prodajni objekat —</option></select>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;">
+      <input type="file" id="presek-fajl" accept=".xlsx,.xls">
+      <button type="button" class="btn" onclick="presekUcitajPregled()">📄 Učitaj pregled</button>
+    </div>
+    <div id="presek-greska" style="display:none;background:#fce8e6;color:var(--red);padding:10px;border-radius:8px;margin-bottom:12px;white-space:pre-line;"></div>
+    <div id="presek-sazetak" style="display:none;margin-bottom:12px;"></div>
+    <div id="presek-tabela-wrap"></div>
+    <div id="presek-primeni-wrap" style="display:none;margin-top:14px;text-align:right;">
+      <button type="button" class="btn" style="background:var(--green,#1f8a4c);" onclick="presekPrimeni()">✓ Primeni usaglašavanje</button>
+    </div>
+  </div>
+  <div class="import-box" style="margin-top:16px;">
+    <h3>Istorija preseka</h3>
+    <select id="presek-ist-objekt" onchange="presekIstorijaUcitaj()" style="margin-bottom:12px;"><option value="">— svi PJ —</option></select>
+    <div id="presek-ist-lista"></div>
   </div>
 </div>
 
@@ -1848,10 +1872,12 @@ function prebaciGlavniTabRM(tab){
   document.getElementById('tab-kalkulacija').style.display = tab==='kalkulacija' ? 'block' : 'none';
   document.getElementById('tab-lager').style.display = tab==='lager' ? 'block' : 'none';
   document.getElementById('tab-uvoz-istorija').style.display = tab==='uvoz-istorija' ? 'block' : 'none';
+  document.getElementById('tab-presek').style.display = tab==='presek' ? 'block' : 'none';
   document.getElementById('tab-pj').style.display = tab==='pj' ? 'block' : 'none';
   document.getElementById('tab-kretanje').style.display = tab==='kretanje' ? 'block' : 'none';
   if(tab==='kretanje' && !kretanjeObjektiUcitani) kretanjeUcitajObjekte();
   if(tab==='uvoz-istorija') uvozIstorijaUcitaj();
+  if(tab==='presek' && !presekObjektiUcitani) presekUcitajObjekte();
 }
 
 /* ═══ ISTORIJA UVOZA — pregled i storniranje cijelih XLSX uvoza ═══ */
@@ -1892,6 +1918,191 @@ async function uvozIstorijaUcitaj(){
     `).join('');
   }catch(e){ cont.innerHTML='<div style="text-align:center;color:red;padding:20px;">Greška pri učitavanju.</div>'; }
 }
+
+/* ═══ PRESEK / USAGLAŠAVANJE — dovodi lager na stvarno stanje (razlikuje se od uvoza:
+   ne dodaje, koriguje NA tačnu vrednost u oba smera) ═══ */
+let presekObjektiUcitani=false;
+let presekStavke=[]; // trenutne stavke pregleda, sa mogućim ručnim ispravkama
+async function presekUcitajObjekte(){
+  try{
+    const r=await fetch(`${API}/api/prodajni-objekti`);
+    const objekti=await r.json();
+    const opcije='<option value="">— izaberi prodajni objekat —</option>'+
+      objekti.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');
+    document.getElementById('presek-objekat').innerHTML=opcije;
+    document.getElementById('presek-ist-objekt').innerHTML='<option value="">— svi PJ —</option>'+
+      objekti.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');
+    presekObjektiUcitani=true;
+    presekIstorijaUcitaj();
+  }catch(e){}
+}
+
+async function presekUcitajPregled(){
+  const objektId=document.getElementById('presek-objekat').value;
+  const fajlEl=document.getElementById('presek-fajl');
+  const greskaDiv=document.getElementById('presek-greska');
+  greskaDiv.style.display='none';
+  if(!objektId){ alert('Izaberi prodajni objekat.'); return; }
+  if(!fajlEl.files.length){ alert('Izaberi fajl.'); return; }
+
+  const fd=new FormData();
+  fd.append('file', fajlEl.files[0]);
+  fd.append('objekt_id', objektId);
+
+  document.getElementById('presek-tabela-wrap').innerHTML='<div class="spinner">Učitavanje i poređenje sa bazom...</div>';
+  try{
+    const r=await fetch(`${API}/api/roba/presek/pregled`,{method:'POST', body:fd});
+    const data=await r.json();
+    if(!r.ok){ greskaDiv.textContent='✗ '+data.error; greskaDiv.style.display='block'; document.getElementById('presek-tabela-wrap').innerHTML=''; return; }
+    presekStavke=data.stavke;
+    presekNazivFajla=data.naziv_fajla;
+    renderPresekSazetak();
+    renderPresekTabela();
+    document.getElementById('presek-primeni-wrap').style.display='block';
+  }catch(e){ greskaDiv.textContent='✗ Greška pri učitavanju.'; greskaDiv.style.display='block'; }
+}
+let presekNazivFajla=null;
+
+function renderPresekSazetak(){
+  const s={nova:0, povecano:0, smanjeno:0, isto:0, greska:0};
+  presekStavke.forEach(st=>{
+    if(st.status==='nova-sifra') s.nova++;
+    else if(st.status==='povecano') s.povecano++;
+    else if(st.status==='smanjeno') s.smanjeno++;
+    else if(st.status==='isto') s.isto++;
+    else if(st.status==='greska') s.greska++;
+  });
+  const sazDiv=document.getElementById('presek-sazetak');
+  sazDiv.style.display='flex';
+  sazDiv.style.cssText='display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;';
+  sazDiv.innerHTML=`
+    <span style="background:#e8f0fe;color:#1a5fa8;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;">🆕 Nove: ${s.nova}</span>
+    <span style="background:#e6f4ea;color:#1f8a4c;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;">▲ Povećano: ${s.povecano}</span>
+    <span style="background:#fce8e6;color:#c0392b;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;">▼ Smanjeno: ${s.smanjeno}</span>
+    <span style="background:#f0f2f5;color:#5a6b7a;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;">= Isto: ${s.isto}</span>
+    ${s.greska?`<span style="background:#fce8e6;color:#c0392b;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;">⚠ Greške: ${s.greska}</span>`:''}
+  `;
+}
+
+const PRESEK_STATUS_BOJA={
+  'nova-sifra':'#e8f0fe', 'povecano':'#e6f4ea', 'smanjeno':'#fce8e6', 'isto':'#fff', 'greska':'#fce8e6',
+};
+const PRESEK_STATUS_LABEL={
+  'nova-sifra':'🆕 Nova', 'povecano':'▲ Povećano', 'smanjeno':'▼ Smanjeno', 'isto':'= Isto', 'greska':'⚠ Greška',
+};
+
+function renderPresekTabela(){
+  const wrap=document.getElementById('presek-tabela-wrap');
+  wrap.innerHTML=`
+    <table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead>
+        <tr style="background:#1f3864;color:#fff;">
+          <th style="padding:4px 6px;text-align:left;">Red</th>
+          <th style="padding:4px 6px;text-align:left;">Šifra</th>
+          <th style="padding:4px 6px;text-align:left;">Naziv</th>
+          <th style="padding:4px 6px;text-align:right;">Staro stanje</th>
+          <th style="padding:4px 6px;text-align:right;">Novo stanje</th>
+          <th style="padding:4px 6px;text-align:right;">Razlika</th>
+          <th style="padding:4px 6px;text-align:right;">Stara cena</th>
+          <th style="padding:4px 6px;text-align:right;">Nova cena</th>
+          <th style="padding:4px 6px;text-align:left;">Status</th>
+        </tr>
+      </thead>
+      <tbody id="presek-tbody"></tbody>
+    </table>`;
+  const tbody=document.getElementById('presek-tbody');
+  tbody.innerHTML=presekStavke.map((s,i)=>`
+    <tr style="background:${PRESEK_STATUS_BOJA[s.status]||'#fff'};border-bottom:1px solid #eee;">
+      <td style="padding:3px 6px;color:#999;">${s.red}</td>
+      <td style="padding:3px 6px;" contenteditable="true" onblur="presekIzmeniPolje(${i},'sifra',this.textContent)">${esc(s.sifra||'')}</td>
+      <td style="padding:3px 6px;" contenteditable="true" onblur="presekIzmeniPolje(${i},'naziv',this.textContent)">${esc(s.naziv||'')}</td>
+      <td style="padding:3px 6px;text-align:right;color:#999;">${s.stanje_staro??'—'}</td>
+      <td style="padding:3px 6px;text-align:right;font-weight:700;" contenteditable="true" onblur="presekIzmeniPolje(${i},'stanje_novo',this.textContent)">${s.stanje_novo}</td>
+      <td style="padding:3px 6px;text-align:right;color:${s.razlika>0?'#1f8a4c':s.razlika<0?'#c0392b':'#999'};">${s.razlika!=null?(s.razlika>0?'+':'')+s.razlika:'—'}</td>
+      <td style="padding:3px 6px;text-align:right;color:#999;">${s.cijena_stara??'—'}</td>
+      <td style="padding:3px 6px;text-align:right;" contenteditable="true" onblur="presekIzmeniPolje(${i},'cijena_nova',this.textContent)">${s.cijena_nova}</td>
+      <td style="padding:3px 6px;">${PRESEK_STATUS_LABEL[s.status]||s.status}${s.greske?.length?`<div style="color:#c0392b;font-size:10px;">${s.greske.join('; ')}</div>`:''}</td>
+    </tr>
+  `).join('');
+}
+
+// Ručna ispravka bilo kog polja u pregledu — PRE primene. Ako se šifra ili stanje
+// promeni, status/razlika se preračunavaju lokalno (bez ponovnog odlaska na server).
+function presekIzmeniPolje(indeks, polje, vrijednost){
+  const s=presekStavke[indeks];
+  if(polje==='stanje_novo'||polje==='cijena_nova'){
+    s[polje]=parseFloat(String(vrijednost).replace(',','.'))||0;
+  }else{
+    s[polje]=vrijednost.trim();
+  }
+  if(polje==='stanje_novo' && s.stanje_staro!=null){
+    s.razlika=+(s.stanje_novo-s.stanje_staro).toFixed(3);
+    s.status=Math.abs(s.razlika)<0.001?'isto':(s.razlika>0?'povecano':'smanjeno');
+  }
+  if(polje==='sifra'){
+    if(!/^\d{1,6}$/.test(s.sifra)){ s.status='greska'; s.greske=['šifra mora biti broj']; }
+  }
+  renderPresekSazetak();
+  renderPresekTabela();
+}
+
+async function presekPrimeni(){
+  const objektId=document.getElementById('presek-objekat').value;
+  const brojZaPrimjenu=presekStavke.filter(s=>s.status!=='greska').length;
+  if(!confirm(`Primeniti usaglašavanje za ${brojZaPrimjenu} stavki? Redovi sa greškom se preskaču (ostaju kako su bili). Ovo se može stornirati kao celina posle.`)) return;
+  try{
+    const r=await fetch(`${API}/api/roba/presek/primeni`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ objekt_id:objektId, stavke:presekStavke, naziv_fajla:presekNazivFajla }),
+    });
+    const data=await r.json();
+    if(!r.ok){ alert('✗ '+data.error); return; }
+    alert(`✓ Usaglašeno — ${data.novih} novih, ${data.povecanih} povećano, ${data.smanjenih} smanjeno.`);
+    presekStavke=[];
+    document.getElementById('presek-tabela-wrap').innerHTML='';
+    document.getElementById('presek-sazetak').style.display='none';
+    document.getElementById('presek-primeni-wrap').style.display='none';
+    document.getElementById('presek-fajl').value='';
+    presekIstorijaUcitaj();
+  }catch(e){ alert('✗ Greška pri primeni.'); }
+}
+
+async function presekIstorijaUcitaj(){
+  const cont=document.getElementById('presek-ist-lista');
+  cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Učitavanje...</div>';
+  try{
+    const objektId=document.getElementById('presek-ist-objekt').value;
+    const params=objektId?`?objekt_id=${objektId}`:'';
+    const r=await fetch(`${API}/api/roba/presek-batch${params}`);
+    const rows=await r.json();
+    if(!rows.length){ cont.innerHTML='<div style="text-align:center;color:#999;padding:20px;">Nema zabilježenih preseka.</div>'; return; }
+    cont.innerHTML=rows.map(b=>`
+      <div style="border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;margin-bottom:8px;${b.stornirano?'opacity:.55;':''}">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <div><b>${esc(b.objekt_naziv||'—')}</b> — ${esc(b.naziv_fajla||'(bez naziva fajla)')}</div>
+          ${b.stornirano
+            ? `<span style="color:var(--red,#c0392b);font-size:11.5px;font-weight:700;">✕ Stornirano ${fd(b.stornirano_kada)} — ${esc(b.stornirao_ime||'')}</span>`
+            : `<button class="btn-sm" onclick="presekStorniraj(${b.id})" style="background:var(--red,#c0392b);color:#fff;">✕ Storniraj ceo presek</button>`}
+        </div>
+        <div style="font-size:11.5px;color:#8b96a5;margin-top:4px;">
+          ${fd(b.kreirano)} · ${esc(b.korisnik_ime||'')} · ${b.broj_stavki} stavki (${b.broj_novih} novih, ${b.broj_povecanih} povećano, ${b.broj_smanjenih} smanjeno, ${b.broj_nepromijenjenih} nepromenjeno)
+        </div>
+      </div>
+    `).join('');
+  }catch(e){ cont.innerHTML='<div style="text-align:center;color:red;padding:20px;">Greška pri učitavanju.</div>'; }
+}
+
+async function presekStorniraj(id){
+  if(!confirm('Stornirati ceo presek? Ovo vraća stanje robe (za sve stavke iz tog preseka) tačno na ono što je bilo PRE preseka.')) return;
+  try{
+    const r=await fetch(`${API}/api/roba/presek-batch/${id}/storniraj`,{method:'POST'});
+    const data=await r.json();
+    if(!r.ok){ alert('✗ '+data.error); return; }
+    alert(`✓ Storno uspešan — vraćeno ${data.stavki_stornirano} stavki na prethodno stanje.`);
+    presekIstorijaUcitaj();
+  }catch(e){ alert('✗ Greška pri storniranju.'); }
+}
+
 async function uvozStorniraj(id){
   if(!confirm('Stornirati ovaj CEO uvoz? Ovo vraća stanje robe (za sve stavke iz tog uvoza) tačno na ono što je bilo PRE uvoza. Ako je nešto od te robe u međuvremenu prodato, storno će biti odbijen.')) return;
   try{

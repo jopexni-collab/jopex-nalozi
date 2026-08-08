@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('./db');
 const multer = require('multer');
 const XLSX = require('xlsx');
+const presekUvoz = require('./presek-uvoz');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
@@ -1133,6 +1134,223 @@ router.put('/lager-pragovi', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/roba/presek/pregled — čita XLSX, upoređuje SVAKI red sa TRENUTNIM stanjem u
+// bazi, vraća potpun pregled (NIŠTA se ne upisuje ovdje). Frontend prikazuje ovo kao
+// Excel-stil tabelu, korisnik ispravlja šta treba, TEK ONDA se zove /primeni.
+router.post('/presek/pregled', upload.single('file'), async (req, res) => {
+  if (req.session?.user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin.' });
+  try {
+    const objektId = req.body.objekt_id;
+    if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat.' });
+    if (!req.file) return res.status(400).json({ error: 'Nema fajla.' });
+
+    const { redovi } = presekUvoz.citajList(req.file.buffer, req.body.list);
+    const { greska, stavke } = presekUvoz.pripremi(redovi);
+    if (greska) return res.status(400).json({ error: greska });
+
+    // Za SVAKI red koji je uspješno parsiran (ima šifru), uporedi sa bazom.
+    const sifre = stavke.filter(s => s.status !== 'greska').map(s => s.sifra);
+    let postojeci = new Map();
+    if (sifre.length) {
+      const r = await pool.query(
+        `SELECT r.sifra, r.id AS roba_id, r.naziv, r.grupa, r.jed_mjera, rp.stanje, rp.cijena
+         FROM roba r LEFT JOIN roba_pj rp ON rp.roba_id = r.id AND rp.objekt_id = $1
+         WHERE r.sifra = ANY($2::text[])`,
+        [objektId, sifre]
+      );
+      r.rows.forEach(row => postojeci.set(row.sifra, row));
+    }
+
+    const konacno = stavke.map(s => {
+      if (s.status === 'greska') return s;
+      const p = postojeci.get(s.sifra);
+      if (!p) {
+        return { ...s, status: 'nova-sifra', roba_id: null, stanje_staro: null, cijena_stara: null };
+      }
+      const stanjeStaro = parseFloat(p.stanje || 0);
+      const razlika = +(s.stanje_novo - stanjeStaro).toFixed(3);
+      let noviStatus;
+      if (Math.abs(razlika) < 0.001) noviStatus = 'isto';
+      else if (razlika > 0) noviStatus = 'povecano';
+      else noviStatus = 'smanjeno';
+      return {
+        ...s, status: noviStatus, roba_id: p.roba_id,
+        stanje_staro: stanjeStaro, cijena_stara: parseFloat(p.cijena || 0),
+        razlika, naziv: s.naziv || p.naziv, grupa: s.grupa || p.grupa, jm: s.jm || p.jed_mjera,
+      };
+    });
+
+    res.json({ stavke: konacno, naziv_fajla: req.file.originalname });
+  } catch (err) {
+    res.status(500).json({ error: 'Greška: ' + err.message });
+  }
+});
+
+// POST /api/roba/presek/primeni — prima KONAČNE (možda ručno ispravljene na frontend-u)
+// redove i upisuje razliku. Ništa se ne briše — samo se DODAJE korekcija (pozitivna ili
+// negativna) kao nov roba_kretanja red, grupisano u presek_batch (može se pregledati i
+// stornirati kao cjelina, isti obrazac kao uvoz_batch).
+router.post('/presek/primeni', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin.' });
+  const { objekt_id, stavke, naziv_fajla } = req.body || {};
+  if (!objekt_id || !Array.isArray(stavke) || !stavke.length)
+    return res.status(400).json({ error: 'Nema stavki za primjenu.' });
+
+  const user = req.session.user;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const objRes = await client.query('SELECT naziv FROM prodajni_objekti WHERE id=$1', [objekt_id]);
+    const batchRes = await client.query(
+      `INSERT INTO presek_batch (objekt_id, objekt_naziv, naziv_fajla, korisnik_id, korisnik_ime)
+       VALUES ($1,$2,$3,$4,$5) RETURNING id`,
+      [objekt_id, objRes.rows[0]?.naziv || null, naziv_fajla || null, user.id, user.ime_prezime]
+    );
+    const batchId = batchRes.rows[0].id;
+
+    let novih = 0, povecanih = 0, smanjenih = 0, nepromijenjenih = 0;
+
+    for (const s of stavke) {
+      if (s.status === 'greska' || s.status === 'isto') { if (s.status === 'isto') nepromijenjenih++; continue; }
+      if (!s.sifra || !/^\d{1,6}$/.test(String(s.sifra))) continue; // sigurnosna provjera i ovdje, ne samo na frontendu
+
+      let robaId = s.roba_id;
+      if (!robaId) {
+        // Nova šifra — kreiraj artikal (isti obrazac kao postojeći uvoz za novu šifru).
+        const noviArtikal = await client.query(
+          `INSERT INTO roba (sifra, naziv, grupa, jed_mjera)
+           VALUES ($1,$2,$3,$4)
+           ON CONFLICT (sifra) DO UPDATE SET naziv=EXCLUDED.naziv
+           RETURNING id`,
+          [s.sifra, s.naziv || s.sifra, s.grupa || null, s.jm || 'kom']
+        );
+        robaId = noviArtikal.rows[0].id;
+        novih++;
+      } else if (s.status === 'povecano') povecanih++;
+      else if (s.status === 'smanjeno') smanjenih++;
+
+      const stanjeNovo = parseFloat(s.stanje_novo) || 0;
+      const cijenaNova = parseFloat(s.cijena_nova) || 0;
+
+      await client.query(
+        `INSERT INTO roba_pj (roba_id, objekt_id, cijena, stanje)
+         VALUES ($1,$2,$3,$4)
+         ON CONFLICT (roba_id, objekt_id) DO UPDATE SET cijena=$3, stanje=$4, azurirano=now()`,
+        [robaId, objekt_id, cijenaNova, stanjeNovo]
+      );
+
+      const staroStanje = parseFloat(s.stanje_staro) || 0;
+      const razlika = +(stanjeNovo - staroStanje).toFixed(3);
+      if (Math.abs(razlika) > 0.001) {
+        await client.query(
+          `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_nova, napomena, korisnik_id, korisnik_ime, presek_batch_id)
+           VALUES ($1,$2,'korekcija-preseka',$3,$4,$5,$6,$7,$8)`,
+          [robaId, objekt_id, razlika, cijenaNova,
+           `Presek/usaglašavanje — staro stanje ${staroStanje}, novo ${stanjeNovo}`,
+           user.id, user.ime_prezime, batchId]
+        );
+      }
+    }
+
+    await client.query(
+      `UPDATE presek_batch SET broj_stavki=$1, broj_novih=$2, broj_povecanih=$3, broj_smanjenih=$4, broj_nepromijenjenih=$5 WHERE id=$6`,
+      [stavke.length, novih, povecanih, smanjenih, nepromijenjenih, batchId]
+    );
+
+    await client.query('COMMIT');
+    res.json({ ok: true, batch_id: batchId, novih, povecanih, smanjenih, nepromijenjenih });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: 'Greška: ' + err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// GET /api/roba/presek-batch?objekt_id=X — istorija preseka (za pregled/storniranje),
+// isti obrazac kao uvoz-batch.
+router.get('/presek-batch', async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  try {
+    const { objekt_id } = req.query;
+    let where = '';
+    let vals = [];
+    if (objekt_id) { where = 'WHERE objekt_id=$1'; vals.push(objekt_id); }
+    const r = await pool.query(`SELECT * FROM presek_batch ${where} ORDER BY kreirano DESC LIMIT 100`, vals);
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/roba/presek-batch/:id/storniraj — poništava CIJEL presek kao cjelinu, vraća
+// stanje na ono PRIJE preseka (oduzima upisanu razliku). Isti obrazac (i sigurnosna
+// provjera ispod nule) kao uvoz-batch storniraj.
+router.post('/presek-batch/:id/storniraj', async (req, res) => {
+  const user = req.session?.user;
+  if (user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin može stornirati presek.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const batchRes = await client.query('SELECT * FROM presek_batch WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!batchRes.rows.length) throw Object.assign(new Error('Presek nije pronađen.'), { status: 404 });
+    const batch = batchRes.rows[0];
+    if (batch.stornirano) throw Object.assign(new Error('Ovaj presek je već storniran.'), { status: 400 });
+
+    const stavke = await client.query(
+      `SELECT roba_id, objekt_id, SUM(kolicina) AS kolicina
+       FROM roba_kretanja WHERE presek_batch_id=$1 GROUP BY roba_id, objekt_id`,
+      [req.params.id]
+    );
+    if (!stavke.rows.length) throw Object.assign(new Error('Nema stavki za ovaj presek.'), { status: 400 });
+
+    const robaIds = stavke.rows.map(s => s.roba_id);
+    const objektIds = stavke.rows.map(s => s.objekt_id);
+    const kolicine = stavke.rows.map(s => parseFloat(s.kolicina));
+
+    const provjera = await client.query(`
+      SELECT v.roba_id, v.objekt_id, v.kolicina AS presek_kolicina,
+             r.sifra, r.naziv, COALESCE(rp.stanje,0) AS stanje
+      FROM unnest($1::int[], $2::int[], $3::numeric[]) AS v(roba_id, objekt_id, kolicina)
+      JOIN roba r ON r.id = v.roba_id
+      LEFT JOIN roba_pj rp ON rp.roba_id = v.roba_id AND rp.objekt_id = v.objekt_id
+    `, [robaIds, objektIds, kolicine]);
+
+    const problemi = [];
+    for (const row of provjera.rows) {
+      if (parseFloat(row.stanje) - parseFloat(row.presek_kolicina) < -0.001) {
+        problemi.push(`${row.sifra} (${row.naziv}): na stanju ${row.stanje}, presek je dodao ${row.presek_kolicina} — dio je već prodat/premešten, ne može se stornirati automatski.`);
+      }
+    }
+    if (problemi.length) throw Object.assign(new Error('Storno odbijen — sledeće stavke bi pale ispod nule:\n' + problemi.join('\n')), { status: 409 });
+
+    await client.query(`
+      UPDATE roba_pj SET stanje = stanje - v.kolicina, azurirano = now()
+      FROM unnest($1::int[], $2::int[], $3::numeric[]) AS v(roba_id, objekt_id, kolicina)
+      WHERE roba_pj.roba_id = v.roba_id AND roba_pj.objekt_id = v.objekt_id
+    `, [robaIds, objektIds, kolicine]);
+
+    await client.query(`
+      INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, napomena, korisnik_id, korisnik_ime, presek_batch_id)
+      SELECT v.roba_id, v.objekt_id, 'storno-preseka', -v.kolicina, $4, $5, $6, $7
+      FROM unnest($1::int[], $2::int[], $3::numeric[]) AS v(roba_id, objekt_id, kolicina)
+    `, [robaIds, objektIds, kolicine, `Storno preseka #${batch.id} (${batch.naziv_fajla || ''})`, user.id, user.ime_prezime, batch.id]);
+
+    await client.query(
+      `UPDATE presek_batch SET stornirano=true, stornirao_id=$1, stornirao_ime=$2, stornirano_kada=now() WHERE id=$3`,
+      [user.id, user.ime_prezime, batch.id]
+    );
+
+    await client.query('COMMIT');
+    res.json({ ok: true, stavki_stornirano: stavke.rows.length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
