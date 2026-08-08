@@ -947,16 +947,6 @@ function tackaUMm(e) {
 }
 
 function samoPoligon() {
-  // KRITIČNO: ova provjera odlučuje da li se temena mogu prevlačiti (vidi
-  // pocniVucenje/vuci ispod). Ranije je UVIJEK gledala "n_oblik" padajuću listu, koja
-  // pripada SAMO "Novi komad" tabu — kad je editor prebačen u "Traži komad" (EDITOR_GDJE
-  // === 'trazi'), ta lista je nepovezana/zastarjela za taj kontekst, pa je prevlačenje u
-  // pretrazi bilo nepouzdano (radilo je slučajno, zavisno od toga šta je "n_oblik" ranije
-  // slučajno imao kao vrijednost, ne od stvarnog stanja pretrage).
-  if (EDITOR_GDJE === 'trazi') {
-    const cb = document.getElementById('t_nacrtaj');
-    return !!(cb && cb.checked);
-  }
   const i = document.getElementById('n_oblik');
   return i && i.value === 'poligon';
 }
@@ -1152,13 +1142,6 @@ function skicaCrtaj(zatvoreno, pojednostavljeno) {
 }
 function ocistiSkicu() {
   SKICA = []; PREPOZNATO = null;
-  // KRITIČNO: ranije se ovdje brisala SAMO gornja skica (platno), a TJEMENA (donji,
-  // digitalni/precizan crtež) je ostajao netaknut — zato je "Očisti" izgledalo kao da ne
-  // radi na donjem delu, ostajao je stari oblik "zaglavljen" tamo dok se ne nacrta nešto
-  // novo (a i tad bi se mogao pomiješati sa starim podatkom).
-  TJEMENA = [];
-  const svgDigital = document.getElementById('digital');
-  if (svgDigital) nacrtaj(svgDigital, null, null, null, null, null, svgDigital.getAttribute('width'), svgDigital.getAttribute('height'));
   skicaCrtaj(false, null);
   poruka2('');
 }
