@@ -1545,6 +1545,7 @@ function rucniUnosResetujNaSifruUnos(){
   document.getElementById('rucni-unos-sifra-input').style.display='block';
   document.getElementById('rucni-unos-naziv').style.display='none';
   document.getElementById('rucni-unos-polja').style.display='none';
+  document.getElementById('rucni-unos-novo-stanje').placeholder='Novo stanje...'; // vraća generički tekst dok se ne nadje sledeća šifra
   document.getElementById('rucni-unos-btn-novi').style.display='none';
   document.getElementById('rucni-unos-btn-zavrsi').style.display='none';
   document.getElementById('rucni-unos-popup-greska').style.display='none';
@@ -1574,6 +1575,9 @@ function rucniUnosOtvoriPopupZaStavku(stavka){
 
   document.getElementById('rucni-unos-polja').style.display='block';
   document.getElementById('rucni-unos-staro').textContent=`${stavka.stanje} ${stavka.jed_mjera||''}`;
+  // Placeholder = STARA količina (sivo, ne generički tekst) — vizuelni podsetnik da je ovo
+  // baš to polje (u brzini se lako pomiješa sa poljem za šifru).
+  document.getElementById('rucni-unos-novo-stanje').placeholder=`trenutno: ${stavka.stanje}`;
   document.getElementById('rucni-unos-novo-stanje').value='';
   document.getElementById('rucni-unos-nova-cijena').value=stavka.cijena;
   document.getElementById('rucni-unos-btn-novi').style.display='block';
@@ -1583,7 +1587,15 @@ function rucniUnosOtvoriPopupZaStavku(stavka){
   // renderovanoj tabeli.
   const redovi=document.querySelectorAll('#lager-tbody tr');
   let ciljaniRed=null;
-  redovi.forEach(tr=>{ if(tr.textContent.includes(stavka.sifra)) ciljaniRed=ciljaniRed||tr; });
+  // KRITIČNO: traži TAČNO poklapanje SAMO u prvoj koloni (šifra) — ranije je tražilo
+  // "7900" BILO GDE u tekstu celog reda (npr. neka DRUGA stavka ima 7.900,00 u koloni
+  // "Ukupno" i pogrešno bi se poklopila PRE prave šifre, pa bi skrolovanje otišlo na
+  // pogrešan red).
+  redovi.forEach(tr=>{
+    if(ciljaniRed) return;
+    const prvaCelija=tr.querySelector('td:first-child');
+    if(prvaCelija && prvaCelija.textContent.trim()===stavka.sifra) ciljaniRed=tr;
+  });
   if(ciljaniRed){
     ciljaniRed.scrollIntoView({behavior:'smooth', block:'center'});
     ciljaniRed.style.outline='2px solid var(--blue,#1a5fa8)';
