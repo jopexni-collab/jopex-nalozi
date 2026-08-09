@@ -393,12 +393,12 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
           <div class="fg"><label>Širina upuštanja (mm)</label><input type="text" inputmode="decimal" id="sud-step" value="5" oninput="fixComma(this);refresh()"></div>
         </div>
         <div id="sud-strana-red" style="display:none">
-          <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Slobodan oblik — otvor se mjeri OD IZABRANE STRANE (okomito na nju)</div>
+          <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Slobodan oblik — X i Y se mjere od zamišljenih linija (lijeva i gornja ivica okvira). Otvor može biti sa bilo koje strane.</div>
           <div class="r2">
-            <div class="fg"><label>Uz stranu</label><select id="sud-strana" onchange="refresh()"></select></div>
-            <div class="fg"><label>Odmak od strane (mm)</label><input type="number" id="sud-odmak" value="50" min="0" oninput="fixComma(this);refresh()"></div>
+            <div class="fg"><label>Orijentacija otvora</label><select id="sud-orij" onchange="refresh()"><option value="vodoravno">↔ Paralelno vodoravno</option><option value="uspravno">↕ Paralelno uspravno</option></select></div>
+            <div class="fg"><label>Y — od zamišljene vodoravne (mm)</label><input type="number" id="sud-odmak" value="50" oninput="fixComma(this);refresh()"></div>
           </div>
-          <div class="fg"><label>Pomak duž strane, od početnog tjemena (mm)</label><input type="number" id="sud-duz" value="200" min="0" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>X — od zamišljene uspravne (mm)</label><input type="number" id="sud-duz" value="200" oninput="fixComma(this);refresh()"></div>
         </div>
         <div id="sud-osa-red"><div class="hint">Pozicija otvora — biraj od koje se STVARNE ivice kraka mjeri</div>
         <div class="r2">
@@ -465,12 +465,12 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
           <div class="fg"><label>Širina upuštanja (mm)</label><input type="text" inputmode="decimal" id="plo-step" value="5" oninput="fixComma(this);refresh()"></div>
         </div>
         <div id="plo-strana-red" style="display:none">
-          <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Slobodan oblik — otvor se mjeri OD IZABRANE STRANE (okomito na nju)</div>
+          <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Slobodan oblik — X i Y se mjere od zamišljenih linija (lijeva i gornja ivica okvira). Otvor može biti sa bilo koje strane.</div>
           <div class="r2">
-            <div class="fg"><label>Uz stranu</label><select id="plo-strana" onchange="refresh()"></select></div>
-            <div class="fg"><label>Odmak od strane (mm)</label><input type="number" id="plo-odmak" value="50" min="0" oninput="fixComma(this);refresh()"></div>
+            <div class="fg"><label>Orijentacija otvora</label><select id="plo-orij" onchange="refresh()"><option value="vodoravno">↔ Paralelno vodoravno</option><option value="uspravno">↕ Paralelno uspravno</option></select></div>
+            <div class="fg"><label>Y — od zamišljene vodoravne (mm)</label><input type="number" id="plo-odmak" value="50" oninput="fixComma(this);refresh()"></div>
           </div>
-          <div class="fg"><label>Pomak duž strane, od početnog tjemena (mm)</label><input type="number" id="plo-duz" value="1000" min="0" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>X — od zamišljene uspravne (mm)</label><input type="number" id="plo-duz" value="1000" oninput="fixComma(this);refresh()"></div>
         </div>
         <div id="plo-osa-red"><div class="hint">Pozicija otvora — biraj od koje se STVARNE ivice kraka mjeri</div>
         <div class="r2">
@@ -769,7 +769,13 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <div style="display:flex;align-items:center;justify-content:space-between;
                   margin-bottom:8px;flex-wrap:wrap;gap:8px">
         <b style="font-size:13px;color:#134a85">✎ Dotjerivanje oblika</b>
-        <div id="sk-veliki-info" style="font-size:11px;color:#6b7a8d"></div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div id="sk-veliki-info" style="font-size:11px;color:#6b7a8d"></div>
+          <button type="button" onclick="undo()" title="Poništi zadnju izmjenu (Ctrl+Z)"
+            style="font:inherit;font-size:11px;padding:5px 12px;border:1px solid #c0392b;
+                   background:#fce8e6;color:#c0392b;border-radius:5px;cursor:pointer;
+                   font-weight:600;flex-shrink:0">↩ Undo</button>
+        </div>
       </div>
       <div style="font-size:11px;color:#6b7a8d;margin-bottom:8px;line-height:1.5">
         Tjemena <b>A B C</b> &middot; strane <b>a b c</b>.
@@ -1803,6 +1809,9 @@ var _undoStack=[];  // undo historija
 var _undoMax=20;    // max koraka
 
 function _saveUndo(){
+  // Snima i HTML polja aktivne stavke, inace bi Undo vratio tjemena ali
+  // ostavio stare vrijednosti otvora (koje zive u DOM inputima).
+  try{ if(items.length) saveItemInputs(); }catch(e){}
   _undoStack.push({
     items:JSON.parse(JSON.stringify(items)),
     activeIdx:activeIdx
@@ -1822,7 +1831,9 @@ function undo(){
     var bl=ge('blok-'+x); if(bl) bl.className='blok'+(x===tip?' on':'');
   });
   buildShapeGrid();buildDimTable();buildWallGrid();
-  buildExtSection();buildIvice();buildCornerR();buildCustomOtvoriUI();buildSlavinaUI();buildItemList();refresh();
+  buildExtSection();buildIvice();buildCornerR();buildCustomOtvoriUI();buildSlavinaUI();
+  try{ buildSkicaPanel(); crtajDigitalno(); osvjeziOtvorRezim(); }catch(e){}
+  buildItemList();refresh();
 }         // lista svih stavki
 var activeIdx=0;      // indeks aktivne stavke
 
@@ -1914,7 +1925,7 @@ function getItemInputIds(t){
               'k-ugr','k-mer','cb-sud','cb-plo',
               'sud-t','plo-t','sud-dub','sud-step','plo-dub','plo-step','k-nap','k-narucilac','k-ugovorio','mat-naziv','mat-c',
               'sud-xref','sud-yref','plo-xref','plo-yref',
-              'sud-strana','sud-duz','sud-odmak','plo-strana','plo-duz','plo-odmak',
+              'sud-orij','sud-duz','sud-odmak','plo-orij','plo-duz','plo-odmak',
               'sud-r-tl-sel','sud-r-tl-inp','sud-r-tr-sel','sud-r-tr-inp',
               'sud-r-br-sel','sud-r-br-inp','sud-r-bl-sel','sud-r-bl-inp',
               'plo-r-tl-sel','plo-r-tl-inp','plo-r-tr-sel','plo-r-tr-inp',
@@ -2190,12 +2201,12 @@ function _rjesiOtvorMM(w,h,ux,uy,xref,yref,stranaIdx){
   if(sh==='SK'){
     var t=(d&&d._tj)||[];
     if(t.length<3) return {x:0,y:0,w:w,h:h,left:0,right:0,front:0,back:0,pts:null};
-    var si=Math.max(0,Math.min(stranaIdx||0,t.length-1));
-    var pts=otvorUzStranu(t,si,ux,uy,w,h);
+    // ux,uy su sada X i Y od ZAMISLJENIH linija (lijeva/gornja ivica okvira),
+    // a stranaIdx nosi orijentaciju otvora (string).
+    var pts=otvorPoOrijentaciji(ux,uy,w,h,stranaIdx);
     var bb=_bbPoly(pts);
-    var f=_stranaOkvir(t,si);
-    return {x:bb.x,y:bb.y,w:bb.w,h:bb.h, pts:pts, strana:si,
-            left:0,right:f.len,front:0,back:0};
+    return {x:bb.x,y:bb.y,w:bb.w,h:bb.h, pts:pts, orij:stranaIdx,
+            left:0,right:_bbMM('SK',d,0).w,front:_bbMM('SK',d,0).h,back:0};
   }
   var outl=getShapeOutline(sh,d,vo), flip=_isYFlipped(sh,vo);
   var bb=_bbMM(sh,d,vo);
@@ -2233,6 +2244,36 @@ function _stranaOkvir(t,i){
   if((cx-mx)*nx+(cy-my)*ny<0){ nx=-nx; ny=-ny; }
   return {ax:a[0],ay:a[1],ux:ux,uy:uy,nx:nx,ny:ny,len:L};
 }
+// ── ORIJENTACIJA OTVORA ──────────────────────────────────────────
+// Otvor se pozicionira od ZAMISLJENIH linija (lijeva/gornja ivica okvira
+// oblika), a zasebno se bira kako je OKRENUT:
+//   'vodoravno'  - stranice otvora paralelne sa x/y osom
+//   'uspravno'   - zaokrenut 90 stepeni
+//   'strana:N'   - paralelan sa stranom N (za kose zidove)
+// Time otvor moze biti na BILO KOJOJ strani zamisljene linije - ranije je
+// isao samo "unutra" jer se racunao po normali strane.
+function _ugaoOrijentacije(orij){
+  var t=(dims&&dims._tj)||[];
+  if(!orij||orij==='vodoravno') return 0;
+  if(orij==='uspravno') return Math.PI/2;
+  var m=String(orij).match(/^strana:(\d+)$/);
+  if(m && t.length>=3){
+    var i=Math.max(0,Math.min(parseInt(m[1],10),t.length-1));
+    var a=t[i], b=t[(i+1)%t.length];
+    return Math.atan2(b[1]-a[1],b[0]-a[0]);
+  }
+  return 0;
+}
+// Otvor zadan gornjim-lijevim uglom (x,y) od zamisljenih linija, sa datom
+// orijentacijom. Rotira se oko svoje POCETNE tacke.
+function otvorPoOrijentaciji(x,y,w,h,orij){
+  var u=_ugaoOrijentacije(orij);
+  var cos=Math.cos(u), sin=Math.sin(u);
+  return [[x,y],
+          [x+w*cos, y+w*sin],
+          [x+w*cos-h*sin, y+w*sin+h*cos],
+          [x-h*sin, y+h*cos]];
+}
 // Pravougaoni otvor uz stranu i: duz = pomak duz strane, odmak = okomito.
 // Vraca 4 ugla u mm (moze biti zarotiran ako je strana kosa).
 function otvorUzStranu(t,i,duz,odmak,w,h){
@@ -2269,9 +2310,10 @@ function _otvorRef(prefix,osa){
 }
 function getOtvorRectMM(prefix){
   if(jeSlobodan()){
-    // duz = pomak duz strane, odmak = okomito od strane
+    // duz/odmak su sada X i Y od ZAMISLJENIH linija (lijeva/gornja ivica),
+    // pa otvor moze biti bilo gdje - i lijevo i desno od bilo koje strane.
     return _rjesiOtvorMM(gi(prefix+'-w'),gi(prefix+'-h'),
-      gi(prefix+'-duz'),gi(prefix+'-odmak'),'lijeva','prednja',_otvorStrana(prefix));
+      gi(prefix+'-duz'),gi(prefix+'-odmak'),'lijeva','prednja',gs(prefix+'-orij')||'vodoravno');
   }
   return _rjesiOtvorMM(gi(prefix+'-w'),gi(prefix+'-h'),
     gi(prefix+'-x'),gi(prefix+'-y'),
@@ -2281,14 +2323,14 @@ function getCustomOtvorRectMM(c){
   return _rjesiOtvorMM(c.w||0,c.h||0,c.x||0,c.y||0,
     (c.xref==='desna')?'desna':'lijeva',
     (c.yref==='zadnja')?'zadnja':'prednja',
-    c.strana||0);
+    jeSlobodan()?(c.orij||'vodoravno'):(c.strana||0));
 }
 function getSlavinaPosMM(s){
   // Slavina je tacka - w/h = 0, pa vazi ista logika referentnih ivica.
   var r=_rjesiOtvorMM(0,0,s.x||0,s.yz||0,
     (s.xref==='desna')?'desna':'lijeva',
     (s.yref==='prednja')?'prednja':'zadnja',
-    s.strana||0);
+    jeSlobodan()?(s.orij||'vodoravno'):(s.strana||0));
   return {x:r.x,y:r.y,left:r.left,right:r.right,front:r.front,back:r.back};
 }
 
@@ -3031,17 +3073,19 @@ function skIzaberiOtvor(vrsta,idx){
 }
 // Koja strana i koje polje pripadaju kojem otvoru
 function _otvorPolja(o){
-  if(o.vrsta==='sud') return {strana:_otvorStrana('sud'),setDuz:function(v){var e=ge('sud-duz');if(e)e.value=v;},
-                              setOdm:function(v){var e=ge('sud-odmak');if(e)e.value=v;}};
-  if(o.vrsta==='plo') return {strana:_otvorStrana('plo'),setDuz:function(v){var e=ge('plo-duz');if(e)e.value=v;},
-                              setOdm:function(v){var e=ge('plo-odmak');if(e)e.value=v;}};
+  if(o.vrsta==='sud') return {orij:gs('sud-orij')||'vodoravno',
+    setDuz:function(v){var e=ge('sud-duz');if(e)e.value=v;},
+    setOdm:function(v){var e=ge('sud-odmak');if(e)e.value=v;}};
+  if(o.vrsta==='plo') return {orij:gs('plo-orij')||'vodoravno',
+    setDuz:function(v){var e=ge('plo-duz');if(e)e.value=v;},
+    setOdm:function(v){var e=ge('plo-odmak');if(e)e.value=v;}};
   if(o.vrsta==='custom'){
     var c=customOtvori[o.idx];
-    return c?{strana:c.strana||0,setDuz:function(v){c.x=v;},setOdm:function(v){c.y=v;}}:null;
+    return c?{orij:c.orij||'vodoravno',setDuz:function(v){c.x=v;},setOdm:function(v){c.y=v;}}:null;
   }
   if(o.vrsta==='slavina'){
     var sl=slavine[o.idx];
-    return sl?{strana:sl.strana||0,setDuz:function(v){sl.x=v;},setOdm:function(v){sl.yz=v;}}:null;
+    return sl?{orij:sl.orij||'vodoravno',setDuz:function(v){sl.x=v;},setOdm:function(v){sl.yz=v;}}:null;
   }
   return null;
 }
@@ -3050,9 +3094,10 @@ function _otvorPolja(o){
 // pa brojevi u panelu ostaju tacni.
 function _pomjeriOtvorNa(o,P){
   var pol=_otvorPolja(o); if(!pol) return;
-  var v=_mmUDuzOdmak(pol.strana,P);
-  pol.setDuz(Math.max(0,v.duz));
-  pol.setOdm(Math.max(0,v.odmak));
+  // X i Y se mjere od zamisljenih linija - dozvoljene su i NEGATIVNE
+  // vrijednosti, da otvor moze i van okvira ako tako treba.
+  pol.setDuz(Math.round(P[0]/5)*5);
+  pol.setOdm(Math.round(P[1]/5)*5);
 }
 // Ucrtavanje NOVOG otvora povlacenjem pravougaonika po ploci
 function skPocniCrtanjeOtvora(){
@@ -3081,15 +3126,13 @@ function _napraviOtvorIzPravougaonika(A,B){
   var w=Math.abs(B[0]-A[0]), h=Math.abs(B[1]-A[1]);
   if(w<50||h<50){ _skPoruka('<b style="color:#c0392b">Premali otvor \u2014 povuci ve\u0107i pravougaonik.</b>'); return; }
   var P=[Math.min(A[0],B[0]),Math.min(A[1],B[1])];
-  var si=_najblizaStranaTacki([(A[0]+B[0])/2,(A[1]+B[1])/2]);
-  var v=_mmUDuzOdmak(si,P);
   _saveUndo();
   customOtvori=customOtvori||[];
   customOtvori.push({
     id:'co'+Date.now()+Math.floor(Math.random()*1000),
     name:'Otvor '+(customOtvori.length+1),
     loc:'plate', sides:4,
-    strana:si, x:Math.max(0,v.duz), y:Math.max(0,v.odmak),
+    orij:'vodoravno', x:Math.round(P[0]/5)*5, y:Math.round(P[1]/5)*5,
     w:Math.round(w/5)*5, h:Math.round(h/5)*5,
     edgeIdx:0,pos:200,cornerIdx:0,d1:200,d2:200,
     cost:0, r:[0,0,0,0], vrsta:'bez', dub:5, step:5
@@ -3098,7 +3141,8 @@ function _napraviOtvorIzPravougaonika(A,B){
   SK_CRTAM_OTVOR=false;
   SK_IZABRAN_OTVOR={vrsta:'custom',idx:customOtvori.length-1};
   buildCustomOtvoriUI(); crtajDigitalno(); refresh();
-  _skPoruka('Otvor <b>'+Math.round(w)+'\u00d7'+Math.round(h)+' mm</b> ucrtan uz stranu <b>'+SLOVA_S[si]+'</b>.');
+  _skPoruka('Otvor <b>'+Math.round(w)+'\u00d7'+Math.round(h)+' mm</b> ucrtan. '
+    +'Orijentaciju i ta\u010dne mjere podesi u lijevom panelu.');
 }
 function skResetIzbor(){ SK_IZABRANO_TJEME=null; SK_IZABRANA_STRANA=null; }
 function skIzaberiTjeme(v){
@@ -3165,6 +3209,7 @@ function _skVeziVeliki(){
     if(naj>=0&&najD<=prag){
       e.preventDefault();
       if(skTjemeZakljucano(naj)){ SK_IZABRANO_TJEME=naj; SK_IZABRAN_OTVOR=null; crtajDigitalno(); return; }
+      _saveUndo();   // stanje PRIJE povlacenja tjemena
       _skVucem={v:naj,veliki:true};
       SK_IZABRANO_TJEME=naj; SK_IZABRANA_STRANA=null; SK_IZABRAN_OTVOR=null;
       crtajDigitalno();
@@ -3174,6 +3219,7 @@ function _skVeziVeliki(){
     var o=_otvorPodTackom(mm);
     if(o){
       e.preventDefault();
+      _saveUndo();   // stanje PRIJE povlacenja
       var ref=o.krug?[o.krug.x,o.krug.y]:o.pts[0];
       _skVucem={otvor:{vrsta:o.vrsta,idx:o.idx},veliki:true,
                 pom:[mm[0]-ref[0],mm[1]-ref[1]]};
@@ -3280,14 +3326,21 @@ function osvjeziOtvorRezim(){
     if(sr) sr.style.display=slob?'':'none';
     if(or) or.style.display=slob?'none':'';
     if(!slob) return;
-    var sel=ge(pref+'-strana');
+    var sel=ge(pref+'-orij');
     if(!sel) return;
-    var tren=sel.value;
-    sel.innerHTML=t.map(function(_,i){
-      var a=SLOVA_T[i], b=SLOVA_T[(i+1)%t.length];
-      return '<option value="'+i+'">Strana '+SLOVA_S[i]+' ('+a+'\u2192'+b+', '+Math.round(stranaDuzina(t,i))+' mm)</option>';
-    }).join('');
-    if(tren!==''&&Number(tren)<t.length) sel.value=tren;
+    var tren=sel.value||'vodoravno';
+    // Osnovne dvije orijentacije + po jedna "paralelno sa stranom X" za
+    // kose zidove, gdje ni vodoravno ni uspravno ne odgovara.
+    sel.innerHTML='<option value="vodoravno">\u2194 Paralelno vodoravno</option>'
+      +'<option value="uspravno">\u2195 Paralelno uspravno</option>'
+      +t.map(function(_,i){
+        var a=SLOVA_T[i], b=SLOVA_T[(i+1)%t.length];
+        var ug=Math.round(Math.atan2(t[(i+1)%t.length][1]-t[i][1],t[(i+1)%t.length][0]-t[i][0])*180/Math.PI);
+        return '<option value="strana:'+i+'">\u2571 Paralelno sa stranom '+SLOVA_S[i]
+          +' ('+a+'\u2192'+b+', '+ug+'\u00b0)</option>';
+      }).join('');
+    sel.value=tren;
+    if(sel.value!==tren) sel.value='vodoravno';   // strana vise ne postoji
   });
 }
 function buildSkicaPanel(){
