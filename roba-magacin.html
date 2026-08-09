@@ -1845,7 +1845,7 @@ function renderLagerZaglavlje(){
       <tbody id="lager-tbody"></tbody>
     </table>
     <div id="lager-prazno" class="empty-msg" style="display:none;">Nijedan red ne odgovara filterima kolona.</div>
-    <div id="lager-filter-panel" style="display:none;position:fixed;z-index:520;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.2);width:220px;max-height:340px;display:flex;flex-direction:column;"></div>
+    <div id="lager-filter-panel" onclick="event.stopPropagation()" style="display:none;position:fixed;z-index:520;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.2);width:220px;max-height:340px;display:flex;flex-direction:column;"></div>
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:10px;padding:8px 10px;background:#f7f8fa;border-radius:8px;font-size:11px;">
       <b style="color:#6b7a8d;">Legenda "Stanje":</b>
       <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#f26a5f;border-radius:3px;display:inline-block;"></span>Nema (0)</span>
