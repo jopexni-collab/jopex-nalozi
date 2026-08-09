@@ -470,7 +470,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <button class="ce-tip-btn" style="color:var(--red);" id="btn-obrisi-lager" onclick="otvoriBrisanjeLagera()">🗑️ Obriši lager</button>
       <button class="ce-tip-btn" onclick="otvoriQrNalepnice()">🏷️ QR nalepnice (za štampu)</button>
     </div>
-    <div id="lager-lista-tabela-wrap" style="overflow-x:auto;margin-top:10px;"></div>
+    <div id="lager-lista-tabela-wrap" style="overflow:auto;margin-top:10px;max-height:calc(100vh - 220px);border:1px solid var(--border,#ddd);border-radius:8px;"></div>
     <div id="lager-total" style="display:none" class="dnevni-total"></div>
   </div>
 
@@ -1822,8 +1822,10 @@ function renderLagerZaglavlje(){
       <thead>
         <tr style="background:#1f3864;color:#fff;">
           ${LAGER_KOLONE.map(c=>`
-            <th style="padding:4px 6px;text-align:${c.align};white-space:nowrap;font-size:10.5px;position:sticky;top:53px;background:#1f3864;z-index:30;">
-              <span style="cursor:pointer;" onclick="lagerKlikNaslov('${c.k}')">${c.lbl}${strelica(c.k)}</span>${filterDugme(c.k)}
+            <th style="padding:4px 6px;text-align:${c.align};white-space:nowrap;font-size:10.5px;position:sticky;top:0;background:#1f3864;z-index:30;">
+              <div style="display:flex;align-items:center;justify-content:${c.align==='right'?'flex-end':c.align==='center'?'center':'flex-start'};gap:2px;">
+                <span style="cursor:pointer;" onclick="lagerKlikNaslov('${c.k}')">${c.lbl}${strelica(c.k)}</span>${filterDugme(c.k)}
+              </div>
             </th>
           `).join('')}
         </tr>
