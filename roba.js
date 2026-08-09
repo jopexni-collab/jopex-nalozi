@@ -1395,4 +1395,50 @@ router.post('/:id/rucni-unos', async (req, res) => {
   }
 });
 
+// POST /api/roba/rucni-unos/obrisi-nedavne — brzo brisanje SVIH ručnih unosa TRENUTNOG
+// korisnika iz zadnjih N minuta (za ispravku greške pri brzom radu — pogrešna šifra,
+// pogrešan broj otkucan u žurbi). Za razliku od "storna" (koji ostavlja trag), ovo BRIŠE
+// zapis potpuno — ovo su sitne, česte ispravke tokom rada, ne veliki događaji.
+router.post('/rucni-unos/obrisi-nedavne', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin može raditi ručna usaglašavanja.' });
+  try {
+    const minuti = parseInt(req.body.minuti);
+    if (!minuti || minuti <= 0 || minuti > 1440) return res.status(400).json({ error: 'Neispravan vremenski period.' });
+    const objektId = req.body.objekt_id;
+    const user = req.session.user;
+
+    const filterObj = objektId ? 'AND objekt_id=$3' : '';
+    const vals = objektId ? [user.id, minuti, objektId] : [user.id, minuti];
+
+    const zapisi = await pool.query(
+      `SELECT id, roba_id, objekt_id, kolicina FROM roba_kretanja
+       WHERE tip='rucni-unos' AND korisnik_id=$1 AND datum >= now() - ($2 || ' minutes')::interval ${filterObj}`,
+      vals
+    );
+    if (!zapisi.rows.length) return res.json({ ok: true, broj_obrisanih: 0 });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const z of zapisi.rows) {
+        await client.query(
+          'UPDATE roba_pj SET stanje = GREATEST(0, stanje - $1), azurirano = now() WHERE roba_id=$2 AND objekt_id=$3',
+          [z.kolicina, z.roba_id, z.objekt_id]
+        );
+        await client.query('DELETE FROM roba_kretanja WHERE id=$1', [z.id]);
+      }
+      await client.query('COMMIT');
+      res.json({ ok: true, broj_obrisanih: zapisi.rows.length });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
