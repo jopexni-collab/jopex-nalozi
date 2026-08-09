@@ -433,7 +433,6 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <div id="rucni-unos-naziv" style="display:none;font-weight:700;font-size:13px;margin-bottom:8px;line-height:1.35;"></div>
 
   <div id="rucni-unos-polja" style="display:none;">
-    <div style="font-size:11px;color:#8b96a5;margin-bottom:4px;">Staro stanje: <b id="rucni-unos-staro"></b></div>
     <input type="number" id="rucni-unos-novo-stanje" placeholder="Novo stanje..." style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:6px;box-sizing:border-box;">
     <div style="font-size:11px;color:#8b96a5;margin-bottom:4px;">Cena:</div>
     <input type="number" id="rucni-unos-nova-cijena" placeholder="Nova cena..." style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:8px;box-sizing:border-box;">
@@ -1574,7 +1573,7 @@ function rucniUnosOtvoriPopupZaStavku(stavka){
   nazivDiv.textContent=`${stavka.sifra} — ${stavka.naziv}`;
 
   document.getElementById('rucni-unos-polja').style.display='block';
-  document.getElementById('rucni-unos-staro').textContent=`${stavka.stanje} ${stavka.jed_mjera||''}`;
+  // "Staro stanje" tekst uklonjen — sad se vidi kao sivi placeholder direktno u polju za unos.
   // Placeholder = STARA količina (sivo, ne generički tekst) — vizuelni podsetnik da je ovo
   // baš to polje (u brzini se lako pomiješa sa poljem za šifru).
   document.getElementById('rucni-unos-novo-stanje').placeholder=`trenutno: ${stavka.stanje}`;
