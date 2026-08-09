@@ -1870,9 +1870,17 @@ function lagerDistinctVrijednosti(k){
     .sort((a,b)=>typeof a==='number'?a-b:String(a).localeCompare(String(b),'sr-Latn-BA'));
 }
 
+// "Draft" (na čekanju) stanje — čekiranje/otčekiravanje mijenja SAMO ovo, ne dira stvarni
+// filter niti tabelu. Tek "OK" primjenjuje. Ovo je NAMJERNO odvojeno od
+// lagerKolonaFilteri — ranije je svaki klik na kvadratić zvao renderLagerZaglavlje(), koja
+// PONOVO PRAVI ceo wrap (pa i sam panel) — panel bi se doslovno obrisao i napravio iznova
+// u zatvorenom stanju, izgledalo je kao da se "sam zatvara".
+let lagerFilterDraft=new Set();
+
 function lagerOtvoriFilterPanel(kolona, dugmeEl){
   lagerFilterPanelKolona=kolona;
   lagerFilterPanelPretraga='';
+  lagerFilterDraft=new Set(lagerKolonaFilteri[kolona]||[]); // kopija trenutnog stanja za uređivanje
   const panel=document.getElementById('lager-filter-panel');
   const r=dugmeEl.getBoundingClientRect();
   panel.style.top=(r.bottom+4)+'px';
@@ -1885,10 +1893,9 @@ function lagerRenderFilterPanel(){
   const kolona=lagerFilterPanelKolona;
   const panel=document.getElementById('lager-filter-panel');
   const sve=lagerDistinctVrijednosti(kolona);
-  const iskljuceno=lagerKolonaFilteri[kolona]||new Set();
   const pretraga=lagerFilterPanelPretraga.toLowerCase();
   const prikazane=sve.filter(v=>String(v).toLowerCase().includes(pretraga));
-  const sveOznaceno=prikazane.every(v=>!iskljuceno.has(v));
+  const sveOznaceno=prikazane.every(v=>!lagerFilterDraft.has(v));
 
   panel.innerHTML=`
     <div style="padding:8px;border-bottom:1px solid #eee;">
@@ -1900,45 +1907,49 @@ function lagerRenderFilterPanel(){
       </label>
       ${prikazane.map(v=>`
         <label style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11.5px;cursor:pointer;">
-          <input type="checkbox" ${iskljuceno.has(v)?'':'checked'} onchange="lagerFilterToggleVrijednost('${esc(String(v)).replace(/'/g,"\\'")}',this.checked)"> ${esc(String(v))}
+          <input type="checkbox" ${lagerFilterDraft.has(v)?'':'checked'} onchange="lagerFilterToggleVrijednost('${esc(String(v)).replace(/'/g,"\\'")}',this.checked)"> ${esc(String(v))}
         </label>
       `).join('')}
     </div>
     <div style="display:flex;gap:6px;padding:8px;border-top:1px solid #eee;">
-      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;" onclick="lagerZatvoriFilterPanel()">Zatvori</button>
-      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;background:var(--blue,#1a5fa8);color:#fff;" onclick="lagerFilterOcisti()">Obriši filter</button>
+      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;" onclick="lagerZatvoriFilterPanel()">Otkaži</button>
+      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;" onclick="lagerFilterOcisti()">Obriši filter</button>
+      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;background:var(--blue,#1a5fa8);color:#fff;font-weight:700;" onclick="lagerFilterPrimijeni()">✓ OK</button>
     </div>`;
 }
 
+// Kvadratić se promijeni — mijenja SAMO draft, ponovo iscrtava SAMO panel (ne tabelu, ne
+// zaglavlje) — brzo, i ne dira ništa van samog panela.
 function lagerFilterToggleVrijednost(vrijednost, oznaceno){
-  const kolona=lagerFilterPanelKolona;
-  if(!lagerKolonaFilteri[kolona]) lagerKolonaFilteri[kolona]=new Set();
-  if(oznaceno) lagerKolonaFilteri[kolona].delete(vrijednost);
-  else lagerKolonaFilteri[kolona].add(vrijednost);
-  renderLagerRedovi();
+  if(oznaceno) lagerFilterDraft.delete(vrijednost);
+  else lagerFilterDraft.add(vrijednost);
   lagerRenderFilterPanel();
-  renderLagerZaglavlje_samoDugme(kolona);
 }
 
 function lagerFilterOznaciSve(oznaceno){
-  const kolona=lagerFilterPanelKolona;
   const pretraga=lagerFilterPanelPretraga.toLowerCase();
-  const prikazane=lagerDistinctVrijednosti(kolona).filter(v=>String(v).toLowerCase().includes(pretraga));
-  if(!lagerKolonaFilteri[kolona]) lagerKolonaFilteri[kolona]=new Set();
+  const prikazane=lagerDistinctVrijednosti(lagerFilterPanelKolona).filter(v=>String(v).toLowerCase().includes(pretraga));
   prikazane.forEach(v=>{
-    if(oznaceno) lagerKolonaFilteri[kolona].delete(v);
-    else lagerKolonaFilteri[kolona].add(v);
+    if(oznaceno) lagerFilterDraft.delete(v);
+    else lagerFilterDraft.add(v);
   });
-  renderLagerRedovi();
   lagerRenderFilterPanel();
-  renderLagerZaglavlje_samoDugme(kolona);
 }
 
+// "Obriši filter" — brza akcija, primjenjuje ODMAH (prazan filter = prikaži sve).
 function lagerFilterOcisti(){
   lagerKolonaFilteri[lagerFilterPanelKolona]=new Set();
+  lagerZatvoriFilterPanel();
+  renderLagerZaglavlje();
   renderLagerRedovi();
-  lagerRenderFilterPanel();
-  renderLagerZaglavlje_samoDugme(lagerFilterPanelKolona);
+}
+
+// "OK" — primjenjuje draft na STVARNI filter, tek SAD se tabela/zaglavlje osvježavaju.
+function lagerFilterPrimijeni(){
+  lagerKolonaFilteri[lagerFilterPanelKolona]=lagerFilterDraft;
+  lagerZatvoriFilterPanel();
+  renderLagerZaglavlje();
+  renderLagerRedovi();
 }
 
 function lagerZatvoriFilterPanel(){
@@ -1946,18 +1957,7 @@ function lagerZatvoriFilterPanel(){
   lagerFilterPanelKolona=null;
 }
 
-// Osvježava SAMO boju dugmeta ▼ (plavo=aktivan filter) bez re-renderovanja cele tabele —
-// tabela se već osvježila preko renderLagerRedovi() u pozivnim funkcijama iznad.
-function renderLagerZaglavlje_samoDugme(kolona){
-  // Jednostavnije: samo ponovo iscrtaj cijelo zaglavlje (jeftino, malo kolona).
-  const trenutniScrollX=document.getElementById('lager-lista-tabela-wrap')?.scrollLeft||0;
-  renderLagerZaglavlje();
-  renderLagerRedovi();
-  const wrap=document.getElementById('lager-lista-tabela-wrap');
-  if(wrap) wrap.scrollLeft=trenutniScrollX;
-}
-
-// Zatvori panel klikom bilo gde van njega.
+// Zatvori panel klikom bilo gde van njega (draft se GUBI — isto kao "Otkaži").
 document.addEventListener('click', e=>{
   const panel=document.getElementById('lager-filter-panel');
   if(panel && panel.style.display!=='none' && !panel.contains(e.target)){
