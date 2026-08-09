@@ -423,11 +423,39 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 </style>
 
 <div id="tab-lager">
+
+<div id="rucni-unos-trazi-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:20px;max-width:340px;width:90vw;">
+    <h3 style="margin:0 0 12px;">✏️ Ručni unos — traži šifru</h3>
+    <input type="text" id="rucni-unos-sifra-input" placeholder="Unesi šifru artikla..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:10px;" onkeydown="if(event.key==='Enter') rucniUnosTraziSifru()">
+    <div id="rucni-unos-greska" style="display:none;color:var(--red);font-size:12px;margin-bottom:8px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="ce-tip-btn" style="flex:1;" onclick="zatvoriRucniUnosTrazi()">Zatvori</button>
+      <button class="ce-tip-btn" style="flex:1;background:var(--blue,#1a5fa8);color:#fff;" onclick="rucniUnosTraziSifru()">🔍 Traži</button>
+    </div>
+  </div>
+</div>
+
+<div id="rucni-unos-popup" style="display:none;position:absolute;z-index:501;background:#fffde7;border:2px solid var(--blue,#1a5fa8);border-radius:10px;padding:12px;box-shadow:0 4px 16px rgba(0,0,0,.25);width:220px;">
+  <div id="rucni-unos-naziv" style="font-weight:700;font-size:12.5px;margin-bottom:6px;"></div>
+  <div style="font-size:11px;color:#8b96a5;margin-bottom:4px;">Staro stanje: <b id="rucni-unos-staro"></b></div>
+  <input type="number" id="rucni-unos-novo-stanje" placeholder="Novo stanje..." style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:6px;">
+  <div style="font-size:11px;color:#8b96a5;margin-bottom:4px;">Cena:</div>
+  <input type="number" id="rucni-unos-nova-cijena" placeholder="Nova cena..." style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:8px;">
+  <div id="rucni-unos-popup-greska" style="display:none;color:var(--red);font-size:11px;margin-bottom:6px;"></div>
+  <div style="display:flex;gap:6px;">
+    <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:6px;" onclick="rucniUnosZatvoriPopup()">✕</button>
+    <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:6px;background:var(--blue,#1a5fa8);color:#fff;" onclick="rucniUnosSacuvaj(false)">💾 Novi unos</button>
+    <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:6px;background:var(--green,#1f8a4c);color:#fff;" onclick="rucniUnosSacuvaj(true)">✓ Završi</button>
+  </div>
+</div>
+
 <div class="import-box" id="lager-lista-box">
     <h3>📋 Kompletna lager lista</h3>
     <select id="lager-objekat"><option value="">— izaberi prodajni objekat —</option></select>
     <div class="ce-row">
       <button class="ce-tip-btn" onclick="ucitajLagerListu()">Prikaži</button>
+      <button class="ce-tip-btn" onclick="otvoriRucniUnos()">✏️ Ručni unos</button>
       <button class="ce-tip-btn" onclick="izvezLagerListu()">📥 Izvezi u XLSX</button>
       <button class="ce-tip-btn" style="color:var(--red);" id="btn-obrisi-lager" onclick="otvoriBrisanjeLagera()">🗑️ Obriši lager</button>
       <button class="ce-tip-btn" onclick="otvoriQrNalepnice()">🏷️ QR nalepnice (za štampu)</button>
@@ -698,7 +726,7 @@ let uvozNacin='nabavka';
 
 let lagerPodaci=[]; // sirovi podaci sa servera
 let lagerKolonaFilteri={sifra:'',naziv:'',grupa:'',debljina:'',jm:'',cijena:'',stanje:'',ukupno:''};
-let lagerSort={kolona:'naziv',smjer:'asc'};
+let lagerSort={kolona:'sifra',smjer:'asc'};
 const LAGER_KOLONE=[
   {k:'sifra',lbl:'Šifra',align:'left',tip:'text'},
   {k:'naziv',lbl:'Naziv',align:'left',tip:'text'},
@@ -1462,6 +1490,95 @@ function lagerValuta(){
   const objektId=document.getElementById('lager-objekat').value;
   return (window.__lagerObjektiValute||{})[objektId]||'KM';
 }
+/* ═══ RUČNI UNOS — povremena ručna usaglašavanja, između dva "velika" preseka. Piše
+   ODMAH po artiklu (za razliku od Preseka koji čeka grupnu potvrdu). ═══ */
+let rucniUnosTrenutniId=null, rucniUnosTrenutniObjekat=null;
+
+function otvoriRucniUnos(){
+  const objektId=document.getElementById('lager-objekat').value;
+  if(!objektId || !lagerPodaci?.length){ alert('Prvo prikaži lager listu za neki objekat (dugme "Prikaži").'); return; }
+  rucniUnosTrenutniObjekat=objektId;
+  document.getElementById('rucni-unos-sifra-input').value='';
+  document.getElementById('rucni-unos-greska').style.display='none';
+  document.getElementById('rucni-unos-trazi-modal').style.display='flex';
+  setTimeout(()=>document.getElementById('rucni-unos-sifra-input').focus(),50);
+}
+function zatvoriRucniUnosTrazi(){
+  document.getElementById('rucni-unos-trazi-modal').style.display='none';
+}
+
+function rucniUnosTraziSifru(){
+  const sifra=document.getElementById('rucni-unos-sifra-input').value.trim();
+  const greskaDiv=document.getElementById('rucni-unos-greska');
+  const stavka=lagerPodaci.find(s=>s.sifra===sifra);
+  if(!stavka){
+    greskaDiv.textContent='Šifra "'+sifra+'" nije pronađena u trenutno prikazanoj listi.';
+    greskaDiv.style.display='block';
+    return;
+  }
+  document.getElementById('rucni-unos-trazi-modal').style.display='none';
+  rucniUnosOtvoriPopupZaStavku(stavka);
+}
+
+function rucniUnosOtvoriPopupZaStavku(stavka){
+  rucniUnosTrenutniId=stavka.id;
+  // Skroluje do reda U TABELI (ne samo do vrha stranice) — traži red po šifri direktno u
+  // renderovanoj tabeli, ne oslanja se na neki poseban data-atribut koji možda ne postoji.
+  const redovi=document.querySelectorAll('#lager-tbody tr');
+  let ciljaniRed=null;
+  redovi.forEach(tr=>{ if(tr.textContent.includes(stavka.sifra)) ciljaniRed=ciljaniRed||tr; });
+  const popup=document.getElementById('rucni-unos-popup');
+  document.getElementById('rucni-unos-naziv').textContent=`${stavka.sifra} — ${stavka.naziv}`;
+  document.getElementById('rucni-unos-staro').textContent=`${stavka.stanje} ${stavka.jed_mjera||''}`;
+  document.getElementById('rucni-unos-novo-stanje').value='';
+  document.getElementById('rucni-unos-nova-cijena').value=stavka.cijena;
+  document.getElementById('rucni-unos-popup-greska').style.display='none';
+
+  if(ciljaniRed){
+    ciljaniRed.scrollIntoView({behavior:'smooth', block:'center'});
+    ciljaniRed.style.outline='2px solid var(--blue,#1a5fa8)';
+    setTimeout(()=>{
+      const r=ciljaniRed.getBoundingClientRect();
+      popup.style.top=(window.scrollY+r.top)+'px';
+      popup.style.left=Math.min(window.scrollX+r.right+10, window.innerWidth-240)+'px';
+      popup.style.display='block';
+    }, 300); // sačekaj da se smooth-scroll završi prije pozicioniranja
+  }else{
+    popup.style.top=(window.scrollY+100)+'px';
+    popup.style.left='20px';
+    popup.style.display='block';
+  }
+  document.getElementById('rucni-unos-novo-stanje').focus();
+}
+
+function rucniUnosZatvoriPopup(){
+  document.getElementById('rucni-unos-popup').style.display='none';
+  document.querySelectorAll('#lager-tbody tr').forEach(tr=>tr.style.outline='');
+  rucniUnosTrenutniId=null;
+}
+
+async function rucniUnosSacuvaj(zavrsi){
+  const stanjeNovo=document.getElementById('rucni-unos-novo-stanje').value;
+  const cijenaNova=document.getElementById('rucni-unos-nova-cijena').value;
+  const greskaDiv=document.getElementById('rucni-unos-popup-greska');
+  if(stanjeNovo===''){ greskaDiv.textContent='Unesi novo stanje.'; greskaDiv.style.display='block'; return; }
+  try{
+    const r=await fetch(`${API}/api/roba/${rucniUnosTrenutniId}/rucni-unos`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({objekt_id:rucniUnosTrenutniObjekat, stanje_novo:stanjeNovo, cijena_nova:cijenaNova}),
+    });
+    const data=await r.json();
+    if(!r.ok){ greskaDiv.textContent=data.error; greskaDiv.style.display='block'; return; }
+    rucniUnosZatvoriPopup();
+    await ucitajLagerListu(); // osvježi tabelu da se vidi nova vrijednost
+    if(zavrsi){
+      // gotovo — ništa dalje
+    }else{
+      otvoriRucniUnos(); // odmah traži sledeću šifru
+    }
+  }catch(e){ greskaDiv.textContent='Greška pri čuvanju.'; greskaDiv.style.display='block'; }
+}
+
 function lagerFmMoney(n){
   const valuta=lagerValuta();
   if(valuta==='EUR') return `${fm(n)} € <span style="font-size:0.6em;color:#8b96a5;font-weight:600;">(${fm(n*1.95)} KM)</span>`;
@@ -1599,7 +1716,9 @@ function lagerFiltrirajISortiraj(){
   );
   const {kolona, smjer}=lagerSort;
   const tipKolone=LAGER_KOLONE.find(c=>c.k===kolona)?.tip;
-  const jeNumericko = tipKolone==='num'||tipKolone==='select-num';
+  // Šifra je tekst po tipu (radi tekstualnog filtera), ali se SORTIRA numerički — inače bi
+  // npr. "9" došlo poslije "10" (tekstualno poređenje), a šifre su suštinski brojevi.
+  const jeNumericko = tipKolone==='num'||tipKolone==='select-num'||kolona==='sifra';
   prikaz=[...prikaz].sort((a,b)=>{
     let va=lagerVrijednostZaKolonu(a,kolona), vb=lagerVrijednostZaKolonu(b,kolona);
     let cmp;

@@ -1354,4 +1354,45 @@ router.post('/presek-batch/:id/storniraj', async (req, res) => {
   }
 });
 
+// POST /api/roba/:id/rucni-unos — brza, POJEDINAČNA ispravka stanja/cijene za JEDAN
+// artikal (alat "Ručni unos" u Lager listi — za povremena ručna usaglašavanja, između
+// dva "velika" preseka). Piše ODMAH (ne čeka grupnu potvrdu kao presek), po jedan artikal
+// odjednom.
+router.post('/:id/rucni-unos', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin')
+    return res.status(403).json({ error: 'Samo admin može raditi ručna usaglašavanja.' });
+  try {
+    const objektId = trebaObjekat(req.body.objekt_id);
+    if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat.' });
+    const stanjeNovo = parseFloat(req.body.stanje_novo);
+    const cijenaNova = parseFloat(req.body.cijena_nova);
+    if (isNaN(stanjeNovo) || stanjeNovo < 0) return res.status(400).json({ error: 'Unesite ispravno stanje.' });
+    if (isNaN(cijenaNova) || cijenaNova < 0) return res.status(400).json({ error: 'Unesite ispravnu cijenu.' });
+
+    const staraRes = await pool.query('SELECT stanje, cijena FROM roba_pj WHERE roba_id=$1 AND objekt_id=$2', [req.params.id, objektId]);
+    if (!staraRes.rows.length) return res.status(404).json({ error: 'Artikal nije pronađen za ovaj PJ.' });
+    const stanjeStaro = parseFloat(staraRes.rows[0].stanje);
+    const cijenaStara = parseFloat(staraRes.rows[0].cijena);
+
+    await pool.query(
+      'UPDATE roba_pj SET stanje=$1, cijena=$2, azurirano=now() WHERE roba_id=$3 AND objekt_id=$4',
+      [stanjeNovo, cijenaNova, req.params.id, objektId]
+    );
+
+    const razlika = +(stanjeNovo - stanjeStaro).toFixed(3);
+    if (Math.abs(razlika) > 0.001) {
+      await pool.query(
+        `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_stara, cijena_nova, napomena, korisnik_id, korisnik_ime)
+         VALUES ($1,$2,'rucni-unos',$3,$4,$5,$6,$7,$8)`,
+        [req.params.id, objektId, razlika, cijenaStara, cijenaNova,
+         `Ručno usaglašavanje — staro stanje ${stanjeStaro}, novo ${stanjeNovo}`,
+         req.session.user.id, req.session.user.ime_prezime]
+      );
+    }
+    res.json({ ok: true, stanje_staro: stanjeStaro, stanje_novo: stanjeNovo, cijena_stara: cijenaStara, cijena_nova: cijenaNova });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
