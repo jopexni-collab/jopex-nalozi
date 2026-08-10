@@ -578,7 +578,13 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
         <div class="fg"><label>Mjerenje (KM)</label><input type="text" inputmode="decimal" id="kl-m" value="0" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div class="fg"><label>Napomena</label><input type="text" id="kl-n" placeholder="npr. spavaća soba" oninput="refresh()"></div>
-      <div class="cbrow" style="margin-top:8px">
+      <div class="fg" style="margin-top:8px"><label>Vrsta klupice</label>
+        <select id="kl-vrsta" onchange="buildPozicijeTabelu();refresh()">
+          <option value="prozorska">⬜ Prozorska (niša, špaletne)</option>
+          <option value="zidna">▬ Zidna (uz zid, bez niše)</option>
+        </select>
+      </div>
+      <div class="cbrow" style="margin-top:4px">
         <input type="checkbox" id="cb-kl-poz" onchange="togglePozicije('kl')">
         <label for="cb-kl-poz" style="color:#7a4fa0">Razne dimenzije (tabela pozicija)</label>
       </div>
@@ -1857,7 +1863,7 @@ function newItem(tipArg){
   var t=tipArg||'k';
   return {
     tip: t,
-    shape:'I', dims:{}, ivSt:{}, cornerR:{}, cornerRData:{}, customOtvori:[], slavine:[], tableHoles:[], pozicije:[],
+    shape:'I', dims:{}, ivSt:{}, cornerR:{}, cornerRData:{}, customOtvori:[], slavine:[], tableHoles:[], pozicije:[], pozBdDef:{},
     vOrient:0, wallSides:{},
     wallCfgIdx: (t==='k'?5:0), // k: Nema zida (idx 5)
     extState:{},
@@ -1946,7 +1952,7 @@ function getItemInputIds(t){
               'sud-r-br-sel','sud-r-br-inp','sud-r-bl-sel','sud-r-bl-inp',
               'plo-r-tl-sel','plo-r-tl-inp','plo-r-tr-sel','plo-r-tr-inp',
               'plo-r-br-sel','plo-r-br-inp','plo-r-bl-sel','plo-r-bl-inp'],
-           kl:['kl-a','kl-b','kl-k','kl-ic','kl-u','kl-m','kl-n','kl-p','kl-iv','cb-kl-poz','mat-naziv','mat-c'],
+           kl:['kl-a','kl-b','kl-k','kl-ic','kl-u','kl-m','kl-n','kl-p','kl-iv','kl-vrsta','cb-kl-poz','kl-tabla-a','kl-tabla-b','mat-naziv','mat-c'],
            st:['st-a','st-b','st-d','st-br','st-ic','st-u','st-m','st-n','st-p','cb-cel','cb-st-poz',
                'cel-a','cel-b','cel-d','cel-c','mat-naziv','mat-c'],
            sto:['sto-a','sto-b','sto-r-sel','sto-r-inp','sto-rl','sto-rs','sto-br','sto-ugr','sto-mer','sto-n','mat-naziv','mat-c']};
@@ -2021,6 +2027,7 @@ function syncFromActive(){
   slavine=a.slavine?JSON.parse(JSON.stringify(a.slavine)):[];
   tableHoles=a.tableHoles?JSON.parse(JSON.stringify(a.tableHoles)):[];
   pozicije=a.pozicije?JSON.parse(JSON.stringify(a.pozicije)):[];
+  pozBdDef=a.pozBdDef?JSON.parse(JSON.stringify(a.pozBdDef)):{};
   vOrient=a.vOrient; wallSides=a.wallSides; wallCfgIdx=a.wallCfgIdx;
   extState=a.extState;
 }
@@ -2033,6 +2040,7 @@ function syncToActive(){
   a.slavine=JSON.parse(JSON.stringify(slavine));
   a.tableHoles=JSON.parse(JSON.stringify(tableHoles));
   a.pozicije=JSON.parse(JSON.stringify(pozicije||[]));
+  a.pozBdDef=JSON.parse(JSON.stringify(pozBdDef||{}));
   a.vOrient=vOrient; a.wallSides=wallSides; a.wallCfgIdx=wallCfgIdx;
   a.extState=extState;
   saveItemInputs();
@@ -2780,20 +2788,52 @@ function setShape(s){
 //   ob = profil po strani (nema kljuca = uzmi podrazumijevani iz panela)
 //   bd = obradi samo prvih N mm te strane (nema kljuca = cijela strana)
 var pozicije=[];
+// Podrazumijevana djelimicna obrada (mm po strani) - vazi za SVE pozicije,
+// pa i za one dodate KASNIJE. Cuva se uz stavku, kao i ivSt.
+var pozBdDef={};
 function _pozStrane(){
-  // Opisi su OPISNI da operater ne pomijesa koju stranu obradjuje.
-  // Klupica ide u prozorsku nisu: zadnja je UZ PROZOR, prednja je vidljiva
-  // (visi u prostoriju), a bocne ulaze u spaletne.
+  // A je PREDNJA (vidljiva, visi u prostoriju), D je ZADNJA (uz prozor).
+  // Bocne ulaze u spaletne. Kod stepenica: A nastup, D uz zid.
   if(tip==='st'){
-    return [{id:'A-zad',lbl:'A',opis:'zadnja \u2014 uz zid',kratko:'uz zid'},
+    return [{id:'A-zad',lbl:'A',opis:'prednja \u2014 nastup',kratko:'nastup'},
             {id:'B-lev',lbl:'B',opis:'lijeva bo\u010dna',kratko:'lijeva'},
             {id:'C-des',lbl:'C',opis:'desna bo\u010dna',kratko:'desna'},
-            {id:'D-pred',lbl:'D',opis:'prednja \u2014 nastup',kratko:'nastup'}];
+            {id:'D-pred',lbl:'D',opis:'zadnja \u2014 uz zid',kratko:'uz zid'}];
   }
-  return [{id:'A-zad',lbl:'A',opis:'zadnja \u2014 uz prozor',kratko:'uz prozor'},
+  return [{id:'A-zad',lbl:'A',opis:'prednja \u2014 vidljiva',kratko:'prednja'},
           {id:'B-lev',lbl:'B',opis:'lijeva \u2014 u \u0161paletnu',kratko:'lijeva'},
           {id:'C-des',lbl:'C',opis:'desna \u2014 u \u0161paletnu',kratko:'desna'},
-          {id:'D-pred',lbl:'D',opis:'prednja \u2014 vidljiva',kratko:'prednja'}];
+          {id:'D-pred',lbl:'D',opis:'zadnja \u2014 uz prozor',kratko:'uz prozor'}];
+}
+// ── ZIDNA KLUPICA: podjela ukupne duzine na optimalne komade ─────
+// Kod zidne klupice se cesto zada UKUPNA duzina (npr. 7,2 m uz zid), pa se
+// dijeli na komade koji staju iz table. Cilj: sto manje spojeva i sto manje
+// otpada, uz postovanje maksimalne duzine table.
+function jeZidnaKlupica(){ return tip==='kl'&&gs('kl-vrsta')==='zidna'; }
+function _tablaMjere(){
+  return {a:gi('kl-tabla-a')||3200, b:gi('kl-tabla-b')||1600};
+}
+// Podijeli ukupnu duzinu na priblizno jednake komade koji staju u tablu
+function podijeliDuzinu(ukupno,maxKom){
+  ukupno=Math.max(0,ukupno||0);
+  maxKom=Math.max(100,maxKom||3200);
+  if(ukupno<=0) return [];
+  if(ukupno<=maxKom) return [Math.round(ukupno)];
+  var n=Math.ceil(ukupno/maxKom);
+  // priblizno jednaki komadi - ljepse od "puna tabla + ostatak"
+  var duz=Math.round(ukupno/n/5)*5;
+  var kom=[];
+  for(var i=0;i<n-1;i++) kom.push(duz);
+  kom.push(Math.round(ukupno-duz*(n-1)));
+  return kom;
+}
+// Koliko komada date duzine/sirine stane iz JEDNE table (oba smjera)
+function komadaIzTable(duzina,sirina){
+  var t=_tablaMjere();
+  if(!(duzina>0&&sirina>0)) return 0;
+  var n1=Math.floor(t.a/duzina)*Math.floor(t.b/sirina);   // uzduz
+  var n2=Math.floor(t.b/duzina)*Math.floor(t.a/sirina);   // popreko
+  return Math.max(n1,n2);
 }
 // Vodeni kanal po poziciji: izuzetak reda ili podrazumijevani iz panela
 function _pozKanal(p){
@@ -2816,7 +2856,9 @@ function pozKanal(i,val){
   syncToActive(); buildPozicijeTabelu(); refresh();
 }
 function pozSveKanal(val){
-  pozicije.forEach(function(p){ if(val==='') delete p.kan; else p.kan=val; });
+  if(val==='') return;
+  var e=ge('kl-iv'); if(e) e.value=val;   // podrazumijevani kanal
+  pozicije.forEach(function(p){ delete p.kan; });
   syncToActive(); buildPozicijeTabelu(); refresh();
 }
 // Zamjena A <-> D: ako je unesено obrnuto (zadnja kao prednja)
@@ -2889,18 +2931,20 @@ function pozBocna(i,segId,val){
 }
 // Masovna izmjena - jedan klik postavlja SVE redove
 function pozSveObrada(segId,val){
-  pozicije.forEach(function(p){
-    p.ob=p.ob||{};
-    if(val==='') delete p.ob[segId]; else p.ob[segId]=val;
-  });
-  syncToActive(); buildPozicijeTabelu(); refresh();
+  if(val==='') return;
+  // Postavlja PODRAZUMIJEVANU obradu (ivSt) i brise izuzetke po redovima -
+  // tako i pozicije dodate KASNIJE automatski naslijede ovaj izbor.
+  ivSt[segId]=ivSt[segId]||{};
+  ivSt[segId].prof=val;
+  ivSt[segId].chk=(val!=='none');
+  pozicije.forEach(function(p){ if(p.ob) delete p.ob[segId]; });
+  syncToActive(); buildIvice(); buildPozicijeTabelu(); refresh();
 }
 function pozSveBocna(segId,val){
   var v=parseFloat((val||'0').toString().replace(',','.'))||0;
-  pozicije.forEach(function(p){
-    p.bd=p.bd||{};
-    if(v<=0) delete p.bd[segId]; else p.bd[segId]=v;
-  });
+  // Podrazumijevana vrijednost + brisanje izuzetaka, da nove pozicije naslijede
+  if(v<=0) delete pozBdDef[segId]; else pozBdDef[segId]=v;
+  pozicije.forEach(function(p){ if(p.bd) delete p.bd[segId]; });
   syncToActive(); buildPozicijeTabelu(); refresh();
 }
 // Stvarna obrada strane za poziciju: izuzetak reda ili podrazumijevana
@@ -2913,8 +2957,13 @@ function _pozProf(p,segId){
 // strana cesto polira samo na vidljivom pocetku (3-5 cm), ne cijelom duzinom.
 function _pozDuzObrade(p,segId,duzA,duzB){
   var puna=(segId==='A-zad'||segId==='D-pred')?duzA:duzB;
-  var d=(p.bd&&p.bd[segId])||0;
+  var d=_pozBd(p,segId);
   return (d>0&&d<puna)?d:puna;
+}
+// Djelimicna obrada te strane: izuzetak reda ili podrazumijevana za sve
+function _pozBd(p,segId){
+  if(p.bd&&p.bd[segId]!=null) return p.bd[segId];
+  return pozBdDef[segId]||0;
 }
 
 // Tabela pozicija: brzi unos Enterom (duzina -> sirina -> kom -> novi red),
@@ -2927,7 +2976,7 @@ function _pozSazetak(p){
   strane.forEach(function(sd){
     var pr=_pozProf(p,sd.id);
     var puna=(sd.id==='A-zad'||sd.id==='D-pred')?(p.a||0):(p.b||0);
-    var d=(p.bd&&p.bd[sd.id])||0;
+    var d=_pozBd(p,sd.id);
     var djelim=(d>0&&d<puna);
     if(p.ob&&p.ob[sd.id]!=null) izuz++;
     if(pr==='none'&&!djelim) return;
@@ -2963,20 +3012,21 @@ function buildPozicijeTabelu(){
     +'VA\u017dI ZA SVE POZICIJE</div>';
   strane.forEach(function(sd){
     // Sta je trenutno postavljeno za sve (ako su svi redovi isti)
-    var vrijednosti=pozicije.map(function(p){return _pozProf(p,sd.id);});
-    var sviIsti=vrijednosti.every(function(v){return v===vrijednosti[0];});
-    var zaSve=sviIsti?vrijednosti[0]:'';
-    var bdV=pozicije.map(function(p){return (p.bd&&p.bd[sd.id])||0;});
-    var bdIsti=bdV.every(function(v){return v===bdV[0];});
+    // Prikazuje se PODRAZUMIJEVANA vrijednost (ivSt / pozBdDef), a narandzasti
+    // obrub upozorava ako neki red ima svoj izuzetak.
+    var zaSve=(ivSt[sd.id]&&ivSt[sd.id].prof)||'none';
+    var sviIsti=!pozicije.some(function(p){return p.ob&&p.ob[sd.id]!=null;});
+    var bdDef=pozBdDef[sd.id]||0;
+    var bdIsti=!pozicije.some(function(p){return p.bd&&p.bd[sd.id]!=null;});
     h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'
       +'<b style="font-size:11px;color:#1a5fa8;min-width:13px">'+sd.lbl+'</b>'
       +'<span style="font-size:10px;color:#8a93a3;min-width:84px">'+sd.opis+'</span>'
       +'<select onchange="pozSveObrada(\''+sd.id+'\',this.value)" style="font-size:11px;'
       +'padding:3px 5px;border:1px solid '+(sviIsti?'#dde2ea':'#e67e22')+';border-radius:4px;'
       +'flex:1;min-width:118px;background:'+(sviIsti?'#fff':'#fff8f0')+'">'
-      +(sviIsti?'':'<option value="">\u26a0 razli\u010dito po redovima</option>')
-      +optProf(zaSve,sviIsti?null:null)+'</select>'
-      +'<input type="number" min="0" placeholder="cijela" value="'+(bdIsti&&bdV[0]?bdV[0]:'')+'"'
+      +optProf(zaSve,null)+'</select>'
+      +(sviIsti?'':'<span style="font-size:9.5px;color:#e67e22" title="Neki redovi imaju svoj izbor">\u26a0</span>')
+      +'<input type="number" min="0" placeholder="cijela" value="'+(bdDef||'')+'"'
       +' title="Obradi samo prvih N mm (vidljivi dio)"'
       +' onchange="pozSveBocna(\''+sd.id+'\',this.value)" style="width:70px;font-size:11px;'
       +'padding:3px 5px;border:1px solid '+(bdIsti?'#dde2ea':'#e67e22')+';border-radius:4px;text-align:right">'
@@ -2984,8 +3034,8 @@ function buildPozicijeTabelu(){
   });
   // Vodeni kanal za sve pozicije (samo klupice)
   if(t==='kl'){
-    var kanV=pozicije.map(function(p){return _pozKanal(p);});
-    var kanIsti=kanV.every(function(v){return v===kanV[0];});
+    var kanDef=gs('kl-iv')||'bez';
+    var kanIsti=!pozicije.some(function(p){return p.kan!=null;});
     h+='<div style="display:flex;gap:5px;align-items:center;margin-top:6px;padding-top:6px;'
       +'border-top:1px dashed #c8d9ee;flex-wrap:wrap">'
       +'<b style="font-size:11px;color:#1a5fa8;min-width:13px">\u2248</b>'
@@ -2993,10 +3043,11 @@ function buildPozicijeTabelu(){
       +'<select onchange="pozSveKanal(this.value)" style="font-size:11px;padding:3px 5px;'
       +'border:1px solid '+(kanIsti?'#dde2ea':'#e67e22')+';border-radius:4px;flex:1;min-width:118px;'
       +'background:'+(kanIsti?'#fff':'#fff8f0')+'">'
-      +(kanIsti?'':'<option value="">\u26a0 razli\u010dito po redovima</option>')
       +Object.keys(KanalLbl).map(function(kk){
-        return '<option value="'+kk+'"'+(kanIsti&&kanV[0]===kk?' selected':'')+'>'+KanalLbl[kk]+'</option>';
-      }).join('')+'</select></div>';
+        return '<option value="'+kk+'"'+(kanDef===kk?' selected':'')+'>'+KanalLbl[kk]+'</option>';
+      }).join('')+'</select>'
+      +(kanIsti?'':'<span style="font-size:9.5px;color:#e67e22" title="Neki redovi imaju svoj izbor">\u26a0</span>')
+      +'</div>';
   }
   // Zamjena A <-> D ako je uneseno obrnuto
   h+='<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #c8d9ee;text-align:center">'
@@ -3006,6 +3057,34 @@ function buildPozicijeTabelu(){
     +'\u21c5 Zamijeni A ('+strane[0].kratko+') \u2194 D ('+strane[3].kratko+')</button></div>';
   h+='</div>';
 
+  // ── ZIDNA KLUPICA: unos ukupne dužine i automatska podjela ──
+  if(jeZidnaKlupica()){
+    var tb=_tablaMjere();
+    h+='<div style="background:#f3eef8;border:1px solid #d9c8e8;border-radius:6px;padding:8px 10px;margin-bottom:8px">'
+      +'<div style="font-size:10px;font-weight:700;color:#7a4fa0;margin-bottom:6px;letter-spacing:.5px">'
+      +'PODIJELI UKUPNU DU\u017dINU NA KOMADE</div>'
+      +'<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:5px">'
+      +'<label style="font-size:10.5px;color:#6b7a8d">Ukupna du\u017eina</label>'
+      +'<input type="number" id="kl-ukupna" min="1" placeholder="npr. 7200" style="width:88px;'
+      +'font:inherit;font-size:12px;padding:4px 6px;border:1px solid #dde2ea;border-radius:4px;text-align:right">'
+      +'<span style="font-size:10px;color:#8a93a3">mm</span>'
+      +'<label style="font-size:10.5px;color:#6b7a8d;margin-left:6px">\u0160irina</label>'
+      +'<input type="number" id="kl-ukupna-b" min="1" value="'+(pozicije[0]?pozicije[0].b:250)+'" style="width:70px;'
+      +'font:inherit;font-size:12px;padding:4px 6px;border:1px solid #dde2ea;border-radius:4px;text-align:right">'
+      +'<span style="font-size:10px;color:#8a93a3">mm</span></div>'
+      +'<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:5px">'
+      +'<label style="font-size:10.5px;color:#6b7a8d">Tabla</label>'
+      +'<input type="number" id="kl-tabla-a" min="100" value="'+tb.a+'" style="width:74px;'
+      +'font:inherit;font-size:12px;padding:4px 6px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
+      +' oninput="fixComma(this);syncToActive()"><span style="font-size:10px;color:#8a93a3">\u00d7</span>'
+      +'<input type="number" id="kl-tabla-b" min="100" value="'+tb.b+'" style="width:74px;'
+      +'font:inherit;font-size:12px;padding:4px 6px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
+      +' oninput="fixComma(this);syncToActive()"><span style="font-size:10px;color:#8a93a3">mm</span>'
+      +'<button type="button" onclick="primijeniPodjelu()" style="font:inherit;font-size:11px;'
+      +'padding:5px 12px;border:1px solid #7a4fa0;background:#7a4fa0;color:#fff;border-radius:5px;'
+      +'cursor:pointer;font-weight:600;margin-left:auto">\u2702 Podijeli</button></div>'
+      +'<div id="kl-podjela-info" style="font-size:10.5px;color:#6b7a8d"></div></div>';
+  }
   // ── REDOVI ──
   h+='<div class="poz-tabela">';
   pozicije.forEach(function(p,i){
@@ -3037,7 +3116,7 @@ function buildPozicijeTabelu(){
       h+='<div class="poz-meni">';
       strane.forEach(function(sd){
         var izuz=(p.ob&&p.ob[sd.id]!=null);
-        var bd=(p.bd&&p.bd[sd.id])||'';
+        var bd=(p.bd&&p.bd[sd.id]!=null)?p.bd[sd.id]:'';
         h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'
           +'<b style="font-size:11px;color:'+(izuz?'#7a4fa0':'#1a5fa8')+';min-width:13px">'+sd.lbl+'</b>'
           +'<span style="font-size:10px;color:#8a93a3;min-width:84px">'+sd.opis+'</span>'
@@ -3100,6 +3179,27 @@ function pozEnter(e,i,polje){
     var nov=document.querySelector('[data-poz="'+(pozicije.length-1)+'"][data-pol="a"]');
     if(nov){ nov.focus(); if(nov.select) nov.select(); }
   },30);
+}
+// Primijeni podjelu: napravi pozicije od ukupne duzine
+function primijeniPodjelu(){
+  var uk=gi('kl-ukupna'), sir=gi('kl-ukupna-b')||250;
+  var t=_tablaMjere();
+  if(uk<=0){ alert('Unesi ukupnu du\u017einu.'); return; }
+  var maxKom=Math.max(t.a,t.b)-20;   // 20 mm rezerva na rez
+  var kom=podijeliDuzinu(uk,maxKom);
+  if(!kom.length) return;
+  if(!confirm('Podijeliti '+uk+' mm na '+kom.length+' komada?\n\n'
+    +kom.map(function(d,i){return (i+1)+'. '+d+' \u00d7 '+sir+' mm';}).join('\n')
+    +'\n\nPostoje\u0107e pozicije se ZAMJENJUJU.')) return;
+  _saveUndo();
+  pozicije=kom.map(function(d){
+    return {a:d,b:sir,kom:1,nap:'',ob:{},bd:{}};
+  });
+  syncToActive(); buildPozicijeTabelu(); refresh();
+  var izTable=komadaIzTable(kom[0],sir);
+  var inf=ge('kl-podjela-info');
+  if(inf) inf.innerHTML='\u2713 Podijeljeno na <b>'+kom.length+'</b> komada. '
+    +'Iz jedne table '+t.a+'\u00d7'+t.b+' stane <b>'+izTable+'</b> komada od '+kom[0]+'\u00d7'+sir+' mm.';
 }
 function pozOtvori(i){
   POZ_OTVOREN=(POZ_OTVOREN===i)?null:i;
@@ -4856,30 +4956,33 @@ function _prilogPozicija(){
     +'<table style="width:100%;border-collapse:collapse;font-size:11px">'
     +'<thead><tr style="background:#f0f2f5">'
     +'<th style="padding:5px 7px;text-align:left">#</th>'
-    +'<th style="padding:5px 7px;text-align:left">Dimenzija</th>'
+    +'<th style="padding:5px 7px;text-align:left">Du\u017eina \u00d7 \u0161irina</th>'
     +'<th style="padding:5px 7px;text-align:center">Kom</th>'
     +'<th style="padding:5px 7px;text-align:right">m\u00b2</th>'
-    +'<th style="padding:5px 7px;text-align:left">Obrada ivica</th>'
-    +'<th style="padding:5px 7px;text-align:left">Napomena</th></tr></thead><tbody>';
+    +'<th style="padding:5px 7px;text-align:left">Obrada ivica po stranama</th>'
+    +'<th style="padding:5px 7px;text-align:left">Vodeni kanal / napomena</th></tr></thead><tbody>';
   pozicije.forEach(function(p,i){
     var kom=Math.max(1,p.kom||1);
     var opis=strane.map(function(sd){
       var pr=_pozProf(p,sd.id);
       if(pr==='none') return null;
       var puna=(sd.id==='A-zad'||sd.id==='D-pred')?(p.a||0):(p.b||0);
-      var d=(p.bd&&p.bd[sd.id])||0;
+      var d=_pozBd(p,sd.id);
+      var oznaka=sd.lbl+' ('+sd.kratko+')';
       return (d>0&&d<puna)
         ? ('<span style="background:#fff3cd;padding:1px 4px;border-radius:3px;border:1px solid #f0c419">'
-           +sd.lbl+': '+(PLbl[pr]||pr)+' <b>samo '+d+' mm</b></span>')
-        : (sd.lbl+': '+(PLbl[pr]||pr));
+           +oznaka+': '+(PLbl[pr]||pr)+' <b>samo '+d+' mm</b></span>')
+        : (oznaka+': '+(PLbl[pr]||pr));
     }).filter(Boolean).join(' \u00b7 ')||'\u2014';
     var kanP=(tip==='kl')?_pozKanal(p):'bez';
-    if(kanP&&kanP!=='bez') opis+=(opis==='\u2014'?'':' \u00b7 ')
-      +'<span style="color:#1d8a6e">\u2248 kanal: '+(KanalLbl[kanP]||kanP)+'</span>';
+    var napP='';
+    if(kanP&&kanP!=='bez') napP='<span style="color:#1d8a6e">\u2248 <b>vodeni kanal:</b> '
+      +(KanalLbl[kanP]||kanP)+' strane</span>';
     h+='<tr>'+red(i+1)+red((p.a||0)+'\u00d7'+(p.b||0)+' mm')
       +red(kom,'text-align:center')
       +red(((p.a||0)*(p.b||0)/1e6*kom).toFixed(3),'text-align:right')
-      +red(opis,'font-size:10px')+red(p.nap||'','font-size:10px;color:#6b7a8d')+'</tr>';
+      +red(opis,'font-size:10px')
+      +red(napP+(napP&&p.nap?'<br>':'')+(p.nap||''),'font-size:10px;color:#6b7a8d')+'</tr>';
   });
   var r=_racunajPozicije();
   h+='</tbody><tfoot><tr style="background:#f0f2f5;font-weight:700">'
@@ -4890,7 +4993,7 @@ function _prilogPozicija(){
   var imaDjelim=pozicije.some(function(p){
     return strane.some(function(sd){
       var puna2=(sd.id==='A-zad'||sd.id==='D-pred')?(p.a||0):(p.b||0);
-      var d2=(p.bd&&p.bd[sd.id])||0;
+      var d2=_pozBd(p,sd.id);
       return d2>0&&d2<puna2;
     });
   });
@@ -6168,7 +6271,7 @@ function buildPozicijeRN(){
     strane.forEach(function(sd){
       var pr=_pozProf(p,sd.id);
       var puna=(sd.id==='A-zad'||sd.id==='D-pred')?(p.a||0):(p.b||0);
-      var d=(p.bd&&p.bd[sd.id])||0;
+      var d=_pozBd(p,sd.id);
       var djelim=(d>0&&d<puna);
       h+='<td style="text-align:center;font-size:10px'+(djelim?';background:#fff3cd':'')+'">'
         +(pr==='none'?'\u2013':PSym[pr])
@@ -6176,8 +6279,8 @@ function buildPozicijeRN(){
     });
     var kanR2=(tip==='kl')?_pozKanal(p):'bez';
     h+='<td style="font-size:10px">'
-      +((kanR2&&kanR2!=='bez')?('<b style="color:#1d8a6e">\u2248 '+(KanalLbl[kanR2]||kanR2)+'</b>'
-        +(p.nap?'<br>':'')):'')
+      +((kanR2&&kanR2!=='bez')?('<b style="color:#1d8a6e">\u2248 vodeni kanal: '
+        +(KanalLbl[kanR2]||kanR2)+' strane</b>'+(p.nap?'<br>':'')):'')
       +(p.nap||'')+'</td></tr>';
   });
   var uk=pozicije.reduce(function(a,p){return a+Math.max(1,p.kom||1);},0);
@@ -6185,8 +6288,11 @@ function buildPozicijeRN(){
   h+='</tbody><tfoot><tr><td colspan="2"><b>UKUPNO</b></td>'
     +'<td style="text-align:center"><b>'+uk+'</b></td>'
     +'<td colspan="'+(strane.length+1)+'"><b>'+ukM2.toFixed(3)+' m\u00b2</b></td></tr></tfoot></table>'
-    +'<div style="font-size:10px;color:#8a6d3b;margin-top:4px">'
-    +'\u26a0 \u017dutо polje = obradi <b>samo prvih N mm</b> te strane (vidljivi dio), ne cijelu du\u017einu.</div>';
+    +'<div style="font-size:10px;margin-top:5px;padding:5px 7px;background:#f8fafd;border:1px solid #dde2ea;border-radius:4px">'
+    +'<b>Strane:</b> '+strane.map(function(sd){return sd.lbl+' = '+sd.opis;}).join(' \u00b7 ')
+    +'<br><b>Simboli:</b> '+Object.keys(PLbl).map(function(pr){return PSym[pr]+' '+PLbl[pr];}).join(' \u00b7 ')
+    +'<br><span style="color:#8a6d3b">\u26a0 <b>\u017duto polje</b> = obradi samo prvih N mm te strane '
+    +'(vidljivi dio nakon ugradnje), ne cijelu du\u017einu.</span></div>';
   return h;
 }
 
@@ -6897,9 +7003,12 @@ function drawKlSematski(ctx,W,H){
 
   // Uz zadnju stranu: PROZOR kod klupice, ZID kod stepenice - da se odmah
   // vidi orijentacija i ne pomijesa koja strana ide u nisu.
+  // PROZOR (ili zid) je GORE. Strana D (zadnja) je uz njega, a strana A
+  // (prednja, vidljiva) je DOLJE - okrenuta prema prostoriji.
   var jeKlupica=(tip!=='st');
+  var jeZidna=(jeKlupica&&gs('kl-vrsta')==='zidna');
   ctx.save();
-  if(jeKlupica){
+  if(jeKlupica&&!jeZidna){
     ctx.fillStyle='#eaf3fb';
     ctx.fillRect(0,-30,A,22);
     ctx.strokeStyle='#7ba7cc'; ctx.lineWidth=1.6; ctx.strokeRect(0,-30,A,22);
@@ -6911,7 +7020,7 @@ function drawKlSematski(ctx,W,H){
     ctx.fillStyle='#4a7fa5'; ctx.font='bold 11px Segoe UI,Arial';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('P R O Z O R',A/2,-19);
-  } else {
+  } else if(!jeKlupica||jeZidna){
     ctx.fillStyle='#e8ecf1';
     ctx.fillRect(0,-26,A,18);
     ctx.strokeStyle='#8a93a3'; ctx.lineWidth=1; ctx.strokeRect(0,-26,A,18);
@@ -6925,7 +7034,8 @@ function drawKlSematski(ctx,W,H){
   ctx.restore();
 
   // Geometrija strana
-  var geo={'A-zad':[0,0,A,0],'B-lev':[0,0,0,B],'C-des':[A,0,A,B],'D-pred':[0,B,A,B]};
+  // A je DOLJE (prednja, vidljiva), D je GORE (zadnja, uz prozor/zid)
+  var geo={'D-pred':[0,0,A,0],'B-lev':[0,0,0,B],'C-des':[A,0,A,B],'A-zad':[0,B,A,B]};
   // Puna linija = obradjena strana; kod djelimicne obrade samo dio
   var pod=function(id){ var st=ivSt[id]; return (st&&st.prof)||'none'; };
   // Da li SVE pozicije imaju istu obradu te strane
@@ -6936,7 +7046,7 @@ function drawKlSematski(ctx,W,H){
   var djelimicnoIma=function(id){
     return (pozicije||[]).some(function(p){
       var puna=(id==='A-zad'||id==='D-pred')?(p.a||0):(p.b||0);
-      var d=(p.bd&&p.bd[id])||0;
+      var d=_pozBd(p,id);
       return d>0&&d<puna;
     });
   };
@@ -6975,8 +7085,8 @@ function drawKlSematski(ctx,W,H){
     var kd=17;
     ctx.save(); ctx.strokeStyle='#1d8a6e'; ctx.lineWidth=1.8; ctx.setLineDash([6,3]);
     _kanalStrane(kanJed).forEach(function(id){
-      if(id==='A-zad')  { ctx.beginPath(); ctx.moveTo(0,kd);    ctx.lineTo(A,kd);    ctx.stroke(); }
-      if(id==='D-pred') { ctx.beginPath(); ctx.moveTo(0,B-kd);  ctx.lineTo(A,B-kd);  ctx.stroke(); }
+      if(id==='D-pred') { ctx.beginPath(); ctx.moveTo(0,kd);    ctx.lineTo(A,kd);    ctx.stroke(); }
+      if(id==='A-zad')  { ctx.beginPath(); ctx.moveTo(0,B-kd);  ctx.lineTo(A,B-kd);  ctx.stroke(); }
       if(id==='B-lev')  { ctx.beginPath(); ctx.moveTo(kd,0);    ctx.lineTo(kd,B);    ctx.stroke(); }
       if(id==='C-des')  { ctx.beginPath(); ctx.moveTo(A-kd,0);  ctx.lineTo(A-kd,B);  ctx.stroke(); }
     });
@@ -6987,7 +7097,7 @@ function drawKlSematski(ctx,W,H){
     ctx.restore();
   }
   // Spaletne (bocni zidovi nise) kod klupice
-  if(jeKlupica){
+  if(jeKlupica&&!jeZidna){
     ctx.save();
     ctx.fillStyle='#e8ecf1'; ctx.strokeStyle='#8a93a3'; ctx.lineWidth=1;
     [-20,A].forEach(function(sx){
@@ -7021,10 +7131,10 @@ function drawKlSematski(ctx,W,H){
     }
     ctx.restore();
   };
-  pisi(A/2,42,strane[0]);          // A gore
+  pisi(A/2,42,strane[3]);          // D gore - uz prozor/zid
   pisi(58,B/2-14,strane[1]);       // B lijevo
   pisi(A-58,B/2-14,strane[2]);     // C desno
-  pisi(A/2,B-56,strane[3]);        // D dolje
+  pisi(A/2,B-56,strane[0]);        // A dolje - prednja, vidljiva
 
   // Naslov - BEZ konkretnih mjera
   ctx.save(); ctx.setTransform(1,0,0,1,0,0);
