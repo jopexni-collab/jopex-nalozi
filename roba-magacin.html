@@ -1398,7 +1398,7 @@ async function otvoriIzmjenuDebljine(robaId, naziv, trenutnaDebljina){
     });
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška.');
-    ucitajLagerListu();
+    ucitajLagerListu(true);
   }catch(e){ alert('✗ '+e.message); }
 }
 
@@ -1415,7 +1415,7 @@ async function otvoriIzmjenuJedinice(robaId, naziv, trenutnaJedinica){
     });
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška.');
-    ucitajLagerListu();
+    ucitajLagerListu(true);
   }catch(e){ alert('✗ '+e.message); }
 }
 
@@ -1443,7 +1443,7 @@ async function potvrdiNivelaciju(){
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška.');
     document.getElementById('nivelacija-modal').classList.remove('on');
-    ucitajLagerListu();
+    ucitajLagerListu(true);
   }catch(e){
     msg.style.color='red'; msg.textContent=e.message;
   }
@@ -1587,7 +1587,7 @@ async function rucniUnosSacuvaj(zavrsi){
     });
     const data=await r.json();
     if(!r.ok){ greskaDiv.textContent=data.error; greskaDiv.style.display='block'; return; }
-    await ucitajLagerListu(); // osvježi tabelu da se vidi nova vrijednost — prozorčić OSTAJE otvoren
+    await ucitajLagerListu(true); // osvježi tabelu da se vidi nova vrijednost — prozorčić OSTAJE otvoren
     if(zavrsi){
       rucniUnosZatvoriPopup();
     }else{
@@ -1610,7 +1610,7 @@ async function rucniUnosObrisiNedavne(minuti){
     const data=await r.json();
     if(!r.ok){ greskaDiv.textContent=data.error; greskaDiv.style.display='block'; return; }
     alert(`✓ Izbrisano ${data.broj_obrisanih} unosa.`);
-    await ucitajLagerListu();
+    await ucitajLagerListu(true);
   }catch(e){ greskaDiv.textContent='Greška pri brisanju.'; greskaDiv.style.display='block'; }
 }
 
@@ -1704,21 +1704,27 @@ async function qrGenerisi(lista){
   }
 }
 
-async function ucitajLagerListu(){
+async function ucitajLagerListu(zadrziFiltere){
   const objektId=document.getElementById('lager-objekat').value;
   const wrap=document.getElementById('lager-lista-tabela-wrap');
   const totalDiv=document.getElementById('lager-total');
   if(!objektId){wrap.innerHTML='<div class="empty-msg">Izaberite prodajni objekat.</div>';totalDiv.style.display='none';return;}
-  wrap.innerHTML='<div class="spinner">Učitavanje...</div>';
+  // Kod SITNE izmene (debljina/JM/cena/ručni unos) NE briši spinner-om (gubi se pozicija
+  // skrola), samo tiho osvježi podatke ispod postojeće tabele.
+  if(!zadrziFiltere) wrap.innerHTML='<div class="spinner">Učitavanje...</div>';
 
   try{
     const r=await fetch(`${API}/api/roba/lager?objekt_id=${objektId}`);
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška.');
     lagerPodaci=data.stavke;
-    lagerKolonaFilteri={sifra:'',naziv:'',grupa:'',debljina:'',jm:'',cijena:'',stanje:'',ukupno:''};
+    // Filteri se resetuju SAMO kod pravog, novog ulaska (klik "Prikaži", promena PJ, ili
+    // velika akcija poput brisanja/undo cijelog lagera) — NE kod sitne izmene jednog
+    // artikla (debljina/JM/cena/ručni unos), inače bi svaka takva izmena "izbacivala"
+    // korisnika iz filtera koji je upravo koristio da nadje sledeći artikal za ispravku.
+    if(!zadrziFiltere) lagerKolonaFilteri={};
     await ucitajLagerPragove(); // mora prije zaglavlja, legenda koristi lagerPragovi vrijednosti
-    renderLagerZaglavlje(); // pravi tabelu + zaglavlje SAMO JEDNOM po učitavanju
+    if(!zadrziFiltere) renderLagerZaglavlje(); // pravi tabelu + zaglavlje SAMO pri pravom ulasku
     renderLagerRedovi();    // puni tbody (ovo se poziva ponovo pri svakom filteru/sortiranju)
     prikaziUndoDugmeAkoPostoji(objektId);
   }catch(e){

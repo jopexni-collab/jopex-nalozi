@@ -455,6 +455,13 @@ td.num{text-align:right;font-weight:700;}
   </div>
 </div>
 
+<div class="modal" id="modal-brzi-otp" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;">
+  <div class="modal-box" style="background:#fff;border-radius:12px;padding:20px;max-width:520px;width:92vw;max-height:82vh;overflow-y:auto;">
+    <div id="brzi-otp-sadrzaj"><div style="text-align:center;color:#999;padding:30px;">Učitavanje...</div></div>
+    <button class="btn-sm" onclick="document.getElementById('modal-brzi-otp').style.display='none'" style="width:100%;margin-top:14px;">Zatvori</button>
+  </div>
+</div>
+
 <div class="modal" id="modal-klijent-dug" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;">
   <div class="modal-box" style="background:#fff;border-radius:12px;padding:20px;max-width:460px;width:92vw;max-height:80vh;overflow-y:auto;">
     <h3 id="kd-naslov" style="margin:0 0 12px;">Odakle dolazi dug</h3>
@@ -948,6 +955,39 @@ async function potvrdiRazduzenjeAdmin(id){
   }catch(e){ alert(e.message); }
 }
 
+// Brz, READ-ONLY prikaz otpremnice direktno iz baze — BEZ navigacije na maloprodaja.html
+// (koja bi tražila biranje PJ + lozinku za tu PJ). Ko vidi razduženje ovde, sme da vidi i
+// sadržaj otpremnice — to ne znači da sme i da prodaje kroz tu PJ.
+async function prikaziBrziOtp(broj){
+  const modal=document.getElementById('modal-brzi-otp');
+  const sadrzaj=document.getElementById('brzi-otp-sadrzaj');
+  sadrzaj.innerHTML='<div style="text-align:center;color:#999;padding:30px;">Učitavanje...</div>';
+  modal.style.display='flex';
+  try{
+    const r=await fetch(`${API}/api/otpremnice/po-broju/${encodeURIComponent(broj)}`);
+    const otp=await r.json();
+    if(!r.ok){ sadrzaj.innerHTML=`<div style="text-align:center;color:red;padding:20px;">✗ ${esc(otp.error||'Greška.')}</div>`; return; }
+    const valuta=otp.valuta||'KM';
+    sadrzaj.innerHTML=`
+      <h3 style="margin:0 0 4px;">${esc(otp.broj)}</h3>
+      <div style="font-size:12px;color:#8b96a5;margin-bottom:12px;">${fd(otp.datum)} · ${esc(otp.objekt_naziv||'')} · Komercijalista: ${esc(otp.komercijalista_ime||'—')}</div>
+      <div style="font-size:13px;margin-bottom:10px;"><b>Kupac:</b> ${esc(otp.kupac_naziv||'—')}${otp.kupac_telefon?' · '+esc(otp.kupac_telefon):''}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px;">
+        <thead><tr style="background:#f0f2f5;"><th style="padding:5px 6px;text-align:left;">Šifra</th><th style="padding:5px 6px;text-align:left;">Naziv</th><th style="padding:5px 6px;text-align:right;">Kol.</th>${otp.iznos!==undefined?`<th style="padding:5px 6px;text-align:right;">Cena</th><th style="padding:5px 6px;text-align:right;">Iznos</th>`:''}</tr></thead>
+        <tbody>${(otp.stavke||[]).map(s=>`
+          <tr style="border-bottom:1px solid #eee;">
+            <td style="padding:4px 6px;">${esc(s.sifra||'')}</td>
+            <td style="padding:4px 6px;">${esc(s.naziv||'')}</td>
+            <td style="padding:4px 6px;text-align:right;">${s.kolicina}</td>
+            ${s.iznos!==undefined?`<td style="padding:4px 6px;text-align:right;">${fmValuta(s.cijena,valuta)}</td><td style="padding:4px 6px;text-align:right;">${fmValuta(s.iznos,valuta)}</td>`:''}
+          </tr>`).join('')}
+        </tbody>
+      </table>
+      ${otp.ukupan_iznos!==undefined?`<div style="text-align:right;font-size:13px;"><b>Ukupno: ${fmValuta(otp.ukupan_iznos,valuta)}</b>${otp.iznos_placeno!==undefined?` · Plaćeno: ${fmValuta(otp.iznos_placeno,valuta)}`:''}</div>`:''}
+    `;
+  }catch(e){ sadrzaj.innerHTML='<div style="text-align:center;color:red;padding:20px;">Greška pri učitavanju.</div>'; }
+}
+
 async function loadSume(){
   try{
     const r=await fetch(`${API}/api/gotovina/suma`);
@@ -1135,7 +1175,7 @@ function render(){
       <td>${r.nalog_r_br?(/^\d+$/.test(String(r.nalog_r_br))
         ?`<a class="nalog-link" href="lista.html">#${r.nalog_r_br}</a>${r.narucilac?' — '+esc(r.narucilac):''}`
         :String(r.nalog_r_br).startsWith('OTP-')
-          ?`<a class="nalog-link" href="maloprodaja.html?otp=${encodeURIComponent(r.nalog_r_br)}">${esc(r.nalog_r_br)}</a>`
+          ?`<a class="nalog-link" href="#" onclick="prikaziBrziOtp('${esc(r.nalog_r_br).replace(/'/g,"\\'")}');return false;">${esc(r.nalog_r_br)}</a>`
           :String(r.nalog_r_br).startsWith('ISP-')&&r.javni_token
             ?`<a class="nalog-link" href="isplata-dokument.html?token=${encodeURIComponent(r.javni_token)}" target="_blank" rel="noopener">${esc(r.nalog_r_br)}</a>`
             :String(r.nalog_r_br).startsWith('UPL-')&&r.javni_token

@@ -540,6 +540,32 @@ router.get('/istorija-zakljucavanja', async (req, res) => {
   }
 });
 
+// GET /api/otpremnice/po-broju/:broj — brz, READ-ONLY prikaz otpremnice PO BROJU (npr.
+// "OTP-2026-000123") — koristi se za brzi uvid iz blagajne (razduženje komercijaliste),
+// bez potrebe da se ide kroz ceo maloprodaja.html tok (biranje PJ + lozinka za PJ). Ista
+// logika dozvola kao GET /:id ispod — ko vidi razduženje u blagajni, sme da vidi i
+// sadržaj otpremnice (to NE znači da sme i da PRODAJE kroz tu PJ — to ostaje zaštićeno
+// PJ-lozinkom u maloprodaja.html).
+router.get('/po-broju/:broj', async (req, res) => {
+  try {
+    const user = req.session?.user;
+    const h = await pool.query('SELECT * FROM otpremnice WHERE broj=$1', [req.params.broj]);
+    if (!h.rows.length) return res.status(404).json({ error: 'Otpremnica nije pronađena.' });
+    let otp = h.rows[0];
+    if (user?.rola !== 'admin' && otp.komercijalista_id !== user.id) {
+      const bp = await pool.query(
+        'SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 AND objekat_id=$2',
+        [user.id, otp.objekt_id]
+      );
+      if (!bp.rows.length) return res.status(403).json({ error: 'Nema pristupa.' });
+    }
+    const s = await pool.query('SELECT * FROM otpremnica_stavke WHERE otpremnica_id=$1 ORDER BY id', [otp.id]);
+    res.json({ ...otp, stavke: s.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const user = req.session?.user;
