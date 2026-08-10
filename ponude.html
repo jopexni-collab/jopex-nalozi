@@ -2414,7 +2414,10 @@ var tableHoles=[]; // [{id,name,shape:'round'|'rect',x,y,fi|...w,h,r[],cost}] - 
 var _edgeLabelLog=[]; // [{x,y,lbl}] mm pozicije slova A/B/C... snimljene tokom zadnjeg crtanja
 var _lastSc=1;
 var EXT_GAP_MM=70; // razmak izmedju kuhinjske ploče i produžetka (5-10cm), produžetak je odvojen komad
-var _suppressCanvasLegend=false; // kad je true, drawLegenda() se ne crta u canvas (koristi se u radnom nalogu - legenda ide kao HTML tekst u desnom bloku)
+var _suppressCanvasLegend=false;
+// Ambijent (prozor, spaletne) je tu da KUPAC razumije gdje klupica ide.
+// CNC operateru samo smeta, pa se u radnom nalogu i DXF-u NE crta.
+var _bezAmbijenta=false; // kad je true, drawLegenda() se ne crta u canvas (koristi se u radnom nalogu - legenda ide kao HTML tekst u desnom bloku)
 var PClr={none:'transparent',ravna:'#000',polukrug:'#000',bevel:'#000',ogee:'#000',mitered:'#000'};
 // Dash uzorci po profilu (crno-bijeli ispis)
 var PDash={none:[],ravna:[],polukrug:[10,5],bevel:[2,4,10,4],ogee:[10,3,2,3,2,3],mitered:[14,4]};
@@ -2792,18 +2795,20 @@ var pozicije=[];
 // pa i za one dodate KASNIJE. Cuva se uz stavku, kao i ivSt.
 var pozBdDef={};
 function _pozStrane(){
-  // A je PREDNJA (vidljiva, visi u prostoriju), D je ZADNJA (uz prozor).
-  // Bocne ulaze u spaletne. Kod stepenica: A nastup, D uz zid.
+  // A je PREDNJA (vidljiva), D je ZADNJA. Sta je iza zadnje zavisi od vrste:
+  // prozorska ide u nisu (prozor), zidna preko zida (nema nicega).
   if(tip==='st'){
     return [{id:'A-zad',lbl:'A',opis:'prednja \u2014 nastup',kratko:'nastup'},
             {id:'B-lev',lbl:'B',opis:'lijeva bo\u010dna',kratko:'lijeva'},
             {id:'C-des',lbl:'C',opis:'desna bo\u010dna',kratko:'desna'},
             {id:'D-pred',lbl:'D',opis:'zadnja \u2014 uz zid',kratko:'uz zid'}];
   }
+  var zidna=(gs('kl-vrsta')==='zidna');
   return [{id:'A-zad',lbl:'A',opis:'prednja \u2014 vidljiva',kratko:'prednja'},
-          {id:'B-lev',lbl:'B',opis:'lijeva \u2014 u \u0161paletnu',kratko:'lijeva'},
-          {id:'C-des',lbl:'C',opis:'desna \u2014 u \u0161paletnu',kratko:'desna'},
-          {id:'D-pred',lbl:'D',opis:'zadnja \u2014 uz prozor',kratko:'uz prozor'}];
+          {id:'B-lev',lbl:'B',opis:zidna?'lijeva bo\u010dna':'lijeva \u2014 u \u0161paletnu',kratko:'lijeva'},
+          {id:'C-des',lbl:'C',opis:zidna?'desna bo\u010dna':'desna \u2014 u \u0161paletnu',kratko:'desna'},
+          {id:'D-pred',lbl:'D',opis:zidna?'zadnja':'zadnja \u2014 uz prozor',
+           kratko:zidna?'zadnja':'uz prozor'}];
 }
 // ── ZIDNA KLUPICA: podjela ukupne duzine na optimalne komade ─────
 // Kod zidne klupice se cesto zada UKUPNA duzina (npr. 7,2 m uz zid), pa se
@@ -2840,19 +2845,90 @@ function _pozKanal(p){
   if(p.kan!=null) return p.kan;
   return gs('kl-iv')||'bez';
 }
-var KanalLbl={bez:'Bez kanala',dve_duze:'Dvije du\u017ee',dve_krace:'Dvije kra\u0107e',
-  duza_leva:'Du\u017ea + lijeva',duza_desna:'Du\u017ea + desna',sve:'Sve strane'};
+// ── VODENI KANAL: sta je uopste MOGUCE ───────────────────────────
+// Prozorska klupica: kanal NIKAD uz prozor (strana D). Voda se skuplja na
+//   prednjoj (vidljivoj) strani, eventualno i na bocnim.
+// Zidna klupica: sve kombinacije, ALI samo na VIDLJIVIM stranama. Kod komada
+//   koji se nastavljaju, spojna strana nema kanal - nema vidnog zavrsetka.
+var KanalLbl={
+  bez:'Bez kanala',
+  pred:'Prednja',
+  pred_lijeva:'Prednja + lijeva',
+  pred_desna:'Prednja + desna',
+  pred_obje:'Prednja + lijeva + desna',
+  zadnja:'Zadnja',
+  pred_zadnja:'Prednja + zadnja',
+  sve:'Sve strane',
+  dve_duze:'Prednja + zadnja', dve_krace:'Lijeva + desna',
+  duza_leva:'Prednja + lijeva', duza_desna:'Prednja + desna'
+};
+// Pozicija komada kod zidne klupice - odredjuje koje su bocne VIDLJIVE
+function _pozKomTip(p){ return p.kt||'sam'; }
+var KomTipLbl={sam:'samostalan',prvi:'prvi (lijevo vidljivo)',
+  sred:'srednji (nastavlja se s obje strane)',zadnji:'zadnji (desno vidljivo)'};
+function _vidljiveStrane(p){
+  var v={'A-zad':true,'D-pred':true,'B-lev':true,'C-des':true};
+  if(tip!=='kl') return v;
+  if(gs('kl-vrsta')!=='zidna'){ v['D-pred']=false; return v; }
+  var kt=_pozKomTip(p);
+  if(kt==='prvi'){   v['C-des']=false; }
+  if(kt==='zadnji'){ v['B-lev']=false; }
+  if(kt==='sred'){   v['B-lev']=false; v['C-des']=false; }
+  return v;
+}
+function _kanalOpcije(p){
+  var v=_vidljiveStrane(p||{});
+  var o=['bez','pred'];
+  if(v['B-lev']) o.push('pred_lijeva');
+  if(v['C-des']) o.push('pred_desna');
+  if(v['B-lev']&&v['C-des']) o.push('pred_obje');
+  if(tip==='kl'&&gs('kl-vrsta')==='zidna'){
+    o.push('zadnja','pred_zadnja');
+    if(v['B-lev']&&v['C-des']) o.push('sve');
+  }
+  return o;
+}
+// Opis kanala sa KONKRETNIM slovima strana - "dvije duze" ne govori CNC
+// operateru koje su to strane, pa se ispisuje npr. "A i D (prednja, uz prozor)"
+function _kanalOpis(k){
+  var ids=_kanalStrane(k);
+  if(!ids.length) return '';
+  var sve=_pozStrane();
+  var dijelovi=ids.map(function(id){
+    return sve.filter(function(x){return x.id===id;})[0];
+  }).filter(Boolean);
+  if(!dijelovi.length) return '';
+  return dijelovi.map(function(sd){return sd.lbl;}).join(' i ')
+    +' ('+dijelovi.map(function(sd){return sd.kratko;}).join(', ')+')';
+}
 function _kanalStrane(k){
+  // A = prednja (vidljiva), D = zadnja (uz prozor / uz zid)
+  if(k==='pred')        return ['A-zad'];
+  if(k==='pred_lijeva') return ['A-zad','B-lev'];
+  if(k==='pred_desna')  return ['A-zad','C-des'];
+  if(k==='pred_obje')   return ['A-zad','B-lev','C-des'];
+  if(k==='zadnja')      return ['D-pred'];
+  if(k==='pred_zadnja') return ['A-zad','D-pred'];
+  if(k==='sve')         return ['A-zad','B-lev','C-des','D-pred'];
   if(k==='dve_duze')   return ['A-zad','D-pred'];
   if(k==='dve_krace')  return ['B-lev','C-des'];
-  if(k==='duza_leva')  return ['D-pred','B-lev'];
-  if(k==='duza_desna') return ['D-pred','C-des'];
-  if(k==='sve')        return ['A-zad','B-lev','C-des','D-pred'];
+  if(k==='duza_leva')  return ['A-zad','B-lev'];
+  if(k==='duza_desna') return ['A-zad','C-des'];
   return [];
 }
 function pozKanal(i,val){
   if(!pozicije[i]) return;
   if(val==='') delete pozicije[i].kan; else pozicije[i].kan=val;
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
+// Tip komada kod zidne klupice - mijenja koje su bocne strane vidljive,
+// pa i koje opcije kanala imaju smisla za taj red.
+function pozKomTip(i,val){
+  if(!pozicije[i]) return;
+  pozicije[i].kt=val;
+  // Ako je izabrani kanal koristio stranu koja vise nije vidljiva, ocisti ga
+  var dozv=_kanalOpcije(pozicije[i]);
+  if(pozicije[i].kan!=null&&dozv.indexOf(pozicije[i].kan)<0) delete pozicije[i].kan;
   syncToActive(); buildPozicijeTabelu(); refresh();
 }
 function pozSveKanal(val){
@@ -2985,7 +3061,7 @@ function _pozSazetak(p){
   });
   var kan=(tip==='kl')?_pozKanal(p):'bez';
   if(kan&&kan!=='bez'){
-    dijelovi.push('<span style="color:#1d8a6e">\u2248 '+(KanalLbl[kan]||kan)+'</span>');
+    dijelovi.push('<span style="color:#1d8a6e">\u2248 kanal '+_kanalOpis(kan)+'</span>');
   }
   return {tekst:dijelovi.join(' ')||'<span style="color:#b9c4d2">bez obrade</span>',
           izuz:izuz+((p.kan!=null)?1:0)};
@@ -3043,7 +3119,7 @@ function buildPozicijeTabelu(){
       +'<select onchange="pozSveKanal(this.value)" style="font-size:11px;padding:3px 5px;'
       +'border:1px solid '+(kanIsti?'#dde2ea':'#e67e22')+';border-radius:4px;flex:1;min-width:118px;'
       +'background:'+(kanIsti?'#fff':'#fff8f0')+'">'
-      +Object.keys(KanalLbl).map(function(kk){
+      +_kanalOpcije(pozicije[0]||{}).map(function(kk){
         return '<option value="'+kk+'"'+(kanDef===kk?' selected':'')+'>'+KanalLbl[kk]+'</option>';
       }).join('')+'</select>'
       +(kanIsti?'':'<span style="font-size:9.5px;color:#e67e22" title="Neki redovi imaju svoj izbor">\u26a0</span>')
@@ -3136,9 +3212,21 @@ function buildPozicijeTabelu(){
           +'<select onchange="pozKanal('+i+',this.value)" style="font-size:11px;padding:3px 5px;'
           +'border:1px solid '+(kanR?'#7a4fa0':'#dde2ea')+';border-radius:4px;flex:1;min-width:118px">'
           +'<option value="">\u2014 kao za sve \u2014</option>'
-          +Object.keys(KanalLbl).map(function(kk){
+          +_kanalOpcije(p).map(function(kk){
             return '<option value="'+kk+'"'+(kanR&&p.kan===kk?' selected':'')+'>'+KanalLbl[kk]+'</option>';
           }).join('')+'</select></div>';
+        // Kod zidne klupice: gdje se komad nastavlja, tu bocna strana nema
+        // kanal (nema vidnog zavrsetka) - pa se bira tip komada.
+        if(gs('kl-vrsta')==='zidna'){
+          h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'
+            +'<b style="font-size:11px;color:#1a5fa8;min-width:13px">\u29c9</b>'
+            +'<span style="font-size:10px;color:#8a93a3;min-width:84px">nastavak</span>'
+            +'<select onchange="pozKomTip('+i+',this.value)" style="font-size:11px;padding:3px 5px;'
+            +'border:1px solid #dde2ea;border-radius:4px;flex:1;min-width:118px">'
+            +Object.keys(KomTipLbl).map(function(kt){
+              return '<option value="'+kt+'"'+(_pozKomTip(p)===kt?' selected':'')+'>'+KomTipLbl[kt]+'</option>';
+            }).join('')+'</select></div>';
+        }
       }
       h+='<div style="display:flex;gap:5px;margin-top:5px">'
         +'<input type="text" value="'+String(p.nap||'').replace(/"/g,'&quot;')+'" placeholder="napomena za ovaj red"'
@@ -3192,8 +3280,11 @@ function primijeniPodjelu(){
     +kom.map(function(d,i){return (i+1)+'. '+d+' \u00d7 '+sir+' mm';}).join('\n')
     +'\n\nPostoje\u0107e pozicije se ZAMJENJUJU.')) return;
   _saveUndo();
-  pozicije=kom.map(function(d){
-    return {a:d,b:sir,kom:1,nap:'',ob:{},bd:{}};
+  // Automatski se odredjuje koji je komad prvi/srednji/zadnji - kod nastavaka
+  // bocna strana nema kanal, jer se tu klupice spajaju bez vidnog zavrsetka.
+  pozicije=kom.map(function(d,i){
+    var kt=(kom.length===1)?'sam':(i===0?'prvi':(i===kom.length-1?'zadnji':'sred'));
+    return {a:d,b:sir,kom:1,nap:'',ob:{},bd:{},kt:kt};
   });
   syncToActive(); buildPozicijeTabelu(); refresh();
   var izTable=komadaIzTable(kom[0],sir);
@@ -4976,8 +5067,8 @@ function _prilogPozicija(){
     }).filter(Boolean).join(' \u00b7 ')||'\u2014';
     var kanP=(tip==='kl')?_pozKanal(p):'bez';
     var napP='';
-    if(kanP&&kanP!=='bez') napP='<span style="color:#1d8a6e">\u2248 <b>vodeni kanal:</b> '
-      +(KanalLbl[kanP]||kanP)+' strane</span>';
+    if(kanP&&kanP!=='bez') napP='<span style="color:#1d8a6e">\u2248 <b>vodeni kanal:</b> strane '
+      +_kanalOpis(kanP)+'</span>';
     h+='<tr>'+red(i+1)+red((p.a||0)+'\u00d7'+(p.b||0)+' mm')
       +red(kom,'text-align:center')
       +red(((p.a||0)*(p.b||0)/1e6*kom).toFixed(3),'text-align:right')
@@ -6279,8 +6370,10 @@ function buildPozicijeRN(){
     });
     var kanR2=(tip==='kl')?_pozKanal(p):'bez';
     h+='<td style="font-size:10px">'
-      +((kanR2&&kanR2!=='bez')?('<b style="color:#1d8a6e">\u2248 vodeni kanal: '
-        +(KanalLbl[kanR2]||kanR2)+' strane</b>'+(p.nap?'<br>':'')):'')
+      +((tip==='kl'&&gs('kl-vrsta')==='zidna'&&_pozKomTip(p)!=='sam')
+        ?('<b style="color:#7a4fa0">\u29c9 '+KomTipLbl[_pozKomTip(p)]+'</b><br>'):'')
+      +((kanR2&&kanR2!=='bez')?('<b style="color:#1d8a6e">\u2248 VODENI KANAL: strane '
+        +_kanalOpis(kanR2)+'</b>'+(p.nap?'<br>':'')):'')
       +(p.nap||'')+'</td></tr>';
   });
   var uk=pozicije.reduce(function(a,p){return a+Math.max(1,p.kom||1);},0);
@@ -7007,8 +7100,11 @@ function drawKlSematski(ctx,W,H){
   // (prednja, vidljiva) je DOLJE - okrenuta prema prostoriji.
   var jeKlupica=(tip!=='st');
   var jeZidna=(jeKlupica&&gs('kl-vrsta')==='zidna');
+  // Zidna klupica ide PREKO zida (kao polica) - nema nikakvog zida u crtezu.
+  // Ambijent se crta samo za ponudu; u nalogu i DXF-u je cist tehnicki crtez.
+  var crtajAmbijent=(!_bezAmbijenta&&jeKlupica&&!jeZidna);
   ctx.save();
-  if(jeKlupica&&!jeZidna){
+  if(crtajAmbijent){
     ctx.fillStyle='#eaf3fb';
     ctx.fillRect(0,-30,A,22);
     ctx.strokeStyle='#7ba7cc'; ctx.lineWidth=1.6; ctx.strokeRect(0,-30,A,22);
@@ -7020,7 +7116,9 @@ function drawKlSematski(ctx,W,H){
     ctx.fillStyle='#4a7fa5'; ctx.font='bold 11px Segoe UI,Arial';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('P R O Z O R',A/2,-19);
-  } else if(!jeKlupica||jeZidna){
+  } else if(!_bezAmbijenta&&!jeKlupica){
+    // Zid se crta SAMO kod stepenica (gaziste nalijeze na zid).
+    // Zidna klupica ide preko zida, pa se zid NE prikazuje.
     ctx.fillStyle='#e8ecf1';
     ctx.fillRect(0,-26,A,18);
     ctx.strokeStyle='#8a93a3'; ctx.lineWidth=1; ctx.strokeRect(0,-26,A,18);
@@ -7097,7 +7195,7 @@ function drawKlSematski(ctx,W,H){
     ctx.restore();
   }
   // Spaletne (bocni zidovi nise) kod klupice
-  if(jeKlupica&&!jeZidna){
+  if(crtajAmbijent){
     ctx.save();
     ctx.fillStyle='#e8ecf1'; ctx.strokeStyle='#8a93a3'; ctx.lineWidth=1;
     [-20,A].forEach(function(sx){
@@ -7841,11 +7939,13 @@ function genRadniNalog(returnHtml){try{
     // Crtaj sa vise prostora (legenda se NE crta u sliku - prikazuje se kao
     // HTML tekst u desnom bloku, vidi legendaHtml ispod)
     _suppressCanvasLegend=true;
+    _bezAmbijenta=true;   // CNC crtez - bez prozora i spaletni
     if(tip==='k') drawK(ctx2,pc.width,pc.height);
     else if(tip==='kl') drawKl(ctx2,pc.width,pc.height);
     else if(tip==='sto') drawSto(ctx2,pc.width,pc.height);
     else drawSt(ctx2,pc.width,pc.height);
     _suppressCanvasLegend=false;
+    _bezAmbijenta=false;
     var img=pc.toDataURL('image/png');
     document.body.removeChild(pc);
     var legendaHtml=buildLegendaHTML();
@@ -8496,6 +8596,39 @@ function genDXF(){
           'REZ '+rz.rezLbl+(rz.rez==='ugao'?(' '+rz.ugao+'st'):'')+': '+rz.lbl+' '+rz.m.toFixed(2)+'m','TEKST');
       });
     } else if(tip==='kl'){
+      // Tabela pozicija: SVAKA pozicija dobija svoj crtez u DXF-u, jedan
+      // ispod drugog - operater rezи po stvarnim mjerama, ne po tipskom.
+      if(imaPozicije()&&(pozicije||[]).length){
+        var yPoz=0, sveStrane=_pozStrane();
+        pozicije.forEach(function(pz,pi){
+          var pa=pz.a||0, pb=pz.b||0, pk=Math.max(1,pz.kom||1);
+          rc(0,yPoz,pa,pb,'KONTURA');
+          tx(0,yPoz-12,3.5,'POZ '+(pi+1)+':  '+pa+' x '+pb+' mm   x'+pk+' kom'
+            +(pz.nap?('   ('+pz.nap+')'):''),'TEKST');
+          // Obrada po stranama, sa oznakom djelimicne
+          var opisi=[];
+          sveStrane.forEach(function(sd){
+            var pr=_pozProf(pz,sd.id);
+            var puna=(sd.id==='A-zad'||sd.id==='D-pred')?pa:pb;
+            var dd=_pozBd(pz,sd.id);
+            var djel=(dd>0&&dd<puna);
+            // Djelimicna obrada se ispisuje I kad strana nema profil - operater
+            // mora znati da se dira samo dio, cak i ako je "bez obrade" drugdje.
+            if(pr==='none'&&!djel) return;
+            opisi.push(sd.lbl+'('+sd.kratko+')='+(pr==='none'?'bez':(PLbl[pr]||pr))
+              +(djel?(' SAMO '+dd+'mm'):''));
+          });
+          if(opisi.length) tx(0,yPoz+pb+10,2.6,'OBRADA: '+opisi.join('  |  '),'TEKST');
+          var kanPz=(tip==='kl')?_pozKanal(pz):'bez';
+          if(kanPz&&kanPz!=='bez')
+            tx(0,yPoz+pb+18,2.6,'VODENI KANAL: strane '
+              +_kanalOpis(kanPz).replace(/[()]/g,''),'TEKST');
+          dH(0,yPoz,pa,pa+' mm',30);
+          dV(-45,yPoz,yPoz+pb,pb+' mm',0);
+          yPoz+=pb+70;
+        });
+        bbox_h=yPoz;
+      } else {
       // Jedan crtez klupice sa brojem komada
       var kk=Math.max(1,gi('kl-k'));
       rcY(0,0,gi('kl-a'),gi('kl-b'),'KONTURA');
@@ -8510,6 +8643,7 @@ function genDXF(){
           'REZ '+rz.rezLbl+(rz.rez==='ugao'?(' '+rz.ugao+'st'):'')+': '+rz.lbl+' '+rz.m.toFixed(2)+'m','TEKST');
       });
       bbox_h=gi('kl-b')+(_rzKlD.length?50+_rzKlD.length*8:0);
+      }
     } else if(tip==='sto'){
       var stoAD=d.A||0, stoBD=(shape==='okrugao')?stoAD:(d.B||0);
       var rrD=getTableRadiusMM();
