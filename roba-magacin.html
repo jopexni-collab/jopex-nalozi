@@ -304,6 +304,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <button type="button" class="glavni-tab-btn" data-tab="presek" onclick="prebaciGlavniTabRM('presek')">⚖️ Presek / Usaglašavanje</button>
   <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
   <button type="button" class="glavni-tab-btn" data-tab="kretanje" onclick="prebaciGlavniTabRM('kretanje')">📈 Kretanje robe</button>
+  <button type="button" class="glavni-tab-btn" data-tab="uvoz" onclick="prebaciGlavniTabRM('uvoz')">📥 Uvoz robe</button>
 </div>
 
 <div id="tab-kalkulacija">
@@ -473,80 +474,6 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <div id="lager-total" style="display:none" class="dnevni-total"></div>
   </div>
 
-  <div class="import-box" id="import-box">
-    <h3>📥 Uvoz robe iz XLSX</h3>
-
-    <!-- Korak 1: izbor fajla -->
-    <div id="imp-korak1">
-      <div class="ce-row">
-        <button type="button" class="ce-tip-btn active" data-izvor="bluesoft" onclick="postaviIzvorUvoza('bluesoft')">📀 Bluesoft</button>
-        <button type="button" class="ce-tip-btn" data-izvor="interni" onclick="postaviIzvorUvoza('interni')">📝 Interni XLS</button>
-        <button type="button" class="ce-tip-btn" data-izvor="metapodaci" onclick="postaviIzvorUvoza('metapodaci')">🏷️ Samo grupa/debljina</button>
-      </div>
-      <div id="izvor-opis" style="font-size:11px;color:#6b7a8d;margin:6px 0 10px;line-height:1.5;">
-        Bluesoft izvoz — uvozi SAMO količine, cijena se nikad ne upisuje niti mijenja odavde
-        (nova stavka dobija cijenu 0, admin je ručno postavlja).
-      </div>
-
-      <div id="imp-nacin-red" class="ce-row">
-        <button type="button" class="ce-tip-btn active" data-nacin="nabavka" onclick="postaviNacinUvoza('nabavka')">📦 Nova nabavka</button>
-        <button type="button" class="ce-tip-btn" data-nacin="zamjena" onclick="postaviNacinUvoza('zamjena')">🔁 Zamjena kompletnog lagera</button>
-      </div>
-      <div id="nacin-opis" style="font-size:11px;color:#6b7a8d;margin:-4px 0 8px;">
-        Dodaje količinu iz fajla na postojeće stanje.
-      </div>
-      <div id="imp-objekat-red">
-        <select id="imp-objekat"><option value="">— izaberi prodajni objekat —</option></select>
-      </div>
-      <div id="nabavka-cijena-opcija">
-        <label class="chk" style="margin-bottom:8px;">
-          <input type="checkbox" id="imp-azuriraj-cijenu"> Ažuriraj cijenu ako se razlikuje od fajla
-        </label>
-      </div>
-
-      <input type="file" id="imp-file" accept=".xlsx,.xls">
-      <div id="imp-sheet-red" style="display:none;">
-        <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin:6px 0 4px;">Fajl ima više listova (sheet-ova) — izaberi koji da uvezeš:</label>
-        <select id="imp-sheet" onchange="ucitajPregledUvoza()"></select>
-      </div>
-      <button class="btn-import" onclick="ucitajPregledUvoza()">Učitaj fajl i prikaži kolone</button>
-    </div>
-
-    <!-- Korak 2: potvrda mapiranja kolona (prikazuje se nakon učitavanja) -->
-    <div id="imp-korak2" style="display:none">
-      <div class="uzorak-hint">Zaglavlja pronađena u fajlu i prvih par redova — provjeri mapiranje:</div>
-      <div class="uzorak-box"><table id="uzorak-tabela"></table></div>
-
-      <div class="map-row"><label>Šifra <span class="req">*</span></label><select id="map-sifra"></select></div>
-      <div class="map-row"><label>Naziv <span class="req">*</span></label><select id="map-naziv"></select></div>
-      <div class="map-row" id="map-cijena-red"><label>Cijena</label><select id="map-cijena"></select></div>
-      <div class="map-row" id="map-stanje-red"><label>Stanje</label><select id="map-stanje"></select></div>
-      <div class="map-row"><label>Jed. mjere</label><select id="map-jed_mjera"></select></div>
-      <div class="map-row"><label>Grupa</label><select id="map-grupa"></select></div>
-      <div class="map-row"><label>Debljina</label><select id="map-debljina"></select></div>
-      <div class="map-row" id="map-jm-default-red"><label>Ako nema JM kolone</label><input type="text" id="map-jm-default" value="m2" placeholder="npr. m2, kom"></div>
-
-      <button class="btn-import" onclick="potvrdiUvoz()">✓ Uvezi sa ovim mapiranjem</button>
-      <button class="btn-import sec" onclick="otkaziUvoz()">← Nazad / drugi fajl</button>
-    </div>
-
-    <div id="import-msg"></div>
-  </div>
-
-  <div class="import-box" id="blic-izbor-box">
-    <h3>📏 Blic izbor jedinice mjere</h3>
-    <div class="uzorak-hint">Brzo grupno podešavanje — pretraži artikle, označi ih, pa jednim dodirom postavi jedinicu za sve izabrane. Bitno je da jedinica ovdje odgovara jedinici za koju važi cijena artikla.</div>
-    <input type="text" id="blic-search" placeholder="Pretraga po šifri ili nazivu...">
-    <button class="btn-import sec" onclick="blicTrazi()">Pretraži</button>
-    <div id="blic-lista"></div>
-    <div id="blic-akcije" style="display:none;margin-top:10px;">
-      <div style="font-size:11.5px;color:#6b7a8d;margin-bottom:6px;">Izabrano: <b id="blic-broj">0</b></div>
-      <div class="ce-row">
-        <button type="button" class="ce-tip-btn" onclick="blicPostavi('kom')">Postavi: Kom</button>
-        <button type="button" class="ce-tip-btn" onclick="blicPostavi('m2')">Postavi: m²</button>
-        <button type="button" class="ce-tip-btn" onclick="blicPostavi('m3')">Postavi: m³</button>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -654,6 +581,11 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <button type="button" class="ce-tip-btn" data-kper="mjesec" onclick="postaviKretanjeMjesec(this)">Ovaj mjesec</button>
     </div>
     <div class="ce-row" style="margin-top:6px;">
+      <button type="button" class="ce-tip-btn active" data-kizv="" onclick="postaviKretanjeIzvor('',this)">Sva kretanja</button>
+      <button type="button" class="ce-tip-btn" data-kizv="otpremnice" onclick="postaviKretanjeIzvor('otpremnice',this)">Samo otpremnice</button>
+      <button type="button" class="ce-tip-btn" data-kizv="usaglasavanje" onclick="postaviKretanjeIzvor('usaglasavanje',this)">Samo usaglašavanja</button>
+    </div>
+    <div class="ce-row" style="margin-top:6px;">
       <input type="date" id="kretanje-od" onchange="ucitajKretanjeRobe()">
       <span style="align-self:center;color:#8b96a5;">—</span>
       <input type="date" id="kretanje-do" onchange="ucitajKretanjeRobe()">
@@ -697,6 +629,66 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   </div>
 </div>
 
+<div id="tab-uvoz" style="display:none;">
+  <div class="import-box" id="import-box">
+    <h3>📥 Uvoz robe iz XLSX</h3>
+
+    <!-- Korak 1: izbor fajla -->
+    <div id="imp-korak1">
+      <div class="ce-row">
+        <button type="button" class="ce-tip-btn active" data-izvor="bluesoft" onclick="postaviIzvorUvoza('bluesoft')">📀 Bluesoft</button>
+        <button type="button" class="ce-tip-btn" data-izvor="interni" onclick="postaviIzvorUvoza('interni')">📝 Interni XLS</button>
+        <button type="button" class="ce-tip-btn" data-izvor="metapodaci" onclick="postaviIzvorUvoza('metapodaci')">🏷️ Samo grupa/debljina</button>
+      </div>
+      <div id="izvor-opis" style="font-size:11px;color:#6b7a8d;margin:6px 0 10px;line-height:1.5;">
+        Bluesoft izvoz — uvozi SAMO količine, cijena se nikad ne upisuje niti mijenja odavde
+        (nova stavka dobija cijenu 0, admin je ručno postavlja).
+      </div>
+
+      <div id="imp-nacin-red" class="ce-row">
+        <button type="button" class="ce-tip-btn active" data-nacin="nabavka" onclick="postaviNacinUvoza('nabavka')">📦 Nova nabavka</button>
+        <button type="button" class="ce-tip-btn" data-nacin="zamjena" onclick="postaviNacinUvoza('zamjena')">🔁 Zamjena kompletnog lagera</button>
+      </div>
+      <div id="nacin-opis" style="font-size:11px;color:#6b7a8d;margin:-4px 0 8px;">
+        Dodaje količinu iz fajla na postojeće stanje.
+      </div>
+      <div id="imp-objekat-red">
+        <select id="imp-objekat"><option value="">— izaberi prodajni objekat —</option></select>
+      </div>
+      <div id="nabavka-cijena-opcija">
+        <label class="chk" style="margin-bottom:8px;">
+          <input type="checkbox" id="imp-azuriraj-cijenu"> Ažuriraj cijenu ako se razlikuje od fajla
+        </label>
+      </div>
+
+      <input type="file" id="imp-file" accept=".xlsx,.xls">
+      <div id="imp-sheet-red" style="display:none;">
+        <label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin:6px 0 4px;">Fajl ima više listova (sheet-ova) — izaberi koji da uvezeš:</label>
+        <select id="imp-sheet" onchange="ucitajPregledUvoza()"></select>
+      </div>
+      <button class="btn-import" onclick="ucitajPregledUvoza()">Učitaj fajl i prikaži kolone</button>
+    </div>
+
+    <!-- Korak 2: potvrda mapiranja kolona (prikazuje se nakon učitavanja) -->
+    <div id="imp-korak2" style="display:none">
+      <div class="uzorak-hint">Zaglavlja pronađena u fajlu i prvih par redova — provjeri mapiranje:</div>
+      <div class="uzorak-box"><table id="uzorak-tabela"></table></div>
+
+      <div class="map-row"><label>Šifra <span class="req">*</span></label><select id="map-sifra"></select></div>
+      <div class="map-row"><label>Naziv <span class="req">*</span></label><select id="map-naziv"></select></div>
+      <div class="map-row" id="map-cijena-red"><label>Cijena</label><select id="map-cijena"></select></div>
+      <div class="map-row" id="map-stanje-red"><label>Stanje</label><select id="map-stanje"></select></div>
+      <div class="map-row"><label>Jed. mjere</label><select id="map-jed_mjera"></select></div>
+      <div class="map-row"><label>Grupa</label><select id="map-grupa"></select></div>
+      <div class="map-row"><label>Debljina</label><select id="map-debljina"></select></div>
+      <div class="map-row" id="map-jm-default-red"><label>Ako nema JM kolone</label><input type="text" id="map-jm-default" value="m2" placeholder="npr. m2, kom"></div>
+
+      <button class="btn-import" onclick="potvrdiUvoz()">✓ Uvezi sa ovim mapiranjem</button>
+      <button class="btn-import sec" onclick="otkaziUvoz()">← Nazad / drugi fajl</button>
+    </div>
+
+    <div id="import-msg"></div>
+  </div>
 </div>
 
 <!-- ═══ MODAL: ROBNA KARTICA ═══ -->
@@ -1011,66 +1003,6 @@ async function potvrdiUvoz(){
     otkaziUvoz();
   }catch(e){
     msg.style.color='red'; msg.textContent=e.message;
-  }
-}
-
-async function blicTrazi(){
-  const q=document.getElementById('blic-search').value;
-  const cont=document.getElementById('blic-lista');
-  cont.innerHTML='<div class="spinner">Pretraga...</div>';
-  try{
-    const r=await fetch(`${API}/api/roba?q=${encodeURIComponent(q)}&limit=100`);
-    const rows=await r.json();
-    blicSelected.clear();
-    renderBlicLista(rows);
-  }catch(e){
-    cont.innerHTML='<div class="empty-msg">Greška pri pretrazi.</div>';
-  }
-}
-
-function renderBlicLista(rows){
-  const cont=document.getElementById('blic-lista');
-  if(!rows.length){
-    cont.innerHTML='<div class="empty-msg">Nema rezultata.</div>';
-    document.getElementById('blic-akcije').style.display='none';
-    return;
-  }
-  cont.innerHTML=rows.map(a=>`
-    <label class="kupac-rez-item" style="display:flex;align-items:center;gap:10px;">
-      <input type="checkbox" onchange="blicToggle(${a.id},this.checked)" style="width:20px;height:20px;flex-shrink:0;">
-      <div style="flex:1;min-width:0;">
-        <div class="kupac-rez-naziv">${esc(a.naziv)}</div>
-        <div class="kupac-rez-meta">Šifra: ${esc(a.sifra)} · Trenutno: <b>${esc(a.jed_mjera)}</b></div>
-      </div>
-    </label>
-  `).join('');
-  document.getElementById('blic-akcije').style.display='block';
-  blicAzurirajBroj();
-}
-
-function blicToggle(id, checked){
-  if(checked) blicSelected.add(id); else blicSelected.delete(id);
-  blicAzurirajBroj();
-}
-
-function blicAzurirajBroj(){
-  document.getElementById('blic-broj').textContent=blicSelected.size;
-}
-
-async function blicPostavi(jm){
-  if(!blicSelected.size){alert('Izaberite bar jedan artikal.');return;}
-  if(!confirm(`Postaviti jedinicu "${jm}" za ${blicSelected.size} artikal(a)? Ovo mijenja jedinicu za koju važi njihova cijena.`)) return;
-  try{
-    const r=await fetch(`${API}/api/roba/bulk-jedinica`,{
-      method:'PATCH',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ids:[...blicSelected], jed_mjera:jm}),
-    });
-    const data=await r.json();
-    if(!r.ok) throw new Error(data.error||'Greška.');
-    alert(`✓ Ažurirano ${data.izmijenjeno} artikal(a).`);
-    blicTrazi();
-  }catch(e){
-    alert(e.message);
   }
 }
 
@@ -1407,6 +1339,12 @@ async function popuniLagerObjekat(){
     window.__lagerObjektiValute=Object.fromEntries(rows.map(o=>[String(o.id),o.valuta||'KM']));
     sel.innerHTML='<option value="">— izaberi prodajni objekat —</option>'+rows.map(o=>`<option value="${o.id}">${esc(o.naziv)}${o.valuta==='EUR'?' (€)':''}</option>`).join('');
     if(trenutniObjekat) sel.value=trenutniObjekat.id;
+    else{
+      // Nema sačuvanog PJ za ovog korisnika — podrazumevano odmah izabran i UČITAN
+      // "PJ Aleksandrovac" (najčešće korišćen), umesto praznog izbora koji zahteva ručni klik.
+      const aleksandrovac=rows.find(o=>o.naziv?.toLowerCase().includes('aleksandrovac'));
+      if(aleksandrovac){ sel.value=aleksandrovac.id; ucitajLagerListu(); }
+    }
   }catch(e){}
 }
 
@@ -1865,8 +1803,25 @@ function renderLagerZaglavlje(){
 let lagerFilterPanelKolona=null;
 let lagerFilterPanelPretraga='';
 
+// Vraća redove koji prežive SVE AKTIVNE filtere OSIM kolone "izuzKolona" — koristi se da
+// se opcije u JEDNOM padajućem meniju suze prema onome što je VEĆ filtrirano u drugim
+// kolonama (kaskadno, kao u Excel-u). Kolona ne filtrira SAMA SEBE (inače bi svaki put
+// nudila samo trenutno izabrano, umjesto punog izbora za TU kolonu).
+function lagerRedoviBezJedneKolone(izuzKolona){
+  return lagerPodaci.filter(s=>
+    LAGER_KOLONE.every(({k})=>{
+      if(k===izuzKolona) return true;
+      const iskljuceno=lagerKolonaFilteri[k];
+      if(!iskljuceno || iskljuceno.size===0) return true;
+      const v=lagerVrijednostZaKolonu(s,k);
+      return !iskljuceno.has(v) && !(iskljuceno.has('') && (v==null||v===''));
+    })
+  );
+}
+
 function lagerDistinctVrijednosti(k){
-  const svePop=lagerPodaci.map(s=>lagerVrijednostZaKolonu(s,k));
+  const izvor=lagerRedoviBezJedneKolone(k); // kaskadno — suženo prema OSTALIM filterima
+  const svePop=izvor.map(s=>lagerVrijednostZaKolonu(s,k));
   const nepraznih=[...new Set(svePop.filter(v=>v!=null&&v!==''))]
     .sort((a,b)=>typeof a==='number'?a-b:String(a).localeCompare(String(b),'sr-Latn-BA'));
   // Ako postoji BAR JEDAN red sa praznom vrijednosti u ovoj koloni, dodaj eksplicitnu ""
@@ -2153,11 +2108,6 @@ async function vratiLagerIzBackupa(objektId, backupId){
 }
 
 /* ── INICIJALIZACIJA ─────────────────────────────────────────── */
-document.getElementById('blic-search').addEventListener('input', e=>{
-  // Enter-triggered pretraga vec postoji preko dugmeta; ovdje samo omoguci Enter u polju.
-});
-document.getElementById('blic-search').addEventListener('keydown', e=>{ if(e.key==='Enter') blicTrazi(); });
-
 document.getElementById('prenos-search').addEventListener('input', e=>{
   clearTimeout(prenosSearchTimer);
   const q=e.target.value;
@@ -2178,6 +2128,7 @@ function prebaciGlavniTabRM(tab){
   document.getElementById('tab-presek').style.display = tab==='presek' ? 'block' : 'none';
   document.getElementById('tab-pj').style.display = tab==='pj' ? 'block' : 'none';
   document.getElementById('tab-kretanje').style.display = tab==='kretanje' ? 'block' : 'none';
+  document.getElementById('tab-uvoz').style.display = tab==='uvoz' ? 'block' : 'none';
   if(tab==='kretanje' && !kretanjeObjektiUcitani) kretanjeUcitajObjekte();
   if(tab==='uvoz-istorija') uvozIstorijaUcitaj();
   if(tab==='presek' && !presekObjektiUcitani) presekUcitajObjekte();
@@ -2428,6 +2379,10 @@ async function kalkUcitajObjekte(){
     kalkMojiPJovi=await r.json();
     document.getElementById('kalk-objekt').innerHTML=kalkMojiPJovi.map(p=>`<option value="${p.id}">${esc(p.naziv)}</option>`).join('');
     window.__lagerObjektiValute={...(window.__lagerObjektiValute||{}), ...Object.fromEntries(kalkMojiPJovi.map(p=>[String(p.id),p.valuta||'KM']))};
+    // Podrazumevano odmah izabran "PJ Aleksandrovac" (najčešće korišćen) — ne mora se ručno
+    // birati svaki put pre nove kalkulacije.
+    const aleksandrovac=kalkMojiPJovi.find(p=>p.naziv?.toLowerCase().includes('aleksandrovac'));
+    if(aleksandrovac) document.getElementById('kalk-objekt').value=aleksandrovac.id;
     kalkRenderStavke(); // ponovo iscrtaj ako je vec bilo stavki, da se valuta odmah primijeni
   }catch(e){}
 }
@@ -2614,6 +2569,13 @@ async function kretanjeUcitajObjekte(){
   postaviKretanjePeriod(7, document.querySelector('.ce-tip-btn[data-kper="7"]'));
 }
 
+let kretanjeIzvorFilter=''; // '' = sva kretanja, 'otpremnice' = samo prodaja, 'usaglasavanje' = samo presek/rucni-unos
+function postaviKretanjeIzvor(izvor, btn){
+  kretanjeIzvorFilter=izvor;
+  document.querySelectorAll('[data-kizv]').forEach(b=>b.classList.toggle('active', b===btn));
+  primijeniKretanjeFiltere();
+}
+
 function postaviKretanjePeriod(dana, btn){
   document.querySelectorAll('.ce-tip-btn[data-kper]').forEach(b=>b.classList.toggle('active', b===btn));
   const danas=new Date();
@@ -2707,6 +2669,8 @@ function primijeniKretanjeFiltere(){
   // Svi filteri se primjenjuju ZAJEDNO (AND) na isti niz — kombinovani efekat je isto
   // što i "kaskadno sužavanje", samo bez dropdown-a koji bi trebalo ponovo graditi.
   let filtrirano=kretanjeSveStavke.filter(s=>{
+    if(kretanjeIzvorFilter==='otpremnice' && s.izvor!=='prodaja') return false;
+    if(kretanjeIzvorFilter==='usaglasavanje' && s.izvor!=='usaglasavanje') return false;
     if(fDatum && !new Date(s.datum).toLocaleDateString('sr-Latn-BA').toLowerCase().includes(fDatum)) return false;
     if(fArtikal && !((s.sifra||'').toLowerCase().includes(fArtikal) || (s.naziv||'').toLowerCase().includes(fArtikal))) return false;
     if(fTip && s.tip!==fTip) return false;
@@ -2740,7 +2704,7 @@ function renderKretanjeTabela(stavke){
     <tr>
       <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;white-space:nowrap;cursor:pointer;" onclick="filtrirajPoVrijednostiKretanje('kf-datum','${new Date(s.datum).toLocaleDateString('sr-Latn-BA')}')" title="Klik za filter po ovom datumu">${new Date(s.datum).toLocaleDateString('sr-Latn-BA')}</td>
       <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;cursor:pointer;" onclick="filtrirajPoVrijednostiKretanje('kf-artikal','${esc(s.sifra).replace(/'/g,"\\'")}')" title="Klik za filter po ovom artiklu"><b>${esc(s.sifra)}</b><br><span style="font-size:10.5px;color:#8b96a5;">${esc(s.naziv)}</span></td>
-      <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;text-align:center;font-size:10.5px;color:#8b96a5;">${s.izvor==='kalkulacija'?'📦 kalkulacija':s.izvor==='prodaja'?'🛒 prodaja':'🔄 prenos'}</td>
+      <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;text-align:center;font-size:10.5px;color:#8b96a5;">${s.izvor==='kalkulacija'?'📦 kalkulacija':s.izvor==='prodaja'?'🛒 prodaja':s.izvor==='usaglasavanje'?'⚖️ usaglašavanje':'🔄 prenos'}</td>
       <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;text-align:right;color:var(--green,#1f8a4c);font-weight:700;">${jeUlaz?'+'+fm(s.kolicina)+' '+esc(s.jed_mjera||''):''}</td>
       <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;${jeUlaz?'cursor:pointer;':''}" ${jeUlaz?`onclick="filtrirajPoVrijednostiKretanje('kf-od-koga','${esc(s.partner).replace(/'/g,"\\'")}')" title="Klik za filter po ovom dobavljaču"`:''}>${jeUlaz?esc(s.partner):''}</td>
       <td style="padding:6px 7px;border-bottom:1px solid #f0f2f5;text-align:right;color:var(--red,#c0392b);font-weight:700;">${!jeUlaz?'−'+fm(s.kolicina)+' '+esc(s.jed_mjera||''):''}</td>
