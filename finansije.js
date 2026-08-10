@@ -9,6 +9,26 @@ function jeDozvoljeno(user) {
   return !!user && (user.rola === 'admin' || user.je_blagajnik || user.moze_prodavati);
 }
 
+// Isti obrazac kao u otpremnice.js — vraća listu ID-jeva PJ na koje je korisnik ograničen,
+// ili NULL ako vidi sve (admin, blagajnik za bar jednu PJ, ili nikad eksplicitno ograničen
+// prodavac). Koristi se da VP/banka pregled ne pokazuje podatke iz PJ na koje korisnik
+// nema nikakvo ovlašćenje (ni blagajnik ni prodavac).
+// STRIKTNO ograničenje — kombinuje blagajnici_pj + prodavci_pj (ko god ima ulogu u
+// bilo kojoj od te dvije tabele za konkretnu PJ, vidi TU PJ) — BEZ izuzetka "blagajnik
+// vidi sve" (za razliku od sličnog helpera u otpremnice.js). Ako korisnik NEMA nijednu
+// dodjelu ni u jednoj tabeli, vraća PRAZAN niz (vidi NIŠTA) — ne null (što bi značilo
+// "bez ograničenja/vidi sve"). Ograničenje koje je već definisano se poštuje strogo.
+async function dozvoljeniPJZaPregled(user) {
+  if (!user || user.rola === 'admin') return null;
+  const r = await pool.query(
+    `SELECT DISTINCT objekat_id FROM blagajnici_pj WHERE zaposleni_id=$1
+     UNION
+     SELECT DISTINCT objekat_id FROM prodavci_pj WHERE zaposleni_id=$1`,
+    [user.id]
+  );
+  return r.rows.map(row => row.objekat_id); // može biti prazan niz — namjerno, znači "ne vidi nijednu PJ"
+}
+
 /* ═══ BANKA ═══════════════════════════════════════════════════════════════ */
 
 // GET /api/finansije/banka — lista bankovnih uplata, sa filterima (banka, od, do,
@@ -26,6 +46,15 @@ router.get('/banka', async (req, res) => {
     if (na_cekanju === 'true') where.push('potvrdjeno = false');
     if (od) { where.push(`datum >= $${i++}`); vals.push(od); }
     if (do_) { where.push(`datum <= $${i++}`); vals.push(do_); }
+    // banka_uplate čuva NAZIV PJ (ne ID) — pretvori dozvoljene ID-jeve u nazive prije
+    // filtriranja. Zapisi BEZ objekt_naziv (npr. iz Proizvodnje, nisu vezani za PJ) ostaju
+    // vidljivi svima ko ima pristup blagajni — to je "zajednički" novac, ne PJ-specifičan.
+    const dozvoljeniPJ = await dozvoljeniPJZaPregled(user);
+    if (dozvoljeniPJ) {
+      const nazivi = await pool.query('SELECT naziv FROM prodajni_objekti WHERE id = ANY($1::int[])', [dozvoljeniPJ]);
+      where.push(`(objekt_naziv = ANY($${i++}::text[]) OR objekt_naziv IS NULL)`);
+      vals.push(nazivi.rows.map(r => r.naziv));
+    }
     const r = await pool.query(
       `SELECT * FROM banka_uplate ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
        ORDER BY datum DESC LIMIT 300`,
@@ -515,6 +544,7 @@ router.get('/vp-cekanje', async (req, res) => {
   const user = req.session?.user;
   if (!jeDozvoljeno(user)) return res.status(403).json({ error: 'Nema pristupa.' });
   try {
+    const dozvoljeniPJ = await dozvoljeniPJZaPregled(user);
     // Performanse: CTE agregati (računaju se JEDNOM, iskorišćavaju indekse) umjesto
     // korelisanih podupita po redu (koji bi se ponovo izvršavali za SVAKI red prije
     // ograničavanja/sortiranja) — bitno na skali kad naplate_duga_log poraste.
@@ -555,12 +585,13 @@ router.get('/vp-cekanje', async (req, res) => {
         AND (g.opis LIKE 'Prodaja (bruto)%' OR g.opis LIKE 'Dug po otpremnici%')
       LEFT JOIN vp_bruto vb ON vb.nalog_r_br = o.broj
       LEFT JOIN naplate_agg na ON na.otpremnica_broj = o.broj
+      ${dozvoljeniPJ ? 'WHERE o.objekt_id = ANY($1::int[])' : ''}
       GROUP BY o.id, o.broj, o.datum, o.kupac_naziv, o.komercijalista_ime, o.objekt_naziv,
                o.ukupan_iznos, o.iznos_placeno, o.status_placanja,
                na.naplatio_ime, na.naplatio_kada, vb.vp_iznos, na.naplaceno_gotovina, na.naplaceno_banka
       ORDER BY o.datum DESC
       LIMIT 200
-    `);
+    `, dozvoljeniPJ ? [dozvoljeniPJ] : []);
     res.json(r.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });

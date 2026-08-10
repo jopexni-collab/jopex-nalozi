@@ -4,17 +4,21 @@ const pool = require('./db');
 
 const KURS_EUR_KM = 1.95;
 
-// Pristup: admin (sve) ili blagajnik (samo svoje PJ — server ga FORSIRA na te PJ bez
-// obzira šta klijent pošalje, da niko ne može da vidi tuđu blagajnu mijenjajući parametre).
-// Jedna osoba može biti blagajnik za VIŠE PJ (blagajnici_pj tabela).
+// Pristup: admin (sve) ili blagajnik/prodavac (samo svoje PJ — server ga FORSIRA na te PJ
+// bez obzira šta klijent pošalje, da niko ne može da vidi tuđu blagajnu mijenjajući
+// parametre). Jedna osoba može biti blagajnik i/ili prodavac za VIŠE PJ (blagajnici_pj i
+// prodavci_pj tabele) — ko god ima BAR JEDNO od ta dva ovlašćenja za neki PJ, vidi
+// gotovinu/VP/banka SAMO za te PJ. Ranije je ovo bilo ISKLJUČIVO za blagajnike — prodavac
+// bez blagajnik uloge je dobijao potpuno odbijen pristup (403), čak i za PJ gde prodaje.
 router.use(async (req, res, next) => {
   const u = req.session?.user;
   if (!u) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
   if (u.rola === 'admin') return next();
   try {
     const r = await pool.query(
-      `SELECT p.id, p.naziv FROM blagajnici_pj b JOIN prodajni_objekti p ON p.id = b.objekat_id
-       WHERE b.zaposleni_id = $1`,
+      `SELECT DISTINCT p.id, p.naziv FROM prodajni_objekti p
+       WHERE p.id IN (SELECT objekat_id FROM blagajnici_pj WHERE zaposleni_id = $1)
+          OR p.id IN (SELECT objekat_id FROM prodavci_pj WHERE zaposleni_id = $1)`,
       [u.id]
     );
     if (!r.rows.length) return res.status(403).json({ error: 'Nemate pristup blagajni.' });
