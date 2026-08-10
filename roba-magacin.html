@@ -2031,8 +2031,15 @@ function izvezLagerListu(){
   const objektId=document.getElementById('lager-objekat').value;
   if(!objektId){alert('Izaberite prodajni objekat.');return;}
   const params=new URLSearchParams({objekt_id:objektId});
-  if(lagerKolonaFilteri.grupa) params.set('grupa',lagerKolonaFilteri.grupa);
-  if(lagerKolonaFilteri.debljina) params.set('debljina',lagerKolonaFilteri.debljina);
+  // Šalje TAČNU listu šifri koje su trenutno vidljive (posle Excel-stil filtera) — server
+  // ne razume Set-bazirane filtere, pa se prosleđuje već izračunat rezultat umjesto
+  // pokušaja da se filter logika ponovo napiše na serveru.
+  if(lagerPodaci?.length){
+    const vidljive=lagerFiltrirajISortiraj().map(s=>s.sifra).filter(Boolean);
+    if(vidljive.length && vidljive.length<lagerPodaci.length){
+      params.set('sifre', vidljive.join(','));
+    }
+  }
   // Direktan link ka preuzimanju — browser sam otvara "Sačuvaj kao" dijalog za XLSX.
   window.location.href=`${API}/api/roba/lager/export?${params}`;
 }

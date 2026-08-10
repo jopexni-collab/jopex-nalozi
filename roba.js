@@ -141,6 +141,14 @@ router.get('/lager/export', zahtijevaRobaMagacin, async (req, res) => {
     let i = 2;
     if (req.query.grupa) { uslovi.push(`r.grupa = $${i++}`); vals.push(req.query.grupa); }
     if (req.query.debljina) { uslovi.push(`r.debljina_cm = $${i++}`); vals.push(parseFloat(req.query.debljina)); }
+    // Excel-stil filteri na frontendu (moguć izbor VIŠE vrednosti po koloni) se ne mogu
+    // prevesti u jednostavne grupa=/debljina= parametre — umjesto toga, frontend šalje
+    // TAČNU listu šifri koje su trenutno vidljive (posle svih filtera), i export uzima
+    // SAMO njih.
+    if (req.query.sifre) {
+      const sifre = req.query.sifre.split(',').map(s => s.trim()).filter(Boolean);
+      if (sifre.length) { uslovi.push(`r.sifra = ANY($${i++}::text[])`); vals.push(sifre); }
+    }
 
     const r = await pool.query(
       `SELECT r.sifra, r.naziv, r.grupa, r.debljina_cm, r.jed_mjera, rp.cijena, rp.stanje,
