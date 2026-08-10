@@ -68,12 +68,11 @@ header{background:#1a5fa8;color:#fff;height:48px;padding:0 12px 0 10px;display:f
 .poz-hd button{background:none;border:none;cursor:pointer;font-size:13px;color:#8a93a3;padding:2px 5px;border-radius:3px;}
 .poz-hd button:hover{background:rgba(0,0,0,.07);}
 .poz-hd button.poz-del{color:#c0392b;}
-.poz-strane{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;padding-top:5px;border-top:1px dashed #e2e6ef;}
-.poz-s{display:flex;align-items:center;gap:3px;background:#fff;border:1px solid #e8ecf1;border-radius:4px;padding:2px 5px;}
-.poz-s.izuz{border-color:#7a4fa0;background:#f9f5fc;}
-.poz-s b{font-size:10px;color:#1a5fa8;}
-.poz-s select{font:inherit;font-size:10px;padding:1px 3px;border:1px solid #dde2ea;border-radius:3px;max-width:104px;}
-.poz-s input{font:inherit;font-size:10px;padding:1px 3px;border:1px solid #dde2ea;border-radius:3px;width:52px;text-align:right;}
+.poz-red.otvoren{border-color:#1a5fa8;background:#fff;box-shadow:0 1px 4px rgba(26,95,168,.12);}
+.poz-red.ima-izuz{border-left:3px solid #7a4fa0;}
+.poz-saz{font-size:10px;color:#6b7a8d;margin-top:4px;padding-top:4px;border-top:1px dashed #e2e6ef;line-height:1.7;}
+.poz-meni{margin-top:6px;padding-top:6px;border-top:1px solid #dde2ea;background:#f7f9fc;border-radius:5px;padding:7px 8px;}
+.poz-hd button.poz-izm{color:#1a5fa8;font-size:12px;}
 .ivrow{flex-wrap:wrap;}
 .iv-rez-line{display:flex;align-items:center;gap:5px;flex-basis:100%;margin-top:4px;padding-top:4px;border-top:1px dashed #e2e6ef;}
 .iv-rez-line select{width:126px;border:1px solid #dde2ea;border-radius:3px;padding:2px 4px;font-size:11px;font-family:inherit;}
@@ -2791,6 +2790,7 @@ function imaPozicije(){
   return (tip==='kl'&&gc('cb-kl-poz'))||(tip==='st'&&gc('cb-st-poz'));
 }
 function togglePozicije(t){
+  POZ_OTVOREN=null;
   var w=ge(t+'-poz-wrap');
   var on=gc('cb-'+t+'-poz');
   if(w) w.style.display=on?'':'none';
@@ -2807,6 +2807,7 @@ function dodajPoziciju(){
   syncToActive(); buildPozicijeTabelu(); refresh();
 }
 function ukloniPoziciju(i){
+  POZ_OTVOREN=null;
   pozicije.splice(i,1);
   if(!pozicije.length) pozicije.push({a:1500,b:250,kom:1,nap:'',ob:{},bd:{}});
   syncToActive(); buildPozicijeTabelu(); refresh();
@@ -2865,8 +2866,25 @@ function _pozDuzObrade(p,segId,duzA,duzB){
   return (d>0&&d<puna)?d:puna;
 }
 
-// Tabela pozicija u panelu. Na uskom ekranu se prelama u kartice
-// (CSS .poz-tabela), na sirem je klasicna tabela.
+// Tabela pozicija: brzi unos Enterom (duzina -> sirina -> kom -> novi red),
+// kompaktan pregled reda, a meni za izmjenu se otvara samo za red koji se
+// dira. Podrazumijevana obrada je uvijek VIDLJIVA na vrhu.
+var POZ_OTVOREN=null;   // indeks reda ciji je meni otvoren
+function _pozSazetak(p){
+  // Kratak opis obrade tog reda: sta odstupa i gdje je djelimicna obrada
+  var strane=_pozStrane(), dijelovi=[], izuz=0;
+  strane.forEach(function(sd){
+    var pr=_pozProf(p,sd.id);
+    var puna=(sd.id==='A-zad'||sd.id==='D-pred')?(p.a||0):(p.b||0);
+    var d=(p.bd&&p.bd[sd.id])||0;
+    var djelim=(d>0&&d<puna);
+    if(p.ob&&p.ob[sd.id]!=null) izuz++;
+    if(pr==='none'&&!djelim) return;
+    dijelovi.push('<span'+(djelim?' style="background:#fff3cd;padding:0 3px;border-radius:3px"':'')+'>'
+      +sd.lbl+' '+PSym[pr]+(djelim?(' <b>'+d+'mm</b>'):'')+'</span>');
+  });
+  return {tekst:dijelovi.join(' ')||'<span style="color:#b9c4d2">bez obrade</span>', izuz:izuz};
+}
 function buildPozicijeTabelu(){
   var t=(tip==='st')?'st':'kl';
   var con=ge(t+'-poz-wrap'); if(!con) return;
@@ -2874,74 +2892,128 @@ function buildPozicijeTabelu(){
   pozicije=pozicije||[];
   if(!pozicije.length) pozicije=[{a:1500,b:250,kom:1,nap:'',ob:{},bd:{}}];
   var strane=_pozStrane();
-  var lblA=(t==='st')?'Du\u017eina':'A (du\u017eina)';
-  var lblB=(t==='st')?'Dubina':'B (\u0161irina)';
-  var optProf=function(izabran){
-    return '<option value="">\u2014 kao podrazumijevano \u2014</option>'
+  var optProf=function(izabran,prazno){
+    return (prazno?'<option value="">'+prazno+'</option>':'')
       +Object.keys(PLbl).map(function(pr){
         return '<option value="'+pr+'"'+(izabran===pr?' selected':'')+'>'+PSym[pr]+' '+PLbl[pr]+'</option>';
       }).join('');
   };
-  var uk=pozicije.reduce(function(a,p){return a+(p.kom||1);},0);
-  var ukM2=pozicije.reduce(function(a,p){return a+(p.a||0)*(p.b||0)/1e6*(p.kom||1);},0);
+  var uk=pozicije.reduce(function(a,p){return a+Math.max(1,p.kom||1);},0);
+  var ukM2=pozicije.reduce(function(a,p){return a+(p.a||0)*(p.b||0)/1e6*Math.max(1,p.kom||1);},0);
 
-  var h='<div class="hint" style="color:#7a4fa0;background:#f3eef8;border-left-color:#7a4fa0">'
-    +'Svaki red je jedna pozicija. Obrada praznog polja = <b>podrazumijevana</b> (iz sekcije Obrada ivica). '
-    +'Kolona <b>samo</b> = obradi samo prvih N mm te strane (vidljivi dio).</div>';
-
-  // Masovna izmjena po stranama
-  h+='<div style="background:#f0f4fa;border-radius:6px;padding:8px 10px;margin-bottom:8px">'
+  // ── PODRAZUMIJEVANA OBRADA: uvijek vidljiva, vazi za sve redove ──
+  var h='<div style="background:#eef4fb;border:1px solid #c8d9ee;border-radius:6px;padding:8px 10px;margin-bottom:8px">'
     +'<div style="font-size:10px;font-weight:700;color:#134a85;margin-bottom:6px;letter-spacing:.5px">'
-    +'POSTAVI ZA SVE POZICIJE ODJEDNOM</div>';
+    +'VA\u017dI ZA SVE POZICIJE</div>';
   strane.forEach(function(sd){
+    // Sta je trenutno postavljeno za sve (ako su svi redovi isti)
+    var vrijednosti=pozicije.map(function(p){return _pozProf(p,sd.id);});
+    var sviIsti=vrijednosti.every(function(v){return v===vrijednosti[0];});
+    var zaSve=sviIsti?vrijednosti[0]:'';
+    var bdV=pozicije.map(function(p){return (p.bd&&p.bd[sd.id])||0;});
+    var bdIsti=bdV.every(function(v){return v===bdV[0];});
     h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'
-      +'<b style="font-size:11px;color:#1a5fa8;min-width:14px">'+sd.lbl+'</b>'
-      +'<span style="font-size:10px;color:#8a93a3;min-width:88px">'+sd.opis+'</span>'
+      +'<b style="font-size:11px;color:#1a5fa8;min-width:13px">'+sd.lbl+'</b>'
+      +'<span style="font-size:10px;color:#8a93a3;min-width:84px">'+sd.opis+'</span>'
       +'<select onchange="pozSveObrada(\''+sd.id+'\',this.value)" style="font-size:11px;'
-      +'padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;flex:1;min-width:120px">'
-      +optProf('')+'</select>'
-      +'<input type="number" min="0" placeholder="samo mm" title="Obradi samo prvih N mm"'
-      +' onchange="pozSveBocna(\''+sd.id+'\',this.value)" style="width:74px;font-size:11px;'
-      +'padding:3px 5px;border:1px solid #dde2ea;border-radius:4px">'
-      +'</div>';
+      +'padding:3px 5px;border:1px solid '+(sviIsti?'#dde2ea':'#e67e22')+';border-radius:4px;'
+      +'flex:1;min-width:118px;background:'+(sviIsti?'#fff':'#fff8f0')+'">'
+      +(sviIsti?'':'<option value="">\u26a0 razli\u010dito po redovima</option>')
+      +optProf(zaSve,sviIsti?null:null)+'</select>'
+      +'<input type="number" min="0" placeholder="cijela" value="'+(bdIsti&&bdV[0]?bdV[0]:'')+'"'
+      +' title="Obradi samo prvih N mm (vidljivi dio)"'
+      +' onchange="pozSveBocna(\''+sd.id+'\',this.value)" style="width:70px;font-size:11px;'
+      +'padding:3px 5px;border:1px solid '+(bdIsti?'#dde2ea':'#e67e22')+';border-radius:4px;text-align:right">'
+      +'<span style="font-size:9.5px;color:#8a93a3">mm</span></div>';
   });
   h+='</div>';
 
-  // Redovi
+  // ── REDOVI ──
   h+='<div class="poz-tabela">';
   pozicije.forEach(function(p,i){
-    h+='<div class="poz-red">'
-      +'<div class="poz-hd"><b>'+(i+1)+'.</b>'
-      +'<input type="number" min="1" value="'+(p.a||0)+'" title="'+lblA+'"'
-      +' oninput="fixComma(this);pozPolje('+i+',\'a\',this.value)"><span>\u00d7</span>'
-      +'<input type="number" min="1" value="'+(p.b||0)+'" title="'+lblB+'"'
-      +' oninput="fixComma(this);pozPolje('+i+',\'b\',this.value)"><span>mm</span>'
-      +'<input type="number" min="1" value="'+(p.kom||1)+'" title="Broj komada" class="poz-kom"'
-      +' oninput="fixComma(this);pozPolje('+i+',\'kom\',this.value)"><span>kom</span>'
-      +'<input type="text" value="'+String(p.nap||'').replace(/"/g,'&quot;')+'" placeholder="napomena"'
-      +' class="poz-nap" oninput="pozNapomena('+i+',this.value)">'
+    var kom=Math.max(1,p.kom||1);
+    var saz=_pozSazetak(p);
+    var otv=(POZ_OTVOREN===i);
+    h+='<div class="poz-red'+(otv?' otvoren':'')+(saz.izuz?' ima-izuz':'')+'">'
+      +'<div class="poz-hd">'
+      +'<b>'+(i+1)+'.</b>'
+      +'<input type="number" min="1" value="'+(p.a||0)+'" data-poz="'+i+'" data-pol="a"'
+      +' onkeydown="pozEnter(event,'+i+',\'a\')" oninput="fixComma(this);pozPolje('+i+',\'a\',this.value)">'
+      +'<span>\u00d7</span>'
+      +'<input type="number" min="1" value="'+(p.b||0)+'" data-poz="'+i+'" data-pol="b"'
+      +' onkeydown="pozEnter(event,'+i+',\'b\')" oninput="fixComma(this);pozPolje('+i+',\'b\',this.value)">'
+      +'<span>mm</span>'
+      +'<input type="number" min="1" value="'+kom+'" class="poz-kom" data-poz="'+i+'" data-pol="kom"'
+      +' onkeydown="pozEnter(event,'+i+',\'kom\')" oninput="fixComma(this);pozPolje('+i+',\'kom\',this.value)">'
+      +'<span>kom</span>'
+      +'<button type="button" onclick="pozOtvori('+i+')" class="poz-izm" title="Izmijeni obradu ovog reda">'
+      +(otv?'\u25b2':'\u270e')+'</button>'
       +'<button type="button" onclick="kopirajPoziciju('+i+')" title="Kopiraj">\u29c9</button>'
       +'<button type="button" onclick="ukloniPoziciju('+i+')" title="Ukloni" class="poz-del">\u2715</button>'
-      +'</div><div class="poz-strane">';
-    strane.forEach(function(sd){
-      var izuz=(p.ob&&p.ob[sd.id]!=null);
-      var bd=(p.bd&&p.bd[sd.id])||'';
-      h+='<span class="poz-s'+(izuz?' izuz':'')+'">'
-        +'<b>'+sd.lbl+'</b>'
-        +'<select onchange="pozObrada('+i+',\''+sd.id+'\',this.value)">'
-        +optProf(izuz?p.ob[sd.id]:'')+'</select>'
-        +'<input type="number" min="0" placeholder="cijela" value="'+bd+'" title="Obradi samo prvih N mm"'
-        +' oninput="fixComma(this);pozBocna('+i+',\''+sd.id+'\',this.value)">'
-        +'</span>';
-    });
-    h+='</div></div>';
+      +'</div>'
+      +'<div class="poz-saz">'+saz.tekst
+      +(saz.izuz?' <span style="color:#7a4fa0;font-weight:700">\u25cf '+saz.izuz+' izuzetak'+(saz.izuz>1?'a':'')+'</span>':'')
+      +(p.nap?' <span style="color:#8a93a3">\u2014 '+p.nap+'</span>':'')+'</div>';
+    // Meni za izmjenu - SAMO za otvoreni red
+    if(otv){
+      h+='<div class="poz-meni">';
+      strane.forEach(function(sd){
+        var izuz=(p.ob&&p.ob[sd.id]!=null);
+        var bd=(p.bd&&p.bd[sd.id])||'';
+        h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'
+          +'<b style="font-size:11px;color:'+(izuz?'#7a4fa0':'#1a5fa8')+';min-width:13px">'+sd.lbl+'</b>'
+          +'<span style="font-size:10px;color:#8a93a3;min-width:84px">'+sd.opis+'</span>'
+          +'<select onchange="pozObrada('+i+',\''+sd.id+'\',this.value)" style="font-size:11px;'
+          +'padding:3px 5px;border:1px solid '+(izuz?'#7a4fa0':'#dde2ea')+';border-radius:4px;flex:1;min-width:118px">'
+          +optProf(izuz?p.ob[sd.id]:'','\u2014 kao za sve \u2014')+'</select>'
+          +'<input type="number" min="0" placeholder="cijela" value="'+bd+'"'
+          +' title="Obradi samo prvih N mm" oninput="fixComma(this);pozBocna('+i+',\''+sd.id+'\',this.value)"'
+          +' style="width:70px;font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right">'
+          +'<span style="font-size:9.5px;color:#8a93a3">mm</span></div>';
+      });
+      h+='<div style="display:flex;gap:5px;margin-top:5px">'
+        +'<input type="text" value="'+String(p.nap||'').replace(/"/g,'&quot;')+'" placeholder="napomena za ovaj red"'
+        +' oninput="pozNapomena('+i+',this.value)" style="flex:1;font-size:11px;padding:4px 6px;'
+        +'border:1px solid #dde2ea;border-radius:4px">'
+        +'<button type="button" onclick="pozOtvori(-1)" style="font:inherit;font-size:11px;padding:4px 12px;'
+        +'border:1px solid #1a5fa8;background:#eef4fb;color:#1a5fa8;border-radius:4px;cursor:pointer;'
+        +'font-weight:600">Gotovo</button></div></div>';
+    }
+    h+='</div>';
   });
   h+='</div>';
   h+='<button type="button" onclick="dodajPoziciju()" class="item-add-btn" style="margin-top:6px">'
-    +'+ Dodaj poziciju</button>'
+    +'+ Dodaj poziciju <small style="font-weight:400;opacity:.7">(ili Enter na "kom")</small></button>'
     +'<div style="font-size:11px;color:#134a85;font-weight:700;text-align:right;margin-top:6px">'
-    +'Ukupno: '+pozicije.length+' pozicija \u00b7 '+uk+' kom \u00b7 '+ukM2.toFixed(3)+' m\u00b2</div>';
+    +pozicije.length+' pozicija \u00b7 '+uk+' kom \u00b7 '+ukM2.toFixed(3)+' m\u00b2</div>';
   con.innerHTML=h;
+}
+// Enter prelazi na sljedece polje; sa "kom" otvara NOVI red i skace u njega.
+function pozEnter(e,i,polje){
+  if(e.key!=='Enter') return;
+  e.preventDefault();
+  var red=['a','b','kom'];
+  var k=red.indexOf(polje);
+  if(k<red.length-1){
+    var sl=document.querySelector('[data-poz="'+i+'"][data-pol="'+red[k+1]+'"]');
+    if(sl){ sl.focus(); if(sl.select) sl.select(); }
+    return;
+  }
+  // Bio je "kom" - ako je ovo posljednji red, otvori novi; inace idi na sljedeci
+  if(i<pozicije.length-1){
+    var sl2=document.querySelector('[data-poz="'+(i+1)+'"][data-pol="a"]');
+    if(sl2){ sl2.focus(); if(sl2.select) sl2.select(); }
+    return;
+  }
+  dodajPoziciju();
+  setTimeout(function(){
+    var nov=document.querySelector('[data-poz="'+(pozicije.length-1)+'"][data-pol="a"]');
+    if(nov){ nov.focus(); if(nov.select) nov.select(); }
+  },30);
+}
+function pozOtvori(i){
+  POZ_OTVOREN=(POZ_OTVOREN===i)?null:i;
+  buildPozicijeTabelu();
 }
 
 // ══ SKICA: platno, crtanje, panel strana ═════════════════════════
@@ -4706,7 +4778,10 @@ function _prilogPozicija(){
       if(pr==='none') return null;
       var puna=(sd.id==='A-zad'||sd.id==='D-pred')?(p.a||0):(p.b||0);
       var d=(p.bd&&p.bd[sd.id])||0;
-      return sd.lbl+': '+(PLbl[pr]||pr)+((d>0&&d<puna)?(' <b>samo '+d+' mm</b>'):'');
+      return (d>0&&d<puna)
+        ? ('<span style="background:#fff3cd;padding:1px 4px;border-radius:3px;border:1px solid #f0c419">'
+           +sd.lbl+': '+(PLbl[pr]||pr)+' <b>samo '+d+' mm</b></span>')
+        : (sd.lbl+': '+(PLbl[pr]||pr));
     }).filter(Boolean).join(' \u00b7 ')||'\u2014';
     h+='<tr>'+red(i+1)+red((p.a||0)+'\u00d7'+(p.b||0)+' mm')
       +red(kom,'text-align:center')
@@ -4719,6 +4794,19 @@ function _prilogPozicija(){
     +'<td style="padding:5px 7px;text-align:center">'+r.kom+'</td>'
     +'<td style="padding:5px 7px;text-align:right">'+r.m2.toFixed(3)+'</td>'
     +'<td colspan="2"></td></tr></tfoot></table>';
+  var imaDjelim=pozicije.some(function(p){
+    return strane.some(function(sd){
+      var puna2=(sd.id==='A-zad'||sd.id==='D-pred')?(p.a||0):(p.b||0);
+      var d2=(p.bd&&p.bd[sd.id])||0;
+      return d2>0&&d2<puna2;
+    });
+  });
+  if(imaDjelim){
+    h+='<div style="background:#fffbee;border-left:3px solid #e8a800;padding:6px 10px;'
+      +'font-size:10.5px;color:#7a6520;margin-top:6px;border-radius:0 4px 4px 0">'
+      +'<b>\u017duto ozna\u010deno</b> \u2014 na tim stranama se obra\u0111uje samo nazna\u010deni po\u010detni dio '
+      +'(vidljivi dio nakon ugradnje), ne cijela du\u017eina strane.</div>';
+  }
   return h;
 }
 
