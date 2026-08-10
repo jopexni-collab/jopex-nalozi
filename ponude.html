@@ -2781,10 +2781,61 @@ function setShape(s){
 //   bd = obradi samo prvih N mm te strane (nema kljuca = cijela strana)
 var pozicije=[];
 function _pozStrane(){
-  return [{id:'A-zad',lbl:'A',opis:'zadnja (du\u017ea)'},
-          {id:'B-lev',lbl:'B',opis:'lijeva (kra\u0107a)'},
-          {id:'C-des',lbl:'C',opis:'desna (kra\u0107a)'},
-          {id:'D-pred',lbl:'D',opis:'prednja (du\u017ea)'}];
+  // Opisi su OPISNI da operater ne pomijesa koju stranu obradjuje.
+  // Klupica ide u prozorsku nisu: zadnja je UZ PROZOR, prednja je vidljiva
+  // (visi u prostoriju), a bocne ulaze u spaletne.
+  if(tip==='st'){
+    return [{id:'A-zad',lbl:'A',opis:'zadnja \u2014 uz zid',kratko:'uz zid'},
+            {id:'B-lev',lbl:'B',opis:'lijeva bo\u010dna',kratko:'lijeva'},
+            {id:'C-des',lbl:'C',opis:'desna bo\u010dna',kratko:'desna'},
+            {id:'D-pred',lbl:'D',opis:'prednja \u2014 nastup',kratko:'nastup'}];
+  }
+  return [{id:'A-zad',lbl:'A',opis:'zadnja \u2014 uz prozor',kratko:'uz prozor'},
+          {id:'B-lev',lbl:'B',opis:'lijeva \u2014 u \u0161paletnu',kratko:'lijeva'},
+          {id:'C-des',lbl:'C',opis:'desna \u2014 u \u0161paletnu',kratko:'desna'},
+          {id:'D-pred',lbl:'D',opis:'prednja \u2014 vidljiva',kratko:'prednja'}];
+}
+// Vodeni kanal po poziciji: izuzetak reda ili podrazumijevani iz panela
+function _pozKanal(p){
+  if(p.kan!=null) return p.kan;
+  return gs('kl-iv')||'bez';
+}
+var KanalLbl={bez:'Bez kanala',dve_duze:'Dvije du\u017ee',dve_krace:'Dvije kra\u0107e',
+  duza_leva:'Du\u017ea + lijeva',duza_desna:'Du\u017ea + desna',sve:'Sve strane'};
+function _kanalStrane(k){
+  if(k==='dve_duze')   return ['A-zad','D-pred'];
+  if(k==='dve_krace')  return ['B-lev','C-des'];
+  if(k==='duza_leva')  return ['D-pred','B-lev'];
+  if(k==='duza_desna') return ['D-pred','C-des'];
+  if(k==='sve')        return ['A-zad','B-lev','C-des','D-pred'];
+  return [];
+}
+function pozKanal(i,val){
+  if(!pozicije[i]) return;
+  if(val==='') delete pozicije[i].kan; else pozicije[i].kan=val;
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
+function pozSveKanal(val){
+  pozicije.forEach(function(p){ if(val==='') delete p.kan; else p.kan=val; });
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
+// Zamjena A <-> D: ako je unesено obrnuto (zadnja kao prednja)
+function pozZamijeniAD(){
+  var _oS=_pozStrane();
+  if(!confirm('Zamijeniti stranu A ('+_oS[0].kratko+') i D ('+_oS[3].kratko+') na SVIM pozicijama?\n\n'
+    +'Mijenja se obrada i djelimi\u010dna obrada.')) return;
+  _saveUndo();
+  var zA=ivSt['A-zad'], zD=ivSt['D-pred'];
+  ivSt['A-zad']=zD||{prof:'none'}; ivSt['D-pred']=zA||{prof:'none'};
+  (pozicije||[]).forEach(function(p){
+    ['ob','bd'].forEach(function(kljuc){
+      if(!p[kljuc]) return;
+      var t1=p[kljuc]['A-zad'];
+      if(p[kljuc]['D-pred']!=null) p[kljuc]['A-zad']=p[kljuc]['D-pred']; else delete p[kljuc]['A-zad'];
+      if(t1!=null) p[kljuc]['D-pred']=t1; else delete p[kljuc]['D-pred'];
+    });
+  });
+  syncToActive(); buildIvice(); buildPozicijeTabelu(); refresh();
 }
 function imaPozicije(){
   return (tip==='kl'&&gc('cb-kl-poz'))||(tip==='st'&&gc('cb-st-poz'));
@@ -2883,7 +2934,12 @@ function _pozSazetak(p){
     dijelovi.push('<span'+(djelim?' style="background:#fff3cd;padding:0 3px;border-radius:3px"':'')+'>'
       +sd.lbl+' '+PSym[pr]+(djelim?(' <b>'+d+'mm</b>'):'')+'</span>');
   });
-  return {tekst:dijelovi.join(' ')||'<span style="color:#b9c4d2">bez obrade</span>', izuz:izuz};
+  var kan=(tip==='kl')?_pozKanal(p):'bez';
+  if(kan&&kan!=='bez'){
+    dijelovi.push('<span style="color:#1d8a6e">\u2248 '+(KanalLbl[kan]||kan)+'</span>');
+  }
+  return {tekst:dijelovi.join(' ')||'<span style="color:#b9c4d2">bez obrade</span>',
+          izuz:izuz+((p.kan!=null)?1:0)};
 }
 function buildPozicijeTabelu(){
   var t=(tip==='st')?'st':'kl';
@@ -2926,6 +2982,28 @@ function buildPozicijeTabelu(){
       +'padding:3px 5px;border:1px solid '+(bdIsti?'#dde2ea':'#e67e22')+';border-radius:4px;text-align:right">'
       +'<span style="font-size:9.5px;color:#8a93a3">mm</span></div>';
   });
+  // Vodeni kanal za sve pozicije (samo klupice)
+  if(t==='kl'){
+    var kanV=pozicije.map(function(p){return _pozKanal(p);});
+    var kanIsti=kanV.every(function(v){return v===kanV[0];});
+    h+='<div style="display:flex;gap:5px;align-items:center;margin-top:6px;padding-top:6px;'
+      +'border-top:1px dashed #c8d9ee;flex-wrap:wrap">'
+      +'<b style="font-size:11px;color:#1a5fa8;min-width:13px">\u2248</b>'
+      +'<span style="font-size:10px;color:#8a93a3;min-width:84px">vodeni kanal</span>'
+      +'<select onchange="pozSveKanal(this.value)" style="font-size:11px;padding:3px 5px;'
+      +'border:1px solid '+(kanIsti?'#dde2ea':'#e67e22')+';border-radius:4px;flex:1;min-width:118px;'
+      +'background:'+(kanIsti?'#fff':'#fff8f0')+'">'
+      +(kanIsti?'':'<option value="">\u26a0 razli\u010dito po redovima</option>')
+      +Object.keys(KanalLbl).map(function(kk){
+        return '<option value="'+kk+'"'+(kanIsti&&kanV[0]===kk?' selected':'')+'>'+KanalLbl[kk]+'</option>';
+      }).join('')+'</select></div>';
+  }
+  // Zamjena A <-> D ako je uneseno obrnuto
+  h+='<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #c8d9ee;text-align:center">'
+    +'<button type="button" onclick="pozZamijeniAD()" style="font:inherit;font-size:10.5px;'
+    +'padding:4px 12px;border:1px solid #8a93a3;background:#fff;color:#6b7a8d;border-radius:4px;'
+    +'cursor:pointer" title="Ako si zamijenio zadnju i prednju stranu">'
+    +'\u21c5 Zamijeni A ('+strane[0].kratko+') \u2194 D ('+strane[3].kratko+')</button></div>';
   h+='</div>';
 
   // ── REDOVI ──
@@ -2971,6 +3049,18 @@ function buildPozicijeTabelu(){
           +' style="width:70px;font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right">'
           +'<span style="font-size:9.5px;color:#8a93a3">mm</span></div>';
       });
+      if(t==='kl'){
+        var kanR=(p.kan!=null);
+        h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'
+          +'<b style="font-size:11px;color:'+(kanR?'#7a4fa0':'#1a5fa8')+';min-width:13px">\u2248</b>'
+          +'<span style="font-size:10px;color:#8a93a3;min-width:84px">vodeni kanal</span>'
+          +'<select onchange="pozKanal('+i+',this.value)" style="font-size:11px;padding:3px 5px;'
+          +'border:1px solid '+(kanR?'#7a4fa0':'#dde2ea')+';border-radius:4px;flex:1;min-width:118px">'
+          +'<option value="">\u2014 kao za sve \u2014</option>'
+          +Object.keys(KanalLbl).map(function(kk){
+            return '<option value="'+kk+'"'+(kanR&&p.kan===kk?' selected':'')+'>'+KanalLbl[kk]+'</option>';
+          }).join('')+'</select></div>';
+      }
       h+='<div style="display:flex;gap:5px;margin-top:5px">'
         +'<input type="text" value="'+String(p.nap||'').replace(/"/g,'&quot;')+'" placeholder="napomena za ovaj red"'
         +' oninput="pozNapomena('+i+',this.value)" style="flex:1;font-size:11px;padding:4px 6px;'
@@ -4783,6 +4873,9 @@ function _prilogPozicija(){
            +sd.lbl+': '+(PLbl[pr]||pr)+' <b>samo '+d+' mm</b></span>')
         : (sd.lbl+': '+(PLbl[pr]||pr));
     }).filter(Boolean).join(' \u00b7 ')||'\u2014';
+    var kanP=(tip==='kl')?_pozKanal(p):'bez';
+    if(kanP&&kanP!=='bez') opis+=(opis==='\u2014'?'':' \u00b7 ')
+      +'<span style="color:#1d8a6e">\u2248 kanal: '+(KanalLbl[kanP]||kanP)+'</span>';
     h+='<tr>'+red(i+1)+red((p.a||0)+'\u00d7'+(p.b||0)+' mm')
       +red(kom,'text-align:center')
       +red(((p.a||0)*(p.b||0)/1e6*kom).toFixed(3),'text-align:right')
@@ -6081,7 +6174,11 @@ function buildPozicijeRN(){
         +(pr==='none'?'\u2013':PSym[pr])
         +(djelim?('<br><b>'+d+'mm</b>'):'')+'</td>';
     });
-    h+='<td style="font-size:10px">'+(p.nap||'')+'</td></tr>';
+    var kanR2=(tip==='kl')?_pozKanal(p):'bez';
+    h+='<td style="font-size:10px">'
+      +((kanR2&&kanR2!=='bez')?('<b style="color:#1d8a6e">\u2248 '+(KanalLbl[kanR2]||kanR2)+'</b>'
+        +(p.nap?'<br>':'')):'')
+      +(p.nap||'')+'</td></tr>';
   });
   var uk=pozicije.reduce(function(a,p){return a+Math.max(1,p.kom||1);},0);
   var ukM2=pozicije.reduce(function(a,p){return a+(p.a||0)*(p.b||0)/1e6*Math.max(1,p.kom||1);},0);
@@ -6784,7 +6881,171 @@ function drawK(ctx,W,H){
   ctx.restore();
 }
 
+// Sematski crtez za tabelu pozicija: NEMA konkretnih mjera (razne su), nego
+// pokazuje SAMO gdje i kako se koja strana obradjuje - da operater ili kupac
+// ne pomijesa zadnju i prednju stranu.
+function drawKlSematski(ctx,W,H){
+  var PAD=74;
+  var A=W-PAD*2, B=Math.min(H-PAD*2, A*0.42);
+  var strane=_pozStrane();
+  ctx.save(); ctx.translate(PAD,(H-B)/2);
+
+  ctx.beginPath(); ctx.rect(0,0,A,B);
+  ctx.fillStyle='#fff'; ctx.fill();
+  ctx.strokeStyle='#000'; ctx.lineWidth=1.3; ctx.setLineDash([9,3,1.4,3]); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Uz zadnju stranu: PROZOR kod klupice, ZID kod stepenice - da se odmah
+  // vidi orijentacija i ne pomijesa koja strana ide u nisu.
+  var jeKlupica=(tip!=='st');
+  ctx.save();
+  if(jeKlupica){
+    ctx.fillStyle='#eaf3fb';
+    ctx.fillRect(0,-30,A,22);
+    ctx.strokeStyle='#7ba7cc'; ctx.lineWidth=1.6; ctx.strokeRect(0,-30,A,22);
+    ctx.beginPath(); ctx.moveTo(A/2,-30); ctx.lineTo(A/2,-8); ctx.stroke();
+    ctx.strokeStyle='#b8d4e8'; ctx.lineWidth=1;
+    for(var pz=6;pz<A;pz+=26){
+      ctx.beginPath(); ctx.moveTo(pz,-10); ctx.lineTo(pz+13,-28); ctx.stroke();
+    }
+    ctx.fillStyle='#4a7fa5'; ctx.font='bold 11px Segoe UI,Arial';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('P R O Z O R',A/2,-19);
+  } else {
+    ctx.fillStyle='#e8ecf1';
+    ctx.fillRect(0,-26,A,18);
+    ctx.strokeStyle='#8a93a3'; ctx.lineWidth=1; ctx.strokeRect(0,-26,A,18);
+    for(var zx=0;zx<A;zx+=12){
+      ctx.beginPath(); ctx.moveTo(zx,-8); ctx.lineTo(zx+8,-26); ctx.stroke();
+    }
+    ctx.fillStyle='#6b7a8d'; ctx.font='bold 11px Segoe UI,Arial';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('Z I D',A/2,-17);
+  }
+  ctx.restore();
+
+  // Geometrija strana
+  var geo={'A-zad':[0,0,A,0],'B-lev':[0,0,0,B],'C-des':[A,0,A,B],'D-pred':[0,B,A,B]};
+  // Puna linija = obradjena strana; kod djelimicne obrade samo dio
+  var pod=function(id){ var st=ivSt[id]; return (st&&st.prof)||'none'; };
+  // Da li SVE pozicije imaju istu obradu te strane
+  var jedinstveno=function(id){
+    var v=(pozicije||[]).map(function(p){return _pozProf(p,id);});
+    return v.every(function(x){return x===v[0];})?(v[0]||'none'):null;
+  };
+  var djelimicnoIma=function(id){
+    return (pozicije||[]).some(function(p){
+      var puna=(id==='A-zad'||id==='D-pred')?(p.a||0):(p.b||0);
+      var d=(p.bd&&p.bd[id])||0;
+      return d>0&&d<puna;
+    });
+  };
+  strane.forEach(function(sd){
+    var g=geo[sd.id];
+    var pr=jedinstveno(sd.id);
+    var dj=djelimicnoIma(sd.id);
+    if(pr&&pr!=='none'){
+      if(dj){
+        // djelimicno: puna linija samo na pocetnom dijelu, ostalo isprekidano
+        var dio=0.28;
+        var mx=g[0]+(g[2]-g[0])*dio, my=g[1]+(g[3]-g[1])*dio;
+        drawIv(ctx,g[0],g[1],mx,my,pr);
+        ctx.save(); ctx.strokeStyle='#e8a800'; ctx.lineWidth=3; ctx.setLineDash([5,4]);
+        ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(g[2],g[3]); ctx.stroke();
+        ctx.setLineDash([]); ctx.restore();
+      } else {
+        drawIv(ctx,g[0],g[1],g[2],g[3],pr);
+      }
+    }
+  });
+  // Vodeni kanal - isprekidana linija uvucena od strane
+  // Kanal se crta i kad redovi nisu jedinstveni - uzima se NAJCESCI izbor,
+  // uz napomenu da po pozicijama ima odstupanja (tacno stanje je u tabeli).
+  var kanBroj={}, kanUkupno=0;
+  (pozicije||[]).forEach(function(p){
+    var kk=_pozKanal(p);
+    kanBroj[kk]=(kanBroj[kk]||0)+1; kanUkupno++;
+  });
+  var kanJed=null, kanNaj=0;
+  Object.keys(kanBroj).forEach(function(kk){
+    if(kanBroj[kk]>kanNaj){ kanNaj=kanBroj[kk]; kanJed=kk; }
+  });
+  var kanRazlicito=(kanNaj<kanUkupno);
+  if(kanJed&&kanJed!=='bez'){
+    var kd=17;
+    ctx.save(); ctx.strokeStyle='#1d8a6e'; ctx.lineWidth=1.8; ctx.setLineDash([6,3]);
+    _kanalStrane(kanJed).forEach(function(id){
+      if(id==='A-zad')  { ctx.beginPath(); ctx.moveTo(0,kd);    ctx.lineTo(A,kd);    ctx.stroke(); }
+      if(id==='D-pred') { ctx.beginPath(); ctx.moveTo(0,B-kd);  ctx.lineTo(A,B-kd);  ctx.stroke(); }
+      if(id==='B-lev')  { ctx.beginPath(); ctx.moveTo(kd,0);    ctx.lineTo(kd,B);    ctx.stroke(); }
+      if(id==='C-des')  { ctx.beginPath(); ctx.moveTo(A-kd,0);  ctx.lineTo(A-kd,B);  ctx.stroke(); }
+    });
+    ctx.setLineDash([]);
+    ctx.fillStyle='#1d8a6e'; ctx.font='bold 10px Segoe UI,Arial';
+    ctx.textAlign='left'; ctx.textBaseline='bottom';
+    ctx.fillText('\u2248 VODENI KANAL'+(kanRazlicito?' (vidi tabelu)':''),7,B-kd-5);
+    ctx.restore();
+  }
+  // Spaletne (bocni zidovi nise) kod klupice
+  if(jeKlupica){
+    ctx.save();
+    ctx.fillStyle='#e8ecf1'; ctx.strokeStyle='#8a93a3'; ctx.lineWidth=1;
+    [-20,A].forEach(function(sx){
+      ctx.fillRect(sx,-30,20,B*0.45+30);
+      ctx.strokeRect(sx,-30,20,B*0.45+30);
+    });
+    ctx.fillStyle='#8a93a3'; ctx.font='9px Segoe UI,Arial';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.save(); ctx.translate(-10,B*0.2); ctx.rotate(-Math.PI/2);
+    ctx.fillText('ŠPALETNA',0,0); ctx.restore();
+    ctx.save(); ctx.translate(A+10,B*0.2); ctx.rotate(-Math.PI/2);
+    ctx.fillText('ŠPALETNA',0,0); ctx.restore();
+    ctx.restore();
+  }
+  // Oznake strana sa OPISOM - jasno koja je koja
+  var pisi=function(x,y,sd,poravnanje){
+    var pr=jedinstveno(sd.id);
+    var dj=djelimicnoIma(sd.id);
+    ctx.save();
+    ctx.textAlign=poravnanje||'center'; ctx.textBaseline='middle';
+    ctx.font='bold 15px Segoe UI,Arial'; ctx.fillStyle='#1a5fa8';
+    ctx.fillText(sd.lbl,x,y);
+    ctx.font='11px Segoe UI,Arial'; ctx.fillStyle='#6b7a8d';
+    ctx.fillText(sd.opis,x,y+15);
+    ctx.font='bold 11px Segoe UI,Arial';
+    ctx.fillStyle=(pr&&pr!=='none')?'#1a2332':'#b9c4d2';
+    ctx.fillText(pr===null?'razli\u010dito':(PLbl[pr]||'bez obrade'),x,y+29);
+    if(dj){
+      ctx.font='bold 10px Segoe UI,Arial'; ctx.fillStyle='#8a6d3b';
+      ctx.fillText('samo po\u010detni dio',x,y+42);
+    }
+    ctx.restore();
+  };
+  pisi(A/2,42,strane[0]);          // A gore
+  pisi(58,B/2-14,strane[1]);       // B lijevo
+  pisi(A-58,B/2-14,strane[2]);     // C desno
+  pisi(A/2,B-56,strane[3]);        // D dolje
+
+  // Naslov - BEZ konkretnih mjera
+  ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle='#333'; ctx.font='bold 14px Segoe UI,Arial';
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  var uk=(pozicije||[]).reduce(function(a,p){return a+Math.max(1,p.kom||1);},0);
+  ctx.fillText((jeKlupica?'Prozorske klupice':'Gazi\u0161ta stepenica')+' \u2014 RAZNE DIMENZIJE',12,10);
+  ctx.font='11.5px Segoe UI,Arial'; ctx.fillStyle='#6b7a8d';
+  ctx.fillText((pozicije||[]).length+' pozicija \u00b7 '+uk+' kom \u00b7 '
+    +getMatV()+(gs('mat-naziv')?' \u2013 '+gs('mat-naziv'):'')+' \u00b7 '+getMatD()+' mm',12,29);
+  ctx.font='bold 11px Segoe UI,Arial'; ctx.fillStyle='#c0392b';
+  ctx.fillText('\u0160ematski prikaz \u2014 mjere po pozicijama u tabeli',12,47);
+  ctx.restore();
+
+  drawLegenda(ctx,W,H);
+  _flushKotes();
+  ctx.restore();
+}
 function drawKl(ctx,W,H){
+  // Kod tabele pozicija mjere su razne, pa se crta sematski prikaz
+  if(imaPozicije()) return drawKlSematski(ctx,W,H);
   var PAD=60,k=Math.max(1,gi('kl-k'));
   var A=gi('kl-a'),B=gi('kl-b');
   var sc=Math.min((W-PAD*2-90)/Math.max(A,1),(H-PAD*2)/Math.max(B,1))*0.92;
@@ -6968,6 +7229,7 @@ function drawSto(ctx,W,H){
   ctx.restore();
 }
 function drawSt(ctx,W,H){
+  if(imaPozicije()) return drawKlSematski(ctx,W,H);
   var PAD=60, br=Math.max(1,gi('st-br'));
   var A=gi('st-a'), B=gi('st-b');
   var hasCel=gc('cb-cel');
