@@ -380,6 +380,21 @@ router.get('/kretanje-pregled', zahtijevaRobaMagacin, async (req, res) => {
        LEFT JOIN roba_pj rp ON rp.roba_id = pr.roba_id AND rp.objekt_id = $1
        WHERE pr.iz_objekta_id = $1 AND pr.kreiran::date >= $2::date AND pr.kreiran::date < ($3::date + 1)
 
+       UNION ALL
+
+       -- Usaglašavanja (Presek modul + Ručni unos) — SAMO gdje je stvarno bilo promjene
+       -- (prazne/nulte razlike se od početka ne upisuju u roba_kretanja, pa ovo prirodno
+       -- ne "zatrpava" listu artiklima kod kojih ništa nije mijenjano).
+       SELECT CASE WHEN rk.kolicina >= 0 THEN 'ulaz' ELSE 'izlaz' END, 'usaglasavanje',
+              rk.datum::date, rk.roba_id, r.sifra, r.naziv, r.jed_mjera,
+              ABS(rk.kolicina), ABS(rk.kolicina) * COALESCE(rk.cijena_nova, rp.cijena, 0),
+              COALESCE(rk.korisnik_ime, 'Nepoznato')
+       FROM roba_kretanja rk
+       JOIN roba r ON r.id = rk.roba_id
+       LEFT JOIN roba_pj rp ON rp.roba_id = rk.roba_id AND rp.objekt_id = $1
+       WHERE rk.objekt_id = $1 AND rk.tip IN ('korekcija-preseka','rucni-unos')
+         AND rk.datum >= $2::date AND rk.datum < ($3::date + 1)
+
        ORDER BY datum DESC`,
       [objektId, od, do_]
     );
@@ -1436,6 +1451,22 @@ router.post('/rucni-unos/obrisi-nedavne', async (req, res) => {
     } finally {
       client.release();
     }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/roba/:id/debljina — izmjena debljine artikla (mnogi stari artikli je
+// nemaju uneseno). Debljina je svojstvo SAMOG artikla (roba tabela), ne po PJ.
+router.patch('/:id/debljina', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin.' });
+  try {
+    const debljina = req.body.debljina_cm === '' || req.body.debljina_cm == null
+      ? null : parseFloat(req.body.debljina_cm);
+    if (debljina !== null && (isNaN(debljina) || debljina < 0))
+      return res.status(400).json({ error: 'Unesite ispravnu debljinu (ili ostavite prazno da je uklonite).' });
+    await pool.query('UPDATE roba SET debljina_cm=$1, azurirano=now() WHERE id=$2', [debljina, req.params.id]);
+    res.json({ ok: true, debljina_cm: debljina });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

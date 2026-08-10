@@ -298,8 +298,8 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 <div id="roba-magacin-glavni-sadrzaj" style="padding:12px;padding-bottom:40px;">
 
 <div class="ce-row" style="margin-bottom:14px;">
-  <button type="button" class="glavni-tab-btn active" data-tab="kalkulacija" onclick="prebaciGlavniTabRM('kalkulacija')">📦 Kalkulacija</button>
-  <button type="button" class="glavni-tab-btn" data-tab="lager" onclick="prebaciGlavniTabRM('lager')">📋 Lager lista</button>
+  <button type="button" class="glavni-tab-btn active" data-tab="lager" onclick="prebaciGlavniTabRM('lager')">📋 Lager lista</button>
+  <button type="button" class="glavni-tab-btn" data-tab="kalkulacija" onclick="prebaciGlavniTabRM('kalkulacija')">📦 Kalkulacija</button>
   <button type="button" class="glavni-tab-btn" data-tab="uvoz-istorija" onclick="prebaciGlavniTabRM('uvoz-istorija')">🗂️ Istorija uvoza</button>
   <button type="button" class="glavni-tab-btn" data-tab="presek" onclick="prebaciGlavniTabRM('presek')">⚖️ Presek / Usaglašavanje</button>
   <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
@@ -307,7 +307,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <button type="button" class="glavni-tab-btn" data-tab="uvoz" onclick="prebaciGlavniTabRM('uvoz')">📥 Uvoz robe</button>
 </div>
 
-<div id="tab-kalkulacija">
+<div id="tab-kalkulacija" style="display:none;">
   <div class="import-box" id="kalk-box">
     <h3>📦 Kalkulacija — prijem robe od dobavljača</h3>
     <div class="uzorak-hint">Unosi novu nabavku sa zavisnim troškovima — automatski obračunava pravu nabavnu cijenu po stavci (proporcionalno po vrijednosti), postavlja novu prodajnu cijenu, i obračunava carinu/PDV. Čuvanje odmah uvećava stanje robe.</div>
@@ -1386,6 +1386,22 @@ async function otvoriRobnuKarticu(robaId, naziv){
 }
 
 let nivelacijaRobaId=null;
+async function otvoriIzmjenuDebljine(robaId, naziv, trenutnaDebljina){
+  const nova=prompt(`Nova debljina (cm) za "${naziv}" (trenutno: ${trenutnaDebljina??'nije uneseno'}) — ostavi prazno da ukloniš:`, trenutnaDebljina??'');
+  if(nova===null) return; // otkazano
+  const novaTrim=nova.trim();
+  if(novaTrim===String(trenutnaDebljina??'')) return; // nema promjene
+  try{
+    const r=await fetch(`${API}/api/roba/${robaId}/debljina`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({debljina_cm:novaTrim}),
+    });
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška.');
+    ucitajLagerListu();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
 async function otvoriIzmjenuJedinice(robaId, naziv, trenutnaJedinica){
   const nova=prompt(`Nova jedinica mjere za "${naziv}" (trenutno: ${trenutnaJedinica}):`, trenutnaJedinica);
   if(nova===null) return; // otkazano
@@ -1975,7 +1991,10 @@ function renderLagerRedovi(){
       <td style="padding:3px 6px;">${esc(s.sifra)}</td>
       <td style="padding:3px 6px;">${esc(s.naziv)}</td>
       <td style="padding:3px 6px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
-      <td style="padding:3px 6px;text-align:center;color:#6b7a8d;">${s.debljina_cm??'—'}</td>
+      <td style="padding:3px 6px;text-align:center;color:#6b7a8d;">
+        ${s.debljina_cm??'—'}
+        ${currentUser?.rola==='admin'?`<button onclick="otvoriIzmjenuDebljine(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.debljina_cm??'null'})" title="Promijeni debljinu" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
+      </td>
       <td style="padding:3px 6px;text-align:center;">
         ${esc(s.jed_mjera)}
         ${currentUser?.rola==='admin'?`<button onclick="otvoriIzmjenuJedinice(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}','${esc(s.jed_mjera)}')" title="Promijeni jedinicu mjere" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
