@@ -579,10 +579,8 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       </div>
       <div class="fg"><label>Napomena</label><input type="text" id="kl-n" placeholder="npr. spavaća soba" oninput="refresh()"></div>
       <input type="hidden" id="kl-vrsta" value="prozorska">
-      <div class="cbrow" style="margin-top:4px">
-        <input type="checkbox" id="cb-kl-poz" onchange="togglePozicije('kl')">
-        <label for="cb-kl-poz" style="color:#7a4fa0">Razne dimenzije (tabela pozicija)</label>
-      </div>
+      <div id="kl-podtip-izbor" style="margin-top:8px"></div>
+      <input type="checkbox" id="cb-kl-poz" style="display:none" onchange="togglePozicije('kl')">
       <div id="kl-poz-wrap" style="display:none"></div>
     </div>
   
@@ -1858,7 +1856,7 @@ function newItem(tipArg){
   var t=tipArg||'k';
   return {
     tip: t,
-    shape:'I', dims:{}, ivSt:{}, cornerR:{}, cornerRData:{}, customOtvori:[], slavine:[], tableHoles:[], pozicije:[], pozBdDef:{},
+    shape:'I', dims:{}, ivSt:{}, cornerR:{}, cornerRData:{}, customOtvori:[], slavine:[], tableHoles:[], pozicije:[], pozBdDef:{}, klPodtip:'solo',
     vOrient:0, wallSides:{},
     wallCfgIdx: (t==='k'?5:0), // k: Nema zida (idx 5)
     extState:{},
@@ -2005,6 +2003,14 @@ function loadItemInputs(){
   // Vidljivost polja dubina/stepenik (samo kod "upušteno")
   toggleUpustenoFields('sud'); toggleUpustenoFields('plo');
   // Vidljivost tabele pozicija prati stanje prekidaca te stavke
+  // Podtip klupice odredjuje sta se prikazuje - cita se iz same stavke
+  var _a=items[activeIdx];
+  if(_a&&tip==='kl'){
+    var _pt=_a.klPodtip||(gc('cb-kl-poz')?((gs('kl-vrsta')==='zidna')?'zidna':'vise'):'solo');
+    _a.klPodtip=_pt;
+    var _cb=ge('cb-kl-poz'); if(_cb) _cb.checked=(_pt!=='solo');
+    var _vr=ge('kl-vrsta');  if(_vr) _vr.value=(_pt==='zidna')?'zidna':'prozorska';
+  }
   ['kl','st'].forEach(function(t){
     var w=ge(t+'-poz-wrap');
     if(w) w.style.display=gc('cb-'+t+'-poz')?'':'none';
@@ -2494,7 +2500,7 @@ function switchItem(toIdx){
   buildIvice();
   buildCornerR();buildCustomOtvoriUI();buildSlavinaUI();
   buildTableShapeGrid();buildTableDimWrap();buildTableHoleUI();
-  buildPozicijeTabelu();
+  buildKlPodtip();buildPozicijeTabelu();
   buildItemList();
   refresh();
 }
@@ -2551,7 +2557,7 @@ function addItem(){
     dims=Object.assign({},newIt.dims);
     buildShapeGrid();buildDimTable();buildWallGrid();
     buildExtSection();buildIvice();buildCornerR();buildCustomOtvoriUI();buildSlavinaUI();
-    buildTableShapeGrid();buildTableDimWrap();buildTableHoleUI();buildPozicijeTabelu();buildItemList();
+    buildTableShapeGrid();buildTableDimWrap();buildTableHoleUI();buildKlPodtip();buildPozicijeTabelu();buildItemList();
     refresh();
     return; // preskoči switchItem
   }catch(e){
@@ -2671,6 +2677,7 @@ function setTip(t){
     var el=ge('tab-'+x); if(el) el.className='tip-tab'+(x===t?' on':'');
     var bl=ge('blok-'+x); if(bl) bl.className='blok'+(x===t?' on':'');
   });
+  try{ buildKlPodtip(); }catch(e){}
 }
 
 function tcb(id){
@@ -2798,7 +2805,7 @@ function _pozStrane(){
             {id:'C-des',lbl:'C',opis:'desna bo\u010dna',kratko:'desna'},
             {id:'D-pred',lbl:'D',opis:'zadnja \u2014 uz zid',kratko:'uz zid'}];
   }
-  var zidna=(gs('kl-vrsta')==='zidna');
+  var zidna=(tip==='kl'&&_klPodtip()==='zidna');
   return [{id:'A-zad',lbl:'A',opis:'prednja \u2014 vidljiva',kratko:'prednja'},
           {id:'B-lev',lbl:'B',opis:zidna?'lijeva bo\u010dna':'lijeva \u2014 u \u0161paletnu',kratko:'lijeva'},
           {id:'C-des',lbl:'C',opis:zidna?'desna bo\u010dna':'desna \u2014 u \u0161paletnu',kratko:'desna'},
@@ -2809,7 +2816,7 @@ function _pozStrane(){
 // Kod zidne klupice se cesto zada UKUPNA duzina (npr. 7,2 m uz zid), pa se
 // dijeli na komade koji staju iz table. Cilj: sto manje spojeva i sto manje
 // otpada, uz postovanje maksimalne duzine table.
-function jeZidnaKlupica(){ return tip==='kl'&&gs('kl-vrsta')==='zidna'; }
+function jeZidnaKlupica(){ return tip==='kl'&&_klPodtip()==='zidna'; }
 function _tablaMjere(){
   return {a:gi('kl-tabla-a')||3200, b:gi('kl-tabla-b')||1600};
 }
@@ -2864,7 +2871,7 @@ var KomTipLbl={sam:'samostalan',prvi:'prvi (lijevo vidljivo)',
 function _vidljiveStrane(p){
   var v={'A-zad':true,'D-pred':true,'B-lev':true,'C-des':true};
   if(tip!=='kl') return v;
-  if(gs('kl-vrsta')!=='zidna'){ v['D-pred']=false; return v; }
+  if(_klPodtip()!=='zidna'){ v['D-pred']=false; return v; }
   var kt=_pozKomTip(p);
   if(kt==='prvi'){   v['C-des']=false; }
   if(kt==='zadnji'){ v['B-lev']=false; }
@@ -2877,7 +2884,7 @@ function _kanalOpcije(p){
   if(v['B-lev']) o.push('pred_lijeva');
   if(v['C-des']) o.push('pred_desna');
   if(v['B-lev']&&v['C-des']) o.push('pred_obje');
-  if(tip==='kl'&&gs('kl-vrsta')==='zidna'){
+  if(tip==='kl'&&_klPodtip()==='zidna'){
     o.push('zadnja','pred_zadnja');
     if(v['B-lev']&&v['C-des']) o.push('sve');
   }
@@ -3076,7 +3083,92 @@ function pozZamijeniAD(){
   syncToActive(); buildIvice(); buildPozicijeTabelu(); refresh();
 }
 function imaPozicije(){
-  return (tip==='kl'&&gc('cb-kl-poz'))||(tip==='st'&&gc('cb-st-poz'));
+  if(tip==='kl'){
+    var a=items[activeIdx];
+    if(a&&a.klPodtip) return a.klPodtip!=='solo';
+    return gc('cb-kl-poz');
+  }
+  return tip==='st'&&gc('cb-st-poz');
+}
+// ── PODTIPOVI KLUPICE ────────────────────────────────────────────
+// Jedna stavka = jedan podtip. Klik na podtip koji NIJE trenutni dodaje
+// NOVU stavku tog podtipa, pa se zidne i prozorske mogu mijesati u ponudi.
+var KL_PODTIPOVI=[
+  {id:'solo',   lbl:'Prozorska \u2014 solo',  opis:'jedna mjera, vi\u0161e komada'},
+  {id:'vise',   lbl:'Prozorska \u2014 vi\u0161e',  opis:'tabela raznih mjera'},
+  {id:'zidna',  lbl:'Zidna klupica',      opis:'zid se dijeli na komade'}
+];
+// Podtip zivi u SAMOJ stavci. Ranije se citao iz DOM polja (kl-vrsta,
+// kl-tabla-*) koja postoje tek kad je tabela otvorena, pa se pri prebacivanju
+// stavki gubio i sve je izgledalo kao "solo".
+function _klPodtip(){
+  var a=items[activeIdx];
+  if(a&&a.klPodtip) return a.klPodtip;
+  if(!gc('cb-kl-poz')) return 'solo';
+  return (gs('kl-vrsta')==='zidna')?'zidna':'vise';
+}
+function _zapisiPodtip(pt){
+  var a=items[activeIdx];
+  if(a) a.klPodtip=pt;
+}
+function buildKlPodtip(){
+  var con=ge('kl-podtip-izbor'); if(!con) return;
+  if(tip!=='kl'){ con.innerHTML=''; return; }
+  var tren=_klPodtip();
+  con.innerHTML='<div style="font-size:9px;letter-spacing:.5px;color:#6b7a8d;font-weight:700;'
+    +'margin-bottom:5px">TIP STAVKE \u2014 klik na drugi dodaje novu stavku</div>'
+    +'<div style="display:flex;gap:5px">'
+    +KL_PODTIPOVI.map(function(v){
+      var akt=(tren===v.id);
+      return '<button type="button" onclick="klikPodtip(\''+v.id+'\')" '
+        +'style="flex:1;font:inherit;font-size:10.5px;padding:6px 4px;border-radius:6px;cursor:pointer;'
+        +'font-weight:'+(akt?'700':'500')+';border:1.5px solid '+(akt?'#1a5fa8':'#dde2ea')+';'
+        +'background:'+(akt?'#eef4fb':'#fff')+';color:'+(akt?'#134a85':'#6b7a8d')+'">'
+        +v.lbl+'<br><small style="font-weight:400;opacity:.75;font-size:9px">'+v.opis+'</small></button>';
+    }).join('')+'</div>';
+}
+// Postavi podtip na TRENUTNU stavku (bez dodavanja nove)
+function _primijeniPodtip(pt){
+  _zapisiPodtip(pt);
+  var cb=ge('cb-kl-poz'), vr=ge('kl-vrsta');
+  if(cb) cb.checked=(pt!=='solo');
+  if(vr) vr.value=(pt==='zidna')?'zidna':'prozorska';
+  var w=ge('kl-poz-wrap'); if(w) w.style.display=(pt!=='solo')?'':'none';
+  if(pt!=='solo'&&(!pozicije||!pozicije.length)){
+    pozicije=[{a:gi('kl-a')||1500,b:gi('kl-b')||250,kom:1,nap:'',ob:{},bd:{}}];
+    if(pt==='zidna'){ pozicije[0].zid=0; pozicije[0].kt='sam'; }
+  }
+  if(pt==='zidna') (pozicije||[]).forEach(function(p,i){ if(p.zid==null){p.zid=i;p.kt='sam';} });
+  if(pt==='vise')  (pozicije||[]).forEach(function(p){ delete p.zid; delete p.kt; });
+  // ocisti kanal koji vise nije moguc
+  (pozicije||[]).forEach(function(p){
+    if(p.kan!=null&&_kanalOpcije(p).indexOf(p.kan)<0) delete p.kan;
+  });
+  var def=gs('kl-iv');
+  if(def&&def!=='bez'&&_kanalOpcije((pozicije||[])[0]||{}).indexOf(def)<0){
+    var el=ge('kl-iv'); if(el) el.value='bez';
+  }
+}
+function klikPodtip(pt){
+  if(_klPodtip()===pt) return;              // vec je taj podtip
+  // Ako je stavka jos "prazna" (bez unesenih pozicija), samo je prebaci
+  var prazna=(!items[activeIdx])||((pozicije||[]).length<=1&&!gs('kl-n'));
+  if(prazna){
+    _primijeniPodtip(pt);
+    syncToActive(); buildKlPodtip(); buildPozicijeTabelu(); refresh();
+    return;
+  }
+  // Inace: NOVA stavka tog podtipa, da se ne izgubi ono sto je uneseno
+  _saveUndo();
+  syncToActive(); saveItemInputs();
+  var nova=makeDefaultItem('kl');
+  items.push(nova);
+  activeIdx=items.length-1;
+  syncFromActive(); loadItemInputs();
+  pozicije=[];
+  _primijeniPodtip(pt);
+  syncToActive();
+  buildKlPodtip(); buildPozicijeTabelu(); buildIvice(); buildItemList(); refresh();
 }
 function togglePozicije(t){
   POZ_OTVOREN=null;
@@ -3205,7 +3297,7 @@ function buildPozicijeTabelu(){
   // Vrsta klupice - bira se TEK kad je tabela ukljucena, jer od nje zavisi
   // i sam nacin unosa (zidna se zada kao zid pa dijeli na komade).
   var hVrsta='';
-  if(t==='kl'){
+  if(false){
     var vr=gs('kl-vrsta')||'prozorska';
     hVrsta='<div style="display:flex;gap:6px;margin-bottom:8px">'
       +[['prozorska','\u2b1c Prozorska','ni\u0161a, \u0161paletne'],
@@ -6557,12 +6649,15 @@ function buildPozicijeRN(){
   var strane=_pozStrane();
   var h='<table class="rn-poz"><thead><tr>'
     +'<th>#</th><th>Du\u017eina \u00d7 \u0161irina<br><small style="font-weight:400;opacity:.8">mm</small></th><th>Kom</th>'
-  strane.forEach(function(sd){ h+='<th style="text-align:center">'+sd.lbl
-    +'<br><small style="font-weight:400;opacity:.85">'+sd.kratko+'</small></th>'; });
-  h+='<th>Vodeni kanal / napomena</th></tr>'
-    +'<tr class="rn-podnaslov"><td colspan="3"></td>'
-    +'<td colspan="'+strane.length+'" style="text-align:center">OBRADA IVICA po stranama</td>'
-    +'<td></td></tr></thead><tbody>';
+  // Puni opisi u zaglavlju - gola slova A/B/C/D nisu dovoljna operateru
+  var opisKol={'A-zad':'Obrada prednje strane','B-lev':'Obrada lijeve strane',
+               'C-des':'Obrada desne strane','D-pred':'Obrada zadnje strane'};
+  strane.forEach(function(sd){
+    h+='<th style="text-align:center">'+sd.lbl
+      +'<br><small style="font-weight:400;opacity:.9;font-size:8.5px">'
+      +(opisKol[sd.id]||sd.kratko)+'</small></th>';
+  });
+  h+='<th>Vodeni kanal</th></tr></thead><tbody>';
   var zidniPrikaz=jeZidnaKlupica();
   var brKolona=strane.length+4;
   var trenutniZid=null;
@@ -6613,11 +6708,7 @@ function buildPozicijeRN(){
   h+='</tbody><tfoot><tr><td colspan="2"><b>UKUPNO</b></td>'
     +'<td style="text-align:center"><b>'+uk+'</b></td>'
     +'<td colspan="'+(strane.length+1)+'"><b>'+ukM2.toFixed(3)+' m\u00b2</b></td></tr></tfoot></table>'
-    +'<div style="font-size:10px;margin-top:5px;padding:5px 7px;background:#f8fafd;border:1px solid #dde2ea;border-radius:4px">'
-    +'<b>Strane:</b> '+strane.map(function(sd){return sd.lbl+' = '+sd.opis;}).join(' \u00b7 ')
-    +'<br><b>Simboli:</b> '+Object.keys(PLbl).map(function(pr){return PSym[pr]+' '+PLbl[pr];}).join(' \u00b7 ')
-    +'<br><span style="color:#8a6d3b">\u26a0 <b>\u017duto polje</b> = obradi samo prvih N mm te strane '
-    +'(vidljivi dio nakon ugradnje), ne cijelu du\u017einu.</span></div>';
+    ;
   return h;
 }
 
@@ -7331,7 +7422,7 @@ function drawKlSematski(ctx,W,H){
   // PROZOR (ili zid) je GORE. Strana D (zadnja) je uz njega, a strana A
   // (prednja, vidljiva) je DOLJE - okrenuta prema prostoriji.
   var jeKlupica=(tip!=='st');
-  var jeZidna=(jeKlupica&&gs('kl-vrsta')==='zidna');
+  var jeZidna=(jeKlupica&&_klPodtip()==='zidna');
   // Zidna klupica ide PREKO zida (kao polica) - nema nikakvog zida u crtezu.
   // Ambijent se crta samo za ponudu; u nalogu i DXF-u je cist tehnicki crtez.
   var crtajAmbijent=(!_bezAmbijenta&&jeKlupica&&!jeZidna);
