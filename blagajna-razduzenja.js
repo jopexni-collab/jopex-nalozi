@@ -40,7 +40,7 @@ router.get('/stanje-sve', async (req, res) => {
         `SELECT COALESCE(SUM(g.iznos),0) AS ukupno FROM gotovina g
          WHERE g.objekt_naziv=$1 AND g.predao_blagajniku=true
            AND NOT (
-             g.opis LIKE 'Dug po otpremnici%'
+             COALESCE(g.opis,'') LIKE 'Dug po otpremnici%'
              AND NOT EXISTS (SELECT 1 FROM gotovina g2 WHERE g2.nalog_r_br=g.nalog_r_br AND g2.opis LIKE 'Prodaja (bruto)%')
            )`,
         [obj.naziv]
@@ -145,7 +145,7 @@ router.get('/stanje', async (req, res) => {
       `SELECT COALESCE(SUM(g.iznos),0) AS ukupno FROM gotovina g
        WHERE g.objekt_naziv = $1 AND g.predao_blagajniku = true
          AND NOT (
-           g.opis LIKE 'Dug po otpremnici%'
+           COALESCE(g.opis,'') LIKE 'Dug po otpremnici%'
            AND NOT EXISTS (SELECT 1 FROM gotovina g2 WHERE g2.nalog_r_br=g.nalog_r_br AND g2.opis LIKE 'Prodaja (bruto)%')
          )`,
       [objektNaziv]
@@ -189,7 +189,7 @@ router.post('/', async (req, res) => {
       `SELECT COALESCE(SUM(g.iznos),0) AS ukupno FROM gotovina g
        WHERE g.objekt_naziv=$1 AND g.predao_blagajniku=true
          AND NOT (
-           g.opis LIKE 'Dug po otpremnici%'
+           COALESCE(g.opis,'') LIKE 'Dug po otpremnici%'
            AND NOT EXISTS (SELECT 1 FROM gotovina g2 WHERE g2.nalog_r_br=g.nalog_r_br AND g2.opis LIKE 'Prodaja (bruto)%')
          )`,
       [objektNaziv]
