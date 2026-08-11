@@ -97,7 +97,7 @@ router.get('/suma', async (req, res) => {
         FROM gotovina g
         LEFT JOIN prodajni_objekti p ON p.naziv = g.objekt_naziv
         WHERE NOT (
-          COALESCE(g.opis,'') LIKE 'Dug po otpremnici%'
+          g.opis LIKE 'Dug po otpremnici%'
           AND NOT EXISTS (SELECT 1 FROM gotovina g2 WHERE g2.nalog_r_br=g.nalog_r_br AND g2.opis LIKE 'Prodaja (bruto)%')
         )
         ${filterGlavni ? 'AND g.objekt_naziv = ANY($1::text[])' : ''}
@@ -123,7 +123,7 @@ router.get('/suma', async (req, res) => {
         LEFT JOIN prodajni_objekti p ON p.naziv = g.objekt_naziv
         WHERE g.predao_blagajniku = false
           AND NOT (
-            COALESCE(g.opis,'') LIKE 'Dug po otpremnici%'
+            g.opis LIKE 'Dug po otpremnici%'
             AND NOT EXISTS (SELECT 1 FROM gotovina g2 WHERE g2.nalog_r_br=g.nalog_r_br AND g2.opis LIKE 'Prodaja (bruto)%')
           )
           ${filterPJ}
