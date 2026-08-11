@@ -58,6 +58,24 @@ app.use('/api/otpremnice-javno', require('./otpremnice-javno'));
 app.use('/api/terenske-ponude-javno', require('./terenske-ponude-javno'));
 app.use('/api/isplate-javno', require('./isplate-javno'));
 app.use('/api/uplate-javno', require('./uplate-javno'));
+// ─── Trening mod ────────────────────────────────────────────────────────────
+// Ako je korisnik u trening modu, SVAKI pokušaj upisa (POST/PATCH/PUT/DELETE) na bilo
+// koju API rutu se zaustavlja OVDE, prije nego što stigne do bilo koje pojedinačne rute —
+// centralizovano, tako da ne treba dirati svaku od desetina write-ruta pojedinačno (i ne
+// postoji rizik da se neka od njih slučajno propusti). Čitanje (GET) prolazi normalno —
+// korisnik u trening modu i dalje vidi pravu, stvarnu bazu, samo ne može ništa da promijeni.
+app.use('/api', (req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+  if (req.path.startsWith('/auth/')) return next(); // login/logout mora raditi i u trening modu
+  if (req.session?.user?.trening_mod === true) {
+    return res.status(423).json({
+      error: '🎓 Trening mod je uključen — ovo je samo za vežbu, ništa se ne upisuje u pravu bazu.',
+      trening_mod: true,
+    });
+  }
+  next();
+});
+
 // ─── Zaštićene rute ───────────────────────────────────────────────────────
 app.use('/api/upload',     requireLoginOrApiKey, require('./upload'));
 app.use('/api/zaposleni',   requireLoginOrApiKey, require('./zaposleni'));

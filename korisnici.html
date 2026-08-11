@@ -128,6 +128,7 @@ input:checked+.slider:before{transform:translateX(13px);}
           <th style="text-align:center">Restlovi unos</th>
           <th style="text-align:center">Teren</th>
           <th style="text-align:center">Blagajna (PJ)</th>
+          <th style="text-align:center" title="Kad je uključeno, korisnik NE MOŽE ništa da upiše u pravu bazu — vidi sve, ali svaki pokušaj čuvanja se blokira. Za obuku novih zaposlenih.">🎓 Trening mod</th>
           <th style="text-align:center">Aktivan</th>
           <th>Lozinka</th>
           <th></th>
@@ -366,6 +367,7 @@ function render(){
           🏦 ${k.blagajnik_pj_nazivi ? esc(k.blagajnik_pj_nazivi) : '— nije blagajnik —'}
         </button>
       </td>
+      <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.trening_mod?'checked':''} onchange="togglePravo(${k.id},'trening_mod',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.aktivan?'checked':''} onchange="togglePravo(${k.id},'aktivan',this.checked)"><span class="slider"></span></label></td>
       <td><button class="btn-loz" onclick="openLozinka(${k.id},'${esc(k.ime_prezime)}')">🔑 Postavi</button></td>
       <td><span class="saved" id="saved-${k.id}"></span></td>

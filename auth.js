@@ -13,7 +13,7 @@ router.post('/login', async (req, res) => {
       `SELECT id, ime_prezime, email, lozinka, rola, aktivan,
               moze_ugovarati, unos_naloga, izmjena_statusa, izmjena_naloga,
               moze_prodavati, moze_roba_magacin, blagajnik_objekat_id, komercijalista_teren,
-              moze_restlovi, moze_restlovi_unos
+              moze_restlovi, moze_restlovi_unos, trening_mod
        FROM zaposleni WHERE LOWER(email) = LOWER($1)`,
       [String(email).trim()]
     );
@@ -47,6 +47,7 @@ router.post('/login', async (req, res) => {
       blagajnik_objekat_id: user.blagajnik_objekat_id,
       je_blagajnik: jeBlagajnik,
       komercijalista_teren: user.komercijalista_teren,
+      trening_mod: user.trening_mod || false,
     };
 
     // Trajna istorija prijava (van glavne sesijske tabele, koja pamti samo trenutno
@@ -84,7 +85,15 @@ router.get('/me', async (req, res) => {
       imaProdajuPJ = prod.rows.length > 0;
     } catch (e) { imaProdajuPJ = false; }
   }
-  res.json({ ...user, ima_prodaju_pj: imaProdajuPJ });
+  // Trening mod se ISTO provjerava uživo — admin ga može uključiti/isključiti dok je
+  // korisnik VEĆ prijavljen, i mora odmah da počne/prestane da blokira upise, bez čekanja
+  // da se korisnik ponovo prijavi. Sesija se OSVJEŽAVA ovdje da je globalni middleware
+  // (koji blokira upise) uvijek vidi tačnu, trenutnu vrijednost na svakom zahtjevu.
+  try {
+    const tm = await pool.query('SELECT trening_mod FROM zaposleni WHERE id=$1', [user.id]);
+    req.session.user.trening_mod = tm.rows[0]?.trening_mod || false;
+  } catch (e) { /* ne rušimo /me zbog ovoga */ }
+  res.json({ ...req.session.user, ima_prodaju_pj: imaProdajuPJ });
 });
 
 // GET /api/auth/prijave - SAMO admin - istorija prijava (poslednjih 200)

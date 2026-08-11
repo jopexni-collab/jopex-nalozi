@@ -56,7 +56,7 @@ router.get('/', async (req, res) => {
       `SELECT z.id, z.ime_prezime, z.pozicija, z.rola, z.aktivan,
               z.moze_ugovarati, z.unos_naloga, z.izmjena_statusa, z.izmjena_naloga,
               z.moze_prodavati, z.moze_roba_magacin, z.komercijalista_teren, z.email,
-              z.moze_restlovi, z.moze_restlovi_unos,
+              z.moze_restlovi, z.moze_restlovi_unos, z.trening_mod,
               COALESCE(
                 (SELECT string_agg(p.naziv, ', ' ORDER BY p.naziv)
                  FROM blagajnici_pj b JOIN prodajni_objekti p ON p.id = b.objekat_id
@@ -81,7 +81,7 @@ router.get('/', async (req, res) => {
 router.patch('/:id', async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Nema pristupa.' });
- const ALLOWED = ['rola','aktivan','moze_ugovarati','unos_naloga','izmjena_statusa','izmjena_naloga','moze_prodavati','moze_roba_magacin','komercijalista_teren','email','blagajnik_objekat_id','pozicija','moze_restlovi','moze_restlovi_unos'];
+ const ALLOWED = ['rola','aktivan','moze_ugovarati','unos_naloga','izmjena_statusa','izmjena_naloga','moze_prodavati','moze_roba_magacin','komercijalista_teren','email','blagajnik_objekat_id','pozicija','moze_restlovi','moze_restlovi_unos','trening_mod'];
   const sets=[], vals=[];
   let i=1;
   for(const key of ALLOWED){
