@@ -584,6 +584,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
           <option value="zidna">▬ Zidna (uz zid, bez niše)</option>
         </select>
       </div>
+      <input type="hidden" id="kl-vrsta" value="prozorska">
       <div class="cbrow" style="margin-top:4px">
         <input type="checkbox" id="cb-kl-poz" onchange="togglePozicije('kl')">
         <label for="cb-kl-poz" style="color:#7a4fa0">Razne dimenzije (tabela pozicija)</label>
@@ -2923,6 +2924,65 @@ function pozKanal(i,val){
 }
 // Tip komada kod zidne klupice - mijenja koje su bocne strane vidljive,
 // pa i koje opcije kanala imaju smisla za taj red.
+// Prebacivanje prozorska/zidna. Kod zidne se pozicije grupisu u ZIDOVE -
+// jedan zid ima JEDNU sirinu i dijeli se na komade; novi zid = nova sirina.
+function postaviVrstuKlupice(v){
+  var e=ge('kl-vrsta'); if(e) e.value=v;
+  if(v==='zidna'){
+    // Svaka postojeca pozicija bez zida postaje svoj zid
+    (pozicije||[]).forEach(function(p,i){ if(p.zid==null) p.zid=i; });
+  } else {
+    (pozicije||[]).forEach(function(p){ delete p.zid; delete p.kt; });
+  }
+  // Kanal koji vise nije moguc se cisti
+  (pozicije||[]).forEach(function(p){
+    if(p.kan!=null&&_kanalOpcije(p).indexOf(p.kan)<0) delete p.kan;
+  });
+  var def=gs('kl-iv');
+  if(def&&_kanalOpcije(pozicije[0]||{}).indexOf(def)<0){
+    var el=ge('kl-iv'); if(el) el.value='bez';
+  }
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
+// Svi zidovi (grupe pozicija sa istim .zid), sa zajednickom sirinom
+// Redni broj komada UNUTAR svog zida (1, 2, 3...) - za oznaku "2.3"
+function _zidoviRedniBroj(idx){
+  var p=pozicije[idx]; if(!p) return 1;
+  var z=(p.zid!=null)?p.zid:0, n=0;
+  for(var i=0;i<=idx;i++){
+    if((pozicije[i].zid!=null?pozicije[i].zid:0)===z) n++;
+  }
+  return n;
+}
+function _zidovi(){
+  var mapa={}, red=[];
+  (pozicije||[]).forEach(function(p,i){
+    var z=(p.zid!=null)?p.zid:0;
+    if(!mapa[z]){ mapa[z]={zid:z,komadi:[],b:p.b||250}; red.push(mapa[z]); }
+    mapa[z].komadi.push(i);
+  });
+  return red;
+}
+// Sirina se mijenja ZA CIJELI zid - jedan zid, jedna sirina
+function zidSirina(zid,val){
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
+  if(v<=0) return;
+  (pozicije||[]).forEach(function(p){ if((p.zid!=null?p.zid:0)===zid) p.b=v; });
+  syncToActive(); refresh();
+}
+function dodajZid(){
+  var maxZ=-1;
+  (pozicije||[]).forEach(function(p){ var z=(p.zid!=null)?p.zid:0; if(z>maxZ) maxZ=z; });
+  pozicije.push({a:2000,b:250,kom:1,nap:'',ob:{},bd:{},zid:maxZ+1,kt:'sam'});
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
+function ukloniZid(zid){
+  if(!confirm('Ukloniti cijeli zid sa svim komadima?')) return;
+  _saveUndo();
+  pozicije=(pozicije||[]).filter(function(p){ return (p.zid!=null?p.zid:0)!==zid; });
+  if(!pozicije.length) pozicije=[{a:2000,b:250,kom:1,nap:'',ob:{},bd:{},zid:0,kt:'sam'}];
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
 function pozKomTip(i,val){
   if(!pozicije[i]) return;
   pozicije[i].kt=val;
@@ -3082,8 +3142,25 @@ function buildPozicijeTabelu(){
   var uk=pozicije.reduce(function(a,p){return a+Math.max(1,p.kom||1);},0);
   var ukM2=pozicije.reduce(function(a,p){return a+(p.a||0)*(p.b||0)/1e6*Math.max(1,p.kom||1);},0);
 
+  // Vrsta klupice - bira se TEK kad je tabela ukljucena, jer od nje zavisi
+  // i sam nacin unosa (zidna se zada kao zid pa dijeli na komade).
+  var hVrsta='';
+  if(t==='kl'){
+    var vr=gs('kl-vrsta')||'prozorska';
+    hVrsta='<div style="display:flex;gap:6px;margin-bottom:8px">'
+      +[['prozorska','\u2b1c Prozorska','ni\u0161a, \u0161paletne'],
+        ['zidna','\u25ac Zidna','dijeli se na komade']].map(function(v){
+        var akt=(vr===v[0]);
+        return '<button type="button" onclick="postaviVrstuKlupice(\''+v[0]+'\')" '
+          +'style="flex:1;font:inherit;font-size:11.5px;padding:7px 6px;border-radius:6px;cursor:pointer;'
+          +'font-weight:'+(akt?'700':'500')+';border:1.5px solid '+(akt?'#1a5fa8':'#dde2ea')+';'
+          +'background:'+(akt?'#eef4fb':'#fff')+';color:'+(akt?'#134a85':'#6b7a8d')+'">'
+          +v[1]+'<br><small style="font-weight:400;opacity:.75">'+v[2]+'</small></button>';
+      }).join('')+'</div>';
+  }
   // ── PODRAZUMIJEVANA OBRADA: uvijek vidljiva, vazi za sve redove ──
-  var h='<div style="background:#eef4fb;border:1px solid #c8d9ee;border-radius:6px;padding:8px 10px;margin-bottom:8px">'
+  var h=hVrsta
+    +'<div style="background:#eef4fb;border:1px solid #c8d9ee;border-radius:6px;padding:8px 10px;margin-bottom:8px">'
     +'<div style="font-size:10px;font-weight:700;color:#134a85;margin-bottom:6px;letter-spacing:.5px">'
     +'VA\u017dI ZA SVE POZICIJE</div>';
   strane.forEach(function(sd){
@@ -3133,33 +3210,55 @@ function buildPozicijeTabelu(){
     +'\u21c5 Zamijeni A ('+strane[0].kratko+') \u2194 D ('+strane[3].kratko+')</button></div>';
   h+='</div>';
 
-  // ── ZIDNA KLUPICA: unos ukupne dužine i automatska podjela ──
+  // ── ZIDNA KLUPICA: prikaz po ZIDOVIMA ──
+  // Jedan zid = jedna sirina + ukupna duzina koja se dijeli na komade.
+  // Novi zid ima svoju sirinu, pa se unosi zasebno.
   if(jeZidnaKlupica()){
-    var tb=_tablaMjere();
+    var tbl=_tablaMjere();
     h+='<div style="background:#f3eef8;border:1px solid #d9c8e8;border-radius:6px;padding:8px 10px;margin-bottom:8px">'
-      +'<div style="font-size:10px;font-weight:700;color:#7a4fa0;margin-bottom:6px;letter-spacing:.5px">'
-      +'PODIJELI UKUPNU DU\u017dINU NA KOMADE</div>'
-      +'<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:5px">'
-      +'<label style="font-size:10.5px;color:#6b7a8d">Ukupna du\u017eina</label>'
-      +'<input type="number" id="kl-ukupna" min="1" placeholder="npr. 7200" style="width:88px;'
-      +'font:inherit;font-size:12px;padding:4px 6px;border:1px solid #dde2ea;border-radius:4px;text-align:right">'
-      +'<span style="font-size:10px;color:#8a93a3">mm</span>'
-      +'<label style="font-size:10.5px;color:#6b7a8d;margin-left:6px">\u0160irina</label>'
-      +'<input type="number" id="kl-ukupna-b" min="1" value="'+(pozicije[0]?pozicije[0].b:250)+'" style="width:70px;'
-      +'font:inherit;font-size:12px;padding:4px 6px;border:1px solid #dde2ea;border-radius:4px;text-align:right">'
-      +'<span style="font-size:10px;color:#8a93a3">mm</span></div>'
-      +'<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:5px">'
-      +'<label style="font-size:10.5px;color:#6b7a8d">Tabla</label>'
-      +'<input type="number" id="kl-tabla-a" min="100" value="'+tb.a+'" style="width:74px;'
-      +'font:inherit;font-size:12px;padding:4px 6px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
+      +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'
+      +'<span style="font-size:10px;font-weight:700;color:#7a4fa0;letter-spacing:.5px">ZIDOVI</span>'
+      +'<span style="font-size:10px;color:#8a93a3;flex:1">jedan zid \u2014 jedna \u0161irina</span>'
+      +'<label style="font-size:10px;color:#6b7a8d">Tabla</label>'
+      +'<input type="number" id="kl-tabla-a" min="100" value="'+tbl.a+'" style="width:62px;font:inherit;'
+      +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
       +' oninput="fixComma(this);syncToActive()"><span style="font-size:10px;color:#8a93a3">\u00d7</span>'
-      +'<input type="number" id="kl-tabla-b" min="100" value="'+tb.b+'" style="width:74px;'
-      +'font:inherit;font-size:12px;padding:4px 6px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
-      +' oninput="fixComma(this);syncToActive()"><span style="font-size:10px;color:#8a93a3">mm</span>'
-      +'<button type="button" onclick="primijeniPodjelu()" style="font:inherit;font-size:11px;'
-      +'padding:5px 12px;border:1px solid #7a4fa0;background:#7a4fa0;color:#fff;border-radius:5px;'
-      +'cursor:pointer;font-weight:600;margin-left:auto">\u2702 Podijeli</button></div>'
-      +'<div id="kl-podjela-info" style="font-size:10.5px;color:#6b7a8d"></div></div>';
+      +'<input type="number" id="kl-tabla-b" min="100" value="'+tbl.b+'" style="width:62px;font:inherit;'
+      +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
+      +' oninput="fixComma(this);syncToActive()"><span style="font-size:10px;color:#8a93a3">mm</span></div>';
+    _zidovi().forEach(function(z,zi){
+      var ukD=z.komadi.reduce(function(a2,ix){return a2+(pozicije[ix].a||0);},0);
+      var ukK=z.komadi.reduce(function(a2,ix){return a2+Math.max(1,pozicije[ix].kom||1);},0);
+      h+='<div style="background:#fff;border:1px solid #e2d5ee;border-radius:5px;padding:6px 8px;margin-bottom:5px">'
+        +'<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">'
+        +'<b style="font-size:11px;color:#7a4fa0;min-width:44px">Zid '+(zi+1)+'</b>'
+        +'<label style="font-size:10px;color:#6b7a8d">\u0160irina</label>'
+        +'<input type="number" min="1" value="'+z.b+'" style="width:64px;font:inherit;font-size:11.5px;'
+        +'padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
+        +' oninput="fixComma(this);zidSirina('+z.zid+',this.value)">'
+        +'<span style="font-size:10px;color:#8a93a3">mm</span>'
+        +'<label style="font-size:10px;color:#6b7a8d;margin-left:4px">Ukupno</label>'
+        +'<input type="number" min="1" id="zid-uk-'+z.zid+'" value="'+ukD+'" style="width:74px;font:inherit;'
+        +'font-size:11.5px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right">'
+        +'<span style="font-size:10px;color:#8a93a3">mm</span>'
+        +'<button type="button" onclick="podijeliZid('+z.zid+')" style="font:inherit;font-size:10.5px;'
+        +'padding:4px 10px;border:1px solid #7a4fa0;background:#7a4fa0;color:#fff;border-radius:4px;'
+        +'cursor:pointer;font-weight:600">\u2702 Podijeli</button>'
+        +'<button type="button" onclick="ukloniZid('+z.zid+')" style="background:none;border:none;'
+        +'color:#c0392b;cursor:pointer;font-size:13px;padding:2px 4px">\u2715</button>'
+        +'</div>'
+        +'<div style="font-size:10px;color:#6b7a8d;margin-top:4px">'
+        +z.komadi.length+' komad'+(z.komadi.length===1?'':'a')+' \u00b7 '+ukK+' kom \u00b7 '
+        +z.komadi.map(function(ix){
+          var kt=_pozKomTip(pozicije[ix]);
+          return pozicije[ix].a+(kt!=='sam'?('<sub style="color:#7a4fa0">'
+            +({prvi:'L',sred:'\u2194',zadnji:'D'}[kt]||'')+'</sub>'):'');
+        }).join(' + ')+' mm</div></div>';
+    });
+    h+='<button type="button" onclick="dodajZid()" style="width:100%;padding:6px;background:none;'
+      +'border:1px dashed #7a4fa0;color:#7a4fa0;border-radius:5px;cursor:pointer;font:inherit;'
+      +'font-size:11px;font-weight:600">+ Dodaj zid (nova \u0161irina)</button>'
+      +'<div id="kl-podjela-info" style="font-size:10.5px;color:#6b7a8d;margin-top:5px"></div></div>';
   }
   // ── REDOVI ──
   h+='<div class="poz-tabela">';
@@ -3169,12 +3268,17 @@ function buildPozicijeTabelu(){
     var otv=(POZ_OTVOREN===i);
     h+='<div class="poz-red'+(otv?' otvoren':'')+(saz.izuz?' ima-izuz':'')+'">'
       +'<div class="poz-hd">'
-      +'<b>'+(i+1)+'.</b>'
+      +'<b'+(jeZidnaKlupica()?' style="color:#7a4fa0" title="Zid '
+        +(((p.zid!=null?p.zid:0))+1)+'"':'')+'>'
+      +(jeZidnaKlupica()?((((p.zid!=null?p.zid:0))+1)+'.'+(_zidoviRedniBroj(i))):(i+1)+'.')+'</b>'
       +'<input type="number" min="1" value="'+(p.a||0)+'" data-poz="'+i+'" data-pol="a"'
       +' onkeydown="pozEnter(event,'+i+',\'a\')" oninput="fixComma(this);pozPolje('+i+',\'a\',this.value)">'
       +'<span>\u00d7</span>'
-      +'<input type="number" min="1" value="'+(p.b||0)+'" data-poz="'+i+'" data-pol="b"'
-      +' onkeydown="pozEnter(event,'+i+',\'b\')" oninput="fixComma(this);pozPolje('+i+',\'b\',this.value)">'
+      +(jeZidnaKlupica()
+        ? ('<input type="number" value="'+(p.b||0)+'" readonly title="\u0160irina se mijenja na nivou zida"'
+           +' style="background:#f0f2f5;color:#8a93a3;cursor:not-allowed">')
+        : ('<input type="number" min="1" value="'+(p.b||0)+'" data-poz="'+i+'" data-pol="b"'
+           +' onkeydown="pozEnter(event,'+i+',\'b\')" oninput="fixComma(this);pozPolje('+i+',\'b\',this.value)">'))
       +'<span>mm</span>'
       +'<input type="number" min="1" value="'+kom+'" class="poz-kom" data-poz="'+i+'" data-pol="kom"'
       +' onkeydown="pozEnter(event,'+i+',\'kom\')" oninput="fixComma(this);pozPolje('+i+',\'kom\',this.value)">'
@@ -3249,8 +3353,10 @@ function buildPozicijeTabelu(){
 function pozEnter(e,i,polje){
   if(e.key!=='Enter') return;
   e.preventDefault();
-  var red=['a','b','kom'];
+  // Kod zidne klupice sirina je zakljucana po zidu, pa je Enter preskace
+  var red=jeZidnaKlupica()?['a','kom']:['a','b','kom'];
   var k=red.indexOf(polje);
+  if(k<0) k=0;
   if(k<red.length-1){
     var sl=document.querySelector('[data-poz="'+i+'"][data-pol="'+red[k+1]+'"]');
     if(sl){ sl.focus(); if(sl.select) sl.select(); }
@@ -3268,29 +3374,44 @@ function pozEnter(e,i,polje){
     if(nov){ nov.focus(); if(nov.select) nov.select(); }
   },30);
 }
-// Primijeni podjelu: napravi pozicije od ukupne duzine
-function primijeniPodjelu(){
-  var uk=gi('kl-ukupna'), sir=gi('kl-ukupna-b')||250;
+// Podijeli JEDAN zid na komade. Sirina ostaje ista za cijeli zid, a tipovi
+// komada (prvi/srednji/zadnji) se dodjeljuju sami - kod nastavaka bocna
+// strana nema kanal.
+function podijeliZid(zid){
+  var el=ge('zid-uk-'+zid);
+  var uk=el?(parseFloat((el.value||'0').replace(',','.'))||0):0;
+  if(uk<=0){ alert('Unesi ukupnu du\u017einu zida.'); return; }
+  var zz=_zidovi().filter(function(z){return z.zid===zid;})[0];
+  if(!zz) return;
+  var sir=zz.b||250;
   var t=_tablaMjere();
-  if(uk<=0){ alert('Unesi ukupnu du\u017einu.'); return; }
   var maxKom=Math.max(t.a,t.b)-20;   // 20 mm rezerva na rez
   var kom=podijeliDuzinu(uk,maxKom);
   if(!kom.length) return;
-  if(!confirm('Podijeliti '+uk+' mm na '+kom.length+' komada?\n\n'
+  if(!confirm('Zid '+uk+' mm podijeliti na '+kom.length+' komad'+(kom.length===1?'':'a')+'?\n\n'
     +kom.map(function(d,i){return (i+1)+'. '+d+' \u00d7 '+sir+' mm';}).join('\n')
-    +'\n\nPostoje\u0107e pozicije se ZAMJENJUJU.')) return;
+    +'\n\nPostoje\u0107i komadi ovog zida se ZAMJENJUJU.')) return;
   _saveUndo();
-  // Automatski se odredjuje koji je komad prvi/srednji/zadnji - kod nastavaka
-  // bocna strana nema kanal, jer se tu klupice spajaju bez vidnog zavrsetka.
-  pozicije=kom.map(function(d,i){
-    var kt=(kom.length===1)?'sam':(i===0?'prvi':(i===kom.length-1?'zadnji':'sred'));
-    return {a:d,b:sir,kom:1,nap:'',ob:{},bd:{},kt:kt};
+  // Zadrzi obradu prvog komada tog zida kao obrazac
+  var uzor=pozicije[zz.komadi[0]]||{};
+  var novi=kom.map(function(d,i){
+    return {a:d,b:sir,kom:1,nap:'',zid:zid,
+      kt:(kom.length===1)?'sam':(i===0?'prvi':(i===kom.length-1?'zadnji':'sred')),
+      ob:JSON.parse(JSON.stringify(uzor.ob||{})),
+      bd:JSON.parse(JSON.stringify(uzor.bd||{}))};
   });
+  // Ocisti kanal koji vise nije moguc na tom komadu
+  novi.forEach(function(p){
+    if(p.kan!=null&&_kanalOpcije(p).indexOf(p.kan)<0) delete p.kan;
+  });
+  var ostali=pozicije.filter(function(p){ return (p.zid!=null?p.zid:0)!==zid; });
+  var prije=pozicije.filter(function(p,ix){ return ix<zz.komadi[0]&&(p.zid!=null?p.zid:0)!==zid; });
+  pozicije=prije.concat(novi, ostali.filter(function(p){ return prije.indexOf(p)<0; }));
   syncToActive(); buildPozicijeTabelu(); refresh();
   var izTable=komadaIzTable(kom[0],sir);
   var inf=ge('kl-podjela-info');
-  if(inf) inf.innerHTML='\u2713 Podijeljeno na <b>'+kom.length+'</b> komada. '
-    +'Iz jedne table '+t.a+'\u00d7'+t.b+' stane <b>'+izTable+'</b> komada od '+kom[0]+'\u00d7'+sir+' mm.';
+  if(inf) inf.innerHTML='\u2713 Zid podijeljen na <b>'+kom.length+'</b> komada od '+kom[0]+'\u00d7'+sir+' mm. '
+    +'Iz table '+t.a+'\u00d7'+t.b+' stane <b>'+izTable+'</b> takvih komada.';
 }
 function pozOtvori(i){
   POZ_OTVOREN=(POZ_OTVOREN===i)?null:i;
