@@ -555,27 +555,13 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
     <div class="sec">
       <div class="sec-hd">Prozorska klupica</div>
       <div id="kl-podtip-izbor" style="margin:6px 0 8px"></div>
-      <div id="kl-solo-wrap">
-      <div class="hint">A = dužina · B = širina (dubina od zida)</div>
-      <div class="r2">
-        <div class="fg"><label>A – dužina (mm)</label><input type="number" id="kl-a" value="1500" min="100" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>B – širina (mm)</label><input type="number" id="kl-b" value="250" min="50" oninput="fixComma(this);refresh()"></div>
-      </div>
-      <div class="r2">
-        <div class="fg"><label>Broj komada</label><input type="number" id="kl-k" value="1" min="1" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Vodeni kanal</label>
-          <select id="kl-iv" onchange="refresh()">
-            <option value="bez">Bez vodenog kanala</option>
-            <option value="dve_duze">Dvije duže strane</option>
-            <option value="dve_krace">Dvije kraće strane</option>
-            <option value="duza_leva">Duža i lijeva strana</option>
-            <option value="duza_desna">Duža i desna strana</option>
-            <option value="sve">Sve strane</option>
-          </select>
-        </div>
-      </div>
-      
-      </div><!-- /kl-solo-wrap -->
+      <!-- Polja jedne mjere su UKLONJENA iz UI-ja: svaka klupica ide kroz
+           tabelu pozicija (jedna pozicija = nekadasnji "solo"). Ostaju kao
+           skrivena polja, jer sluze kao podrazumijevane vrijednosti. -->
+      <input type="hidden" id="kl-a" value="1500">
+      <input type="hidden" id="kl-b" value="250">
+      <input type="hidden" id="kl-k" value="1">
+      <input type="hidden" id="kl-iv" value="bez">
       <div class="r2">
         <div class="fg"><label>Ugradnja/kom (KM)</label><input type="text" inputmode="decimal" id="kl-u" value="0" min="0" oninput="fixComma(this);refresh()"></div>
         <div class="fg"><label>Mjerenje (KM)</label><input type="text" inputmode="decimal" id="kl-m" value="0" min="0" oninput="fixComma(this);refresh()"></div>
@@ -1858,7 +1844,7 @@ function newItem(tipArg){
   var t=tipArg||'k';
   return {
     tip: t,
-    shape:'I', dims:{}, ivSt:{}, cornerR:{}, cornerRData:{}, customOtvori:[], slavine:[], tableHoles:[], pozicije:[], pozBdDef:{}, klPodtip:'solo',
+    shape:'I', dims:{}, ivSt:{}, cornerR:{}, cornerRData:{}, customOtvori:[], slavine:[], tableHoles:[], pozicije:[], pozBdDef:{}, klPodtip:'vise',
     vOrient:0, wallSides:{},
     wallCfgIdx: (t==='k'?5:0), // k: Nema zida (idx 5)
     extState:{},
@@ -2008,16 +1994,21 @@ function loadItemInputs(){
   // Podtip klupice odredjuje sta se prikazuje - cita se iz same stavke
   var _a=items[activeIdx];
   if(_a&&tip==='kl'){
-    var _pt=_a.klPodtip||(gc('cb-kl-poz')?((gs('kl-vrsta')==='zidna')?'zidna':'vise'):'solo');
+    var _pt=_a.klPodtip;
+    if(!_pt||_pt==='solo') _pt=(gs('kl-vrsta')==='zidna')?'zidna':'vise';
     _a.klPodtip=_pt;
-    var _cb=ge('cb-kl-poz'); if(_cb) _cb.checked=(_pt!=='solo');
+    var _cb=ge('cb-kl-poz'); if(_cb) _cb.checked=true;
     var _vr=ge('kl-vrsta');  if(_vr) _vr.value=(_pt==='zidna')?'zidna':'prozorska';
+    // Svaka klupica ima bar jednu poziciju - stare stavke bez tabele
+    // dobijaju jedan red iz svojih ranijih mjera.
+    if(!pozicije||!pozicije.length){
+      pozicije=[{a:gi('kl-a')||1500,b:gi('kl-b')||250,kom:Math.max(1,gi('kl-k')||1),
+                 nap:'',ob:{},bd:{}}];
+      if(_pt==='zidna'){ pozicije[0].zid=0; pozicije[0].kt='sam'; }
+    }
   }
-  ['kl','st'].forEach(function(t){
-    var on=gc('cb-'+t+'-poz');
-    var w=ge(t+'-poz-wrap');   if(w) w.style.display=on?'':'none';
-    var sw=ge(t+'-solo-wrap'); if(sw) sw.style.display=on?'none':'';
-  });
+  var _wkl=ge('kl-poz-wrap'); if(_wkl) _wkl.style.display=(tip==='kl')?'':'none';
+  var _wst=ge('st-poz-wrap'); if(_wst) _wst.style.display=gc('cb-st-poz')?'':'none';
 }
 function syncFromActive(){
   if(items.length===0) return;
@@ -3086,28 +3077,25 @@ function pozZamijeniAD(){
   syncToActive(); buildIvice(); buildPozicijeTabelu(); refresh();
 }
 function imaPozicije(){
-  if(tip==='kl'){
-    var a=items[activeIdx];
-    if(a&&a.klPodtip) return a.klPodtip!=='solo';
-    return gc('cb-kl-poz');
-  }
+  // Klupice UVIJEK idu kroz tabelu - jedna klupica je tabela sa jednim redom
+  if(tip==='kl') return true;
   return tip==='st'&&gc('cb-st-poz');
 }
 // ── PODTIPOVI KLUPICE ────────────────────────────────────────────
 // Jedna stavka = jedan podtip. Klik na podtip koji NIJE trenutni dodaje
 // NOVU stavku tog podtipa, pa se zidne i prozorske mogu mijesati u ponudi.
+// Solo je uklonjen - to je samo tabela sa jednim redom, pa je bio suvisan
+// i udvostrucavao logiku. Ostaju dva stvarno razlicita nacina rada.
 var KL_PODTIPOVI=[
-  {id:'solo',   lbl:'Prozorska \u2014 solo',  opis:'jedna mjera, vi\u0161e komada'},
-  {id:'vise',   lbl:'Prozorska \u2014 vi\u0161e',  opis:'tabela raznih mjera'},
-  {id:'zidna',  lbl:'Zidna klupica',      opis:'zid se dijeli na komade'}
+  {id:'vise',   lbl:'Prozorska klupica', opis:'jedna ili vi\u0161e mjera'},
+  {id:'zidna',  lbl:'Zidna klupica',     opis:'zid se dijeli na komade'}
 ];
 // Podtip zivi u SAMOJ stavci. Ranije se citao iz DOM polja (kl-vrsta,
 // kl-tabla-*) koja postoje tek kad je tabela otvorena, pa se pri prebacivanju
 // stavki gubio i sve je izgledalo kao "solo".
 function _klPodtip(){
   var a=items[activeIdx];
-  if(a&&a.klPodtip) return a.klPodtip;
-  if(!gc('cb-kl-poz')) return 'solo';
+  if(a&&a.klPodtip&&a.klPodtip!=='solo') return a.klPodtip;
   return (gs('kl-vrsta')==='zidna')?'zidna':'vise';
 }
 function _zapisiPodtip(pt){
@@ -3132,13 +3120,13 @@ function buildKlPodtip(){
 }
 // Postavi podtip na TRENUTNU stavku (bez dodavanja nove)
 function _primijeniPodtip(pt){
+  if(pt==='solo') pt='vise';
   _zapisiPodtip(pt);
   var cb=ge('cb-kl-poz'), vr=ge('kl-vrsta');
-  if(cb) cb.checked=(pt!=='solo');
+  if(cb) cb.checked=true;
   if(vr) vr.value=(pt==='zidna')?'zidna':'prozorska';
-  var w=ge('kl-poz-wrap');  if(w) w.style.display=(pt!=='solo')?'':'none';
-  var sw2=ge('kl-solo-wrap'); if(sw2) sw2.style.display=(pt==='solo')?'':'none';
-  if(pt!=='solo'&&(!pozicije||!pozicije.length)){
+  var w=ge('kl-poz-wrap'); if(w) w.style.display='';
+  if(!pozicije||!pozicije.length){
     pozicije=[{a:gi('kl-a')||1500,b:gi('kl-b')||250,kom:1,nap:'',ob:{},bd:{}}];
     if(pt==='zidna'){ pozicije[0].zid=0; pozicije[0].kt='sam'; }
   }
@@ -3179,8 +3167,6 @@ function togglePozicije(t){
   var w=ge(t+'-poz-wrap');
   var on=gc('cb-'+t+'-poz');
   if(w) w.style.display=on?'':'none';
-  var sw=ge(t+'-solo-wrap');   // polja jedne mjere - samo za "solo"
-  if(sw) sw.style.display=on?'none':'';
   if(on&&(!pozicije||!pozicije.length)){
     pozicije=[{a:gi(t+'-a')||1500,b:gi(t+'-b')||250,kom:1,nap:'',ob:{},bd:{}}];
   }
@@ -3345,7 +3331,7 @@ function buildPozicijeTabelu(){
   });
   // Vodeni kanal za sve pozicije (samo klupice)
   if(t==='kl'){
-    var kanDef=gs('kl-iv')||'bez';
+    var kanDef=gs('kl-iv')||'bez';   // skriveno polje nosi podrazumijevani izbor
     var kanIsti=!pozicije.some(function(p){return p.kan!=null;});
     h+='<div style="display:flex;gap:5px;align-items:center;margin-top:6px;padding-top:6px;'
       +'border-top:1px dashed #c8d9ee;flex-wrap:wrap">'
