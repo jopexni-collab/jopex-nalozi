@@ -554,6 +554,8 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
   <div class="blok" id="blok-kl">
     <div class="sec">
       <div class="sec-hd">Prozorska klupica</div>
+      <div id="kl-podtip-izbor" style="margin:6px 0 8px"></div>
+      <div id="kl-solo-wrap">
       <div class="hint">A = dužina · B = širina (dubina od zida)</div>
       <div class="r2">
         <div class="fg"><label>A – dužina (mm)</label><input type="number" id="kl-a" value="1500" min="100" oninput="fixComma(this);refresh()"></div>
@@ -573,13 +575,13 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
         </div>
       </div>
       
+      </div><!-- /kl-solo-wrap -->
       <div class="r2">
         <div class="fg"><label>Ugradnja/kom (KM)</label><input type="text" inputmode="decimal" id="kl-u" value="0" min="0" oninput="fixComma(this);refresh()"></div>
         <div class="fg"><label>Mjerenje (KM)</label><input type="text" inputmode="decimal" id="kl-m" value="0" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div class="fg"><label>Napomena</label><input type="text" id="kl-n" placeholder="npr. spavaća soba" oninput="refresh()"></div>
       <input type="hidden" id="kl-vrsta" value="prozorska">
-      <div id="kl-podtip-izbor" style="margin-top:8px"></div>
       <input type="checkbox" id="cb-kl-poz" style="display:none" onchange="togglePozicije('kl')">
       <div id="kl-poz-wrap" style="display:none"></div>
     </div>
@@ -720,6 +722,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
     </div>
     <div class="sec">
       <div class="sec-hd">Usluge</div>
+      </div><!-- /kl-solo-wrap -->
       <div class="r2">
         <div class="fg"><label>Ugradnja (KM)</label><input type="text" inputmode="decimal" id="sto-ugr" value="0" min="0" oninput="fixComma(this);refresh()"></div>
         <div class="fg"><label>Mjerenje (KM)</label><input type="text" inputmode="decimal" id="sto-mer" value="0" min="0" oninput="fixComma(this);refresh()"></div>
@@ -2012,8 +2015,9 @@ function loadItemInputs(){
     var _vr=ge('kl-vrsta');  if(_vr) _vr.value=(_pt==='zidna')?'zidna':'prozorska';
   }
   ['kl','st'].forEach(function(t){
-    var w=ge(t+'-poz-wrap');
-    if(w) w.style.display=gc('cb-'+t+'-poz')?'':'none';
+    var on=gc('cb-'+t+'-poz');
+    var w=ge(t+'-poz-wrap');   if(w) w.style.display=on?'':'none';
+    var sw=ge(t+'-solo-wrap'); if(sw) sw.style.display=on?'none':'';
   });
 }
 function syncFromActive(){
@@ -3133,7 +3137,8 @@ function _primijeniPodtip(pt){
   var cb=ge('cb-kl-poz'), vr=ge('kl-vrsta');
   if(cb) cb.checked=(pt!=='solo');
   if(vr) vr.value=(pt==='zidna')?'zidna':'prozorska';
-  var w=ge('kl-poz-wrap'); if(w) w.style.display=(pt!=='solo')?'':'none';
+  var w=ge('kl-poz-wrap');  if(w) w.style.display=(pt!=='solo')?'':'none';
+  var sw2=ge('kl-solo-wrap'); if(sw2) sw2.style.display=(pt==='solo')?'':'none';
   if(pt!=='solo'&&(!pozicije||!pozicije.length)){
     pozicije=[{a:gi('kl-a')||1500,b:gi('kl-b')||250,kom:1,nap:'',ob:{},bd:{}}];
     if(pt==='zidna'){ pozicije[0].zid=0; pozicije[0].kt='sam'; }
@@ -3175,6 +3180,8 @@ function togglePozicije(t){
   var w=ge(t+'-poz-wrap');
   var on=gc('cb-'+t+'-poz');
   if(w) w.style.display=on?'':'none';
+  var sw=ge(t+'-solo-wrap');   // polja jedne mjere - samo za "solo"
+  if(sw) sw.style.display=on?'none':'';
   if(on&&(!pozicije||!pozicije.length)){
     pozicije=[{a:gi(t+'-a')||1500,b:gi(t+'-b')||250,kom:1,nap:'',ob:{},bd:{}}];
   }
