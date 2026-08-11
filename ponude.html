@@ -5238,8 +5238,25 @@ function _prilogPozicija(){
     +'<th style="padding:5px 7px;text-align:right">m\u00b2</th>'
     +'<th style="padding:5px 7px;text-align:left">Obrada ivica po stranama</th>'
     +'<th style="padding:5px 7px;text-align:left">Vodeni kanal / napomena</th></tr></thead><tbody>';
+  var zidniP=jeZidnaKlupica();
+  var trenZid=null;
   pozicije.forEach(function(p,i){
     var kom=Math.max(1,p.kom||1);
+    // Zaglavlje zida - kupcu pokazuje sta cini jednu cjelinu
+    if(zidniP){
+      var zz2=(p.zid!=null)?p.zid:0;
+      if(zz2!==trenZid){
+        trenZid=zz2;
+        var braca2=pozicije.filter(function(q){return (q.zid!=null?q.zid:0)===zz2;});
+        var ukD2=braca2.reduce(function(a2,q){return a2+(q.a||0);},0);
+        var redniZ=0;
+        _zidovi().forEach(function(z,zi){ if(z.zid===zz2) redniZ=zi+1; });
+        h+='<tr style="background:#f3eef8"><td colspan="6" style="padding:5px 7px;'
+          +'font-size:10.5px;color:#5a3a78;border-top:1px solid #d9c8e8">'
+          +'<b>Zid '+redniZ+'</b> \u2014 ukupno '+ukD2+' mm, \u0161irina '+(p.b||0)+' mm, '
+          +braca2.length+' komad'+(braca2.length===1?'':'a')+'</td></tr>';
+      }
+    }
     var opis=strane.map(function(sd){
       var pr=_pozProf(p,sd.id);
       if(pr==='none') return null;
@@ -5255,7 +5272,7 @@ function _prilogPozicija(){
     var napP='';
     if(kanP&&kanP!=='bez') napP='<span style="color:#1d8a6e">\u2248 <b>vodeni kanal:</b> strane '
       +_kanalOpis(kanP)+'</span>';
-    h+='<tr>'+red(i+1)+red((p.a||0)+'\u00d7'+(p.b||0)+' mm')
+    h+='<tr>'+red(zidniP?_zidoviRedniBroj(i):(i+1))+red((p.a||0)+'\u00d7'+(p.b||0)+' mm')
       +red(kom,'text-align:center')
       +red(((p.a||0)*(p.b||0)/1e6*kom).toFixed(3),'text-align:right')
       +red(opis,'font-size:10px')
@@ -5263,7 +5280,9 @@ function _prilogPozicija(){
   });
   var r=_racunajPozicije();
   h+='</tbody><tfoot><tr style="background:#f0f2f5;font-weight:700">'
-    +'<td colspan="2" style="padding:5px 7px">Ukupno '+pozicije.length+' pozicija</td>'
+    +'<td colspan="2" style="padding:5px 7px">Ukupno '
+      +(zidniP?(_zidovi().length+' zid'+(_zidovi().length===1?'':'a')+', '):'')
+      +pozicije.length+' pozicija</td>'
     +'<td style="padding:5px 7px;text-align:center">'+r.kom+'</td>'
     +'<td style="padding:5px 7px;text-align:right">'+r.m2.toFixed(3)+'</td>'
     +'<td colspan="2"></td></tr></tfoot></table>';
@@ -6537,12 +6556,35 @@ function buildPozicijeRN(){
   if(!imaPozicije()||!(pozicije||[]).length) return '';
   var strane=_pozStrane();
   var h='<table class="rn-poz"><thead><tr>'
-    +'<th>#</th><th>Dimenzija</th><th>Kom</th>';
-  strane.forEach(function(sd){ h+='<th>'+sd.lbl+'</th>'; });
-  h+='<th>Napomena</th></tr></thead><tbody>';
+    +'<th>#</th><th>Du\u017eina \u00d7 \u0161irina<br><small style="font-weight:400;opacity:.8">mm</small></th><th>Kom</th>'
+  strane.forEach(function(sd){ h+='<th style="text-align:center">'+sd.lbl
+    +'<br><small style="font-weight:400;opacity:.85">'+sd.kratko+'</small></th>'; });
+  h+='<th>Vodeni kanal / napomena</th></tr>'
+    +'<tr class="rn-podnaslov"><td colspan="3"></td>'
+    +'<td colspan="'+strane.length+'" style="text-align:center">OBRADA IVICA po stranama</td>'
+    +'<td></td></tr></thead><tbody>';
+  var zidniPrikaz=jeZidnaKlupica();
+  var brKolona=strane.length+4;
+  var trenutniZid=null;
   pozicije.forEach(function(p,i){
     var kom=Math.max(1,p.kom||1);
-    h+='<tr><td><b>'+(i+1)+'</b></td>'
+    // Kod zidne klupice komadi se GRUPISU po zidu, sa zaglavljem koje daje
+    // ukupnu duzinu - inace operater ne zna sta ide zajedno uz koji zid.
+    if(zidniPrikaz){
+      var zz=(p.zid!=null)?p.zid:0;
+      if(zz!==trenutniZid){
+        trenutniZid=zz;
+        var braca=pozicije.filter(function(q){return (q.zid!=null?q.zid:0)===zz;});
+        var ukD=braca.reduce(function(a,q){return a+(q.a||0);},0);
+        var ukK=braca.reduce(function(a,q){return a+Math.max(1,q.kom||1);},0);
+        var redniZid=0;
+        _zidovi().forEach(function(z,zi){ if(z.zid===zz) redniZid=zi+1; });
+        h+='<tr class="rn-zid"><td colspan="'+brKolona+'">'
+          +'<b>ZID '+redniZid+'</b> \u2014 ukupno '+ukD+' mm, \u0161irina '+(p.b||0)+' mm, '
+          +braca.length+' komad'+(braca.length===1?'':'a')+' ('+ukK+' kom)</td></tr>';
+      }
+    }
+    h+='<tr><td><b>'+(zidniPrikaz?_zidoviRedniBroj(i):(i+1))+'</b></td>'
       +'<td><b>'+(p.a||0)+'\u00d7'+(p.b||0)+'</b></td>'
       +'<td style="text-align:center"><b>'+kom+'</b></td>';
     strane.forEach(function(sd){
@@ -6550,9 +6592,13 @@ function buildPozicijeRN(){
       var puna=(sd.id==='A-zad'||sd.id==='D-pred')?(p.a||0):(p.b||0);
       var d=_pozBd(p,sd.id);
       var djelim=(d>0&&d<puna);
-      h+='<td style="text-align:center;font-size:10px'+(djelim?';background:#fff3cd':'')+'">'
-        +(pr==='none'?'\u2013':PSym[pr])
-        +(djelim?('<br><b>'+d+'mm</b>'):'')+'</td>';
+      // Simbol + naziv obrade, a kod djelimicne i ODAKLE se mjeri tih N mm
+      h+='<td style="text-align:center;font-size:9.5px;line-height:1.35'
+        +(djelim?';background:#fff3cd':'')+'">'
+        +(pr==='none'?'<span style="color:#b9c4d2">bez</span>'
+          :(PSym[pr]+'<br><span style="font-size:8.5px">'+(PLbl[pr]||pr)+'</span>'))
+        +(djelim?('<br><b style="color:#8a6d3b">samo '+d+' mm</b>'
+          +'<br><span style="font-size:8px;color:#8a6d3b">od prednje</span>'):'')+'</td>';
     });
     var kanR2=(tip==='kl')?_pozKanal(p):'bez';
     h+='<td style="font-size:10px">'
@@ -7319,7 +7365,11 @@ function drawKlSematski(ctx,W,H){
 
   // Geometrija strana
   // A je DOLJE (prednja, vidljiva), D je GORE (zadnja, uz prozor/zid)
-  var geo={'D-pred':[0,0,A,0],'B-lev':[0,0,0,B],'C-des':[A,0,A,B],'A-zad':[0,B,A,B]};
+  // Svaka strana ide OD VIDLJIVOG KRAJA. Kod bocnih (B, C) to znaci odozdo
+  // nagore - od prednje strane prema prozoru - jer se polira upravo pocetak
+  // koji se vidi, a ne dio koji ulazi u spaletnu.
+  //   D (zadnja, uz prozor) = GORE     A (prednja, vidljiva) = DOLJE
+  var geo={'D-pred':[0,0,A,0],'B-lev':[0,B,0,0],'C-des':[A,B,A,0],'A-zad':[0,B,A,B]};
   // Puna linija = obradjena strana; kod djelimicne obrade samo dio
   var pod=function(id){ var st=ivSt[id]; return (st&&st.prof)||'none'; };
   // Da li SVE pozicije imaju istu obradu te strane
@@ -7377,7 +7427,8 @@ function drawKlSematski(ctx,W,H){
     ctx.setLineDash([]);
     ctx.fillStyle='#1d8a6e'; ctx.font='bold 10px Segoe UI,Arial';
     ctx.textAlign='left'; ctx.textBaseline='bottom';
-    ctx.fillText('\u2248 VODENI KANAL'+(kanRazlicito?' (vidi tabelu)':''),7,B-kd-5);
+    ctx.textBaseline='top';
+    ctx.fillText('\u2248 VODENI KANAL'+(kanRazlicito?' (vidi tabelu)':''),7,B-kd+4);
     ctx.restore();
   }
   // Spaletne (bocni zidovi nise) kod klupice
@@ -8250,6 +8301,8 @@ function genRadniNalog(returnHtml){try{
       '.rn-poz td{padding:4px 6px;border-bottom:1px solid #e8ecf1;}'+
       '.rn-poz tbody tr:nth-child(even) td{background:#f8fafd;}'+
       '.rn-poz tfoot td{background:#e8eef8;padding:5px 6px;border-top:2px solid #1a3f7a;}'+
+      '.rn-poz tr.rn-zid td{background:#f3eef8;color:#5a3a78;font-size:10.5px;padding:5px 6px;border-top:1.5px solid #b89dd4;}'+
+      '.rn-poz tr.rn-podnaslov td{background:#dde6f3;color:#1a3f7a;font-size:8.5px;font-weight:700;letter-spacing:.5px;padding:2px 6px;}'+
       '@media print{body{margin:0;padding:0;}@page{size:A4 landscape;margin:10mm;}.rn-stavka{page-break-inside:avoid;margin:8px 12px;border:1.5pt solid #1a3f7a;}.rn-hd{-webkit-print-color-adjust:exact;print-color-adjust:exact;}.rn-stavka-hd{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}'+
     '</style></head><body>'+
     '<div class="rn-hd">'+
