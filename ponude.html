@@ -578,12 +578,6 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
         <div class="fg"><label>Mjerenje (KM)</label><input type="text" inputmode="decimal" id="kl-m" value="0" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div class="fg"><label>Napomena</label><input type="text" id="kl-n" placeholder="npr. spavaća soba" oninput="refresh()"></div>
-      <div class="fg" style="margin-top:8px"><label>Vrsta klupice</label>
-        <select id="kl-vrsta" onchange="buildPozicijeTabelu();refresh()">
-          <option value="prozorska">⬜ Prozorska (niša, špaletne)</option>
-          <option value="zidna">▬ Zidna (uz zid, bez niše)</option>
-        </select>
-      </div>
       <input type="hidden" id="kl-vrsta" value="prozorska">
       <div class="cbrow" style="margin-top:4px">
         <input type="checkbox" id="cb-kl-poz" onchange="togglePozicije('kl')">
@@ -2983,6 +2977,72 @@ function ukloniZid(zid){
   if(!pozicije.length) pozicije=[{a:2000,b:250,kom:1,nap:'',ob:{},bd:{},zid:0,kt:'sam'}];
   syncToActive(); buildPozicijeTabelu(); refresh();
 }
+// Kod zidne klupice zbir komada mora ostati ISTI (to je duzina zida).
+// Kad se jedan komad produzi, ostali se srazmjerno skrate - i obrnuto.
+function zidPromijeniDuzinu(idx,val){
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
+  if(v<=0||!pozicije[idx]) return;
+  var z=(pozicije[idx].zid!=null)?pozicije[idx].zid:0;
+  var braca=[];
+  pozicije.forEach(function(p,i){
+    if(i!==idx&&(p.zid!=null?p.zid:0)===z) braca.push(i);
+  });
+  if(!braca.length){ pozicije[idx].a=v; syncToActive(); refresh(); return; }
+  var ukupno=pozicije[idx].a||0;
+  braca.forEach(function(i){ ukupno+=pozicije[i].a||0; });
+  var maxKom=Math.max(_tablaMjere().a,_tablaMjere().b)-20;
+  v=Math.min(v,maxKom);                       // ne vise nego sto tabla dozvoljava
+  var ostatak=ukupno-v;
+  if(ostatak<braca.length*50){ return; }      // ostalima mora ostati bar 50 mm
+  pozicije[idx].a=v;
+  // Razdijeli ostatak na ostale komade, zaokruzeno na 5 mm
+  var po=Math.round(ostatak/braca.length/5)*5;
+  var dodijeljeno=0;
+  braca.forEach(function(i,n){
+    var d=(n===braca.length-1)?(ostatak-dodijeljeno):po;
+    pozicije[i].a=Math.max(50,Math.round(d));
+    dodijeljeno+=pozicije[i].a;
+  });
+  syncToActive(); refresh();
+  var inf=ge('kl-podjela-info');
+  if(inf) inf.innerHTML='Zbir zida ostaje <b>'+ukupno+' mm</b> \u2014 ostali komadi su prilago\u0111eni.';
+}
+// Promjena mjera table: sve zidove ponovo podijeli po novom ogranicenju,
+// zadrzavajuci ukupnu duzinu svakog zida.
+function tablaPromijenjena(){
+  syncToActive();
+  if(!jeZidnaKlupica()) return;
+  var maxKom=Math.max(_tablaMjere().a,_tablaMjere().b)-20;
+  var promijenjeno=0;
+  _zidovi().forEach(function(z){
+    var uk=z.komadi.reduce(function(a,ix){return a+(pozicije[ix].a||0);},0);
+    var trenutnoMax=Math.max.apply(null,z.komadi.map(function(ix){return pozicije[ix].a||0;}));
+    var trebaN=Math.ceil(uk/maxKom);
+    // Ponovo dijeli samo ako vise ne stane ili ako sada moze na manje komada
+    if(trenutnoMax<=maxKom&&trebaN===z.komadi.length) return;
+    var kom=podijeliDuzinu(uk,maxKom);
+    var uzor=pozicije[z.komadi[0]]||{};
+    var novi=kom.map(function(d,i){
+      return {a:d,b:z.b,kom:1,nap:'',zid:z.zid,
+        kt:(kom.length===1)?'sam':(i===0?'prvi':(i===kom.length-1?'zadnji':'sred')),
+        ob:JSON.parse(JSON.stringify(uzor.ob||{})),
+        bd:JSON.parse(JSON.stringify(uzor.bd||{}))};
+    });
+    novi.forEach(function(p){
+      if(p.kan!=null&&_kanalOpcije(p).indexOf(p.kan)<0) delete p.kan;
+    });
+    var prvi=z.komadi[0];
+    pozicije.splice(prvi,z.komadi.length);
+    Array.prototype.splice.apply(pozicije,[prvi,0].concat(novi));
+    promijenjeno++;
+  });
+  if(promijenjeno){
+    syncToActive(); buildPozicijeTabelu(); refresh();
+    var inf=ge('kl-podjela-info');
+    if(inf) inf.innerHTML='\u2713 Nova tabla \u2014 <b>'+promijenjeno+'</b> zid'
+      +(promijenjeno===1?'':'a')+' ponovo podijeljen'+(promijenjeno===1?'':'o')+'.';
+  }
+}
 function pozKomTip(i,val){
   if(!pozicije[i]) return;
   pozicije[i].kt=val;
@@ -3222,10 +3282,10 @@ function buildPozicijeTabelu(){
       +'<label style="font-size:10px;color:#6b7a8d">Tabla</label>'
       +'<input type="number" id="kl-tabla-a" min="100" value="'+tbl.a+'" style="width:62px;font:inherit;'
       +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
-      +' oninput="fixComma(this);syncToActive()"><span style="font-size:10px;color:#8a93a3">\u00d7</span>'
+      +' onchange="fixComma(this);tablaPromijenjena()"><span style="font-size:10px;color:#8a93a3">\u00d7</span>'
       +'<input type="number" id="kl-tabla-b" min="100" value="'+tbl.b+'" style="width:62px;font:inherit;'
       +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
-      +' oninput="fixComma(this);syncToActive()"><span style="font-size:10px;color:#8a93a3">mm</span></div>';
+      +' onchange="fixComma(this);tablaPromijenjena()"><span style="font-size:10px;color:#8a93a3">mm</span></div>';
     _zidovi().forEach(function(z,zi){
       var ukD=z.komadi.reduce(function(a2,ix){return a2+(pozicije[ix].a||0);},0);
       var ukK=z.komadi.reduce(function(a2,ix){return a2+Math.max(1,pozicije[ix].kom||1);},0);
@@ -3272,7 +3332,12 @@ function buildPozicijeTabelu(){
         +(((p.zid!=null?p.zid:0))+1)+'"':'')+'>'
       +(jeZidnaKlupica()?((((p.zid!=null?p.zid:0))+1)+'.'+(_zidoviRedniBroj(i))):(i+1)+'.')+'</b>'
       +'<input type="number" min="1" value="'+(p.a||0)+'" data-poz="'+i+'" data-pol="a"'
-      +' onkeydown="pozEnter(event,'+i+',\'a\')" oninput="fixComma(this);pozPolje('+i+',\'a\',this.value)">'
+      +' onkeydown="pozEnter(event,'+i+',\'a\')"'
+      +(jeZidnaKlupica()
+        ? (' onchange="fixComma(this);zidPromijeniDuzinu('+i+',this.value);buildPozicijeTabelu()"'
+           +' title="Zbir zida ostaje isti \u2014 ostali komadi se prilago\u0111avaju"')
+        : (' oninput="fixComma(this);pozPolje('+i+',\'a\',this.value)"'))
+      +'>'
       +'<span>\u00d7</span>'
       +(jeZidnaKlupica()
         ? ('<input type="number" value="'+(p.b||0)+'" readonly title="\u0160irina se mijenja na nivou zida"'
@@ -9830,6 +9895,20 @@ async function usvojiPonudu(){
 
 
 
+
+
+// Klik na brojcano polje odmah OZNACI sadrzaj, da se moze kucati preko njega
+// bez prethodnog brisanja. Vazi za cijelu aplikaciju.
+document.addEventListener('focusin',function(e){
+  var el=e.target;
+  if(!el||el.tagName!=='INPUT') return;
+  var t=(el.type||'').toLowerCase();
+  if(el.readOnly||el.disabled) return;
+  // Samo brojcana polja - u tekstualna se obicno dopisuje, ne prekucava
+  var brojcano=(t==='number')||(t==='text'&&el.getAttribute('inputmode')==='decimal');
+  if(!brojcano) return;
+  setTimeout(function(){ try{ el.select(); }catch(err){} },0);
+});
 </script>
 </body>
 </html>
