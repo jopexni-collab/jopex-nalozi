@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const { posaljiEmail } = require('./email');
 
 const RAZLOZI = ['kvalitet', 'kolicina', 'lom', 'jedinica', 'drugo'];
+const TIP_USLUGE_NAZIV = { montaza: 'Montaža', mjerenje: 'Mjerenje', prevoz: 'Prevoz robe', drugo: 'Usluga' };
 
 // HTML sadržaj emaila za knjigovodstvo — sve što je potrebno da se otpremnica ručno
 // unese u Bluesoft: broj, kupac, stavke, iznosi, status plaćanja.
@@ -84,17 +85,21 @@ function trebaObjekat(id) {
 }
 
 // Vraća listu PJ (objekat_id) na koje je korisnik ograničen za PREGLED dugovanja/
-// potraživanja — null znači "bez ograničenja, vidi sve" (admin ili blagajnik, jer njima
-// treba pun pregled bez obzira odakle dug/potraživanje dolazi). Za običnog komercijalistu
-// koji NEMA nijedan zapis u prodavci_pj, i dalje se vraća null (opt-in ograničenje — ne
-// zaključava postojeće korisnike dok ih admin svjesno ne ograniči preko "Prodaja PJ").
+// potraživanja — null znači "bez ograničenja, vidi sve" (SAMO admin).
+// STRIKTNO ograničenje — kombinuje blagajnici_pj + prodavci_pj (ko god ima ulogu u bilo
+// kojoj od te dvije tabele za konkretnu PJ, vidi TU PJ). Ranije je ovdje postojao izuzetak
+// "blagajnik za bar jednu PJ vidi SVE PJ" — to je bilo pogrešno: već dodeljeno ograničenje
+// (koja PJ za koga) mora se striktno poštovati, ne proširivati. Ako korisnik nema NIJEDNU
+// dodjelu ni u jednoj tabeli, vraća PRAZAN niz (vidi NIŠTA), ne null (bez ograničenja).
 async function dozvoljeniPJZaPregled(user) {
   if (!user || user.rola === 'admin') return null;
-  const blag = await pool.query('SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 LIMIT 1', [user.id]);
-  if (blag.rows.length) return null; // blagajnik uvijek vidi sve
-  const dodijeljeni = await pool.query('SELECT objekat_id FROM prodavci_pj WHERE zaposleni_id=$1', [user.id]);
-  if (!dodijeljeni.rows.length) return null; // nikad eksplicitno ograničen — vidi sve
-  return dodijeljeni.rows.map(r => r.objekat_id);
+  const r = await pool.query(
+    `SELECT DISTINCT objekat_id FROM blagajnici_pj WHERE zaposleni_id=$1
+     UNION
+     SELECT DISTINCT objekat_id FROM prodavci_pj WHERE zaposleni_id=$1`,
+    [user.id]
+  );
+  return r.rows.map(row => row.objekat_id); // može biti prazan niz — namjerno, znači "ne vidi nijednu PJ"
 }
 
 // Generiše broj otpremnice: OTP-YYYY-000123
@@ -139,10 +144,37 @@ async function ucitajZivuRobu(client, roba_idjevi, objektId) {
 // se automatski označava kao odstupanje (razlog 'jedinica').
 function sastaviStavke(inputStavke, zivaRoba) {
   const DOZVOLJENE_JEDINICE = ['kom', 'm2', 'm3'];
+  const DOZVOLJENI_TIPOVI_USLUGE = ['montaza', 'mjerenje', 'prevoz', 'drugo'];
   const stavke = [];
   for (const s of inputStavke) {
     const kolicina = parseFloat(s.kolicina);
-    if (!s.roba_id || !kolicina || kolicina <= 0)
+    if (!kolicina || kolicina <= 0)
+      throw Object.assign(new Error('Neispravna stavka u košarici.'), { status: 400 });
+
+    // ── USLUGA (prevoz, montaža, mjerenje, drugo) — NE dira magacin, nema roba_id,
+    // cijena/naziv se unose ručno umjesto pretrage šifrarnika. Odvojena, jednostavnija
+    // grana — nema odstupanja/stanja/JM logike koja ima smisla samo za pravu robu.
+    if (s.tip_usluge) {
+      if (!DOZVOLJENI_TIPOVI_USLUGE.includes(s.tip_usluge))
+        throw Object.assign(new Error('Nepoznat tip usluge.'), { status: 400 });
+      const cijena = parseFloat(s.cijena);
+      if (isNaN(cijena) || cijena < 0)
+        throw Object.assign(new Error('Unesite ispravnu cijenu za uslugu.'), { status: 400 });
+      const naziv = (s.naziv || '').trim().slice(0, 200) || TIP_USLUGE_NAZIV[s.tip_usluge];
+      const iznos = +(kolicina * cijena).toFixed(2);
+      stavke.push({
+        roba_id: null, sifra: 'USLUGA', naziv, jed_mjera: 'kom',
+        kolicina, cijena_zadana: cijena, cijena, iznos,
+        tip_usluge: s.tip_usluge,
+        duzina_cm: null, visina_cm: null, debljina_cm: null, broj_komada: null,
+        odstupa: false, razlog_odstupanja: null, napomena_odstupanja: null,
+        cijena_visa: false, cijena_niza: false, jm_promijenjena: false,
+        stanje_nedovoljno: false, manjak: 0, raspolozivo_prije: null,
+      });
+      continue;
+    }
+
+    if (!s.roba_id)
       throw Object.assign(new Error('Neispravna stavka u košarici.'), { status: 400 });
     const roba = zivaRoba[s.roba_id];
     if (!roba)
@@ -746,16 +778,16 @@ router.post('/potvrdi', async (req, res) => {
            (otpremnica_id, roba_id, sifra, naziv, jed_mjera, kolicina,
             cijena_zadana, cijena, iznos, razlog_odstupanja, napomena_odstupanja,
             duzina_cm, visina_cm, debljina_cm, broj_komada,
-            cijena_visa, cijena_niza, jm_promijenjena, stanje_nedovoljno, manjak)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+            cijena_visa, cijena_niza, jm_promijenjena, stanje_nedovoljno, manjak, tip_usluge)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
         [otpId, s.roba_id, s.sifra, s.naziv, s.jed_mjera, s.kolicina,
          s.cijena_zadana, s.cijena, s.iznos, s.razlog_odstupanja, s.napomena_odstupanja,
          s.duzina_cm, s.visina_cm, s.debljina_cm, s.broj_komada,
-         s.cijena_visa, s.cijena_niza, s.jm_promijenjena, s.stanje_nedovoljno, s.manjak]
+         s.cijena_visa, s.cijena_niza, s.jm_promijenjena, s.stanje_nedovoljno, s.manjak, s.tip_usluge || null]
       );
-      // Stanje se smanjuje SAMO za ovaj prodajni objekat (roba_pj), ne globalno.
-      // Napomena: roba IZLAZI iz magacina bez obzira na način plaćanja (i kad je na dug) —
-      // to se ovdje namjerno ne mijenja, dug je isključivo pitanje novca, ne robe.
+      // Usluge (prevoz/montaža/mjerenje/drugo) NEMAJU roba_id — ne diraju magacin uopšte,
+      // za razliku od prave robe koja UVIJEK izlazi iz stanja (čak i kad je na dug).
+      if (!s.roba_id) continue;
       await client.query(
         'UPDATE roba_pj SET stanje = stanje - $1, azurirano = now() WHERE roba_id=$2 AND objekt_id=$3',
         [s.kolicina, s.roba_id, objektId]
@@ -895,9 +927,8 @@ router.post('/potvrdi', async (req, res) => {
 });
 
 // GET /api/otpremnice/dugovanja?objekt_id=X - lista otpremnica koje nisu u potpunosti
-// plaćene. Admin i blagajnik vide SVE (bilo ko od njih naplaćuje bilo gdje). Običan
-// komercijalista koji je ograničen na konkretne PJ (preko "Prodaja PJ") vidi SAMO dugovanja
-// iz SVOJIH PJ — nema potrebe da vidi tuđe.
+// plaćene. Admin vidi sve. Svako drugi (blagajnik i/ili prodavac) vidi SAMO dugovanja iz
+// PJ za koje je stvarno dodeljen (blagajnici_pj/prodavci_pj) — striktno, bez izuzetka.
 router.get('/dugovanja/lista', async (req, res) => {
   try {
     const user = req.session?.user;
@@ -1365,9 +1396,11 @@ router.post('/:id/storniraj', async (req, res) => {
     if (otp.status !== 'potvrdjena')
       throw Object.assign(new Error('Može se stornirati samo potvrđena otpremnica.'), { status: 400 });
 
-    // 1) Vrati stanje robe (+kolicina za svaku stavku, samo za ovaj PJ).
+    // 1) Vrati stanje robe (+kolicina za svaku stavku, samo za ovaj PJ). Usluge (roba_id
+    // je NULL) se preskaču — nikad nisu ni umanjile stanje, pa nema šta ni da se vrati.
     const stavkeRes = await client.query('SELECT * FROM otpremnica_stavke WHERE otpremnica_id=$1', [otp.id]);
     for (const s of stavkeRes.rows) {
+      if (!s.roba_id) continue;
       await client.query(
         'UPDATE roba_pj SET stanje = stanje + $1, azurirano = now() WHERE roba_id=$2 AND objekt_id=$3',
         [s.kolicina, s.roba_id, otp.objekt_id]

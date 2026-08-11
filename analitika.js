@@ -79,7 +79,7 @@ router.get('/uslo-izaslo', async (req, res) => {
       `SELECT COUNT(DISTINCT o.id) AS broj_otpremnica, COALESCE(SUM(s.iznos),0) AS ukupna_vrijednost,
               COALESCE(SUM(s.kolicina),0) AS ukupna_kolicina
        FROM otpremnica_stavke s JOIN otpremnice o ON o.id = s.otpremnica_id
-       WHERE o.status='potvrdjena' ${filterDatumOtp} ${filterObjOtp}`,
+       WHERE o.status='potvrdjena' AND s.tip_usluge IS NULL ${filterDatumOtp} ${filterObjOtp}`,
       vals
     );
 
@@ -127,7 +127,7 @@ router.get('/top-kupci', async (req, res) => {
 router.get('/top-prodavano', async (req, res) => {
   try {
     const { od, do: doDatuma, objekt_id, limit } = req.query;
-    let where = [`o.status='potvrdjena'`];
+    let where = [`o.status='potvrdjena'`, `s.tip_usluge IS NULL`];
     let vals = [];
     let i = 1;
     if (od && doDatuma) { where.push(`o.datum::date BETWEEN $${i++} AND $${i++}`); vals.push(od, doDatuma); }
@@ -141,6 +141,31 @@ router.get('/top-prodavano', async (req, res) => {
        ORDER BY ukupna_vrijednost DESC
        LIMIT $${i}`,
       [...vals, parseInt(limit) || 20]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/analitika/prihod-usluge?od=X&do=Y&objekt_id=Z — prihod GRUPISAN po tipu
+// usluge (prevoz/montaža/mjerenje/drugo) — odvojeno od prave robe, da se vidi koliko npr.
+// prevoz konkretno donosi.
+router.get('/prihod-usluge', async (req, res) => {
+  try {
+    const { od, do: doDatuma, objekt_id } = req.query;
+    let where = [`o.status='potvrdjena'`, `s.tip_usluge IS NOT NULL`];
+    let vals = [];
+    let i = 1;
+    if (od && doDatuma) { where.push(`o.datum::date BETWEEN $${i++} AND $${i++}`); vals.push(od, doDatuma); }
+    if (objekt_id) { where.push(`o.objekt_id=$${i++}`); vals.push(objekt_id); }
+    const r = await pool.query(
+      `SELECT s.tip_usluge, SUM(s.iznos) AS ukupno, COUNT(*) AS broj_stavki
+       FROM otpremnica_stavke s JOIN otpremnice o ON o.id = s.otpremnica_id
+       WHERE ${where.join(' AND ')}
+       GROUP BY s.tip_usluge
+       ORDER BY ukupno DESC`,
+      vals
     );
     res.json(r.rows);
   } catch (err) {

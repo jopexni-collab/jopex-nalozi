@@ -382,9 +382,29 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
           <rect x="18" y="18" width="3" height="3" fill="white"/>
         </svg>
       </button>
+      <button onclick="otvoriDodajUslugu()" style="flex-shrink:0;padding:0 12px;background:#6b4fa0;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:12px;white-space:nowrap;" title="Dodaj uslugu (prevoz, montaža...) — ne dira magacin">🔧 Usluga</button>
     </div>
     <div class="search-hint">Ukucaj šifru/naziv, ili skeniraj QR kod (dugme desno) — dodirni rezultat da dodaš stavku.</div>
     <div class="rez-list" id="rez-list"></div>
+  </div>
+</div>
+
+<div id="modal-dodaj-uslugu" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:20px;max-width:340px;width:90vw;">
+    <h3 style="margin:0 0 14px;">🔧 Dodaj uslugu</h3>
+    <div class="ce-row" style="margin-bottom:10px;">
+      <button type="button" class="ce-tip-btn active" data-du-tip="prevoz" onclick="postaviTipUsluge('prevoz')">🚚 Prevoz</button>
+      <button type="button" class="ce-tip-btn" data-du-tip="montaza" onclick="postaviTipUsluge('montaza')">🔨 Montaža</button>
+      <button type="button" class="ce-tip-btn" data-du-tip="mjerenje" onclick="postaviTipUsluge('mjerenje')">📏 Mjerenje</button>
+      <button type="button" class="ce-tip-btn" data-du-tip="drugo" onclick="postaviTipUsluge('drugo')">🔧 Drugo</button>
+    </div>
+    <input type="text" id="du-naziv" placeholder="Naziv (opciono, podrazumevano po tipu)..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:8px;box-sizing:border-box;">
+    <input type="number" id="du-kolicina" placeholder="Količina (npr. 1, ili 3 za 3 putovanja)..." value="1" min="1" step="1" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:8px;box-sizing:border-box;">
+    <input type="number" id="du-cijena" placeholder="Cijena po komadu..." min="0" step="0.01" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:12px;box-sizing:border-box;">
+    <div style="display:flex;gap:8px;">
+      <button class="ce-tip-btn" style="flex:1;" onclick="document.getElementById('modal-dodaj-uslugu').style.display='none'">Otkaži</button>
+      <button class="ce-tip-btn" style="flex:1;background:var(--blue,#1a5fa8);color:#fff;" onclick="potvrdiDodajUslugu()">✓ Dodaj u korpu</button>
+    </div>
   </div>
 </div>
 
@@ -2254,6 +2274,33 @@ function zatvoriDodajStavku(){
 // Vraća true ako je stavka uspješno izgrađena i dodana u košaricu, false ako je greška
 // (i sam prikazuje alert za grešku) — dijeli je i potvrdiDodajStavku (dodaj pa zatvori)
 // i dodajJosDimenzija (dodaj pa ostani otvoren za sledeću dimenziju istog artikla).
+/* ── USLUGA U KORPI (prevoz, montaža, mjerenje, drugo) — NE dira magacin ── */
+let duTrenutniTip='prevoz';
+function otvoriDodajUslugu(){
+  postaviTipUsluge('prevoz');
+  document.getElementById('du-naziv').value='';
+  document.getElementById('du-kolicina').value='1';
+  document.getElementById('du-cijena').value='';
+  document.getElementById('modal-dodaj-uslugu').style.display='flex';
+  setTimeout(()=>document.getElementById('du-cijena').focus(),50);
+}
+function postaviTipUsluge(tip){
+  duTrenutniTip=tip;
+  document.querySelectorAll('[data-du-tip]').forEach(b=>b.classList.toggle('active', b.dataset.duTip===tip));
+}
+function potvrdiDodajUslugu(){
+  const kolicina=parseFloat(document.getElementById('du-kolicina').value);
+  const cijena=parseFloat(document.getElementById('du-cijena').value);
+  if(!kolicina||kolicina<=0){alert('Unesite ispravnu količinu.');return;}
+  if(isNaN(cijena)||cijena<0){alert('Unesite ispravnu cijenu.');return;}
+  const naziv=document.getElementById('du-naziv').value.trim()||TIP_USLUGE_NAZIV[duTrenutniTip];
+  kosarica.push({ tip_usluge:duTrenutniTip, naziv, kolicina, cijena });
+  document.getElementById('modal-dodaj-uslugu').style.display='none';
+  renderKosarica();
+  const badge=document.getElementById('kb-count');
+  badge.classList.remove('kb-pulse'); void badge.offsetWidth; badge.classList.add('kb-pulse');
+}
+
 function izgradiIDodajStavku(){
   if(!dasArtikal) return false;
   let kolicina=null, duzina_cm=null, visina_cm=null, debljina_cm=null, broj_komada=null;
@@ -2430,7 +2477,7 @@ function promijeniKolicinu(idx, delta){
   const it=kosarica[idx];
   const nova=it.kolicina+delta;
   if(nova<=0){kosarica.splice(idx,1);}
-  else if(nova>it.stanje_max){
+  else if(!it.tip_usluge && nova>it.stanje_max){
     if(!confirm(`⚠ "${it.naziv}" — stanje nije dovoljno (max ${it.stanje_max} ${it.jed_mjera}). Stanje će otići u MINUS. Nastaviti?`)) return;
     it.kolicina=nova;
   }
@@ -2445,7 +2492,7 @@ function postaviKolicinuDirektno(idx, vrijednost){
   const it=kosarica[idx];
   const nova=parseFloat(vrijednost);
   if(isNaN(nova)||nova<=0){ renderKosarica(); return; } // neispravno — vrati na staru vrijednost
-  if(nova>it.stanje_max){
+  if(!it.tip_usluge && nova>it.stanje_max){
     if(!confirm(`⚠ "${it.naziv}" — stanje nije dovoljno (max ${it.stanje_max} ${it.jed_mjera}). Stanje će otići u MINUS. Nastaviti?`)){ renderKosarica(); return; }
   }
   it.kolicina=nova;
@@ -2537,6 +2584,28 @@ function renderKosarica(){
     return;
   }
   cont.innerHTML=kosarica.map((k,idx)=>{
+    // ── USLUGA (prevoz/montaža/mjerenje/drugo) — mnogo jednostavniji prikaz, bez cijele
+    // logike za odstupanje cijene/JM koja ima smisla samo za pravu robu iz magacina.
+    if(k.tip_usluge){
+      return `
+      <div class="kos-item" style="background:#f7f5ff;">
+        <div class="kos-item-top">
+          <div class="kos-info">
+            <div class="kos-naziv">${TIP_USLUGE_IKONA[k.tip_usluge]||'🔧'} ${esc(k.naziv)}</div>
+            <div class="kos-cijena">${fmMoney(k.cijena)} / kom</div>
+          </div>
+          <div class="kos-qty">
+            <button class="qty-btn" onclick="promijeniKolicinu(${idx},-1)">−</button>
+            <input type="number" class="qty-input" value="${k.kolicina}" step="1" min="1"
+              onchange="postaviKolicinuDirektno(${idx},this.value)">
+            <button class="qty-btn" onclick="promijeniKolicinu(${idx},1)">+</button>
+          </div>
+          <div class="kos-iznos">${fmMoney(k.kolicina*k.cijena)}</div>
+          <button class="kos-del" onclick="ukloniStavku(${idx})">🗑</button>
+        </div>
+      </div>
+    `;
+    }
     const efCij=efektivnaCijenaProcjena(k);
     const odstupa=!!k.override;
     const bojaCij=bojaOdstupanja(efCij,k.cijena);
@@ -2607,8 +2676,16 @@ document.getElementById('kb-summary').onclick=()=>{
    Ovo NE piše ništa u bazu. Samo traži od servera ŽIVU cijenu i
    stanje za stavke iz košarice (cijena i količina se ne zaključavaju
    ovdje — mogu se i dalje mijenjati sve dok kupac ne pritisne potvrdu). */
+const TIP_USLUGE_IKONA={montaza:'🔨',mjerenje:'📏',prevoz:'🚚',drugo:'🔧'};
+const TIP_USLUGE_NAZIV={montaza:'Montaža',mjerenje:'Mjerenje',prevoz:'Prevoz robe',drugo:'Usluga'};
+
 function stavkeZaSlanje(){
-  return kosarica.map(k=>({
+  return kosarica.map(k=>{
+    if(k.tip_usluge){
+      // Usluga — mnogo jednostavniji oblik, bez roba_id/override/dimenzija.
+      return { tip_usluge:k.tip_usluge, naziv:k.naziv, kolicina:k.kolicina, cijena:k.cijena };
+    }
+    return {
     roba_id:k.roba_id, kolicina:k.kolicina, jed_mjera_prodaja:k.jed_mjera,
     duzina_cm:k.duzina_cm||null, visina_cm:k.visina_cm||null, debljina_cm:k.debljina_cm||null,
     broj_komada:k.broj_komada||null,
@@ -2616,7 +2693,8 @@ function stavkeZaSlanje(){
       tip:k.override.tip, vrijednost:k.override.vrijednost,
       razlog:k.override.razlog, napomena:k.override.napomena,
     } : null,
-  }));
+    };
+  });
 }
 
 async function generisiOtpremnicu(){

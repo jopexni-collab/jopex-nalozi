@@ -50,6 +50,7 @@ tbody tr:nth-child(even){background:#f7f8fa;}
     <button class="tab-btn" data-tab="usloizaslo" onclick="prebaciTab('usloizaslo')">↔️ Ušlo / Izašlo</button>
     <button class="tab-btn" data-tab="kupci" onclick="prebaciTab('kupci')">👤 Top kupci</button>
     <button class="tab-btn" data-tab="prodavano" onclick="prebaciTab('prodavano')">🏆 Top prodavano</button>
+    <button class="tab-btn" data-tab="usluge" onclick="prebaciTab('usluge')">🔧 Prihod od usluga</button>
   </div>
 
   <!-- ═══ PROTOK ROBE PO ARTIKLU ═══ -->
@@ -108,6 +109,20 @@ tbody tr:nth-child(even){background:#f7f8fa;}
     </div>
   </div>
 
+  <!-- ═══ PRIHOD OD USLUGA ═══ -->
+  <div id="tab-usluge" style="display:none;">
+    <div class="box">
+      <h3>Prihod od usluga (prevoz, montaža, mjerenje, drugo)</h3>
+      <div class="filteri">
+        <span class="period-chip" data-p="30" onclick="postaviPeriodUsluge(this,30)">30 dana</span>
+        <span class="period-chip" data-p="90" onclick="postaviPeriodUsluge(this,90)">3 meseca</span>
+        <span class="period-chip active" data-p="0" onclick="postaviPeriodUsluge(this,0)">Sve</span>
+        <select id="usluge-objekat" onchange="ucitajPrihodUsluge()"><option value="">— svi PJ —</option></select>
+      </div>
+      <div id="usluge-sadrzaj"></div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -125,15 +140,16 @@ checkAuth();
 
 function prebaciTab(tab){
   document.querySelectorAll('.tab-btn[data-tab]').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
-  ['protok','usloizaslo','kupci','prodavano'].forEach(t=>{
+  ['protok','usloizaslo','kupci','prodavano','usluge'].forEach(t=>{
     document.getElementById('tab-'+t).style.display = t===tab ? 'block' : 'none';
   });
   if(tab==='usloizaslo' && !uiObjektiUcitani) ucitajObjekteZa('ui-objekat', ()=>{uiObjektiUcitani=true; ucitajUsloIzaslo();});
   if(tab==='kupci' && !kupciObjektiUcitani) ucitajObjekteZa('kupci-objekat', ()=>{kupciObjektiUcitani=true; ucitajTopKupci();});
   if(tab==='prodavano' && !prodObjektiUcitani) ucitajObjekteZa('prod-objekat', ()=>{prodObjektiUcitani=true; ucitajTopProdavano();});
+  if(tab==='usluge' && !usligeObjektiUcitani) ucitajObjekteZa('usluge-objekat', ()=>{usligeObjektiUcitani=true; ucitajPrihodUsluge();});
   if(tab==='protok' && !protokObjektiUcitani) ucitajObjekteZa('protok-objekat', ()=>{protokObjektiUcitani=true;});
 }
-let uiObjektiUcitani=false, kupciObjektiUcitani=false, prodObjektiUcitani=false, protokObjektiUcitani=false;
+let uiObjektiUcitani=false, kupciObjektiUcitani=false, prodObjektiUcitani=false, protokObjektiUcitani=false, usligeObjektiUcitani=false;
 
 async function ucitajObjekteZa(selectId, callback){
   try{
@@ -287,6 +303,51 @@ async function ucitajTopProdavano(){
             <td class="num">${fm(p.ukupna_kolicina)}</td>
             <td class="num"><b>${fm(p.ukupna_vrijednost)} KM</b></td>
             <td class="num">${p.broj_otpremnica}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }catch(e){ cont.innerHTML='<div class="empty-msg" style="color:var(--red);">Greška pri učitavanju.</div>'; }
+}
+
+/* ═══ PRIHOD OD USLUGA ═══ */
+let usluzePeriod=0;
+const TIP_USLUGE_IKONA={prevoz:'🚚',montaza:'🔨',mjerenje:'📏',drugo:'🔧'};
+const TIP_USLUGE_LABEL={prevoz:'Prevoz robe',montaza:'Montaža',mjerenje:'Mjerenje',drugo:'Drugo'};
+function postaviPeriodUsluge(el,dana){
+  document.querySelectorAll('#tab-usluge .period-chip').forEach(c=>c.classList.remove('active'));
+  el.classList.add('active');
+  usluzePeriod=dana;
+  ucitajPrihodUsluge();
+}
+async function ucitajPrihodUsluge(){
+  const cont=document.getElementById('usluge-sadrzaj');
+  cont.innerHTML='<div class="spinner">Učitavanje...</div>';
+  const params=new URLSearchParams();
+  if(usluzePeriod>0){
+    const danas=new Date(); const od=new Date(); od.setDate(od.getDate()-usluzePeriod);
+    params.set('od', od.toISOString().split('T')[0]);
+    params.set('do', danas.toISOString().split('T')[0]);
+  }
+  const objektId=document.getElementById('usluge-objekat').value;
+  if(objektId) params.set('objekt_id', objektId);
+  try{
+    const r=await fetch(`${API}/api/analitika/prihod-usluge?${params}`);
+    const rows=await r.json();
+    if(!r.ok){ cont.innerHTML=`<div class="empty-msg" style="color:var(--red);">${esc(rows.error)}</div>`; return; }
+    if(!rows.length){ cont.innerHTML='<div class="empty-msg">Nema podataka za ovaj period.</div>'; return; }
+    const ukupno=rows.reduce((s,r)=>s+ +r.ukupno,0);
+    cont.innerHTML=`
+      <div class="kpi-row">
+        ${rows.map(r=>`<div class="kpi"><div class="broj">${fm(r.ukupno)} KM</div><div class="lbl">${TIP_USLUGE_IKONA[r.tip_usluge]||'🔧'} ${esc(TIP_USLUGE_LABEL[r.tip_usluge]||r.tip_usluge)} (${r.broj_stavki}×)</div></div>`).join('')}
+        <div class="kpi" style="background:#1f3864;"><div class="broj" style="color:#fff;">${fm(ukupno)} KM</div><div class="lbl" style="color:#c9d4e3;">Ukupno usluge</div></div>
+      </div>
+      <table>
+        <thead><tr><th>Tip usluge</th><th class="num">Broj stavki</th><th class="num">Ukupan prihod</th></tr></thead>
+        <tbody>${rows.map(r=>`
+          <tr>
+            <td>${TIP_USLUGE_IKONA[r.tip_usluge]||'🔧'} ${esc(TIP_USLUGE_LABEL[r.tip_usluge]||r.tip_usluge)}</td>
+            <td class="num">${r.broj_stavki}</td>
+            <td class="num"><b>${fm(r.ukupno)} KM</b></td>
           </tr>`).join('')}
         </tbody>
       </table>`;
