@@ -1915,7 +1915,7 @@ function getItemInputIds(t){
               'sud-r-br-sel','sud-r-br-inp','sud-r-bl-sel','sud-r-bl-inp',
               'plo-r-tl-sel','plo-r-tl-inp','plo-r-tr-sel','plo-r-tr-inp',
               'plo-r-br-sel','plo-r-br-inp','plo-r-bl-sel','plo-r-bl-inp'],
-           kl:['kl-a','kl-b','kl-k','kl-ic','kl-u','kl-m','kl-n','kl-p','kl-iv','kl-vrsta','cb-kl-poz','kl-tabla-a','kl-tabla-b','mat-naziv','mat-c'],
+           kl:['kl-a','kl-b','kl-k','kl-ic','kl-u','kl-m','kl-n','kl-p','kl-iv','kl-vrsta','cb-kl-poz','kl-tabla-a','kl-tabla-b','kl-rez-ivice','mat-naziv','mat-c'],
            st:['st-a','st-b','st-d','st-br','st-ic','st-u','st-m','st-n','st-p','cb-cel','cb-st-poz',
                'cel-a','cel-b','cel-d','cel-c','mat-naziv','mat-c'],
            sto:['sto-a','sto-b','sto-r-sel','sto-r-inp','sto-rl','sto-rs','sto-br','sto-ugr','sto-mer','sto-n','mat-naziv','mat-c']};
@@ -2797,19 +2797,163 @@ function jeZidnaKlupica(){ return tip==='kl'&&_klPodtip()==='zidna'; }
 function _tablaMjere(){
   return {a:gi('kl-tabla-a')||3200, b:gi('kl-tabla-b')||1600};
 }
-// Podijeli ukupnu duzinu na priblizno jednake komade koji staju u tablu
+// Sirove ivice table se odsijecaju, pa je korisna mjera manja od nominalne.
+function _rezIvice(){
+  var v=gi('kl-rez-ivice');
+  return (v>0)?v:150;
+}
+// Najduzi komad koji se moze izrezati iz table (duza korisna strana)
+function _maxKomad(){
+  var t=_tablaMjere(), r=_rezIvice();
+  return Math.max(100, Math.max(t.a,t.b)-r);
+}
+// Podijeli ukupnu duzinu: PUNI komadi do maksimuma, pa zadnji koliko ostane.
+// Tako se najbolje iskoristi tabla - npr. zid 11000 mm iz table 2500 (korisno
+// 2350) daje 4 x 2350 + 1 x 1600, umjesto pet priblizno jednakih komada.
 function podijeliDuzinu(ukupno,maxKom){
   ukupno=Math.max(0,ukupno||0);
   maxKom=Math.max(100,maxKom||3200);
   if(ukupno<=0) return [];
   if(ukupno<=maxKom) return [Math.round(ukupno)];
-  var n=Math.ceil(ukupno/maxKom);
-  // priblizno jednaki komadi - ljepse od "puna tabla + ostatak"
-  var duz=Math.round(ukupno/n/5)*5;
+  var puni=Math.floor(ukupno/maxKom);
+  var ostatak=Math.round(ukupno-puni*maxKom);
   var kom=[];
-  for(var i=0;i<n-1;i++) kom.push(duz);
+  for(var i=0;i<puni;i++) kom.push(Math.round(maxKom));
+  if(ostatak<=0) return kom;
+  if(ostatak>=MIN_KOMAD){ kom.push(ostatak); return kom; }
+  // Ostatak je premali za zaseban komad (npr. 40 mm). Umjesto besmisleno
+  // uske trake, skrati SVE komade srazmjerno pa ostatak naraste na koristan.
+  var n=puni+1;
+  var duz=Math.floor(ukupno/n/5)*5;
+  kom=[];
+  for(var j=0;j<n-1;j++) kom.push(duz);
   kom.push(Math.round(ukupno-duz*(n-1)));
   return kom;
+}
+var MIN_KOMAD=200;   // ispod ovoga komad nema smisla
+// ── RESTLOVI: trazenje komada medju ostacima ─────────────────────
+// Modul "restlovi" je jos u razvoju, pa je ovo UGASENO po zadatom. Kad se
+// ukljuci, za svaki komad se pita /api/restlovi/trazi i prikaze sta je nadjeno.
+// Ako ruta ne odgovori ili vrati prazno, tiho se pada nazad na racun sa
+// cijelim tablama - dakle ukljucivanje ne moze pokvariti postojeci obracun.
+var RESTL_UKLJUCEN=false;
+var _restlKes={};        // kljuc "sirina x visina x materijal" -> odgovor
+var _restlTrazi=false;   // da se ne salju paralelni upiti
+
+function restlToggle(){
+  RESTL_UKLJUCEN=!RESTL_UKLJUCEN;
+  _restlKes={};
+  buildPozicijeTabelu();
+  if(RESTL_UKLJUCEN) restlOsvjezi();
+}
+function _restlKljuc(duz,sir){
+  return duz+'x'+sir+'x'+(gs('mat-naziv')||'')+'x'+getMatD();
+}
+// Jedan upit po jedinstvenoj mjeri (ne po komadu) - zid od 5 komada gdje su
+// cetiri iste duzine salje dva upita, ne pet.
+async function restlOsvjezi(){
+  if(!RESTL_UKLJUCEN||_restlTrazi||!jeZidnaKlupica()) return;
+  var mjere={};
+  (pozicije||[]).forEach(function(p){
+    var k=_restlKljuc(p.a||0,p.b||0);
+    if(_restlKes[k]===undefined) mjere[k]={duz:p.a||0,sir:p.b||0};
+  });
+  var kljucevi=Object.keys(mjere);
+  if(!kljucevi.length) return;
+  _restlTrazi=true;
+  try{
+    for(var i=0;i<kljucevi.length;i++){
+      var m=mjere[kljucevi[i]];
+      if(!(m.duz>0&&m.sir>0)){ _restlKes[kljucevi[i]]=null; continue; }
+      _restlKes[kljucevi[i]]=await _restlUpit(m.duz,m.sir);
+    }
+  }catch(e){
+    // Modul jos nije spreman ili ruta ne postoji - ne rusi obracun
+    kljucevi.forEach(function(k){ if(_restlKes[k]===undefined) _restlKes[k]=null; });
+  }finally{
+    _restlTrazi=false;
+    buildPozicijeTabelu();
+  }
+}
+async function _restlUpit(duz,sir){
+  var telo={
+    sirina:Math.round(duz), visina:Math.round(sir),
+    materijal:gs('mat-naziv')||null,
+    debljina_cm:(getMatD()/10)||null,
+    rez:5, odstupanje:0, poligon:null
+  };
+  var r=await fetch(API_URL+'/api/restlovi/trazi',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(telo)
+  });
+  if(!r.ok) return null;
+  var d=await r.json().catch(function(){return null;});
+  if(!d||!d.ima||!d.kandidati||!d.kandidati.length) return null;
+  // Prvi kandidat ostavlja najmanje otpada (tako ih ruta vec sortira)
+  var k=d.kandidati[0];
+  return {oznaka:k.oznaka||k.id, dimA:k.dim_a, dimB:k.dim_b,
+          otpad:k.otpad_m, pj:k.objekt_naziv||'', ukupno:d.kandidati.length};
+}
+// Kratki prikaz uz komad: sta je nadjeno u restlovima
+function _restlOznaka(p){
+  if(!RESTL_UKLJUCEN) return '';
+  var k=_restlKljuc(p.a||0,p.b||0);
+  var v=_restlKes[k];
+  if(v===undefined) return '<span style="font-size:9.5px;color:#8a93a3">\u2026</span>';
+  if(!v) return '<span style="font-size:9.5px;color:#b9c4d2" title="Nema odgovaraju\u0107eg ostatka">nova tabla</span>';
+  return '<span style="font-size:9.5px;color:#1f8a4c;font-weight:600" title="'
+    +(v.dimA||'?')+'\u00d7'+(v.dimB||'?')+' mm'+(v.pj?(', '+v.pj):'')
+    +(v.otpad!=null?(', otpad '+v.otpad+' m\u00b2'):'')
+    +(v.ukupno>1?(' \u2014 jo\u0161 '+(v.ukupno-1)+' kandidata'):'')+'">'
+    +'\u25a3 restl '+v.oznaka+'</span>';
+}
+
+// ── NESTING: raspored komada po tablama ──────────────────────────
+// Svi komadi jednog zida imaju ISTU sirinu, pa se problem svodi na trake:
+// iz table se izrezu trake sirine klupice, a onda se duzine slazu u trake.
+// Materijal smije da se rotira, pa se probaju oba smjera i uzme bolji.
+// Racuna se po zidu zasebno - ostatak ne ide u drugi zid.
+function nestZid(duzine,sirina,rezSjeciva){
+  var t=_tablaMjere(), r=_rezIvice();
+  var kA=Math.max(0,t.a-r), kB=Math.max(0,t.b-r);   // korisne mjere table
+  var rez=(rezSjeciva!=null)?rezSjeciva:5;          // debljina reza
+  if(!duzine.length||sirina<=0) return null;
+  function probaj(trakaDuz,trakaSir){
+    // koliko traka stane po sirini table
+    var poTabli=Math.floor((trakaSir+rez)/(sirina+rez));
+    if(poTabli<1) return null;
+    // najduzi komad mora stati u traku
+    if(Math.max.apply(null,duzine)>trakaDuz) return null;
+    // First Fit Decreasing: duzi komadi prvi
+    var sort=duzine.slice().sort(function(a,b){return b-a;});
+    var trake=[];
+    sort.forEach(function(d){
+      var stao=false;
+      for(var i=0;i<trake.length;i++){
+        if(trake[i].slobodno>=d+(trake[i].komadi.length?rez:0)){
+          trake[i].slobodno-=d+(trake[i].komadi.length?rez:0);
+          trake[i].komadi.push(d);
+          stao=true; break;
+        }
+      }
+      if(!stao) trake.push({slobodno:trakaDuz-d, komadi:[d]});
+    });
+    var tabli=Math.ceil(trake.length/poTabli);
+    var povrTabli=tabli*t.a*t.b;
+    var povrKomada=duzine.reduce(function(a,d){return a+d*sirina;},0);
+    return {tabli:tabli, traka:trake.length, poTabli:poTabli, trake:trake,
+            trakaDuz:trakaDuz, smjer:(trakaDuz===kA)?'uzdu\u017e':'popreko',
+            iskoriscenje:povrTabli?Math.round(povrKomada/povrTabli*1000)/10:0,
+            otpad:Math.round((povrTabli-povrKomada)/1e6*100)/100};
+  }
+  var a=probaj(kA,kB), b=probaj(kB,kA);
+  if(!a&&!b) return null;
+  if(!a) return b;
+  if(!b) return a;
+  // Bolji je onaj sa manje tabli; pri istom broju - bolje iskoriscenje
+  if(b.tabli<a.tabli) return b;
+  if(a.tabli<b.tabli) return a;
+  return (b.iskoriscenje>a.iskoriscenje)?b:a;
 }
 // Koliko komada date duzine/sirine stane iz JEDNE table (oba smjera)
 function komadaIzTable(duzina,sirina){
@@ -2972,7 +3116,7 @@ function zidPromijeniDuzinu(idx,val){
   var svi=[];
   pozicije.forEach(function(p,i){ if((p.zid!=null?p.zid:0)===z) svi.push(i); });
   var ukupno=svi.reduce(function(a2,i){return a2+(pozicije[i].a||0);},0);
-  var maxKom=Math.max(_tablaMjere().a,_tablaMjere().b)-20;
+  var maxKom=_maxKomad();
   var inf=ge('kl-podjela-info');
   if(v>maxKom){
     if(inf) inf.innerHTML='<b style="color:#c0392b">'+v+' mm ne staje u tablu '
@@ -3089,7 +3233,7 @@ function zidOtkljucaj(idx){
 function tablaPromijenjena(){
   syncToActive();
   if(!jeZidnaKlupica()) return;
-  var maxKom=Math.max(_tablaMjere().a,_tablaMjere().b)-20;
+  var maxKom=_maxKomad();
   var promijenjeno=0;
   _zidovi().forEach(function(z){
     var uk=z.komadi.reduce(function(a,ix){return a+(pozicije[ix].a||0);},0);
@@ -3458,7 +3602,23 @@ function buildPozicijeTabelu(){
       +' onchange="fixComma(this);tablaPromijenjena()"><span style="font-size:10px;color:#8a93a3">\u00d7</span>'
       +'<input type="number" id="kl-tabla-b" min="100" value="'+tbl.b+'" style="width:62px;font:inherit;'
       +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
-      +' onchange="fixComma(this);tablaPromijenjena()"><span style="font-size:10px;color:#8a93a3">mm</span></div>';
+      +' onchange="fixComma(this);tablaPromijenjena()"><span style="font-size:10px;color:#8a93a3">mm</span>'
+      +'<label style="font-size:10px;color:#6b7a8d;margin-left:4px" title="Sirove ivice table se odsijecaju prije rezanja">Ivice</label>'
+      +'<input type="number" id="kl-rez-ivice" min="0" value="'+_rezIvice()+'" style="width:52px;font:inherit;'
+      +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
+      +' onchange="fixComma(this);tablaPromijenjena()">'
+      +'<span style="font-size:10px;color:#8a93a3">mm</span>'
+      +'<span style="font-size:10px;color:#1f8a4c;font-weight:600;margin-left:auto">max komad '
+      +_maxKomad()+' mm</span></div>'
+      + '<div style="display:flex;gap:5px;align-items:center;margin-top:5px;padding-top:5px;'
+      + 'border-top:1px dashed #d9c8e8;flex-wrap:wrap">'
+      + '<button type="button" onclick="restlToggle()" style="font:inherit;font-size:10.5px;'
+      + 'padding:4px 10px;border-radius:4px;cursor:pointer;font-weight:600;border:1px solid '
+      + (RESTL_UKLJUCEN?'#1f8a4c;background:#e6f4ea;color:#1f8a4c':'#dde2ea;background:#fff;color:#8a93a3')
+      + '">\u25a3 Tra\u017ei u restlovima: '+(RESTL_UKLJUCEN?'UKLJU\u010cENO':'isklju\u010deno')+'</button>'
+      + '<span style="font-size:9.5px;color:#8a93a3">'
+      + (RESTL_UKLJUCEN?'provjerava ostatke prije nego predlo\u017ei novu tablu'
+                       :'modul restlova jo\u0161 u razvoju')+'</span></div>';
     _zidovi().forEach(function(z,zi){
       var ukD=z.komadi.reduce(function(a2,ix){return a2+(pozicije[ix].a||0);},0);
       var ukK=z.komadi.reduce(function(a2,ix){return a2+Math.max(1,pozicije[ix].kom||1);},0);
@@ -3494,7 +3654,32 @@ function buildPozicijeTabelu(){
           var kt=_pozKomTip(pozicije[ix]);
           return pozicije[ix].a+(kt!=='sam'?('<sub style="color:#7a4fa0">'
             +({prvi:'L',sred:'\u2194',zadnji:'D'}[kt]||'')+'</sub>'):'');
-        }).join(' + ')+' mm</div></div>';
+        }).join(' + ')+' mm</div>'
+        + (RESTL_UKLJUCEN
+           ? ('<div style="font-size:10px;margin-top:3px;display:flex;gap:6px;flex-wrap:wrap">'
+              +z.komadi.map(function(ix){
+                return '<span style="background:#fff;border:1px solid #e8ecf1;border-radius:3px;'
+                  +'padding:1px 5px">'+pozicije[ix].a+': '+_restlOznaka(pozicije[ix])+'</span>';
+              }).join('')+'</div>')
+           : '')
+        + (function(){
+            // Nesting: koliko tabli treba za OVAJ zid i koliko se baca
+            var duz=[];
+            z.komadi.forEach(function(ix){
+              var q=pozicije[ix];
+              for(var c=0;c<Math.max(1,q.kom||1);c++) duz.push(q.a||0);
+            });
+            var n=nestZid(duz,z.b);
+            if(!n) return '<div style="font-size:10px;color:#c0392b;margin-top:4px">'
+              +'\u26a0 Komadi ne staju u tablu \u2014 provjeri mjere.</div></div>';
+            var boja=(n.iskoriscenje>=70)?'#1f8a4c':((n.iskoriscenje>=45)?'#b8860b':'#c0392b');
+            return '<div style="font-size:10px;margin-top:4px;padding:4px 6px;background:#f7f9fc;'
+              +'border-radius:4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'
+              +'<b style="color:'+boja+'">\u25a4 '+n.tabli+' tabl'+(n.tabli===1?'a':(n.tabli<5?'e':'i'))+'</b>'
+              +'<span style="color:#6b7a8d">'+n.traka+' traka '+n.smjer+'</span>'
+              +'<span style="color:'+boja+';font-weight:600">iskori\u0161\u0107enje '+n.iskoriscenje+'%</span>'
+              +'<span style="color:#8a93a3">otpad '+n.otpad.toFixed(2)+' m\u00b2</span></div></div>';
+          })();
     });
     h+='<button type="button" onclick="dodajZid()" style="width:100%;padding:6px;background:none;'
       +'border:1px dashed #7a4fa0;color:#7a4fa0;border-radius:5px;cursor:pointer;font:inherit;'
@@ -3636,7 +3821,7 @@ function podijeliZid(zid){
   if(!zz) return;
   var sir=zz.b||250;
   var t=_tablaMjere();
-  var maxKom=Math.max(t.a,t.b)-20;   // 20 mm rezerva na rez
+  var maxKom=_maxKomad();
   var kom=podijeliDuzinu(uk,maxKom);
   if(!kom.length) return;
   if(!confirm('Zid '+uk+' mm podijeliti na '+kom.length+' komad'+(kom.length===1?'':'a')+'?\n\n'
@@ -6769,9 +6954,20 @@ function buildPozicijeRN(){
         var ukK=braca.reduce(function(a,q){return a+Math.max(1,q.kom||1);},0);
         var redniZid=0;
         _zidovi().forEach(function(z,zi){ if(z.zid===zz) redniZid=zi+1; });
+        // Nesting u nalogu: koliko tabli i kako se rezu trake
+        var nestT='';
+        try{
+          var duzT=[];
+          braca.forEach(function(q){
+            for(var c=0;c<Math.max(1,q.kom||1);c++) duzT.push(q.a||0);
+          });
+          var nn=nestZid(duzT,p.b||0);
+          if(nn) nestT=' \u2014 <b>'+nn.tabli+' tabl'+(nn.tabli===1?'a':(nn.tabli<5?'e':'i'))
+            +'</b> ('+nn.traka+' traka '+nn.smjer+', iskori\u0161\u0107enje '+nn.iskoriscenje+'%)';
+        }catch(e){}
         h+='<tr class="rn-zid"><td colspan="'+brKolona+'">'
           +'<b>ZID '+redniZid+'</b> \u2014 ukupno '+ukD+' mm, \u0161irina '+(p.b||0)+' mm, '
-          +braca.length+' komad'+(braca.length===1?'':'a')+' ('+ukK+' kom)</td></tr>';
+          +braca.length+' komad'+(braca.length===1?'':'a')+' ('+ukK+' kom)'+nestT+'</td></tr>';
       }
     }
     h+='<tr><td><b>'+(zidniPrikaz?_zidoviRedniBroj(i):(i+1))+'</b></td>'
