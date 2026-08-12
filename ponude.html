@@ -261,17 +261,14 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <div class="fg"><label>Telefon</label><input type="text" id="ref-tel" value="+387 65 512 868"></div>
       <div class="fg"><label>E-mail</label><input type="text" id="ref-email" value="jpx.doc@gmail.com"></div>
     </div>
-    <div class="fg"><label>Kategorija (za obračun bonusa)</label>
-      <select id="kategorija-bonus"><option value="">— izaberi —</option></select>
-    </div>
   </div>
 
   <div class="sec">
     <div class="sec-hd">Materijal</div>
     <div class="r2">
-      <div class="fg"><label>Vrsta</label>
+      <div class="fg"><label>Grupa</label>
         <div style="display:flex;gap:4px;align-items:center">
-          <select id="mat-v-sel" onchange="(function(){var v=this.value;if(v==='custom'){ge('mat-v-inp').style.display='';ge('mat-v-inp').focus();ge('mat-v-inp').value='';}else{ge('mat-v-inp').style.display='none';}refresh();}).call(this)" style="flex:1">
+          <select id="mat-v-sel" onchange="grupaPromijenjena()" style="flex:1">
             <option value="Kvarc" selected>Kvarc</option>
             <option value="Granit">Granit</option>
             <option value="Mermer">Mermer</option>
@@ -279,7 +276,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
             <option value="Porcelan">Porcelan</option>
             <option value="custom">Drugo...</option>
           </select>
-          <input type="text" id="mat-v-inp" placeholder="Unesite vrstu" style="display:none;width:110px" oninput="refresh()">
+          <input type="text" id="mat-v-inp" placeholder="Unesite grupu" style="display:none;width:110px" oninput="refresh()">
         </div>
       </div>
       <div class="fg"><label>Debljina</label>
@@ -9689,12 +9686,8 @@ async function _loadConfig(){
       dl.innerHTML = cfg.materijali.map(m=>`<option value="${m.naziv}"></option>`).join('');
     }
 
-    // Kategorija (za obračun bonusa)
-    var katSel = document.getElementById('kategorija-bonus');
-    if(katSel && cfg.kategorije_bonus){
-      katSel.innerHTML = '<option value="">— izaberi —</option>'+
-        cfg.kategorije_bonus.map(k=>`<option value="${k.id}">${k.naziv}</option>`).join('');
-    }
+    // Kategorija za obracun bonusa je UKLONJENA iz generatora -
+    // definise se na drugom mjestu u aplikaciji.
     // Ugovorio select (u sekciji Narudžba)
     var kUgov = document.getElementById('k-ugovorio');
     if(kUgov){
@@ -10081,6 +10074,59 @@ async function _ucitajLager(){
     throw e;
   }finally{ _lagerUcitava=false; }
 }
+// Grupe i modeli se pune IZ LAGERA. Kad se izabere grupa, popis modela se
+// suzi samo na ono sto te grupe stvarno ima na stanju.
+async function napuniGrupeIzLagera(){
+  try{
+    var L=await _ucitajLager();
+    if(!L||!L.length) return;
+    var sel=ge('mat-v-sel'); if(!sel) return;
+    var tren=sel.value;
+    var grupe={};
+    L.forEach(function(x){ if(x.grupa) grupe[x.grupa]=(grupe[x.grupa]||0)+1; });
+    var imena=Object.keys(grupe).sort();
+    if(!imena.length) return;
+    sel.innerHTML=imena.map(function(g){
+      return '<option value="'+g+'">'+g+' <\/option>';
+    }).join('')+'<option value="custom">Drugo\u2026<\/option>';
+    // zadrzi trenutni izbor ako ga i dalje ima
+    sel.value=tren;
+    if(sel.value!==tren){
+      // stara vrijednost nije u lageru - dodaj je da se ne izgubi
+      var o=document.createElement('option');
+      o.value=tren; o.textContent=tren+' (van lagera)';
+      sel.insertBefore(o,sel.firstChild);
+      sel.value=tren;
+    }
+    suziModeleNaGrupu();
+  }catch(e){ /* lager nedostupan - ostaju zadate grupe */ }
+}
+// Popis Model/Boja prati izabranu grupu
+function suziModeleNaGrupu(){
+  var dl=ge('mat-list'); if(!dl) return;
+  var g=getMatV();
+  if(!_lagerKes||!_lagerKes.length) return;   // bez lagera ostaje zadati popis
+  var modeli={};
+  _lagerKes.forEach(function(x){
+    if(!x.naziv) return;
+    if(g&&x.grupa&&x.grupa!==g) return;
+    modeli[x.naziv]=true;
+  });
+  var imena=Object.keys(modeli).sort();
+  if(!imena.length){
+    dl.innerHTML='';
+    return;
+  }
+  dl.innerHTML=imena.map(function(n){ return '<option value="'+n+'"><\/option>'; }).join('');
+}
+function grupaPromijenjena(){
+  var sel=ge('mat-v-sel'), inp=ge('mat-v-inp');
+  if(sel&&sel.value==='custom'){
+    if(inp){ inp.style.display=''; inp.value=''; inp.focus(); }
+  } else if(inp){ inp.style.display='none'; }
+  suziModeleNaGrupu();
+  refresh();
+}
 async function otvoriLager(){
   var stari=ge('lager-modal'); if(stari) stari.remove();
   var m=document.createElement('div');
@@ -10181,6 +10227,21 @@ function _lagerIzaberi(id,pjId){
   var a=items[activeIdx];
   if(a) a.matLager={id:x.id,pjId:x.pjId,sifra:x.sifra,naziv:x.naziv,pj:x.pj,
     nabavna:x.cijena,koef:koef,stanje:x.stanje,jm:x.jm||'m\u00b2'};
+  // Grupa se povlaci iz lagera zajedno sa stavkom
+  if(x.grupa){
+    var sg=ge('mat-v-sel');
+    if(sg){
+      var ima=Array.prototype.some.call(sg.options,function(o){return o.value===x.grupa;});
+      if(!ima){
+        var no=document.createElement('option');
+        no.value=x.grupa; no.textContent=x.grupa;
+        sg.insertBefore(no,sg.firstChild);
+      }
+      sg.value=x.grupa;
+      var vi=ge('mat-v-inp'); if(vi) vi.style.display='none';
+    }
+  }
+  suziModeleNaGrupu();
   var m=ge('lager-modal'); if(m) m.remove();
   saveItemInputs(); syncToActive();
   prikaziLagerInfo(); buildItemList(); refresh();
@@ -10249,13 +10310,12 @@ function _snimiOstalo(){
   return {
     ref_tel: gs('ref-tel'), ref_email: gs('ref-email'),
     popust: gs('pon-popust'),
-    kategorija_bonus: (ge('kategorija-bonus')||{}).value||''
   };
 }
 function _vratiOstalo(o){
   if(!o) return;
   var m={'ref-tel':o.ref_tel,'ref-email':o.ref_email,
-         'pon-popust':o.popust,'kategorija-bonus':o.kategorija_bonus};
+         'pon-popust':o.popust};
   Object.keys(m).forEach(function(id){
     if(m[id]==null) return;
     var e=ge(id); if(e) e.value=m[id];
@@ -10382,7 +10442,6 @@ async function usvojiPonudu(){
     napomena: '',
     status: 'Nije Započeto',
     pocetak: new Date().toISOString().split('T')[0], // datum ugovaranja = danas
-    kategorija_bonus_id: ge('kategorija-bonus') ? (ge('kategorija-bonus').value||null) : null,
     iz_generatora_ponuda: true, // pouzdan signal za "Velika ponuda" — vidi proizvodnja.js
   };
 
@@ -10547,6 +10606,10 @@ async function usvojiPonudu(){
 
 
 
+
+// Grupe i modeli se pune iz lagera cim se aplikacija otvori. Ako lager nije
+// dostupan, ostaju zadate grupe - ne blokira rad.
+setTimeout(function(){ try{ napuniGrupeIzLagera(); }catch(e){} }, 800);
 
 // Klik na brojcano polje odmah OZNACI sadrzaj, da se moze kucati preko njega
 // bez prethodnog brisanja. Vazi za cijelu aplikaciju.
