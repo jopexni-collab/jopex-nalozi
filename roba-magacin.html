@@ -304,6 +304,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
   <button type="button" class="glavni-tab-btn" data-tab="kretanje" onclick="prebaciGlavniTabRM('kretanje')">📈 Kretanje robe</button>
   <button type="button" class="glavni-tab-btn" data-tab="uvoz" onclick="prebaciGlavniTabRM('uvoz')">📥 Uvoz robe</button>
+  <button type="button" class="glavni-tab-btn" data-tab="uvoz-slike" onclick="prebaciGlavniTabRM('uvoz-slike')">📷 Uvoz slika</button>
   <button type="button" class="glavni-tab-btn" data-tab="uvoz-istorija" onclick="prebaciGlavniTabRM('uvoz-istorija')">🗂️ Istorija uvoza</button>
 </div>
 
@@ -688,6 +689,21 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
 
     <div id="import-msg"></div>
+  </div>
+</div>
+
+<div id="tab-uvoz-slike" style="display:none;">
+  <div class="import-box">
+    <h3>📷 Grupni uvoz slika</h3>
+    <div class="uzorak-hint">
+      Izaberi VIŠE slika odjednom (npr. ceo folder sinhronizovan sa Google Drive-a). Naziv fajla se poredi sa NAZIVOM artikla (npr. fajl "Bengal black 3cm Par.jpg" za artikal "Bengal black 3cm Par") — ne mora biti identičan, dovoljno je da se poklapaju. Ako se poklopi više artikala, tražiće se ručna potvrda za tu sliku — ništa se ne uvozi automatski bez tvoje potvrde u tom slučaju.
+    </div>
+    <input type="file" id="uvslika-file-input" accept="image/*" multiple webkitdirectory directory style="margin-bottom:14px;">
+    <div id="uvslika-napredak" style="display:none;margin-bottom:10px;font-size:13px;color:#8b96a5;"></div>
+    <div id="uvslika-lista"></div>
+    <div id="uvslika-akcije" style="display:none;margin-top:14px;text-align:right;">
+      <button type="button" class="btn" onclick="uvslikaPosaljiSve()">✓ Uvezi sve rešene slike</button>
+    </div>
   </div>
 </div>
 
@@ -1386,6 +1402,152 @@ async function otvoriRobnuKarticu(robaId, naziv){
 }
 
 let nivelacijaRobaId=null;
+/* ═══ GRUPNI UVOZ SLIKA — poklapanje po nazivu (opisu) artikla, ne po šifri ═══ */
+let uvslikaStavke=[]; // {folderNaziv, fajlovi:[], kandidati:[], izabranoId, status}
+
+// Ista kompresija kao u maloprodaji — Drive fotografije mogu biti ogromne, ovo ih svede
+// na razumnu veličinu PRE slanja (na 700px, JPEG 75%).
+function uvslikaSmanjiSliku(file){
+  return new Promise((resolve, reject)=>{
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const MAX=700;
+      let {width:w, height:h}=img;
+      if(w>MAX||h>MAX){
+        if(w>h){ h=Math.round(h*MAX/w); w=MAX; }
+        else{ w=Math.round(w*MAX/h); h=MAX; }
+      }
+      const canvas=document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      canvas.toBlob(blob=>{
+        if(!blob){ reject(new Error('Neuspešna obrada slike.')); return; }
+        resolve(new File([blob], file.name.replace(/\.[^.]+$/,'')+'.jpg', {type:'image/jpeg'}));
+      }, 'image/jpeg', 0.75);
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Fajl nije prepoznat kao slika.')); };
+    img.src=url;
+  });
+}
+
+document.getElementById('uvslika-file-input').addEventListener('change', async e=>{
+  const fajlovi=[...e.target.files].filter(f=>f.type.startsWith('image/'));
+  if(!fajlovi.length) return;
+  const napredakDiv=document.getElementById('uvslika-napredak');
+  napredakDiv.style.display='block';
+
+  // Grupiši fajlove po NEPOSREDNOM roditeljskom folderu (webkitRelativePath izgleda kao
+  // "ts-30/slika1.jpg" ili "glavni-folder/ts-30/slika1.jpg") — jedan folder = jedan
+  // artikal, sve slike unutra idu na TAJ isti artikal. Naziv FOLDERA (ne pojedinačnog
+  // fajla) se poredi sa nazivom artikla.
+  const grupePoFolderu=new Map(); // folderNaziv -> [fajl, fajl, ...]
+  fajlovi.forEach(f=>{
+    const putanja=f.webkitRelativePath || f.name;
+    const dijelovi=putanja.split('/');
+    const folderNaziv = dijelovi.length>1 ? dijelovi[dijelovi.length-2] : '(bez foldera)';
+    if(!grupePoFolderu.has(folderNaziv)) grupePoFolderu.set(folderNaziv, []);
+    grupePoFolderu.get(folderNaziv).push(f);
+  });
+
+  uvslikaStavke=[];
+  const foldNazivi=[...grupePoFolderu.keys()];
+  for(let i=0;i<foldNazivi.length;i++){
+    const folderNaziv=foldNazivi[i];
+    napredakDiv.textContent=`Pretraga poklapanja... (${i+1}/${foldNazivi.length} foldera)`;
+    const kljuc=folderNaziv.trim();
+    let kandidati=[];
+    if(kljuc.length>=3){
+      try{
+        const r=await fetch(`${API}/api/roba/trazi-po-nazivu?tekst=${encodeURIComponent(kljuc)}`);
+        if(r.ok) kandidati=await r.json();
+      }catch(err){}
+    }
+    uvslikaStavke.push({
+      folderNaziv, fajlovi: grupePoFolderu.get(folderNaziv), kandidati,
+      izabranoId: kandidati.length===1 ? kandidati[0].id : null,
+      status: kandidati.length===0?'nema-poklapanja':kandidati.length===1?'spremno':'nejasno',
+    });
+  }
+  napredakDiv.style.display='none';
+  uvslikaRenderLista();
+});
+
+function uvslikaRenderLista(){
+  const cont=document.getElementById('uvslika-lista');
+  const akcijeDiv=document.getElementById('uvslika-akcije');
+  if(!uvslikaStavke.length){ cont.innerHTML=''; akcijeDiv.style.display='none'; return; }
+
+  const brSpremno=uvslikaStavke.filter(s=>s.status==='spremno'||( s.status==='nejasno' && s.izabranoId)).length;
+  const brNejasno=uvslikaStavke.filter(s=>s.status==='nejasno' && !s.izabranoId).length;
+  const brNema=uvslikaStavke.filter(s=>s.status==='nema-poklapanja').length;
+
+  cont.innerHTML=`
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+      <span style="background:#e6f4ea;color:#1f8a4c;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;">✓ Spremno: ${brSpremno}</span>
+      ${brNejasno?`<span style="background:#fff4d6;color:#8a6d1f;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;">⚠ Nejasno (treba izbor): ${brNejasno}</span>`:''}
+      ${brNema?`<span style="background:#fce8e6;color:#c0392b;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;">✕ Nema poklapanja: ${brNema}</span>`:''}
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#f0f2f5;"><th style="padding:5px 6px;text-align:left;">Folder</th><th style="padding:5px 6px;text-align:left;">Broj slika</th><th style="padding:5px 6px;text-align:left;">Artikal</th></tr></thead>
+      <tbody>${uvslikaStavke.map((s,i)=>`
+        <tr style="border-bottom:1px solid #eee;background:${s.status==='nema-poklapanja'?'#fce8e6':s.status==='nejasno'&&!s.izabranoId?'#fff4d6':'#fff'};">
+          <td style="padding:4px 6px;">📁 ${esc(s.folderNaziv)}</td>
+          <td style="padding:4px 6px;color:#999;">${s.fajlovi.length}</td>
+          <td style="padding:4px 6px;">
+            ${s.status==='nema-poklapanja'?'<i style="color:#c0392b;">Nijedan naziv artikla se ne poklapa</i>'
+              :s.kandidati.length===1?`${esc(s.kandidati[0].sifra)} — ${esc(s.kandidati[0].naziv)}`
+              :`<select onchange="uvslikaIzaberi(${i},this.value)" style="padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;">
+                  <option value="">— izaberi tačan artikal —</option>
+                  ${s.kandidati.map(k=>`<option value="${k.id}" ${s.izabranoId===k.id?'selected':''}>${esc(k.sifra)} — ${esc(k.naziv)}</option>`).join('')}
+                </select>`}
+          </td>
+        </tr>
+      `).join('')}</tbody>
+    </table>`;
+  akcijeDiv.style.display = brSpremno>0 ? 'block' : 'none';
+}
+
+function uvslikaIzaberi(indeks, robaId){
+  uvslikaStavke[indeks].izabranoId = robaId ? parseInt(robaId) : null;
+  uvslikaRenderLista();
+}
+
+async function uvslikaPosaljiSve(){
+  const zaSlanje=uvslikaStavke.filter(s=>s.izabranoId);
+  if(!zaSlanje.length){ alert('Nema rešenih foldera za uvoz.'); return; }
+  const ukupnoSlika=zaSlanje.reduce((s,x)=>s+x.fajlovi.length,0);
+  if(!confirm(`Uvesti ${ukupnoSlika} slika iz ${zaSlanje.length} foldera? Ovo se ne može grupno poništiti — svaka slika bi se morala pojedinačno obrisati.`)) return;
+
+  const napredakDiv=document.getElementById('uvslika-napredak');
+  napredakDiv.style.display='block';
+  let uspjesno=0, neuspjesno=[], obradjeno=0;
+  for(const s of zaSlanje){
+    // SVE slike iz ovog foldera idu na ISTI artikal (s.izabranoId) — prva postaje glavna
+    // (backend to radi automatski za prvu ikad dodanu sliku artikla).
+    for(const fajl of s.fajlovi){
+      obradjeno++;
+      napredakDiv.textContent=`Otpremanje... (${obradjeno}/${ukupnoSlika}) — ${s.folderNaziv}/${fajl.name}`;
+      try{
+        const smanjena=await uvslikaSmanjiSliku(fajl);
+        const fd=new FormData();
+        fd.append('slika', smanjena);
+        const r=await fetch(`${API}/api/roba/${s.izabranoId}/slika`, {method:'POST', body:fd});
+        if(!r.ok) throw new Error((await r.json()).error||'Greška.');
+        uspjesno++;
+      }catch(e){
+        neuspjesno.push(`${s.folderNaziv}/${fajl.name}: ${e.message}`);
+      }
+    }
+  }
+  napredakDiv.style.display='none';
+  alert(`✓ Uspešno uvezeno: ${uspjesno}${neuspjesno.length?`\n\n✗ Neuspešno (${neuspjesno.length}):\n`+neuspjesno.join('\n'):''}`);
+  uvslikaStavke=[];
+  document.getElementById('uvslika-file-input').value='';
+  uvslikaRenderLista();
+}
+
 async function otvoriIzmjenuDebljine(robaId, naziv, trenutnaDebljina){
   const nova=prompt(`Nova debljina (cm) za "${naziv}" (trenutno: ${trenutnaDebljina??'nije uneseno'}) — ostavi prazno da ukloniš:`, trenutnaDebljina??'');
   if(nova===null) return; // otkazano
@@ -2188,6 +2350,7 @@ function prebaciGlavniTabRM(tab){
   document.getElementById('tab-pj').style.display = tab==='pj' ? 'block' : 'none';
   document.getElementById('tab-kretanje').style.display = tab==='kretanje' ? 'block' : 'none';
   document.getElementById('tab-uvoz').style.display = tab==='uvoz' ? 'block' : 'none';
+  document.getElementById('tab-uvoz-slike').style.display = tab==='uvoz-slike' ? 'block' : 'none';
   if(tab==='kretanje' && !kretanjeObjektiUcitani) kretanjeUcitajObjekte();
   if(tab==='uvoz-istorija') uvozIstorijaUcitaj();
   if(tab==='presek' && !presekObjektiUcitani) presekUcitajObjekte();

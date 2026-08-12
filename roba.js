@@ -1590,4 +1590,33 @@ router.delete('/:id/slike/:slikaId', zahtijevaProdaju, async (req, res) => {
   }
 });
 
+// GET /api/roba/trazi-po-nazivu?tekst=X — vraća aktivne artikle čiji NAZIV odgovara datom
+// tekstu (koristi se za grupni uvoz slika — naziv fajla slike se poredi sa nazivom
+// artikla, ne sa šifrom). Poređenje je u OBA smjera i bez razlike velika/mala slova i
+// razmaka/crtica — da uhvati i "Bengal_black_3cm.jpg" za artikal "Bengal black 3cm Par".
+router.get('/trazi-po-nazivu', zahtijevaProdaju, async (req, res) => {
+  try {
+    const tekst = (req.query.tekst || '').trim();
+    if (tekst.length < 3) return res.status(400).json({ error: 'Prekratak naziv za pretragu.' });
+    // Normalizacija UKLANJA sve razmake/crtice/donje crte (ne zamjenjuje ih razmakom) — da
+    // se "ts-30" poklopi sa "TS30" bez razmaka unutar naziva ("Metalne nogare za sto
+    // TS30"). Zamjena razmakom bi ovdje promašila (razmak vs. bez razmaka su različiti).
+    const r = await pool.query(
+      `SELECT id, sifra, naziv FROM roba
+       WHERE aktivan=true
+         AND (
+           regexp_replace(lower(naziv), '[-_\\s]', '', 'g') = regexp_replace(lower($1), '[-_\\s]', '', 'g')
+           OR regexp_replace(lower($1), '[-_\\s]', '', 'g') LIKE '%' || regexp_replace(lower(naziv), '[-_\\s]', '', 'g') || '%'
+           OR regexp_replace(lower(naziv), '[-_\\s]', '', 'g') LIKE '%' || regexp_replace(lower($1), '[-_\\s]', '', 'g') || '%'
+         )
+       ORDER BY length(naziv) DESC
+       LIMIT 10`,
+      [tekst]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
