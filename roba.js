@@ -113,8 +113,10 @@ router.get('/lager-prodaja', zahtijevaProdaju, async (req, res) => {
   if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
   try {
     const r = await pool.query(
-      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm, r.slika_url,
-              rp.cijena, rp.stanje
+      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
+              rp.cijena, rp.stanje,
+              (SELECT url FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS glavna_slika,
+              (SELECT COUNT(*) FROM roba_slike WHERE roba_id=r.id) AS broj_slika
        FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
        WHERE r.aktivan=true
        ORDER BY r.naziv`,
@@ -137,7 +139,10 @@ router.get('/lager', zahtijevaRobaMagacin, async (req, res) => {
     if (req.query.debljina) { uslovi.push(`r.debljina_cm = $${i++}`); vals.push(parseFloat(req.query.debljina)); }
 
     const r = await pool.query(
-      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm, r.slika_url, rp.cijena, rp.stanje,
+      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
+              (SELECT url FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS glavna_slika,
+              (SELECT COUNT(*) FROM roba_slike WHERE roba_id=r.id) AS broj_slika,
+              rp.cijena, rp.stanje,
               (rp.cijena * rp.stanje) AS ukupno
        FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
        WHERE ${uslovi.join(' AND ')}
@@ -1503,9 +1508,11 @@ router.patch('/:id/debljina', async (req, res) => {
   }
 });
 
-// POST /api/roba/:id/slika — upload slike artikla (bilo koji korisnik koji sme da
+// POST /api/roba/:id/slika — DODAJE novu sliku artikla (bilo koji korisnik koji sme da
 // prodaje, ne samo admin — "komercijaliste unose/dropuju slike"). Slika ide na R2, u bazu
-// se upisuje SAMO URL (ne sam fajl) — da lager upit ostane lagan/brz.
+// se upisuje SAMO URL (ne sam fajl). Prva ikad dodana slika za taj artikal automatski
+// postaje glavna — svaka sledeća se samo dodaje u red, glavna ostaje ista dok se
+// eksplicitno ne promijeni.
 router.post('/:id/slika', zahtijevaProdaju, upload.single('slika'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Nema fajla.' });
   if (!req.file.mimetype.startsWith('image/'))
@@ -1514,10 +1521,72 @@ router.post('/:id/slika', zahtijevaProdaju, upload.single('slika'), async (req, 
     const ekstenzija = (req.file.originalname.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
     const kljuc = `roba-slike/${req.params.id}-${Date.now()}.${ekstenzija}`;
     const url = await uploadFile(kljuc, req.file.buffer, req.file.mimetype);
-    await pool.query('UPDATE roba SET slika_url=$1, azurirano=now() WHERE id=$2', [url, req.params.id]);
-    res.json({ ok: true, slika_url: url });
+
+    const postojeceRes = await pool.query('SELECT COUNT(*) AS n, COALESCE(MAX(redosled),-1) AS max_red FROM roba_slike WHERE roba_id=$1', [req.params.id]);
+    const jePrva = parseInt(postojeceRes.rows[0].n) === 0;
+    const noviRedosled = parseInt(postojeceRes.rows[0].max_red) + 1;
+
+    const ins = await pool.query(
+      'INSERT INTO roba_slike (roba_id, url, redosled, glavna) VALUES ($1,$2,$3,$4) RETURNING id',
+      [req.params.id, url, noviRedosled, jePrva]
+    );
+    res.json({ ok: true, slika_id: ins.rows[0].id, url, glavna: jePrva });
   } catch (err) {
     res.status(500).json({ error: 'Greška pri otpremanju slike: ' + err.message });
+  }
+});
+
+// GET /api/roba/:id/slike — lista svih slika za jedan artikal, glavna prva.
+router.get('/:id/slike', zahtijevaProdaju, async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT id, url, redosled, glavna FROM roba_slike WHERE roba_id=$1 ORDER BY glavna DESC, redosled ASC',
+      [req.params.id]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/roba/:id/slike/:slikaId/glavna — postavlja jednu sliku kao glavnu (skida
+// oznaku sa svih ostalih tog artikla).
+router.post('/:id/slike/:slikaId/glavna', zahtijevaProdaju, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('UPDATE roba_slike SET glavna=false WHERE roba_id=$1', [req.params.id]);
+    const r = await client.query('UPDATE roba_slike SET glavna=true WHERE id=$1 AND roba_id=$2 RETURNING id', [req.params.slikaId, req.params.id]);
+    if (!r.rows.length) throw Object.assign(new Error('Slika nije pronađena.'), { status: 404 });
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /api/roba/:id/slike/:slikaId — briše jednu sliku. Ako je bila glavna, sledeća
+// (po redosledu) automatski postaje glavna, ako postoji.
+router.delete('/:id/slike/:slikaId', zahtijevaProdaju, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const obr = await client.query('DELETE FROM roba_slike WHERE id=$1 AND roba_id=$2 RETURNING glavna', [req.params.slikaId, req.params.id]);
+    if (!obr.rows.length) throw Object.assign(new Error('Slika nije pronađena.'), { status: 404 });
+    if (obr.rows[0].glavna) {
+      const sljedeca = await client.query('SELECT id FROM roba_slike WHERE roba_id=$1 ORDER BY redosled ASC LIMIT 1', [req.params.id]);
+      if (sljedeca.rows.length) await client.query('UPDATE roba_slike SET glavna=true WHERE id=$1', [sljedeca.rows[0].id]);
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
