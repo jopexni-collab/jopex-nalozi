@@ -322,6 +322,15 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       </datalist>
     </div>
     <div class="fg"><label>Cijena materijala (KM/m²)</label><input type="text" inputmode="decimal" id="mat-c" value="450" min="0" oninput="fixComma(this);refresh()"></div>
+    <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap">
+      <button type="button" onclick="otvoriLager()" style="flex:1;font:inherit;font-size:11px;
+        padding:6px 8px;border:1px solid #1a5fa8;background:#eef4fb;color:#1a5fa8;border-radius:5px;
+        cursor:pointer;font-weight:600">⛁ Izaberi sa lagera</button>
+      <button type="button" onclick="vanLagera()" style="flex:1;font:inherit;font-size:11px;
+        padding:6px 8px;border:1px solid #dde2ea;background:#fff;color:#6b7a8d;border-radius:5px;
+        cursor:pointer">✎ Van lagera (slobodan unos)</button>
+    </div>
+    <div id="mat-lager-info"></div>
   </div>
 
   <!-- KUHINJA -->
@@ -1915,7 +1924,7 @@ function getItemInputIds(t){
               'sud-r-br-sel','sud-r-br-inp','sud-r-bl-sel','sud-r-bl-inp',
               'plo-r-tl-sel','plo-r-tl-inp','plo-r-tr-sel','plo-r-tr-inp',
               'plo-r-br-sel','plo-r-br-inp','plo-r-bl-sel','plo-r-bl-inp'],
-           kl:['kl-a','kl-b','kl-k','kl-ic','kl-u','kl-m','kl-n','kl-p','kl-iv','kl-vrsta','cb-kl-poz','kl-tabla-a','kl-tabla-b','kl-rez-ivice','mat-naziv','mat-c'],
+           kl:['kl-a','kl-b','kl-k','kl-ic','kl-u','kl-m','kl-n','kl-p','kl-iv','kl-vrsta','cb-kl-poz','kl-tabla-a','kl-tabla-b','kl-rez-ivice','kl-rez-sjeciva','mat-naziv','mat-c'],
            st:['st-a','st-b','st-d','st-br','st-ic','st-u','st-m','st-n','st-p','cb-cel','cb-st-poz',
                'cel-a','cel-b','cel-d','cel-c','mat-naziv','mat-c'],
            sto:['sto-a','sto-b','sto-r-sel','sto-r-inp','sto-rl','sto-rs','sto-br','sto-ugr','sto-mer','sto-n','mat-naziv','mat-c']};
@@ -2477,6 +2486,7 @@ function switchItem(toIdx){
   buildCornerR();buildCustomOtvoriUI();buildSlavinaUI();
   buildTableShapeGrid();buildTableDimWrap();buildTableHoleUI();
   buildKlPodtip();buildPozicijeTabelu();
+  try{ prikaziLagerInfo(); }catch(e){}
   buildItemList();
   refresh();
 }
@@ -2799,8 +2809,12 @@ function _tablaMjere(){
 }
 // Sirove ivice table se odsijecaju, pa je korisna mjera manja od nominalne.
 function _rezIvice(){
-  var v=gi('kl-rez-ivice');
-  return (v>0)?v:150;
+  var e=ge('kl-rez-ivice');
+  if(e&&e.value!=='') {
+    var v=parseFloat((e.value||'').toString().replace(',','.'));
+    if(!isNaN(v)&&v>=0) return v;   // dozvoljena je i nula
+  }
+  return 50;
 }
 // Najduzi komad koji se moze izrezati iz table (duza korisna strana)
 function _maxKomad(){
@@ -2815,6 +2829,8 @@ function podijeliDuzinu(ukupno,maxKom){
   maxKom=Math.max(100,maxKom||3200);
   if(ukupno<=0) return [];
   if(ukupno<=maxKom) return [Math.round(ukupno)];
+  // Zid se ne skracuje zbog reza - njegova duzina je data. Rez utice na to
+  // koliko komada stane u tablu, sto racuna nestZid pri slaganju u trake.
   var puni=Math.floor(ukupno/maxKom);
   var ostatak=Math.round(ukupno-puni*maxKom);
   var kom=[];
@@ -2831,6 +2847,15 @@ function podijeliDuzinu(ukupno,maxKom){
   return kom;
 }
 var MIN_KOMAD=200;   // ispod ovoga komad nema smisla
+var REZ_SJECIVA=5;   // mm koje sjecivo pojede po rezu (podrazumijevano)
+function _rezSjeciva(){
+  var e=ge('kl-rez-sjeciva');
+  if(e&&e.value!==''){
+    var v=parseFloat((e.value||'').toString().replace(',','.'));
+    if(!isNaN(v)&&v>=0) return v;
+  }
+  return REZ_SJECIVA;
+}
 // ── RESTLOVI: trazenje komada medju ostacima ─────────────────────
 // Modul "restlovi" je jos u razvoju, pa je ovo UGASENO po zadatom. Kad se
 // ukljuci, za svaki komad se pita /api/restlovi/trazi i prikaze sta je nadjeno.
@@ -2916,7 +2941,7 @@ function _restlOznaka(p){
 function nestZid(duzine,sirina,rezSjeciva){
   var t=_tablaMjere(), r=_rezIvice();
   var kA=Math.max(0,t.a-r), kB=Math.max(0,t.b-r);   // korisne mjere table
-  var rez=(rezSjeciva!=null)?rezSjeciva:5;          // debljina reza
+  var rez=(rezSjeciva!=null)?rezSjeciva:_rezSjeciva();  // sjecivo pojede po rezu
   if(!duzine.length||sirina<=0) return null;
   function probaj(trakaDuz,trakaSir){
     // koliko traka stane po sirini table
@@ -3605,6 +3630,11 @@ function buildPozicijeTabelu(){
       +' onchange="fixComma(this);tablaPromijenjena()"><span style="font-size:10px;color:#8a93a3">mm</span>'
       +'<label style="font-size:10px;color:#6b7a8d;margin-left:4px" title="Sirove ivice table se odsijecaju prije rezanja">Ivice</label>'
       +'<input type="number" id="kl-rez-ivice" min="0" value="'+_rezIvice()+'" style="width:52px;font:inherit;'
+      +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
+      +' onchange="fixComma(this);tablaPromijenjena()">'
+      +'<span style="font-size:10px;color:#8a93a3">mm</span>'
+      +'<label style="font-size:10px;color:#6b7a8d;margin-left:4px" title="Debljina sjeciva \u2014 gubitak po svakom rezu">Rez</label>'
+      +'<input type="number" id="kl-rez-sjeciva" min="0" step="0.5" value="'+_rezSjeciva()+'" style="width:44px;font:inherit;'
       +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
       +' onchange="fixComma(this);tablaPromijenjena()">'
       +'<span style="font-size:10px;color:#8a93a3">mm</span>'
@@ -5927,6 +5957,7 @@ function refresh(){
   if(ge('b-iv'))  ge('b-iv').textContent=_allIv.toFixed(2)+' KM';
   if(ge('b-usl')) ge('b-usl').textContent=_allUsl.toFixed(2)+' KM';
   if(ge('b-rez')) ge('b-rez').textContent=_allRez.toFixed(2)+' KM';
+  try{ prikaziLagerInfo(); }catch(e){}
   drawCanvas(); // uvijek osvjezi crtez
   // Veliki prozor slobodnog oblika mora pratiti SVAKU promjenu (dodat otvor,
   // izmijenjena dimenzija, cijena...) - inace bi ostao na starom stanju dok
@@ -10007,7 +10038,187 @@ function novaPonuda(){
   refresh();
 }
 
-// ── CJENOVNIK PONUDE ───────────────────────────────────────────────
+// ── LAGER: izbor materijala iz zaliha ────────────────────────────
+// Cijena se povlaci iz lagera i MNOZI koeficijentom (podrazumijevano 3), sto
+// se jasno prikazuje i moze promijeniti. Materijal koji nije na lageru se i
+// dalje moze ponuditi - dugme "Van lagera".
+var LAGER_PJ=['aleksandrovac','vrbanja'];   // iz kojih PJ se vuce cijena
+var MAT_KOEF=3;                              // podrazumijevani mnozilac
+var _lagerKes=null;                          // ucitane stavke
+var _lagerUcitava=false;
+
+async function _ucitajLager(){
+  if(_lagerKes) return _lagerKes;
+  if(_lagerUcitava) return null;
+  _lagerUcitava=true;
+  try{
+    var ro=await fetch(API_URL+'/api/prodajni-objekti');
+    if(!ro.ok) throw new Error('Ne mogu u\u010ditati poslovnice.');
+    var pj=await ro.json();
+    if(!Array.isArray(pj)) pj=(pj&&pj.objekti)||[];
+    var trazeni=pj.filter(function(o){
+      var n=String(o.naziv||'').toLowerCase();
+      return LAGER_PJ.some(function(x){ return n.indexOf(x)>=0; });
+    });
+    if(!trazeni.length) throw new Error('Nisu na\u0111ene PJ Aleksandrovac ni Vrbanja.');
+    var sve=[];
+    for(var i=0;i<trazeni.length;i++){
+      var r=await fetch(API_URL+'/api/roba/lager?objekt_id='+trazeni[i].id);
+      if(!r.ok) continue;
+      var d=await r.json().catch(function(){return null;});
+      var lista=Array.isArray(d)?d:((d&&d.stavke)||[]);
+      lista.forEach(function(x){
+        sve.push({id:x.id, sifra:x.sifra, naziv:x.naziv, grupa:x.grupa,
+          debljina:x.debljina_cm, jm:x.jed_mjera,
+          cijena:parseFloat(x.cijena)||0, stanje:parseFloat(x.stanje)||0,
+          pj:trazeni[i].naziv, pjId:trazeni[i].id});
+      });
+    }
+    _lagerKes=sve;
+    return sve;
+  }catch(e){
+    _lagerKes=null;
+    throw e;
+  }finally{ _lagerUcitava=false; }
+}
+async function otvoriLager(){
+  var stari=ge('lager-modal'); if(stari) stari.remove();
+  var m=document.createElement('div');
+  m.id='lager-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;'
+    +'display:flex;align-items:center;justify-content:center;padding:16px';
+  m.innerHTML='<div style="background:#fff;border-radius:10px;max-width:640px;width:100%;'
+    +'max-height:82vh;display:flex;flex-direction:column;overflow:hidden">'
+    +'<div style="padding:12px 14px;border-bottom:1px solid #e2e8f0;display:flex;'
+    +'align-items:center;gap:8px;flex-wrap:wrap">'
+    +'<b style="font-size:15px;color:#134a85">\u26c1 Materijal sa lagera</b>'
+    +'<span style="font-size:11px;color:#8a93a3">PJ Aleksandrovac i Vrbanja</span>'
+    +'<button onclick="document.getElementById(\'lager-modal\').remove()" '
+    +'style="margin-left:auto;background:none;border:none;font-size:20px;cursor:pointer;color:#999">\u2715</button>'
+    +'</div>'
+    +'<div style="padding:10px 14px;border-bottom:1px solid #eef1f5;display:flex;gap:6px;'
+    +'align-items:center;flex-wrap:wrap">'
+    +'<input id="lager-trazi" placeholder="Tra\u017ei po nazivu ili \u0161ifri\u2026" '
+    +'oninput="_lagerFilter()" style="flex:1;min-width:150px;font:inherit;font-size:13px;'
+    +'padding:7px 9px;border:1px solid #dde2ea;border-radius:6px">'
+    +'<label style="font-size:11px;color:#6b7a8d">Koeficijent</label>'
+    +'<input id="lager-koef" type="number" min="1" step="0.1" value="'+MAT_KOEF+'" '
+    +'oninput="_lagerFilter()" style="width:60px;font:inherit;font-size:13px;padding:7px;'
+    +'border:1px solid #1a5fa8;border-radius:6px;text-align:right;font-weight:700;color:#134a85">'
+    +'<span style="font-size:11px;color:#8a93a3">\u00d7 nabavna</span></div>'
+    +'<div id="lager-lista" style="overflow-y:auto;padding:8px 14px 14px">'
+    +'<div style="text-align:center;padding:30px;color:#8a93a3">U\u010ditavam lager\u2026</div></div></div>';
+  document.body.appendChild(m);
+  try{
+    await _ucitajLager();
+    _lagerFilter();
+  }catch(e){
+    var l=ge('lager-lista');
+    if(l) l.innerHTML='<div style="text-align:center;padding:24px;color:#c0392b">'
+      +'<b>Lager nije dostupan</b><br><span style="font-size:12px;color:#6b7a8d">'
+      +String(e.message||e)+'</span><br><br>'
+      +'<button onclick="document.getElementById(\'lager-modal\').remove();vanLagera()" '
+      +'style="font:inherit;font-size:12px;padding:7px 14px;border:1px solid #1a5fa8;'
+      +'background:#eef4fb;color:#1a5fa8;border-radius:6px;cursor:pointer">'
+      +'Unesi materijal ru\u010dno</button></div>';
+  }
+}
+function _lagerFilter(){
+  var l=ge('lager-lista'); if(!l||!_lagerKes) return;
+  var q=(gs('lager-trazi')||'').toLowerCase().trim();
+  var koef=parseFloat((gs('lager-koef')||'').replace(',','.'))||MAT_KOEF;
+  var lista=_lagerKes.filter(function(x){
+    if(!q) return true;
+    return String(x.naziv||'').toLowerCase().indexOf(q)>=0
+        || String(x.sifra||'').toLowerCase().indexOf(q)>=0;
+  });
+  if(!lista.length){
+    l.innerHTML='<div style="text-align:center;padding:24px;color:#8a93a3">'
+      +'Nema stavki za \u201e'+q+'\u201c.</div>'; return;
+  }
+  l.innerHTML=lista.slice(0,300).map(function(x){
+    var pred=Math.round(x.cijena*koef*100)/100;
+    var nema=(x.stanje<=0);
+    return '<div onclick="_lagerIzaberi('+x.id+','+x.pjId+')" style="padding:8px 10px;'
+      +'border:1px solid #e8ecf1;border-radius:6px;margin-bottom:5px;cursor:pointer;'
+      +'display:flex;gap:8px;align-items:center;flex-wrap:wrap'
+      +(nema?';opacity:.55':'')+'" onmouseover="this.style.background=\'#f5f8fc\'" '
+      +'onmouseout="this.style.background=\'\'">'
+      +'<div style="flex:1;min-width:150px">'
+      +'<b style="font-size:12.5px">'+(x.naziv||'?')+'</b>'
+      +(x.debljina?(' <span style="font-size:11px;color:#6b7a8d">'+x.debljina+' cm</span>'):'')
+      +'<br><span style="font-size:10.5px;color:#8a93a3">'+(x.sifra||'')+' \u00b7 '+x.pj
+      +(x.grupa?(' \u00b7 '+x.grupa):'')+'</span></div>'
+      +'<div style="text-align:right;min-width:110px">'
+      +'<b style="font-size:13px;color:#134a85">'+pred.toFixed(2)+' KM</b>'
+      +'<br><span style="font-size:10px;color:#8a93a3">nabavna '+x.cijena.toFixed(2)
+      +' \u00d7 '+koef+'</span></div>'
+      +'<div style="text-align:right;min-width:74px">'
+      +'<span style="font-size:11.5px;font-weight:600;color:'+(nema?'#c0392b':'#1f8a4c')+'">'
+      +x.stanje.toFixed(2)+'</span><br><span style="font-size:10px;color:#8a93a3">'
+      +(x.jm||'m\u00b2')+'</span></div></div>';
+  }).join('')
+  +(lista.length>300?('<div style="text-align:center;padding:8px;color:#8a93a3;font-size:11px">'
+    +'Prikazano 300 od '+lista.length+' \u2014 suzi pretragu.</div>'):'');
+}
+function _lagerIzaberi(id,pjId){
+  var x=(_lagerKes||[]).filter(function(y){return y.id===id&&y.pjId===pjId;})[0];
+  if(!x) return;
+  var koef=parseFloat((gs('lager-koef')||'').replace(',','.'))||MAT_KOEF;
+  _saveUndo();
+  var en=ge('mat-naziv'); if(en) en.value=x.naziv||'';
+  var ec=ge('mat-c');     if(ec) ec.value=(Math.round(x.cijena*koef*100)/100).toFixed(2);
+  // Debljina: lager je u cm, polje u mm
+  if(x.debljina){
+    var mm=Math.round(x.debljina*10);
+    var sel=ge('mat-d'), inp=ge('mat-d-inp');
+    if(sel){
+      var ima=Array.prototype.some.call(sel.options,function(o){return o.value===String(mm);});
+      if(ima){ sel.value=String(mm); if(inp) inp.style.display='none'; }
+      else { sel.value='custom'; if(inp){ inp.style.display=''; inp.value=mm; } }
+    }
+  }
+  var a=items[activeIdx];
+  if(a) a.matLager={id:x.id,pjId:x.pjId,sifra:x.sifra,naziv:x.naziv,pj:x.pj,
+    nabavna:x.cijena,koef:koef,stanje:x.stanje,jm:x.jm||'m\u00b2'};
+  var m=ge('lager-modal'); if(m) m.remove();
+  saveItemInputs(); syncToActive();
+  prikaziLagerInfo(); buildItemList(); refresh();
+}
+function vanLagera(){
+  var a=items[activeIdx];
+  if(a) delete a.matLager;
+  syncToActive();
+  prikaziLagerInfo(); refresh();
+  var e=ge('mat-naziv'); if(e) e.focus();
+}
+// Info traka ispod cijene: odakle je materijal i ima li ga dovoljno
+function prikaziLagerInfo(){
+  var con=ge('mat-lager-info'); if(!con) return;
+  var a=items[activeIdx];
+  var L=a&&a.matLager;
+  if(!L){
+    con.innerHTML='<div style="font-size:10.5px;color:#8a93a3;margin-top:5px;padding:5px 8px;'
+      +'background:#fafbfc;border-radius:4px">\u270e Materijal <b>van lagera</b> \u2014 '
+      +'naziv i cijena su unijeti ru\u010dno.</div>';
+    return;
+  }
+  var potrebno=0;
+  try{ potrebno=getArea()*((tip==='kl'||tip==='st')?1:1); }catch(e){}
+  var fali=(L.stanje>0&&potrebno>L.stanje);
+  con.innerHTML='<div style="font-size:10.5px;margin-top:5px;padding:6px 8px;'
+    +'background:#eef4fb;border:1px solid #c8d9ee;border-radius:4px;line-height:1.6">'
+    +'\u26c1 <b>'+(L.naziv||'')+'</b> \u00b7 '+L.pj
+    +'<br>nabavna <b>'+L.nabavna.toFixed(2)+'</b> \u00d7 <b>'+L.koef+'</b> = <b>'
+    +(Math.round(L.nabavna*L.koef*100)/100).toFixed(2)+' KM/'+L.jm+'</b>'
+    +'<span style="color:#8a93a3"> (cijena se mo\u017ee mijenjati)</span>'
+    +'<br>stanje <b style="color:'+(fali?'#c0392b':'#1f8a4c')+'">'+L.stanje.toFixed(2)+' '+L.jm+'</b>'
+    +(potrebno>0?(' \u00b7 ponuda tra\u017ei <b>'+potrebno.toFixed(2)+'</b>'):'')
+    +(fali?(' <b style="color:#c0392b">\u2014 nedostaje '+(potrebno-L.stanje).toFixed(2)+'</b>'):'')
+    +'</div>';
+}
+
+// \u2500\u2500 CJENOVNIK PONUDE \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500─────────────────
 // Cijene profila i rezanja su GLOBALNA polja (nisu dio stavke), pa se moraju
 // posebno snimiti uz ponudu. Bez ovoga bi ucitana ponuda pokupila trenutno
 // vazece cijene i tiho promijenila ukupan iznos u odnosu na ono sto je kupac
@@ -10070,6 +10281,7 @@ function _getProjectData(){
       items: typeof items!=='undefined'?items:[],
       activeIdx: typeof activeIdx!=='undefined'?activeIdx:0,
       cjenovnik: _snimiCjenovnik(),  // cijene profila i rezanja (globalna polja)
+      lagerPJ: LAGER_PJ, matKoef: MAT_KOEF,
       ostalo: _snimiOstalo(),        // popust, kontakt referenta, kategorija
       ukupno: _ukupnoSvihStavki(),   // kontrolni iznos u trenutku cuvanja
       ponuda: _ponudaInfo, // red u tabeli ponuda (da se pregazi, ne duplira)
