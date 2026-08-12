@@ -314,6 +314,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 <div class="tabs">
   <button class="tab-btn active" data-tab="prodaja">🛒 Prodaja</button>
   <button class="tab-btn" data-tab="admin" id="tab-admin-btn">🧾 Otpremnice</button>
+  <button class="tab-btn" data-tab="lager">📦 Lager</button>
   <button class="tab-btn" data-tab="isplate">💸 Isplate</button>
   <button class="tab-btn" data-tab="uplata">💳 Uplata</button>
   <button class="tab-btn" data-tab="dugovanja">⚖️ Ne saldirano</button>
@@ -645,6 +646,28 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   </div>
   <div class="dnevni-total" id="dnevni-total" style="display:none"></div>
   <div id="otp-list"></div>
+</div>
+
+<div class="view" id="view-lager">
+  <div style="padding:12px;">
+    <div id="prlager-tabela-wrap" style="overflow:auto;max-height:calc(100vh - 200px);border:1px solid var(--border,#ddd);border-radius:8px;"></div>
+    <div id="prlager-filter-panel" style="display:none;position:fixed;z-index:520;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.2);width:220px;max-height:340px;flex-direction:column;" onclick="event.stopPropagation()"></div>
+  </div>
+</div>
+
+<div id="modal-slika-artikla" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:20px;max-width:360px;width:90vw;">
+    <h3 id="msa-naziv" style="margin:0 0 14px;font-size:15px;"></h3>
+    <div id="msa-trenutna" style="display:none;text-align:center;margin-bottom:12px;">
+      <img id="msa-trenutna-img" style="max-width:100%;max-height:240px;border-radius:8px;">
+    </div>
+    <div id="msa-drop-zona" style="border:2px dashed var(--border,#ccc);border-radius:10px;padding:24px 12px;text-align:center;color:#8b96a5;font-size:13px;cursor:pointer;margin-bottom:12px;">
+      📷 Dodirni da fotografišeš/izabereš sliku<br><span style="font-size:11px;">(na računaru: klikni ili prevuci fajl ovde)</span>
+    </div>
+    <input type="file" id="msa-file-input" accept="image/*" capture="environment" style="display:none;">
+    <div id="msa-status" style="font-size:12px;color:var(--red);margin-bottom:10px;display:none;"></div>
+    <button class="ce-tip-btn" style="width:100%;" onclick="document.getElementById('modal-slika-artikla').style.display='none'">Zatvori</button>
+  </div>
 </div>
 
 <!-- ═══ TAB: ROBA I MAGACIN (admin) ═══ -->
@@ -1307,6 +1330,7 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     btn.classList.add('active');
     document.getElementById('view-'+btn.dataset.tab).classList.add('active');
     if(btn.dataset.tab==='admin') loadOtpremnice();
+    if(btn.dataset.tab==='lager') ucitajProdajaLager();
     if(btn.dataset.tab==='isplate'){ ucitajIsplateListu(); ucitajIsplateSume(); }
     if(btn.dataset.tab==='dugovanja'){ if(dugPrikaz==='kupci') ucitajSaldoPoKupcima(); else ucitajDugovanja(); }
     if(btn.dataset.tab==='uplata') ucitajUplateSume();
@@ -1684,6 +1708,241 @@ function nedeljaOd(){
   const dan=(d.getDay()+6)%7; // ponedjeljak=0
   d.setDate(d.getDate()-dan);
   return d.toISOString().split('T')[0];
+}
+
+/* ═══ LAGER (pregled za komercijaliste — bez ukupne vrijednosti) ═══ */
+let prLagerPodaci=[];
+let prLagerKolonaFilteri={};
+let prLagerSort={kolona:'sifra',smjer:'asc'};
+const PRLAGER_KOLONE=[
+  {k:'sifra',lbl:'Šifra',align:'left'},
+  {k:'naziv',lbl:'Naziv',align:'left'},
+  {k:'grupa',lbl:'Grupa',align:'left'},
+  {k:'debljina',lbl:'Deb.',align:'center'},
+  {k:'jm',lbl:'JM',align:'center'},
+  {k:'stanje',lbl:'Stanje',align:'right'},
+  {k:'cijena',lbl:'Cijena/JM',align:'right'},
+];
+function prLagerVrijednost(s,k){
+  if(k==='debljina') return s.debljina_cm;
+  if(k==='jm') return s.jed_mjera;
+  return s[k];
+}
+
+async function ucitajProdajaLager(){
+  const wrap=document.getElementById('prlager-tabela-wrap');
+  if(!trenutniObjekat){ wrap.innerHTML='<div class="empty-msg">Nema izabrane PJ.</div>'; return; }
+  wrap.innerHTML='<div class="spinner">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/roba/lager-prodaja?objekt_id=${trenutniObjekat.id}`);
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška.');
+    prLagerPodaci=data.stavke;
+    prLagerKolonaFilteri={};
+    renderPrLagerZaglavlje();
+    renderPrLagerRedovi();
+  }catch(e){
+    wrap.innerHTML=`<div class="empty-msg">${esc(e.message)}</div>`;
+  }
+}
+
+function prLagerFiltrirajISortiraj(){
+  let prikaz=prLagerPodaci.filter(s=>
+    PRLAGER_KOLONE.every(({k})=>{
+      const iskljuceno=prLagerKolonaFilteri[k];
+      if(!iskljuceno||iskljuceno.size===0) return true;
+      const v=prLagerVrijednost(s,k);
+      return !iskljuceno.has(v) && !(iskljuceno.has('') && (v==null||v===''));
+    })
+  );
+  const {kolona,smjer}=prLagerSort;
+  const brojcano=kolona==='sifra'||kolona==='debljina'||kolona==='stanje'||kolona==='cijena';
+  prikaz=[...prikaz].sort((a,b)=>{
+    let va=prLagerVrijednost(a,kolona), vb=prLagerVrijednost(b,kolona);
+    let cmp=brojcano?(parseFloat(va)||0)-(parseFloat(vb)||0):String(va??'').localeCompare(String(vb??''),'sr-Latn-BA');
+    return smjer==='asc'?cmp:-cmp;
+  });
+  return prikaz;
+}
+
+function renderPrLagerZaglavlje(){
+  const wrap=document.getElementById('prlager-tabela-wrap');
+  if(!prLagerPodaci.length){ wrap.innerHTML='<div class="empty-msg">Nema robe za ovu PJ.</div>'; return; }
+  const strelica=k=>prLagerSort.kolona===k?(prLagerSort.smjer==='asc'?' ▲':' ▼'):'';
+  const filterDugme=k=>{
+    const aktivan=prLagerKolonaFilteri[k]&&prLagerKolonaFilteri[k].size>0;
+    return `<span onclick="event.stopPropagation();prLagerOtvoriFilterPanel('${k}',this)" style="cursor:pointer;margin-left:4px;padding:1px 3px;border-radius:3px;background:${aktivan?'#4a90d9':'rgba(255,255,255,.15)'};">▼</span>`;
+  };
+  wrap.innerHTML=`
+    <table style="width:100%;border-collapse:collapse;font-size:11px;">
+      <thead>
+        <tr style="background:#1f3864;color:#fff;">
+          ${PRLAGER_KOLONE.map(c=>`
+            <th style="padding:4px 6px;text-align:${c.align};white-space:nowrap;font-size:10.5px;position:sticky;top:0;background:#1f3864;z-index:30;">
+              <div style="display:flex;align-items:center;justify-content:${c.align==='right'?'flex-end':c.align==='center'?'center':'flex-start'};gap:2px;">
+                <span style="cursor:pointer;" onclick="prLagerKlikNaslov('${c.k}')">${c.lbl}${strelica(c.k)}</span>${filterDugme(c.k)}
+              </div>
+            </th>
+          `).join('')}
+          <th style="padding:4px 6px;text-align:center;font-size:10.5px;position:sticky;top:0;background:#1f3864;z-index:30;">Slika</th>
+        </tr>
+      </thead>
+      <tbody id="prlager-tbody"></tbody>
+    </table>`;
+}
+
+function renderPrLagerRedovi(){
+  const tbody=document.getElementById('prlager-tbody');
+  if(!tbody) return;
+  const prikaz=prLagerFiltrirajISortiraj();
+  tbody.innerHTML=prikaz.map((s,i)=>`
+    <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
+      <td style="padding:3px 6px;">${esc(s.sifra)}</td>
+      <td style="padding:3px 6px;">${esc(s.naziv)}</td>
+      <td style="padding:3px 6px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
+      <td style="padding:3px 6px;text-align:center;color:#6b7a8d;">${s.debljina_cm??'—'}</td>
+      <td style="padding:3px 6px;text-align:center;">${esc(s.jed_mjera)}</td>
+      <td style="padding:3px 6px;text-align:right;font-weight:700;">${s.stanje}</td>
+      <td style="padding:3px 6px;text-align:right;">${fmMoney(s.cijena)}</td>
+      <td style="padding:3px 6px;text-align:center;">
+        ${s.slika_url
+          ?`<img src="${esc(s.slika_url)}" onclick="event.stopPropagation();window.open('${esc(s.slika_url)}','_blank')" style="width:36px;height:36px;object-fit:cover;border-radius:5px;cursor:pointer;border:1px solid #ddd;">`
+          :`<button onclick="otvoriSlikaArtikla(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',null)" style="width:36px;height:36px;border:1px dashed #ccc;border-radius:5px;background:#fafafa;cursor:pointer;font-size:14px;color:#aaa;">＋</button>`}
+      </td>
+    </tr>
+  `).join('');
+}
+
+function prLagerKlikNaslov(kolona){
+  if(prLagerSort.kolona===kolona) prLagerSort.smjer=prLagerSort.smjer==='asc'?'desc':'asc';
+  else prLagerSort={kolona,smjer:'asc'};
+  renderPrLagerZaglavlje();
+  renderPrLagerRedovi();
+}
+
+let prLagerFilterPanelKolona=null, prLagerFilterPanelPretraga='', prLagerFilterDraft=new Set();
+function prLagerDistinctVrijednosti(k){
+  const svePop=prLagerPodaci.map(s=>prLagerVrijednost(s,k));
+  const neprazne=[...new Set(svePop.filter(v=>v!=null&&v!==''))]
+    .sort((a,b)=>typeof a==='number'?a-b:String(a).localeCompare(String(b),'sr-Latn-BA'));
+  const imaPraznih=svePop.some(v=>v==null||v==='');
+  return imaPraznih?[...neprazne,'']:neprazne;
+}
+function prLagerOtvoriFilterPanel(kolona,dugmeEl){
+  prLagerFilterPanelKolona=kolona;
+  prLagerFilterPanelPretraga='';
+  prLagerFilterDraft=new Set(prLagerKolonaFilteri[kolona]||[]);
+  const panel=document.getElementById('prlager-filter-panel');
+  const r=dugmeEl.getBoundingClientRect();
+  panel.style.top=(r.bottom+4)+'px';
+  panel.style.left=Math.min(r.left,window.innerWidth-230)+'px';
+  panel.style.display='flex';
+  prLagerRenderFilterPanel();
+}
+function prLagerRenderFilterPanel(){
+  const kolona=prLagerFilterPanelKolona;
+  const panel=document.getElementById('prlager-filter-panel');
+  const sve=prLagerDistinctVrijednosti(kolona);
+  const pretraga=prLagerFilterPanelPretraga.toLowerCase();
+  const prikazane=sve.filter(v=>String(v).toLowerCase().includes(pretraga));
+  const sveOznaceno=prikazane.every(v=>!prLagerFilterDraft.has(v));
+  panel.innerHTML=`
+    <div style="padding:8px;border-bottom:1px solid #eee;">
+      <input type="text" placeholder="Pretraga..." value="${esc(prLagerFilterPanelPretraga)}" oninput="prLagerFilterPanelPretraga=this.value;prLagerRenderFilterPanel();" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box;">
+    </div>
+    <div style="overflow-y:auto;flex:1;padding:6px 8px;">
+      <label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-weight:700;cursor:pointer;border-bottom:1px solid #eee;margin-bottom:3px;">
+        <input type="checkbox" ${sveOznaceno?'checked':''} onchange="prLagerFilterOznaciSve(this.checked)"> (Izaberi sve)
+      </label>
+      ${prikazane.map(v=>`
+        <label style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11.5px;cursor:pointer;">
+          <input type="checkbox" ${prLagerFilterDraft.has(v)?'':'checked'} onchange="prLagerFilterToggle('${esc(String(v)).replace(/'/g,"\\'")}',this.checked)"> ${v===''?'<i style="color:#8b96a5;">(prazno)</i>':esc(String(v))}
+        </label>
+      `).join('')}
+    </div>
+    <div style="display:flex;gap:6px;padding:8px;border-top:1px solid #eee;">
+      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;" onclick="prLagerZatvoriFilterPanel()">Otkaži</button>
+      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;" onclick="prLagerFilterOcisti()">Obriši filter</button>
+      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;background:var(--blue,#1a5fa8);color:#fff;font-weight:700;" onclick="prLagerFilterPrimijeni()">✓ OK</button>
+    </div>`;
+}
+function prLagerFilterToggle(v,oznaceno){ if(oznaceno) prLagerFilterDraft.delete(v); else prLagerFilterDraft.add(v); prLagerRenderFilterPanel(); }
+function prLagerFilterOznaciSve(oznaceno){
+  const pretraga=prLagerFilterPanelPretraga.toLowerCase();
+  prLagerDistinctVrijednosti(prLagerFilterPanelKolona).filter(v=>String(v).toLowerCase().includes(pretraga)).forEach(v=>{
+    if(oznaceno) prLagerFilterDraft.delete(v); else prLagerFilterDraft.add(v);
+  });
+  prLagerRenderFilterPanel();
+}
+function prLagerFilterOcisti(){
+  prLagerKolonaFilteri[prLagerFilterPanelKolona]=new Set();
+  prLagerZatvoriFilterPanel();
+  renderPrLagerZaglavlje();
+  renderPrLagerRedovi();
+}
+function prLagerFilterPrimijeni(){
+  prLagerKolonaFilteri[prLagerFilterPanelKolona]=prLagerFilterDraft;
+  prLagerZatvoriFilterPanel();
+  renderPrLagerZaglavlje();
+  renderPrLagerRedovi();
+}
+function prLagerZatvoriFilterPanel(){
+  document.getElementById('prlager-filter-panel').style.display='none';
+  prLagerFilterPanelKolona=null;
+}
+document.addEventListener('click', e=>{
+  const panel=document.getElementById('prlager-filter-panel');
+  if(panel && panel.style.display!=='none' && !panel.contains(e.target)){
+    panel.style.display='none';
+    prLagerFilterPanelKolona=null;
+  }
+});
+
+/* ── SLIKA ARTIKLA — upload na R2, thumbnail u tabeli ── */
+let msaTrenutniRobaId=null;
+function otvoriSlikaArtikla(robaId, naziv, trenutnaSlika){
+  msaTrenutniRobaId=robaId;
+  document.getElementById('msa-naziv').textContent=naziv;
+  const trenutnaDiv=document.getElementById('msa-trenutna');
+  if(trenutnaSlika){
+    trenutnaDiv.style.display='block';
+    document.getElementById('msa-trenutna-img').src=trenutnaSlika;
+  }else{
+    trenutnaDiv.style.display='none';
+  }
+  document.getElementById('msa-status').style.display='none';
+  document.getElementById('modal-slika-artikla').style.display='flex';
+}
+document.getElementById('msa-drop-zona').addEventListener('click', ()=>{
+  document.getElementById('msa-file-input').click();
+});
+document.getElementById('msa-drop-zona').addEventListener('dragover', e=>{ e.preventDefault(); e.currentTarget.style.background='#f0f4fa'; });
+document.getElementById('msa-drop-zona').addEventListener('dragleave', e=>{ e.currentTarget.style.background=''; });
+document.getElementById('msa-drop-zona').addEventListener('drop', e=>{
+  e.preventDefault();
+  e.currentTarget.style.background='';
+  if(e.dataTransfer.files[0]) posaljiSlikuArtikla(e.dataTransfer.files[0]);
+});
+document.getElementById('msa-file-input').addEventListener('change', e=>{
+  if(e.target.files[0]) posaljiSlikuArtikla(e.target.files[0]);
+});
+async function posaljiSlikuArtikla(file){
+  const statusDiv=document.getElementById('msa-status');
+  statusDiv.style.display='block'; statusDiv.style.color='#8b96a5'; statusDiv.textContent='Otpremanje...';
+  const fd=new FormData();
+  fd.append('slika', file);
+  try{
+    const r=await fetch(`${API}/api/roba/${msaTrenutniRobaId}/slika`, {method:'POST', body:fd});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška.');
+    statusDiv.style.color='var(--green)'; statusDiv.textContent='✓ Sačuvano.';
+    const stavka=prLagerPodaci.find(s=>s.id===msaTrenutniRobaId);
+    if(stavka) stavka.slika_url=data.slika_url;
+    renderPrLagerRedovi();
+    setTimeout(()=>{ document.getElementById('modal-slika-artikla').style.display='none'; }, 700);
+  }catch(e){
+    statusDiv.style.color='var(--red)'; statusDiv.textContent='✗ '+e.message;
+  }
 }
 
 async function ucitajIsplateSume(){

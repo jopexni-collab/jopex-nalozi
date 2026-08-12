@@ -4,6 +4,7 @@ const pool = require('./db');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const presekUvoz = require('./presek-uvoz');
+const { uploadFile } = require('./storage');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
@@ -103,6 +104,28 @@ router.get('/lager/filteri', zahtijevaRobaMagacin, async (req, res) => {
 // GET /api/roba/lager?objekt_id=X&grupa=Y&debljina=Z - kompletna lager lista za PJ, opciono filtrirana
 // po grupi i/ili debljini (kombinuju se — npr. samo "Bengal" + "2cm", ili samo "2cm" svih grupa).
 // MORA biti prije "/:id" rute ispod — inače Express tumači "lager" kao vrijednost za :id.
+// GET /api/roba/lager-prodaja — ISTI podaci kao /lager, ali za maloprodaju (svako ko
+// prodaje smije da vidi, ne samo admin/roba-magacin uloga) i NAMJERNO NE VRAĆA
+// total_vrijednost/ukupno po redu — vlasnik ne želi da svaki komercijalista zna koliki je
+// ukupan lager u novcu, samo pojedinačnu cijenu i stanje po artiklu. Uključuje sliku.
+router.get('/lager-prodaja', zahtijevaProdaju, async (req, res) => {
+  const objektId = trebaObjekat(req.query.objekt_id);
+  if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
+  try {
+    const r = await pool.query(
+      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm, r.slika_url,
+              rp.cijena, rp.stanje
+       FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
+       WHERE r.aktivan=true
+       ORDER BY r.naziv`,
+      [objektId]
+    );
+    res.json({ stavke: r.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/lager', zahtijevaRobaMagacin, async (req, res) => {
   const objektId = trebaObjekat(req.query.objekt_id);
   if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
@@ -114,7 +137,7 @@ router.get('/lager', zahtijevaRobaMagacin, async (req, res) => {
     if (req.query.debljina) { uslovi.push(`r.debljina_cm = $${i++}`); vals.push(parseFloat(req.query.debljina)); }
 
     const r = await pool.query(
-      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm, rp.cijena, rp.stanje,
+      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm, r.slika_url, rp.cijena, rp.stanje,
               (rp.cijena * rp.stanje) AS ukupno
        FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
        WHERE ${uslovi.join(' AND ')}
@@ -1477,6 +1500,24 @@ router.patch('/:id/debljina', async (req, res) => {
     res.json({ ok: true, debljina_cm: debljina });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/roba/:id/slika — upload slike artikla (bilo koji korisnik koji sme da
+// prodaje, ne samo admin — "komercijaliste unose/dropuju slike"). Slika ide na R2, u bazu
+// se upisuje SAMO URL (ne sam fajl) — da lager upit ostane lagan/brz.
+router.post('/:id/slika', zahtijevaProdaju, upload.single('slika'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Nema fajla.' });
+  if (!req.file.mimetype.startsWith('image/'))
+    return res.status(400).json({ error: 'Fajl mora biti slika.' });
+  try {
+    const ekstenzija = (req.file.originalname.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const kljuc = `roba-slike/${req.params.id}-${Date.now()}.${ekstenzija}`;
+    const url = await uploadFile(kljuc, req.file.buffer, req.file.mimetype);
+    await pool.query('UPDATE roba SET slika_url=$1, azurirano=now() WHERE id=$2', [url, req.params.id]);
+    res.json({ ok: true, slika_url: url });
+  } catch (err) {
+    res.status(500).json({ error: 'Greška pri otpremanju slike: ' + err.message });
   }
 });
 

@@ -734,8 +734,8 @@ const LAGER_KOLONE=[
   {k:'grupa',lbl:'Grupa',align:'left',tip:'select'},
   {k:'debljina',lbl:'Deb. (cm)',align:'center',tip:'select-num'},
   {k:'jm',lbl:'JM',align:'center',tip:'select'},
-  {k:'cijena',lbl:'Cijena/JM',align:'right',tip:'num'},
   {k:'stanje',lbl:'Stanje',align:'right',tip:'num'},
+  {k:'cijena',lbl:'Cijena/JM',align:'right',tip:'num'},
   {k:'ukupno',lbl:'Ukupno',align:'right',tip:'num'},
 ];
 
@@ -2005,11 +2005,11 @@ function renderLagerRedovi(){
         ${esc(s.jed_mjera)}
         ${currentUser?.rola==='admin'?`<button onclick="otvoriIzmjenuJedinice(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}','${esc(s.jed_mjera)}')" title="Promijeni jedinicu mjere" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
       </td>
+      <td style="padding:3px 6px;text-align:right;font-weight:700;background:${lagerBojaStanja(s.stanje)};text-decoration:underline;cursor:pointer;" onclick="otvoriRobnuKarticu(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')">${s.stanje}</td>
       <td style="padding:3px 6px;text-align:right;">
         ${lagerFmMoney(s.cijena)}
         ${currentUser?.rola==='admin'?`<button onclick="otvoriNivelaciju(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.cijena})" title="Promijeni cijenu (nivelacija)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
       </td>
-      <td style="padding:3px 6px;text-align:right;font-weight:700;background:${lagerBojaStanja(s.stanje)};text-decoration:underline;cursor:pointer;" onclick="otvoriRobnuKarticu(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')">${s.stanje}</td>
       <td style="padding:3px 6px;text-align:right;font-weight:700;">${lagerFmMoney(s.ukupno)}</td>
     </tr>
   `).join('');
