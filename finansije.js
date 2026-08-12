@@ -555,7 +555,12 @@ router.get('/vp-cekanje', async (req, res) => {
         -- u trenutku prodaje, dakle bruto UMANJEN za dug koji je tada nastao. Bez ovoga se
         -- "Struktura naplate" duplirala (VP=cijeli bruto + docnija naplata duga = više od
         -- stvarnog ukupnog iznosa otpremnice).
-        SELECT b.nalog_r_br, (b.bruto - COALESCE(d.dug,0)) AS vp_iznos
+        -- "dug" je VEĆ upisan kao NEGATIVAN broj u gotovini (konvencija: dug "odlazi" iz
+        -- gotovine) — zato se SABIRA (ne oduzima!), sabiranje negativnog broja ispravno
+        -- UMANJUJE bruto. Ranije je stajalo "b.bruto - d.dug", što je oduzimanje NEGATIVNOG
+        -- broja — to GA DODAJE umjesto oduzima (npr. 11248 - (-3998) = 15246, umjesto
+        -- ispravnih 11248 + (-3998) = 7250).
+        SELECT b.nalog_r_br, (b.bruto + COALESCE(d.dug,0)) AS vp_iznos
         FROM (SELECT nalog_r_br, SUM(iznos) AS bruto FROM gotovina WHERE opis LIKE 'Prodaja (bruto)%' GROUP BY nalog_r_br) b
         LEFT JOIN (SELECT nalog_r_br, SUM(iznos) AS dug FROM gotovina WHERE opis LIKE 'Dug po otpremnici%' GROUP BY nalog_r_br) d
           ON d.nalog_r_br = b.nalog_r_br
