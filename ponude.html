@@ -10127,8 +10127,19 @@ function grupaPromijenjena(){
   suziModeleNaGrupu();
   refresh();
 }
+// Da li je stavka upotrebljiva za izradu ploca (kuhinja, klupica, sto).
+// Ploca se mjeri u m2 i ima debljinu. Gotovi spomenici, sudopere, ljepila,
+// alat i sitna roba se mjere u komadima ili nemaju debljinu - takvo se ne
+// moze izrezati u radnu plocu, pa se po zadatom sakriva.
+function _lagerJePloca(x){
+  var jm=String(x.jm||'').toLowerCase().replace(/\s/g,'');
+  var m2=(jm==='m2'||jm==='m\u00b2'||jm==='m^2'||jm.indexOf('m2')>=0);
+  var imaDeb=(x.debljina>0);
+  return m2&&imaDeb;
+}
 async function otvoriLager(){
   var stari=ge('lager-modal'); if(stari) stari.remove();
+  _lagerFilteriPunjeni=false;
   var m=document.createElement('div');
   m.id='lager-modal';
   m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;'
@@ -10152,6 +10163,19 @@ async function otvoriLager(){
     +'oninput="_lagerFilter()" style="width:60px;font:inherit;font-size:13px;padding:7px;'
     +'border:1px solid #1a5fa8;border-radius:6px;text-align:right;font-weight:700;color:#134a85">'
     +'<span style="font-size:11px;color:#8a93a3">\u00d7 nabavna</span></div>'
+    +'<div style="padding:8px 14px;border-bottom:1px solid #eef1f5;display:flex;gap:6px;'
+    +'align-items:center;flex-wrap:wrap">'
+    +'<label style="font-size:11px;color:#6b7a8d">Grupa</label>'
+    +'<select id="lager-grupa" onchange="_lagerFilter()" style="font:inherit;font-size:12px;'
+    +'padding:5px 7px;border:1px solid #dde2ea;border-radius:5px;min-width:110px">'
+    +'<option value="">sve grupe</option></select>'
+    +'<label style="font-size:11px;color:#6b7a8d">Debljina</label>'
+    +'<select id="lager-debljina" onchange="_lagerFilter()" style="font:inherit;font-size:12px;'
+    +'padding:5px 7px;border:1px solid #dde2ea;border-radius:5px;min-width:84px">'
+    +'<option value="">sve</option></select>'
+    +'<label style="font-size:11.5px;color:#134a85;display:flex;align-items:center;gap:4px;'
+    +'cursor:pointer;margin-left:auto"><input type="checkbox" id="lager-samo-ploce" checked '
+    +'onchange="_lagerFilter()"> samo plo\u010de</label></div>'
     +'<div id="lager-lista" style="overflow-y:auto;padding:8px 14px 14px">'
     +'<div style="text-align:center;padding:30px;color:#8a93a3">U\u010ditavam lager\u2026</div></div></div>';
   document.body.appendChild(m);
@@ -10169,11 +10193,42 @@ async function otvoriLager(){
       +'Unesi materijal ru\u010dno</button></div>';
   }
 }
+var _lagerFilteriPunjeni=false;
+function _napuniLagerFiltere(){
+  if(!_lagerKes||_lagerFilteriPunjeni) return;
+  // Puni se SAMO jednom po otvaranju - inace bi svako filtriranje ponovo
+  // postavilo grupu i pregazilo ono sto je korisnik izabrao.
+  _lagerFilteriPunjeni=true;
+  var sg=ge('lager-grupa'), sd=ge('lager-debljina');
+  if(sg){
+    var g={}; _lagerKes.forEach(function(x){ if(x.grupa) g[x.grupa]=(g[x.grupa]||0)+1; });
+    sg.innerHTML='<option value="">sve grupe</option>'
+      +Object.keys(g).sort().map(function(n){
+        return '<option value="'+n+'">'+n+' ('+g[n]+')<\/option>'; }).join('');
+    // Ako je u ponudi vec izabrana grupa, otvori lager na njoj
+    var tren=getMatV();
+    if(tren&&Object.keys(g).indexOf(tren)>=0) sg.value=tren;
+  }
+  if(sd){
+    var d={}; _lagerKes.forEach(function(x){ if(x.debljina>0) d[x.debljina]=true; });
+    sd.innerHTML='<option value="">sve</option>'
+      +Object.keys(d).map(Number).sort(function(a,b){return a-b;}).map(function(n){
+        return '<option value="'+n+'">'+n+' cm ('+(n*10)+' mm)<\/option>'; }).join('');
+  }
+}
 function _lagerFilter(){
   var l=ge('lager-lista'); if(!l||!_lagerKes) return;
+  _napuniLagerFiltere();
   var q=(gs('lager-trazi')||'').toLowerCase().trim();
   var koef=parseFloat((gs('lager-koef')||'').replace(',','.'))||MAT_KOEF;
+  var fg=gs('lager-grupa')||'';
+  var fd=parseFloat(gs('lager-debljina')||'')||0;
+  var samoP=gc('lager-samo-ploce');
+  var skriveno=0;
   var lista=_lagerKes.filter(function(x){
+    if(samoP&&!_lagerJePloca(x)){ skriveno++; return false; }
+    if(fg&&x.grupa!==fg) return false;
+    if(fd&&Math.abs((x.debljina||0)-fd)>0.001) return false;
     if(!q) return true;
     return String(x.naziv||'').toLowerCase().indexOf(q)>=0
         || String(x.sifra||'').toLowerCase().indexOf(q)>=0;
@@ -10205,7 +10260,12 @@ function _lagerFilter(){
       +(x.jm||'m\u00b2')+'</span></div></div>';
   }).join('')
   +(lista.length>300?('<div style="text-align:center;padding:8px;color:#8a93a3;font-size:11px">'
-    +'Prikazano 300 od '+lista.length+' \u2014 suzi pretragu.</div>'):'');
+    +'Prikazano 300 od '+lista.length+' \u2014 suzi pretragu.</div>'):'')
+  +(skriveno?('<div style="margin-top:6px;padding:6px 8px;background:#fafbfc;border-radius:4px;'
+    +'font-size:10.5px;color:#8a93a3;text-align:center">'
+    +'\u2298 Sakriveno <b>'+skriveno+'</b> stavki koje nisu plo\u010de '
+    +'(gotovi proizvodi, roba u komadima, bez debljine). '
+    +'Isklju\u010di <b>samo plo\u010de</b> da ih vidi\u0161.</div>'):'');
 }
 function _lagerIzaberi(id,pjId){
   var x=(_lagerKes||[]).filter(function(y){return y.id===id&&y.pjId===pjId;})[0];
@@ -10214,14 +10274,24 @@ function _lagerIzaberi(id,pjId){
   _saveUndo();
   var en=ge('mat-naziv'); if(en) en.value=x.naziv||'';
   var ec=ge('mat-c');     if(ec) ec.value=(Math.round(x.cijena*koef*100)/100).toFixed(2);
-  // Debljina: lager je u cm, polje u mm
-  if(x.debljina){
+  // Debljina: LAGER JE U CENTIMETRIMA, polje u milimetrima - obavezna konverzija.
+  // Polje je 'mat-d-sel' (ne 'mat-d'); ako ponudjena debljina nije u popisu,
+  // prebacuje se na "Drugo..." i upisuje u 'mat-d-inp'.
+  if(x.debljina>0){
     var mm=Math.round(x.debljina*10);
-    var sel=ge('mat-d'), inp=ge('mat-d-inp');
+    var sel=ge('mat-d-sel'), inp=ge('mat-d-inp');
     if(sel){
-      var ima=Array.prototype.some.call(sel.options,function(o){return o.value===String(mm);});
-      if(ima){ sel.value=String(mm); if(inp) inp.style.display='none'; }
-      else { sel.value='custom'; if(inp){ inp.style.display=''; inp.value=mm; } }
+      var ima=false;
+      try{
+        ima=Array.prototype.some.call(sel.options||[],function(o){return o.value===String(mm);});
+      }catch(e){}
+      if(ima){
+        sel.value=String(mm);
+        if(inp){ inp.style.display='none'; inp.value=mm; }
+      } else {
+        sel.value='custom';
+        if(inp){ inp.style.display=''; inp.value=mm; }
+      }
     }
   }
   var a=items[activeIdx];
