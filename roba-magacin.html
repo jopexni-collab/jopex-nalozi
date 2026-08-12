@@ -1755,6 +1755,13 @@ function lagerFiltrirajISortiraj(){
       return !iskljuceno.has(v) && !(iskljuceno.has('') && (v==null||v===''));
     })
   );
+  // Live-pretraga unutar OTVORENOG panela (kucanje odmah filtrira tabelu, bez čekanja na
+  // OK) — korisno kad komercijaliste znaju šifru/naziv napamet i samo žele brzo da je
+  // otkucaju, umjesto da traže/čekiraju kroz listu kvadratića.
+  if(lagerFilterPanelKolona && lagerFilterPanelPretraga){
+    const tekst=lagerFilterPanelPretraga.toLowerCase();
+    prikaz=prikaz.filter(s=>String(lagerVrijednostZaKolonu(s,lagerFilterPanelKolona)??'').toLowerCase().includes(tekst));
+  }
   const {kolona, smjer}=lagerSort;
   const tipKolone=LAGER_KOLONE.find(c=>c.k===kolona)?.tip;
   // Šifra je tekst po tipu (radi tekstualnog filtera), ali se SORTIRA numerički — inače bi
@@ -1824,6 +1831,11 @@ function renderLagerZaglavlje(){
 // ═══ EXCEL-STIL FILTER PANEL (kvadratići, više vrednosti odjednom) ═══
 let lagerFilterPanelKolona=null;
 let lagerFilterPanelPretraga='';
+let lagerFilterPanelPozicija=null; // {top,left} — čuva se eksplicitno i PONOVO postavlja
+                                     // pri svakom iscrtavanju sadržaja panela, da se
+                                     // panel nikad "ne pomjeri" (neki browseri znaju da
+                                     // resetuju position:fixed elemente pri fokusiranju
+                                     // checkbox-a unutar njih — ovo je odbrambena mjera).
 
 // Vraća redove koji prežive SVE AKTIVNE filtere OSIM kolone "izuzKolona" — koristi se da
 // se opcije u JEDNOM padajućem meniju suze prema onome što je VEĆ filtrirano u drugim
@@ -1866,8 +1878,9 @@ function lagerOtvoriFilterPanel(kolona, dugmeEl){
   lagerFilterDraft=new Set(lagerKolonaFilteri[kolona]||[]); // kopija trenutnog stanja za uređivanje
   const panel=document.getElementById('lager-filter-panel');
   const r=dugmeEl.getBoundingClientRect();
-  panel.style.top=(r.bottom+4)+'px';
-  panel.style.left=Math.min(r.left, window.innerWidth-230)+'px';
+  lagerFilterPanelPozicija={top:(r.bottom+4)+'px', left:Math.min(r.left, window.innerWidth-230)+'px'};
+  panel.style.top=lagerFilterPanelPozicija.top;
+  panel.style.left=lagerFilterPanelPozicija.left;
   panel.style.display='flex';
   lagerRenderFilterPanel();
 }
@@ -1875,6 +1888,9 @@ function lagerOtvoriFilterPanel(kolona, dugmeEl){
 function lagerRenderFilterPanel(){
   const kolona=lagerFilterPanelKolona;
   const panel=document.getElementById('lager-filter-panel');
+  // Ponovo eksplicitno postavi poziciju — odbrambena mjera protiv toga da neki browseri
+  // pomjere position:fixed elemente na vrh ekrana pri interakciji sa checkbox-om unutra.
+  if(lagerFilterPanelPozicija){ panel.style.top=lagerFilterPanelPozicija.top; panel.style.left=lagerFilterPanelPozicija.left; }
   const sve=lagerDistinctVrijednosti(kolona);
   const pretraga=lagerFilterPanelPretraga.toLowerCase();
   const prikazane=sve.filter(v=>String(v).toLowerCase().includes(pretraga));
@@ -1882,7 +1898,7 @@ function lagerRenderFilterPanel(){
 
   panel.innerHTML=`
     <div style="padding:8px;border-bottom:1px solid #eee;">
-      <input type="text" placeholder="Pretraga..." value="${esc(lagerFilterPanelPretraga)}" oninput="lagerFilterPanelPretraga=this.value;lagerRenderFilterPanel();" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box;">
+      <input type="text" placeholder="Pretraga... (odmah filtrira tabelu)" value="${esc(lagerFilterPanelPretraga)}" oninput="lagerFilterPanelPretraga=this.value;lagerRenderFilterPanel();renderLagerRedovi();" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box;" autofocus>
     </div>
     <div style="overflow-y:auto;flex:1;padding:6px 8px;">
       <label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-weight:700;cursor:pointer;border-bottom:1px solid #eee;margin-bottom:3px;">
@@ -1906,7 +1922,16 @@ function lagerRenderFilterPanel(){
 function lagerFilterToggleVrijednost(vrijednost, oznaceno){
   if(oznaceno) lagerFilterDraft.delete(vrijednost);
   else lagerFilterDraft.add(vrijednost);
-  lagerRenderFilterPanel();
+  // NE poziva puni re-render panela — to je RUŠILO i PRAVILO IZNOVA sve checkbox
+  // elemente, što je vjerovatno uzrokovalo da neki browseri (fokus na novi element)
+  // automatski skroluju stranicu. Umjesto toga, mijenja se SAMO "Izaberi sve" kvadratić
+  // direktno, ostali elementi ostaju netaknuti (isti DOM čvorovi, isti fokus).
+  const kolona=lagerFilterPanelKolona;
+  const pretraga=lagerFilterPanelPretraga.toLowerCase();
+  const prikazane=lagerDistinctVrijednosti(kolona).filter(v=>String(v).toLowerCase().includes(pretraga));
+  const sveOznaceno=prikazane.every(v=>!lagerFilterDraft.has(v));
+  const izaberiSveCheckbox=document.querySelector('#lager-filter-panel input[type="checkbox"]');
+  if(izaberiSveCheckbox) izaberiSveCheckbox.checked=sveOznaceno;
 }
 
 function lagerFilterOznaciSve(oznaceno){
@@ -1938,6 +1963,7 @@ function lagerFilterPrimijeni(){
 function lagerZatvoriFilterPanel(){
   document.getElementById('lager-filter-panel').style.display='none';
   lagerFilterPanelKolona=null;
+  renderLagerRedovi(); // ukloni live-pretragu efekat sa tabele (panel je zatvoren)
 }
 
 // Zatvori panel klikom bilo gde van njega (draft se GUBI — isto kao "Otkaži").
@@ -1946,6 +1972,7 @@ document.addEventListener('click', e=>{
   if(panel && panel.style.display!=='none' && !panel.contains(e.target)){
     panel.style.display='none';
     lagerFilterPanelKolona=null;
+    renderLagerRedovi(); // ukloni live-pretragu efekat sa tabele
   }
 });
 

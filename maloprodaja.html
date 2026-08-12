@@ -1770,6 +1770,13 @@ function prLagerFiltrirajISortiraj(){
       return !iskljuceno.has(v) && !(iskljuceno.has('') && (v==null||v===''));
     })
   );
+  // Live-pretraga unutar OTVORENOG panela — kucanje odmah filtrira tabelu, korisno kad
+  // komercijaliste znaju šifru/naziv napamet (npr. otkucaju "91" ili "bengal") umjesto da
+  // traže/čekiraju kroz listu kvadratića.
+  if(prLagerFilterPanelKolona && prLagerFilterPanelPretraga){
+    const tekst=prLagerFilterPanelPretraga.toLowerCase();
+    prikaz=prikaz.filter(s=>String(prLagerVrijednost(s,prLagerFilterPanelKolona)??'').toLowerCase().includes(tekst));
+  }
   const {kolona,smjer}=prLagerSort;
   const brojcano=kolona==='sifra'||kolona==='debljina'||kolona==='stanje'||kolona==='cijena';
   prikaz=[...prikaz].sort((a,b)=>{
@@ -1822,7 +1829,7 @@ function renderPrLagerRedovi(){
       <td style="padding:3px 6px;text-align:center;">
         <div onclick="otvoriKaruselSlika(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')" style="position:relative;display:inline-block;cursor:pointer;">
           ${s.glavna_slika
-            ?`<img src="${esc(s.glavna_slika)}" style="width:36px;height:36px;object-fit:cover;border-radius:5px;border:1px solid #ddd;">`
+            ?`<img src="${esc(s.glavna_slika)}" loading="lazy" style="width:36px;height:36px;object-fit:cover;border-radius:5px;border:1px solid #ddd;">`
             :`<div style="width:36px;height:36px;border:1px dashed #ccc;border-radius:5px;background:#fafafa;display:flex;align-items:center;justify-content:center;font-size:14px;color:#aaa;">＋</div>`}
           ${parseInt(s.broj_slika)>1?`<span style="position:absolute;bottom:-4px;right:-4px;background:var(--blue,#1a5fa8);color:#fff;font-size:8.5px;font-weight:700;padding:1px 3px;border-radius:6px;line-height:1;">${s.broj_slika}</span>`:''}
         </div>
@@ -1869,7 +1876,7 @@ function prLagerRenderFilterPanel(){
   const sveOznaceno=prikazane.every(v=>!prLagerFilterDraft.has(v));
   panel.innerHTML=`
     <div style="padding:8px;border-bottom:1px solid #eee;">
-      <input type="text" placeholder="Pretraga..." value="${esc(prLagerFilterPanelPretraga)}" oninput="prLagerFilterPanelPretraga=this.value;prLagerRenderFilterPanel();" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box;">
+      <input type="text" placeholder="Pretraga... (odmah filtrira tabelu)" value="${esc(prLagerFilterPanelPretraga)}" oninput="prLagerFilterPanelPretraga=this.value;prLagerRenderFilterPanel();renderPrLagerRedovi();" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box;" autofocus>
     </div>
     <div style="overflow-y:auto;flex:1;padding:6px 8px;">
       <label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-weight:700;cursor:pointer;border-bottom:1px solid #eee;margin-bottom:3px;">
@@ -1887,7 +1894,15 @@ function prLagerRenderFilterPanel(){
       <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;background:var(--blue,#1a5fa8);color:#fff;font-weight:700;" onclick="prLagerFilterPrimijeni()">✓ OK</button>
     </div>`;
 }
-function prLagerFilterToggle(v,oznaceno){ if(oznaceno) prLagerFilterDraft.delete(v); else prLagerFilterDraft.add(v); prLagerRenderFilterPanel(); }
+function prLagerFilterToggle(v,oznaceno){
+  if(oznaceno) prLagerFilterDraft.delete(v); else prLagerFilterDraft.add(v);
+  // NE puni re-render - samo azurira "Izaberi sve" direktno (sprecava fokus/scroll skok).
+  const pretraga=prLagerFilterPanelPretraga.toLowerCase();
+  const prikazane=prLagerDistinctVrijednosti(prLagerFilterPanelKolona).filter(x=>String(x).toLowerCase().includes(pretraga));
+  const sveOznaceno=prikazane.every(x=>!prLagerFilterDraft.has(x));
+  const izaberiSveCheckbox=document.querySelector('#prlager-filter-panel input[type="checkbox"]');
+  if(izaberiSveCheckbox) izaberiSveCheckbox.checked=sveOznaceno;
+}
 function prLagerFilterOznaciSve(oznaceno){
   const pretraga=prLagerFilterPanelPretraga.toLowerCase();
   prLagerDistinctVrijednosti(prLagerFilterPanelKolona).filter(v=>String(v).toLowerCase().includes(pretraga)).forEach(v=>{
@@ -1910,16 +1925,17 @@ function prLagerFilterPrimijeni(){
 function prLagerZatvoriFilterPanel(){
   document.getElementById('prlager-filter-panel').style.display='none';
   prLagerFilterPanelKolona=null;
+  renderPrLagerRedovi();
 }
 document.addEventListener('click', e=>{
   const panel=document.getElementById('prlager-filter-panel');
   if(panel && panel.style.display!=='none' && !panel.contains(e.target)){
     panel.style.display='none';
     prLagerFilterPanelKolona=null;
+    renderPrLagerRedovi();
   }
 });
 
-/* ── SLIKA ARTIKLA — upload na R2, thumbnail u tabeli ── */
 /* ── SLIKE ARTIKLA — karusel (više slika po artiklu), upload na R2 ── */
 let msaTrenutniRobaId=null, msaSlike=[], msaTrenutniIndeks=0;
 
@@ -1997,9 +2013,43 @@ document.getElementById('msa-file-input').addEventListener('change', e=>{
   if(e.target.files[0]) posaljiSlikuArtikla(e.target.files[0]);
   e.target.value=''; // da isti fajl moze ponovo da se izabere ako treba
 });
+// Smanjuje sliku NA TELEFONU/RAČUNARU pre slanja — telefonske fotografije znaju biti
+// 3-10MB, a za mali thumbnail u tabeli to je potpuno nepotrebno. Ograničava na max 700px
+// (duža strana), JPEG kvalitet 75% — obično svede na par stotina KB.
+function smanjiSliku(file){
+  return new Promise((resolve, reject)=>{
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const MAX=700;
+      let {width:w, height:h}=img;
+      if(w>MAX||h>MAX){
+        if(w>h){ h=Math.round(h*MAX/w); w=MAX; }
+        else{ w=Math.round(w*MAX/h); h=MAX; }
+      }
+      const canvas=document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      canvas.toBlob(blob=>{
+        if(!blob){ reject(new Error('Neuspešna obrada slike.')); return; }
+        resolve(new File([blob], file.name.replace(/\.[^.]+$/,'')+'.jpg', {type:'image/jpeg'}));
+      }, 'image/jpeg', 0.75);
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Fajl nije prepoznat kao slika.')); };
+    img.src=url;
+  });
+}
+
 async function posaljiSlikuArtikla(file){
   const statusDiv=document.getElementById('msa-status');
-  statusDiv.style.display='block'; statusDiv.style.color='#8b96a5'; statusDiv.textContent='Otpremanje...';
+  statusDiv.style.display='block'; statusDiv.style.color='#8b96a5'; statusDiv.textContent='Obrada slike...';
+  try{
+    file=await smanjiSliku(file);
+  }catch(e){
+    statusDiv.style.color='var(--red)'; statusDiv.textContent='✗ '+e.message; return;
+  }
+  statusDiv.textContent='Otpremanje...';
   const fd=new FormData();
   fd.append('slika', file);
   try{
