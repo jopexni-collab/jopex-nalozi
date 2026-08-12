@@ -1879,24 +1879,37 @@ async function ucitajSaldoPoKupcima(tiho){
       return;
     }
     cont.innerHTML=rows.map(k=>{
-      const pozitivan=k.saldo>0;
+      // Kupac može imati dug/avans u DVE valute ODJEDNOM (npr. dužan u KM iz jedne PJ,
+      // a ima avans u EUR iz druge) — nikad se ne miješaju/konvertuju, prikazuju se
+      // OBA reda ako oba postoje.
+      const redovi=[];
+      if(Math.abs(k.saldo_km)>0.004) redovi.push({saldo:k.saldo_km, valuta:'KM'});
+      if(Math.abs(k.saldo_eur)>0.004) redovi.push({saldo:k.saldo_eur, valuta:'EUR'});
+      const bilo_sta_pozitivno=redovi.some(r=>r.saldo>0);
       return `
       <div class="otp-card" onclick='otvoriKarticuKupca(${k.kupac_id},"${esc(k.naziv).replace(/"/g,'&quot;')}")'>
         <div class="otp-top">
           <span class="otp-broj">${esc(k.naziv)}</span>
-          <span class="badge-odstupanje" style="background:${pozitivan?'#e8f5ec':'#fce8e6'};color:${pozitivan?'var(--green)':'var(--red)'};">
-            ${pozitivan?'Ima avans':'Duguje'}
+          <span class="badge-odstupanje" style="background:${bilo_sta_pozitivno?'#e8f5ec':'#fce8e6'};color:${bilo_sta_pozitivno?'var(--green)':'var(--red)'};">
+            ${redovi.length>1?'Avans i dug':bilo_sta_pozitivno?'Ima avans':'Duguje'}
           </span>
         </div>
         <div class="otp-meta">${k.telefon?esc(k.telefon):''}${k.grad?' · '+esc(k.grad):''}</div>
-        <div class="otp-iznos" style="color:${pozitivan?'var(--green)':'var(--red)'};">${fmValuta(Math.abs(k.saldo),k.valuta||'KM')}</div>
+        ${redovi.map(r=>`<div class="otp-iznos" style="color:${r.saldo>0?'var(--green)':'var(--red)'};">${fmValuta(Math.abs(r.saldo),r.valuta)}</div>`).join('')}
       </div>`;
     }).join('');
     totalDiv.style.display='block';
-    const ukupnoNegativno=rows.filter(k=>k.saldo<0).reduce((s,k)=>s+Math.abs(k.saldo),0);
-    const ukupnoPozitivno=rows.filter(k=>k.saldo>0).reduce((s,k)=>s+k.saldo,0);
-    const valutaZaUkupno=objekatId?(rows[0]?.valuta||'KM'):'KM';
-    totalDiv.innerHTML=`<span style="color:var(--red);">Duguju: ${fmValuta(ukupnoNegativno,valutaZaUkupno)}</span><span class="cnt">Imaju avans: ${fmValuta(ukupnoPozitivno,valutaZaUkupno)} &middot; ${rows.length} kupaca</span>`;
+    // Ukupno se računa ODVOJENO po valuti — nikad zbirno konvertovano.
+    const ukupnoDugKM=rows.reduce((s,k)=>s+Math.min(0,k.saldo_km),0);
+    const ukupnoAvansKM=rows.reduce((s,k)=>s+Math.max(0,k.saldo_km),0);
+    const ukupnoDugEUR=rows.reduce((s,k)=>s+Math.min(0,k.saldo_eur),0);
+    const ukupnoAvansEUR=rows.reduce((s,k)=>s+Math.max(0,k.saldo_eur),0);
+    const dijelovi=[];
+    if(Math.abs(ukupnoDugKM)>0.004||Math.abs(ukupnoAvansKM)>0.004)
+      dijelovi.push(`<span style="color:var(--red);">Duguju: ${fmValuta(Math.abs(ukupnoDugKM),'KM')}</span><span class="cnt">Imaju avans: ${fmValuta(ukupnoAvansKM,'KM')}</span>`);
+    if(Math.abs(ukupnoDugEUR)>0.004||Math.abs(ukupnoAvansEUR)>0.004)
+      dijelovi.push(`<span style="color:var(--red);">Duguju: ${fmValuta(Math.abs(ukupnoDugEUR),'EUR')}</span><span class="cnt">Imaju avans: ${fmValuta(ukupnoAvansEUR,'EUR')}</span>`);
+    totalDiv.innerHTML=dijelovi.join(' &middot; ')+`<span class="cnt">${rows.length} kupaca</span>`;
   }catch(e){
     cont.innerHTML='<div class="empty-msg">Greška pri učitavanju.</div>';
     totalDiv.style.display='none';

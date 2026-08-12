@@ -1244,15 +1244,15 @@ async function ucitajVpCekanje(){
           <div style="font-size:12.5px;">
             <b>${esc(o.broj)}</b> — ${esc(o.kupac_naziv||'—')}
             <span style="color:#8b96a5;"> · ${esc(o.objekt_naziv||'')} · ${fd(o.datum)} · Komercijalista: ${esc(skratiIme(o.komercijalista_ime||'—'))}</span>
-            <div style="margin-top:2px;">Ukupno: ${fm(o.ukupan_iznos)}${!jePlaceno?` · Duguje: <b style="color:var(--red);">${fm(o.duguje)}</b>`:` · Plaćeno: <b>${fm(o.iznos_placeno)}</b>`}</div>
+            <div style="margin-top:2px;">Ukupno: ${fmValuta(o.ukupan_iznos,o.valuta)}${!jePlaceno?` · Duguje: <b style="color:var(--red);">${fmValuta(o.duguje,o.valuta)}</b>`:` · Plaćeno: <b>${fmValuta(o.iznos_placeno,o.valuta)}</b>`}</div>
           </div>
           ${akcija}
         </div>
         ${jePlaceno?`<div style="font-size:11px;color:#5a6b5f;margin-top:6px;padding-top:6px;border-top:1px dashed #a8d8b8;">
           Struktura naplate:
-          ${parseFloat(o.vp_iznos)>0?` <b>VP (u trenutku prodaje):</b> ${fm(o.vp_iznos)} KM`:''}
-          ${parseFloat(o.naplaceno_gotovina)>0?` &middot; <b>Gotovina (docnije):</b> ${fm(o.naplaceno_gotovina)} KM`:''}
-          ${parseFloat(o.naplaceno_banka)>0?` &middot; <b>Banka (docnije):</b> ${fm(o.naplaceno_banka)} KM`:''}
+          ${parseFloat(o.vp_iznos)>0?` <b>VP (u trenutku prodaje):</b> ${fmValuta(o.vp_iznos,o.valuta)}`:''}
+          ${parseFloat(o.naplaceno_gotovina)>0?` &middot; <b>Gotovina (docnije):</b> ${fmValuta(o.naplaceno_gotovina,o.valuta)}`:''}
+          ${parseFloat(o.naplaceno_banka)>0?` &middot; <b>Banka (docnije):</b> ${fmValuta(o.naplaceno_banka,o.valuta)}`:''}
         </div>`:''}
       </div>
     `;}).join('');

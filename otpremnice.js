@@ -394,25 +394,28 @@ router.get('/saldo-po-kupcima', async (req, res) => {
     if (objekt_id) { where.push(`t.objekt_id = $${i++}`); vals.push(objekt_id); }
     if (dozvoljeniPJ) { where.push(`t.objekt_id = ANY($${i++}::int[])`); vals.push(dozvoljeniPJ); }
     const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
-    // Ako je filtrirano na JEDAN konkretan PJ, prikaži u NJEGOVOJ pravoj valuti (ne uvijek
-    // pretvoreno u KM) — inače (više PJ pomiješano) normalizacija u KM ostaje neophodna.
-    const iznosIzraz = objekt_id
-      ? `SUM(t.iznos)`
-      : `SUM(CASE WHEN p.valuta='EUR' THEN t.iznos*1.95 ELSE t.iznos END)`;
+    // Dug se NIKAD ne miješa između valuta — dug nastao preko EUR PJ ostaje u EUR, dug
+    // preko KM PJ ostaje u KM. Umjesto JEDNOG broja (koji bi zahtijevao konverziju), svaki
+    // kupac dobija DVA odvojena salda — jedan po valuti, prikazuju se oba ako oba postoje.
     const r = await pool.query(
       `SELECT k.id AS kupac_id, k.naziv, k.telefon, k.grad,
-              COALESCE(${iznosIzraz},0) AS saldo,
-              MAX(p.valuta) AS valuta
+              COALESCE(SUM(CASE WHEN COALESCE(p.valuta,'KM')='KM' THEN t.iznos ELSE 0 END),0) AS saldo_km,
+              COALESCE(SUM(CASE WHEN p.valuta='EUR' THEN t.iznos ELSE 0 END),0) AS saldo_eur
        FROM kupac_transakcije t
        JOIN kupci k ON k.id = t.kupac_id
        LEFT JOIN prodajni_objekti p ON p.id = t.objekt_id
        ${whereClause}
        GROUP BY k.id, k.naziv, k.telefon, k.grad
-       HAVING COALESCE(${iznosIzraz},0) != 0
-       ORDER BY 5 ASC`,
+       HAVING COALESCE(SUM(CASE WHEN COALESCE(p.valuta,'KM')='KM' THEN t.iznos ELSE 0 END),0) != 0
+           OR COALESCE(SUM(CASE WHEN p.valuta='EUR' THEN t.iznos ELSE 0 END),0) != 0
+       ORDER BY k.naziv`,
       vals
     );
-    res.json(r.rows.map(row => ({ ...row, saldo: +parseFloat(row.saldo).toFixed(2), valuta: objekt_id ? (row.valuta||'KM') : 'KM' })));
+    res.json(r.rows.map(row => ({
+      ...row,
+      saldo_km: +parseFloat(row.saldo_km).toFixed(2),
+      saldo_eur: +parseFloat(row.saldo_eur).toFixed(2),
+    })));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -581,7 +584,12 @@ router.get('/istorija-zakljucavanja', async (req, res) => {
 router.get('/po-broju/:broj', async (req, res) => {
   try {
     const user = req.session?.user;
-    const h = await pool.query('SELECT * FROM otpremnice WHERE broj=$1', [req.params.broj]);
+    const h = await pool.query(
+      `SELECT o.*, p.valuta FROM otpremnice o
+       LEFT JOIN prodajni_objekti p ON p.id = o.objekt_id
+       WHERE o.broj=$1`,
+      [req.params.broj]
+    );
     if (!h.rows.length) return res.status(404).json({ error: 'Otpremnica nije pronađena.' });
     let otp = h.rows[0];
     if (user?.rola !== 'admin' && otp.komercijalista_id !== user.id) {
@@ -592,7 +600,7 @@ router.get('/po-broju/:broj', async (req, res) => {
       if (!bp.rows.length) return res.status(403).json({ error: 'Nema pristupa.' });
     }
     const s = await pool.query('SELECT * FROM otpremnica_stavke WHERE otpremnica_id=$1 ORDER BY id', [otp.id]);
-    res.json({ ...otp, stavke: s.rows });
+    res.json({ ...otp, valuta: otp.valuta || 'KM', stavke: s.rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -571,6 +571,7 @@ router.get('/vp-cekanje', async (req, res) => {
       )
       SELECT
         o.id, o.broj, o.datum, o.kupac_naziv, o.komercijalista_ime, o.objekt_naziv,
+        COALESCE(pj.valuta,'KM') AS valuta,
         o.ukupan_iznos, o.iznos_placeno, o.status_placanja,
         (o.ukupan_iznos - o.iznos_placeno) AS duguje,
         COUNT(g.id) AS broj_zapisa,
@@ -585,8 +586,9 @@ router.get('/vp-cekanje', async (req, res) => {
         AND (g.opis LIKE 'Prodaja (bruto)%' OR g.opis LIKE 'Dug po otpremnici%')
       LEFT JOIN vp_bruto vb ON vb.nalog_r_br = o.broj
       LEFT JOIN naplate_agg na ON na.otpremnica_broj = o.broj
+      LEFT JOIN prodajni_objekti pj ON pj.id = o.objekt_id
       ${dozvoljeniPJ ? 'WHERE o.objekt_id = ANY($1::int[])' : ''}
-      GROUP BY o.id, o.broj, o.datum, o.kupac_naziv, o.komercijalista_ime, o.objekt_naziv,
+      GROUP BY o.id, o.broj, o.datum, o.kupac_naziv, o.komercijalista_ime, o.objekt_naziv, pj.valuta,
                o.ukupan_iznos, o.iznos_placeno, o.status_placanja,
                na.naplatio_ime, na.naplatio_kada, vb.vp_iznos, na.naplaceno_gotovina, na.naplaceno_banka
       ORDER BY o.datum DESC
