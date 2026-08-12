@@ -726,6 +726,14 @@ async function ucitajBlagajnaBreakdown(tiho){
     const dugPoNalogu=new Map(); // nalog_r_br -> dug red (iz gRows)
     gRows.filter(x=>(x.opis||'').startsWith('Dug po otpremnici')).forEach(x=>dugPoNalogu.set(x.nalog_r_br, x));
 
+    // Ako je dug za ovaj nalog KASNIJE naplaćen (postoji "Naplata duga —" red za isti
+    // nalog_r_br bilo gdje u istoriji), naglasi to umjesto da izgleda kao da dug još čeka
+    // — bez ovoga je zbunjujuće kad se "nastanak duga" i "naplata duga" prikazuju kao dva
+    // naizgled nepovezana reda istog dana (ili različitih dana).
+    const naloziNaplaceniKasnije=new Set(
+      gRows.filter(x=>(x.opis||'').startsWith('Naplata duga')).map(x=>x.nalog_r_br)
+    );
+
     gRows.forEach(x=>{
       const jeBruto=(x.opis||'').startsWith('Prodaja (bruto)');
       if (jeBruto && dugPoNalogu.has(x.nalog_r_br)) return; // obradjuje se ispod, zajedno sa dugom
@@ -745,6 +753,7 @@ async function ucitajBlagajnaBreakdown(tiho){
       const dugIznos=-parseFloat(dug.iznos);
       d.uplate.push({
         iznos: uplaceno, datum: bruto.datum, djelimicno: true, dugIznos,
+        dugNaplacenKasnije: naloziNaplaceniKasnije.has(bruto.nalog_r_br),
         opis: `${esc(skratiIme(bruto.primio))} — ${esc(bruto.opis||'')}`,
       });
     });
@@ -798,7 +807,9 @@ async function ucitajBlagajnaBreakdown(tiho){
                      <div>${u.opis}</div>
                      <div style="display:flex;justify-content:flex-end;gap:8px;font-weight:700;">
                        <span style="color:var(--green);">✓ ${fmValuta(u.iznos,pj.valuta)}</span>
-                       <span style="color:var(--red);">⏳ dug ${fmValuta(u.dugIznos,pj.valuta)}</span>
+                       ${u.dugNaplacenKasnije
+                         ? `<span style="color:#8b96a5;text-decoration:line-through;" title="Ovaj dug je kasnije naplaćen — vidi 'Naplata duga' red u istoriji">dug ${fmValuta(u.dugIznos,pj.valuta)}</span><span style="color:var(--green);">✓ naplaćeno kasnije</span>`
+                         : `<span style="color:var(--red);">⏳ dug ${fmValuta(u.dugIznos,pj.valuta)}</span>`}
                      </div>
                    </div>`
                 : `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;${u.prenos?'font-style:italic;color:#8b96a5;':''}"><span>${u.opis}</span><span style="font-weight:700;">${fmValuta(u.iznos,pj.valuta)}</span></div>`
