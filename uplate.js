@@ -190,4 +190,51 @@ router.post('/', async (req, res) => {
   }
 });
 
+// DELETE /api/uplate/:gotovinaId - samo admin, za brisanje ČISTE greške u unosu (npr.
+// pogrešan iznos/kupac otkucan slučajno). Za razliku od isplate.js (jedna transakcija),
+// jedna Uplata može pokriti VIŠE otpremnica odjednom — briše se u obrnutom redosledu:
+// prvo se VRAĆA iznos_placeno/status_placanja na svakoj pogodjenoj otpremnici, zatim se
+// brišu kupac_transakcije redovi, na kraju sam gotovina red.
+router.delete('/:gotovinaId', async (req, res) => {
+  const user = req.session?.user;
+  if (user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin može trajno obrisati uplatu.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const gRes = await client.query('SELECT * FROM gotovina WHERE id=$1 FOR UPDATE', [req.params.gotovinaId]);
+    if (!gRes.rows.length) throw Object.assign(new Error('Uplata nije pronađena.'), { status: 404 });
+    if (!String(gRes.rows[0].nalog_r_br || '').startsWith('UPL-'))
+      throw Object.assign(new Error('Ovo nije zapis uplate (UPL-).'), { status: 400 });
+
+    const ktRes = await client.query(
+      'SELECT * FROM kupac_transakcije WHERE gotovina_id=$1 FOR UPDATE',
+      [req.params.gotovinaId]
+    );
+    for (const kt of ktRes.rows) {
+      if (kt.tip === 'naplata_duga' && kt.otpremnica_id) {
+        // Vrati otpremnicu na stanje PRIJE ove uplate — oduzmi ono što je ova uplata
+        // pokrila, i preračunaj status (placeno/djelimicno/neplaceno).
+        const oRes = await client.query('SELECT ukupan_iznos, iznos_placeno FROM otpremnice WHERE id=$1 FOR UPDATE', [kt.otpremnica_id]);
+        if (oRes.rows.length) {
+          const noviPlaceno = +(parseFloat(oRes.rows[0].iznos_placeno) - parseFloat(kt.iznos)).toFixed(2);
+          const noviStatus = noviPlaceno <= 0.004 ? 'neplaceno' : (noviPlaceno < parseFloat(oRes.rows[0].ukupan_iznos) - 0.004 ? 'djelimicno' : 'placeno');
+          await client.query(
+            'UPDATE otpremnice SET iznos_placeno=$1, status_placanja=$2 WHERE id=$3',
+            [Math.max(0, noviPlaceno), noviStatus, kt.otpremnica_id]
+          );
+        }
+      }
+    }
+    await client.query('DELETE FROM kupac_transakcije WHERE gotovina_id=$1', [req.params.gotovinaId]);
+    await client.query('DELETE FROM gotovina WHERE id=$1', [req.params.gotovinaId]);
+    await client.query('COMMIT');
+    res.json({ ok: true, otpremnica_vracena: ktRes.rows.filter(k => k.otpremnica_id).length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;

@@ -143,6 +143,34 @@ router.post('/', async (req, res) => {
 });
 
 // DELETE /api/isplate/:id - samo admin (ispravka greške u unosu) — briše i povezan red u gotovini
+router.delete('/:id', async (req, res) => {
+  const user = req.session?.user;
+  if (user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin može trajno obrisati unos (za storno bez brisanja koristi "Storniraj").' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await client.query('SELECT * FROM isplate WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!r.rows.length) throw Object.assign(new Error('Isplata nije pronađena.'), { status: 404 });
+    const isp = r.rows[0];
+    // Prazan trag — briše se SVE što je kreiranje ove isplate upisalo: red u gotovini
+    // (po nalog_r_br='ISP-{id}'), red u kupac_transakcije (ako je bio povrat komitentu),
+    // i sam isplate red. Za razliku od "Storniraj", ovo ne ostavlja NIKAKAV trag da je
+    // unos ikad postojao — namjerno rezervisano SAMO za admina, za brisanje čistih grešaka
+        // u unosu (npr. pogrešan iznos/kupac otkucan slučajno), ne za stvarno poništavanje
+    // isplate koja se stvarno desila.
+    await client.query('DELETE FROM kupac_transakcije WHERE gotovina_id IN (SELECT id FROM gotovina WHERE nalog_r_br=$1)', [`ISP-${isp.id}`]);
+    await client.query('DELETE FROM gotovina WHERE nalog_r_br=$1', [`ISP-${isp.id}`]);
+    await client.query('DELETE FROM isplate WHERE id=$1', [isp.id]);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // POST /api/isplate/:id/storniraj — poništava isplatu (npr. dupli klik greškom). NE
 // briše ništa — markira kao stornirano i pravi REVERZNI red u gotovini (ako je postojao),
 // da trag ostane potpun. Ista dozvola kao kreiranje (admin/moze_prodavati/blagajnik) —
