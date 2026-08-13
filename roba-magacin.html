@@ -464,6 +464,23 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
 
     <div id="msa-status" style="font-size:12px;color:var(--red);margin-bottom:8px;display:none;"></div>
+
+    <!-- 3D model (FBX) — odvojeno od slika, jedan model po artiklu -->
+    <div style="border-top:1px solid #eee;margin-top:12px;padding-top:12px;">
+      <div style="font-size:12.5px;font-weight:700;margin-bottom:8px;">🧊 3D model (FBX)</div>
+      <div id="m3d-postojeci" style="display:none;margin-bottom:8px;">
+        <div id="m3d-viewer" style="width:100%;height:300px;background:#f0f2f5;border-radius:8px;overflow:hidden;position:relative;">
+          <div id="m3d-ucitavanje" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#8b96a5;font-size:13px;">Učitavanje 3D modela...</div>
+        </div>
+        <div style="font-size:11px;color:#8b96a5;margin-top:4px;text-align:center;">Prevuci mišem da rotiraš · točkić za zum</div>
+        <button onclick="m3dObrisi()" style="width:100%;margin-top:8px;font-size:12px;padding:7px;border:none;border-radius:6px;background:var(--red,#c0392b);color:#fff;cursor:pointer;">🗑 Ukloni 3D model</button>
+      </div>
+      <div id="m3d-drop" style="border:2px dashed var(--border,#ccc);border-radius:10px;padding:20px 12px;text-align:center;color:#8b96a5;font-size:13px;cursor:pointer;">
+        🧊 Klikni ili prevuci <b>.fbx</b> fajl ovde
+      </div>
+      <input type="file" id="m3d-file" accept=".fbx" style="display:none;">
+      <div id="m3d-status" style="font-size:12px;color:var(--red);margin-top:8px;display:none;"></div>
+    </div>
   </div>
 </div>
 
@@ -1512,6 +1529,153 @@ function uvslikaSmanjiSliku(file){
    nijedan način da se doda pojedinačna slika, samo grupni/bulk uvoz. ── */
 let msaTrenutniRobaId=null, msaSlike=[], msaTrenutniIndeks=0;
 
+/* ═══ 3D MODEL (FBX) — pregled direktno u pregledaču preko Three.js ═══
+   Biblioteka se učitava LENJO (tek kad se prvi put otvori model) — ne usporava stranicu
+   onima koji 3D uopšte ne koriste. Za razliku od slika, FBX se NE kompresuje (3D
+   geometrija se ne može smanjiti kao slika) — pa modeli mogu biti veliki i sporiji. */
+let m3dUcitanaBiblioteka=false, m3dScena=null, m3dAnimacija=null;
+
+function m3dUcitajBiblioteku(){
+  if(m3dUcitanaBiblioteka) return Promise.resolve();
+  return new Promise((resolve,reject)=>{
+    const s1=document.createElement('script');
+    s1.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+    s1.onload=()=>{
+      const s2=document.createElement('script');
+      s2.src='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js';
+      s2.onload=()=>{
+        const s3=document.createElement('script');
+        s3.src='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/inflate.min.js';
+        s3.onload=()=>{
+          const s4=document.createElement('script');
+          s4.src='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
+          s4.onload=()=>{ m3dUcitanaBiblioteka=true; resolve(); };
+          s4.onerror=()=>reject(new Error('Neuspešno učitavanje kontrola.'));
+          document.head.appendChild(s4);
+        };
+        s3.onerror=()=>reject(new Error('Neuspešno učitavanje dekompresije.'));
+        document.head.appendChild(s3);
+      };
+      s2.onerror=()=>reject(new Error('Neuspešno učitavanje FBX čitača.'));
+      document.head.appendChild(s2);
+    };
+    s1.onerror=()=>reject(new Error('Neuspešno učitavanje 3D biblioteke.'));
+    document.head.appendChild(s1);
+  });
+}
+
+function m3dOcistiScenu(){
+  if(m3dAnimacija){ cancelAnimationFrame(m3dAnimacija); m3dAnimacija=null; }
+  if(m3dScena?.renderer){ m3dScena.renderer.dispose(); }
+  const viewer=document.getElementById('m3d-viewer');
+  if(viewer) viewer.querySelectorAll('canvas').forEach(c=>c.remove());
+  m3dScena=null;
+}
+
+async function m3dPrikazi(url){
+  const viewer=document.getElementById('m3d-viewer');
+  const ucitavanjeDiv=document.getElementById('m3d-ucitavanje');
+  ucitavanjeDiv.style.display='flex';
+  ucitavanjeDiv.textContent='Učitavanje 3D biblioteke...';
+  try{
+    await m3dUcitajBiblioteku();
+    ucitavanjeDiv.textContent='Učitavanje modela...';
+    m3dOcistiScenu();
+
+    const sirina=viewer.clientWidth, visina=viewer.clientHeight;
+    const scene=new THREE.Scene();
+    scene.background=new THREE.Color(0xf0f2f5);
+    const camera=new THREE.PerspectiveCamera(50, sirina/visina, 0.1, 5000);
+    const renderer=new THREE.WebGLRenderer({antialias:true});
+    renderer.setSize(sirina, visina);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    viewer.appendChild(renderer.domElement);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const dirSvjetlo=new THREE.DirectionalLight(0xffffff, 0.8);
+    dirSvjetlo.position.set(1,1,1);
+    scene.add(dirSvjetlo);
+
+    const controls=new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping=true;
+
+    const loader=new THREE.FBXLoader();
+    loader.load(url, obj=>{
+      // Automatski centriraj i uklopi model u vidno polje — FBX modeli dolaze u raznim
+      // razmerama (metri/centimetri/inči), pa fiksna kamera često promaši model.
+      const box=new THREE.Box3().setFromObject(obj);
+      const centar=box.getCenter(new THREE.Vector3());
+      const velicina=box.getSize(new THREE.Vector3());
+      obj.position.sub(centar);
+      const maxDim=Math.max(velicina.x, velicina.y, velicina.z) || 1;
+      camera.position.set(0, maxDim*0.4, maxDim*1.8);
+      camera.lookAt(0,0,0);
+      controls.update();
+      scene.add(obj);
+      ucitavanjeDiv.style.display='none';
+    }, undefined, err=>{
+      ucitavanjeDiv.textContent='✗ Model se nije mogao učitati.';
+    });
+
+    m3dScena={renderer};
+    (function animiraj(){
+      m3dAnimacija=requestAnimationFrame(animiraj);
+      controls.update();
+      renderer.render(scene, camera);
+    })();
+  }catch(e){
+    ucitavanjeDiv.textContent='✗ '+e.message;
+  }
+}
+
+document.getElementById('m3d-drop').addEventListener('click', ()=>document.getElementById('m3d-file').click());
+document.getElementById('m3d-drop').addEventListener('dragover', e=>{ e.preventDefault(); e.currentTarget.style.background='#eaf2fb'; e.currentTarget.style.borderColor='var(--blue,#1a5fa8)'; });
+document.getElementById('m3d-drop').addEventListener('dragleave', e=>{ e.currentTarget.style.background=''; e.currentTarget.style.borderColor=''; });
+document.getElementById('m3d-drop').addEventListener('drop', e=>{
+  e.preventDefault(); e.currentTarget.style.background=''; e.currentTarget.style.borderColor='';
+  if(e.dataTransfer.files[0]) m3dPosalji(e.dataTransfer.files[0]);
+});
+document.getElementById('m3d-file').addEventListener('change', e=>{ if(e.target.files[0]) m3dPosalji(e.target.files[0]); e.target.value=''; });
+
+async function m3dPosalji(file){
+  const statusDiv=document.getElementById('m3d-status');
+  if(!file.name.toLowerCase().endsWith('.fbx')){
+    statusDiv.style.display='block'; statusDiv.style.color='var(--red)';
+    statusDiv.textContent='✗ Podržan je samo .fbx format.';
+    return;
+  }
+  const mb=(file.size/1024/1024).toFixed(1);
+  statusDiv.style.display='block'; statusDiv.style.color='#8b96a5';
+  statusDiv.textContent=`✓ Fajl "${file.name}" (${mb} MB) uhvaćen — otpremanje...`;
+  const fd=new FormData();
+  fd.append('model', file);
+  try{
+    const r=await fetch(`${API}/api/roba/${msaTrenutniRobaId}/model3d`, {method:'POST', body:fd});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška.');
+    statusDiv.style.color='var(--green)'; statusDiv.textContent='✓ 3D model sačuvan.';
+    const stavka=lagerPodaci.find(s=>s.id===msaTrenutniRobaId);
+    if(stavka) stavka.model_3d_url=data.model_3d_url;
+    document.getElementById('m3d-postojeci').style.display='block';
+    m3dPrikazi(data.model_3d_url);
+    setTimeout(()=>{ statusDiv.style.display='none'; }, 2000);
+  }catch(e){
+    statusDiv.style.color='var(--red)'; statusDiv.textContent='✗ '+e.message;
+  }
+}
+
+async function m3dObrisi(){
+  if(!confirm('Ukloniti 3D model sa ovog artikla?')) return;
+  try{
+    const r=await fetch(`${API}/api/roba/${msaTrenutniRobaId}/model3d`, {method:'DELETE'});
+    if(!r.ok) throw new Error((await r.json()).error||'Greška.');
+    m3dOcistiScenu();
+    document.getElementById('m3d-postojeci').style.display='none';
+    const stavka=lagerPodaci.find(s=>s.id===msaTrenutniRobaId);
+    if(stavka) stavka.model_3d_url=null;
+  }catch(e){ alert('✗ '+e.message); }
+}
+
 async function otvoriKaruselSlika(robaId, naziv){
   msaTrenutniRobaId=robaId;
   document.getElementById('msa-naziv').textContent=naziv;
@@ -1520,6 +1684,16 @@ async function otvoriKaruselSlika(robaId, naziv){
   document.getElementById('msa-karusel').style.display='none';
   msaOtkaziCekaju(); // očisti eventualne neposlate slike od PRETHODNOG artikla
   msaSlike=[]; msaTrenutniIndeks=0;
+  // 3D model — očisti prethodni prikaz, pa prikaži novi ako ovaj artikal ima model.
+  m3dOcistiScenu();
+  document.getElementById('m3d-status').style.display='none';
+  const stavka=lagerPodaci.find(s=>s.id===robaId);
+  if(stavka?.model_3d_url){
+    document.getElementById('m3d-postojeci').style.display='block';
+    m3dPrikazi(stavka.model_3d_url);
+  }else{
+    document.getElementById('m3d-postojeci').style.display='none';
+  }
   try{
     const r=await fetch(`${API}/api/roba/${robaId}/slike`);
     msaSlike=await r.json();
@@ -2554,6 +2728,7 @@ function renderLagerRedovi(){
             ?`<img src="${esc(s.glavna_slika)}" loading="lazy" style="width:36px;height:36px;object-fit:cover;border-radius:5px;border:1px solid #ddd;">`
             :`<div style="width:36px;height:36px;border:1px dashed #ccc;border-radius:5px;background:#fafafa;display:flex;align-items:center;justify-content:center;font-size:14px;color:#aaa;">＋</div>`}
           ${parseInt(s.broj_slika)>1?`<span style="position:absolute;bottom:-4px;right:-4px;background:var(--blue,#1a5fa8);color:#fff;font-size:8.5px;font-weight:700;padding:1px 3px;border-radius:6px;line-height:1;">${s.broj_slika}</span>`:''}
+          ${s.model_3d_url?`<span title="Ima 3D model" style="position:absolute;top:-4px;left:-4px;background:#6b4fa0;color:#fff;font-size:8px;padding:1px 3px;border-radius:6px;line-height:1;">3D</span>`:''}
         </div>
       </td>
     </tr>

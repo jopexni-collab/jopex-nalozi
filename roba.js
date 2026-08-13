@@ -116,6 +116,7 @@ router.get('/lager-prodaja', zahtijevaProdaju, async (req, res) => {
       `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
               rp.cijena, rp.stanje,
               (SELECT url FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS glavna_slika,
+              r.model_3d_url,
               (SELECT COUNT(*) FROM roba_slike WHERE roba_id=r.id) AS broj_slika
        FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
        WHERE r.aktivan=true
@@ -141,6 +142,7 @@ router.get('/lager', zahtijevaRobaMagacin, async (req, res) => {
     const r = await pool.query(
       `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
               (SELECT url FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS glavna_slika,
+              r.model_3d_url,
               (SELECT COUNT(*) FROM roba_slike WHERE roba_id=r.id) AS broj_slika,
               rp.cijena, rp.stanje,
               (rp.cijena * rp.stanje) AS ukupno
@@ -1628,6 +1630,33 @@ router.patch('/:id/debljina', async (req, res) => {
 // se upisuje SAMO URL (ne sam fajl). Prva ikad dodana slika za taj artikal automatski
 // postaje glavna — svaka sledeća se samo dodaje u red, glavna ostaje ista dok se
 // eksplicitno ne promijeni.
+// POST /api/roba/:id/model3d — otprema FBX (3D model) uz artikal. Jedan model po artiklu
+// (nova otprema zamjenjuje prethodni). Fajl ide na R2, u bazu samo URL — isti obrazac kao
+// slike, ali BEZ kompresije (3D geometrija se ne može smanjiti kao slika).
+router.post('/:id/model3d', zahtijevaProdaju, upload.single('model'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Nema fajla.' });
+  const ime = (req.file.originalname || '').toLowerCase();
+  if (!ime.endsWith('.fbx')) return res.status(400).json({ error: 'Podržan je samo .fbx format.' });
+  try {
+    const kljuc = `roba-3d/${req.params.id}-${Date.now()}.fbx`;
+    const url = await uploadFile(kljuc, req.file.buffer, 'application/octet-stream');
+    await pool.query('UPDATE roba SET model_3d_url=$1, azurirano=now() WHERE id=$2', [url, req.params.id]);
+    res.json({ ok: true, model_3d_url: url });
+  } catch (err) {
+    res.status(500).json({ error: 'Greška pri otpremanju modela: ' + err.message });
+  }
+});
+
+// DELETE /api/roba/:id/model3d — uklanja vezu ka 3D modelu (undo pogrešnog unosa).
+router.delete('/:id/model3d', zahtijevaProdaju, async (req, res) => {
+  try {
+    await pool.query('UPDATE roba SET model_3d_url=NULL, azurirano=now() WHERE id=$1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/:id/slika', zahtijevaProdaju, upload.single('slika'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Nema fajla.' });
   if (!req.file.mimetype.startsWith('image/'))
