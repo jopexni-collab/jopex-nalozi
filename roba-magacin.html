@@ -447,10 +447,22 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       </div>
     </div>
 
-    <div id="msa-drop-zona" style="border:2px dashed var(--border,#ccc);border-radius:10px;padding:20px 12px;text-align:center;color:#8b96a5;font-size:13px;cursor:pointer;margin-bottom:10px;">
-      📷 Klikni da izabereš sliku<br><span style="font-size:11px;">(ili prevuci fajl ovde — dodaje se, ne briše postojeće)</span>
+    <div id="msa-drop-zona" style="border:3px dashed var(--border,#ccc);border-radius:12px;padding:44px 16px;text-align:center;color:#8b96a5;font-size:14px;cursor:pointer;margin-bottom:10px;transition:background .15s,border-color .15s;">
+      <div style="font-size:34px;margin-bottom:8px;">📷</div>
+      <b>Klikni da izabereš slike</b><br><span style="font-size:12px;">ili prevuci jednu ili više ovde</span>
     </div>
-    <input type="file" id="msa-file-input" accept="image/*" style="display:none;">
+    <input type="file" id="msa-file-input" accept="image/*" multiple style="display:none;">
+
+    <!-- Pregled ubačenih slika PRIJE slanja — korisnik vidi šta je uhvaćeno i potvrđuje -->
+    <div id="msa-cekaju-blok" style="display:none;margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px;">Spremno za dodavanje (<span id="msa-cekaju-broj">0</span>):</div>
+      <div id="msa-cekaju-lista" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="ce-tip-btn" style="flex:1;font-size:12px;" onclick="msaOtkaziCekaju()">Otkaži</button>
+        <button class="ce-tip-btn" style="flex:2;font-size:12px;background:var(--green,#1f8a4c);color:#fff;font-weight:700;" onclick="msaPotvrdiCekaju()">✓ Potvrdi i dodaj</button>
+      </div>
+    </div>
+
     <div id="msa-status" style="font-size:12px;color:var(--red);margin-bottom:8px;display:none;"></div>
   </div>
 </div>
@@ -1506,6 +1518,7 @@ async function otvoriKaruselSlika(robaId, naziv){
   document.getElementById('msa-status').style.display='none';
   document.getElementById('modal-slika-artikla').style.display='flex';
   document.getElementById('msa-karusel').style.display='none';
+  msaOtkaziCekaju(); // očisti eventualne neposlate slike od PRETHODNOG artikla
   msaSlike=[]; msaTrenutniIndeks=0;
   try{
     const r=await fetch(`${API}/api/roba/${robaId}/slike`);
@@ -1559,50 +1572,96 @@ async function msaObrisiTrenutnu(){
   }catch(e){ alert('✗ '+e.message); }
 }
 
+// Slike koje su UHVAĆENE ali JOŠ NISU poslate — čekaju korisnikovu potvrdu.
+let msaCekaju=[];
+
 document.getElementById('msa-drop-zona').addEventListener('click', ()=>{
   document.getElementById('msa-file-input').click();
 });
-document.getElementById('msa-drop-zona').addEventListener('dragover', e=>{ e.preventDefault(); e.currentTarget.style.background='#f0f4fa'; e.currentTarget.style.borderColor='var(--blue,#1a5fa8)'; });
+document.getElementById('msa-drop-zona').addEventListener('dragover', e=>{ e.preventDefault(); e.currentTarget.style.background='#eaf2fb'; e.currentTarget.style.borderColor='var(--blue,#1a5fa8)'; });
 document.getElementById('msa-drop-zona').addEventListener('dragleave', e=>{ e.currentTarget.style.background=''; e.currentTarget.style.borderColor=''; });
 document.getElementById('msa-drop-zona').addEventListener('drop', e=>{
   e.preventDefault();
   e.currentTarget.style.background=''; e.currentTarget.style.borderColor='';
-  if(e.dataTransfer.files[0]) posaljiSlikuArtikla(e.dataTransfer.files[0]);
+  msaDodajUCekanje([...e.dataTransfer.files]);
 });
 document.getElementById('msa-file-input').addEventListener('change', e=>{
-  if(e.target.files[0]) posaljiSlikuArtikla(e.target.files[0]);
+  msaDodajUCekanje([...e.target.files]);
   e.target.value='';
 });
-async function posaljiSlikuArtikla(file){
+
+// Ubačene slike se NE šalju odmah — prvo se prikažu kao sličice da korisnik VIDI šta je
+// uhvaćeno (i koliko), pa tek na "Potvrdi" kreće otpremanje.
+function msaDodajUCekanje(fajlovi){
+  const slike=fajlovi.filter(f=>f.type.startsWith('image/'));
+  if(!slike.length) return;
+  slike.forEach(f=>msaCekaju.push({fajl:f, pregledUrl:URL.createObjectURL(f)}));
+  msaRenderCekaju();
+}
+
+function msaRenderCekaju(){
+  const blok=document.getElementById('msa-cekaju-blok');
+  if(!msaCekaju.length){ blok.style.display='none'; return; }
+  blok.style.display='block';
+  document.getElementById('msa-cekaju-broj').textContent=msaCekaju.length;
+  document.getElementById('msa-cekaju-lista').innerHTML=msaCekaju.map((s,i)=>`
+    <div style="position:relative;">
+      <img src="${s.pregledUrl}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #ddd;">
+      <button onclick="msaUkloniIzCekanja(${i})" title="Ukloni ovu" style="position:absolute;top:-6px;right:-6px;background:var(--red,#c0392b);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer;line-height:1;">✕</button>
+    </div>
+  `).join('');
+}
+
+function msaUkloniIzCekanja(indeks){
+  URL.revokeObjectURL(msaCekaju[indeks].pregledUrl);
+  msaCekaju.splice(indeks,1);
+  msaRenderCekaju();
+}
+
+function msaOtkaziCekaju(){
+  msaCekaju.forEach(s=>URL.revokeObjectURL(s.pregledUrl));
+  msaCekaju=[];
+  msaRenderCekaju();
+}
+
+async function msaPotvrdiCekaju(){
+  if(!msaCekaju.length) return;
   const statusDiv=document.getElementById('msa-status');
-  // POTVRDA da je fajl stvarno uhvaćen (drop ili izbor) — vidi se ODMAH, prije obrade,
-  // da korisnik zna da je prevlačenje uspjelo (ne čeka u neizvjesnosti).
   statusDiv.style.display='block'; statusDiv.style.color='#8b96a5';
-  statusDiv.textContent=`✓ Fajl "${file.name}" uhvaćen — obrada slike...`;
-  let smanjena;
-  try{ smanjena=await uvslikaSmanjiSliku(file); }
-  catch(e){ statusDiv.style.color='var(--red)'; statusDiv.textContent='✗ '+e.message; return; }
-  statusDiv.textContent='Otpremanje...';
-  const fd=new FormData();
-  fd.append('slika', smanjena);
-  try{
-    const r=await fetch(`${API}/api/roba/${msaTrenutniRobaId}/slika`, {method:'POST', body:fd});
-    const data=await r.json();
-    if(!r.ok) throw new Error(data.error||'Greška.');
-    statusDiv.style.color='var(--green)'; statusDiv.textContent='✓ Sačuvano.';
-    if(data.glavna) msaSlike.forEach(x=>x.glavna=false);
-    msaSlike.push({id:data.slika_id, url:data.url, glavna:data.glavna});
-    msaTrenutniIndeks=msaSlike.length-1;
-    msaPrikaziTrenutnu();
-    const stavka=lagerPodaci.find(s=>s.id===msaTrenutniRobaId);
-    if(stavka){
-      if(data.glavna) stavka.glavna_slika=data.url;
-      stavka.broj_slika=msaSlike.length;
-    }
-    renderLagerRedovi();
-    setTimeout(()=>{ statusDiv.style.display='none'; }, 1200);
-  }catch(e){
-    statusDiv.style.color='var(--red)'; statusDiv.textContent='✗ '+e.message;
+  let uspjesno=0, neuspjesno=[];
+  for(let i=0;i<msaCekaju.length;i++){
+    const s=msaCekaju[i];
+    statusDiv.textContent=`Otpremanje ${i+1}/${msaCekaju.length} — ${s.fajl.name}...`;
+    try{
+      const smanjena=await uvslikaSmanjiSliku(s.fajl);
+      const fd=new FormData();
+      fd.append('slika', smanjena);
+      const r=await fetch(`${API}/api/roba/${msaTrenutniRobaId}/slika`, {method:'POST', body:fd});
+      const data=await r.json();
+      if(!r.ok) throw new Error(data.error||'Greška.');
+      if(data.glavna) msaSlike.forEach(x=>x.glavna=false);
+      msaSlike.push({id:data.slika_id, url:data.url, glavna:data.glavna});
+      uspjesno++;
+    }catch(e){ neuspjesno.push(`${s.fajl.name}: ${e.message}`); }
+  }
+  msaCekaju.forEach(s=>URL.revokeObjectURL(s.pregledUrl));
+  msaCekaju=[];
+  msaRenderCekaju();
+  msaTrenutniIndeks=Math.max(0, msaSlike.length-1);
+  msaPrikaziTrenutnu();
+  const stavka=lagerPodaci.find(s=>s.id===msaTrenutniRobaId);
+  if(stavka){
+    stavka.glavna_slika=msaSlike.find(x=>x.glavna)?.url || msaSlike[0]?.url || null;
+    stavka.broj_slika=msaSlike.length;
+  }
+  renderLagerRedovi();
+  if(neuspjesno.length){
+    statusDiv.style.color='var(--red)';
+    statusDiv.textContent=`✓ ${uspjesno} dodato, ✗ ${neuspjesno.length} neuspešno: ${neuspjesno.join('; ')}`;
+  }else{
+    statusDiv.style.color='var(--green)';
+    statusDiv.textContent=`✓ Dodato ${uspjesno} ${uspjesno===1?'slika':'slika'}.`;
+    setTimeout(()=>{ statusDiv.style.display='none'; }, 1500);
   }
 }
 
