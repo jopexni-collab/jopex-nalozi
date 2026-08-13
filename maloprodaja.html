@@ -1452,7 +1452,8 @@ async function trazi(q){
     list.innerHTML=rows.map(a=>{
       const stanje=parseFloat(a.stanje);
       let chip='chip-ok', txt=stanje+' '+esc(a.jed_mjera);
-      if(stanje<=0){chip='chip-nema';txt='Nema na stanju';}
+      if(stanje<0){chip='chip-nema';txt='⚠ MINUS: '+stanje+' '+esc(a.jed_mjera);} // negativno se SVESNO pokazuje, ne sakriva kao "Nema na stanju"
+      else if(stanje===0){chip='chip-nema';txt='Nema na stanju';}
       else if(stanje<10){chip='chip-nisko';}
       return `
       <div class="rez-item" onclick='dodajUKosaricu(${JSON.stringify(a).replace(/'/g,"&apos;")})'>
@@ -1824,7 +1825,7 @@ function renderPrLagerRedovi(){
       <td style="padding:3px 6px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
       <td style="padding:3px 6px;text-align:center;color:#6b7a8d;">${s.debljina_cm??'—'}</td>
       <td style="padding:3px 6px;text-align:center;">${esc(s.jed_mjera)}</td>
-      <td style="padding:3px 6px;text-align:right;font-weight:700;">${s.stanje}</td>
+      <td style="padding:3px 6px;text-align:right;font-weight:700;${s.stanje<0?'background:#fce8e6;color:#c0392b;':''}" title="${s.stanje<0?'⚠ Stanje je u MINUSU':''}">${s.stanje<0?'⚠ ':''}${s.stanje}</td>
       <td style="padding:3px 6px;text-align:right;">${fmMoney(s.cijena)}</td>
       <td style="padding:3px 6px;text-align:center;">
         <div onclick="otvoriKaruselSlika(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')" style="position:relative;display:inline-block;cursor:pointer;">

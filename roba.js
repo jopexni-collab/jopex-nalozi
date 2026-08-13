@@ -1515,7 +1515,7 @@ router.post('/:id/rucni-unos', async (req, res) => {
     if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat.' });
     const stanjeNovo = parseFloat(req.body.stanje_novo);
     const cijenaNova = parseFloat(req.body.cijena_nova);
-    if (isNaN(stanjeNovo) || stanjeNovo < 0) return res.status(400).json({ error: 'Unesite ispravno stanje.' });
+    if (isNaN(stanjeNovo)) return res.status(400).json({ error: 'Unesite ispravno stanje.' }); // negativno JE dozvoljeno (svesno)
     if (isNaN(cijenaNova) || cijenaNova < 0) return res.status(400).json({ error: 'Unesite ispravnu cijenu.' });
 
     const staraRes = await pool.query('SELECT stanje, cijena FROM roba_pj WHERE roba_id=$1 AND objekt_id=$2', [req.params.id, objektId]);
@@ -1572,7 +1572,7 @@ router.post('/rucni-unos/obrisi-nedavne', async (req, res) => {
       await client.query('BEGIN');
       for (const z of zapisi.rows) {
         await client.query(
-          'UPDATE roba_pj SET stanje = GREATEST(0, stanje - $1), azurirano = now() WHERE roba_id=$2 AND objekt_id=$3',
+          'UPDATE roba_pj SET stanje = stanje - $1, azurirano = now() WHERE roba_id=$2 AND objekt_id=$3', // negativno JE dozvoljeno (svesno)
           [z.kolicina, z.roba_id, z.objekt_id]
         );
         await client.query('DELETE FROM roba_kretanja WHERE id=$1', [z.id]);
