@@ -694,15 +694,36 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 <div id="tab-uvoz-slike" style="display:none;">
   <div class="import-box">
-    <h3>📷 Grupni uvoz slika</h3>
-    <div class="uzorak-hint">
-      Izaberi VIŠE slika odjednom (npr. ceo folder sinhronizovan sa Google Drive-a). Naziv fajla se poredi sa NAZIVOM artikla (npr. fajl "Bengal black 3cm Par.jpg" za artikal "Bengal black 3cm Par") — ne mora biti identičan, dovoljno je da se poklapaju. Ako se poklopi više artikala, tražiće se ručna potvrda za tu sliku — ništa se ne uvozi automatski bez tvoje potvrde u tom slučaju.
+    <h3>📷 Uvoz slika artikala</h3>
+    <div class="ce-row" style="margin-bottom:14px;">
+      <button type="button" class="ce-tip-btn active" data-uvs-mod="solo" onclick="uvslikaPostaviMod('solo')">📁 Pojedinačno (folder po artiklu)</button>
+      <button type="button" class="ce-tip-btn" data-uvs-mod="grupa" onclick="uvslikaPostaviMod('grupa')">👥 Grupa (ista slika za više artikala)</button>
     </div>
-    <input type="file" id="uvslika-file-input" accept="image/*" multiple webkitdirectory directory style="margin-bottom:14px;">
-    <div id="uvslika-napredak" style="display:none;margin-bottom:10px;font-size:13px;color:#8b96a5;"></div>
-    <div id="uvslika-lista"></div>
-    <div id="uvslika-akcije" style="display:none;margin-top:14px;text-align:right;">
-      <button type="button" class="btn" onclick="uvslikaPosaljiSve()">✓ Uvezi sve rešene slike</button>
+
+    <div id="uvslika-solo-blok">
+      <div class="uzorak-hint">
+        Izaberi VIŠE slika odjednom (npr. ceo folder sinhronizovan sa Google Drive-a). Naziv fajla se poredi sa NAZIVOM artikla (npr. fajl "Bengal black 3cm Par.jpg" za artikal "Bengal black 3cm Par") — ne mora biti identičan, dovoljno je da se poklapaju. Ako se poklopi više artikala, tražiće se ručna potvrda za tu sliku — ništa se ne uvozi automatski bez tvoje potvrde u tom slučaju.
+      </div>
+      <input type="file" id="uvslika-file-input" accept="image/*" multiple webkitdirectory directory style="margin-bottom:14px;">
+      <div id="uvslika-napredak" style="display:none;margin-bottom:10px;font-size:13px;color:#8b96a5;"></div>
+      <div id="uvslika-lista"></div>
+      <div id="uvslika-akcije" style="display:none;margin-top:14px;text-align:right;">
+        <button type="button" class="btn" onclick="uvslikaPosaljiSve()">✓ Uvezi sve rešene slike</button>
+      </div>
+    </div>
+
+    <div id="uvslika-grupa-blok" style="display:none;">
+      <div class="uzorak-hint">
+        Za slučaj kad ISTA slika pokriva VIŠE artikala (npr. "Bengal" u različitim debljinama, ista boja/izgled) — slika se otprema SAMO JEDNOM, poveže se sa svim izabranim artiklima. Prvo pretraži i izaberi koji artikli idu u ovu grupu, zatim dodaj sliku.
+      </div>
+      <input type="text" id="uvsgrupa-pretraga" placeholder="Pretraži po nazivu (npr. Bengal)..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
+      <div id="uvsgrupa-rezultati" style="max-height:280px;overflow-y:auto;border:1px solid var(--border,#ddd);border-radius:8px;padding:8px;margin-bottom:12px;"></div>
+      <div id="uvsgrupa-izabrano-brojac" style="font-size:12px;color:#8b96a5;margin-bottom:10px;">Izabrano: 0 artikala</div>
+      <div id="uvsgrupa-drop-zona" style="border:2px dashed var(--border,#ccc);border-radius:10px;padding:20px 12px;text-align:center;color:#8b96a5;font-size:13px;cursor:pointer;margin-bottom:10px;">
+        📷 Klikni da izabereš sliku, ili prevuci ovde
+      </div>
+      <input type="file" id="uvsgrupa-file-input" accept="image/*" style="display:none;">
+      <div id="uvsgrupa-status" style="font-size:12px;color:var(--red);margin-bottom:8px;display:none;"></div>
     </div>
   </div>
 </div>
@@ -1549,6 +1570,95 @@ async function uvslikaPosaljiSve(){
   uvslikaStavke=[];
   document.getElementById('uvslika-file-input').value='';
   uvslikaRenderLista();
+}
+
+/* ═══ PREKIDAČ SOLO / GRUPA ═══ */
+function uvslikaPostaviMod(mod){
+  document.querySelectorAll('[data-uvs-mod]').forEach(b=>b.classList.toggle('active', b.dataset.uvsMod===mod));
+  document.getElementById('uvslika-solo-blok').style.display = mod==='solo' ? 'block' : 'none';
+  document.getElementById('uvslika-grupa-blok').style.display = mod==='grupa' ? 'block' : 'none';
+}
+
+/* ═══ GRUPA — ista slika za više artikala odjednom ═══ */
+let uvsgrupaRezultati=[];
+let uvsgrupaIzabrani=new Set();
+let uvsgrupaPretragaTimer=null;
+
+document.getElementById('uvsgrupa-pretraga').addEventListener('input', e=>{
+  clearTimeout(uvsgrupaPretragaTimer);
+  const tekst=e.target.value.trim();
+  if(tekst.length<2){ document.getElementById('uvsgrupa-rezultati').innerHTML=''; uvsgrupaRezultati=[]; return; }
+  uvsgrupaPretragaTimer=setTimeout(()=>uvsgrupaPretrazi(tekst), 300);
+});
+
+async function uvsgrupaPretrazi(tekst){
+  const cont=document.getElementById('uvsgrupa-rezultati');
+  cont.innerHTML='<div style="color:#8b96a5;font-size:12px;padding:6px;">Pretraga...</div>';
+  try{
+    const r=await fetch(`${API}/api/roba/pretraga-za-grupu?tekst=${encodeURIComponent(tekst)}`);
+    const data=await r.json();
+    if(!r.ok){ cont.innerHTML=`<div style="color:var(--red);font-size:12px;padding:6px;">${esc(data.error)}</div>`; return; }
+    uvsgrupaRezultati=data;
+    uvsgrupaRenderRezultati();
+  }catch(e){ cont.innerHTML='<div style="color:var(--red);font-size:12px;padding:6px;">Greška pri pretrazi.</div>'; }
+}
+
+function uvsgrupaRenderRezultati(){
+  const cont=document.getElementById('uvsgrupa-rezultati');
+  if(!uvsgrupaRezultati.length){ cont.innerHTML='<div style="color:#8b96a5;font-size:12px;padding:6px;">Nema rezultata.</div>'; return; }
+  cont.innerHTML=uvsgrupaRezultati.map(a=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:12.5px;cursor:pointer;border-bottom:1px solid #f0f2f5;">
+      <input type="checkbox" ${uvsgrupaIzabrani.has(a.id)?'checked':''} onchange="uvsgrupaToggle(${a.id},this.checked)">
+      <span style="color:#999;">${esc(a.sifra)}</span> — ${esc(a.naziv)}
+    </label>
+  `).join('');
+}
+
+function uvsgrupaToggle(robaId, oznaceno){
+  if(oznaceno) uvsgrupaIzabrani.add(robaId); else uvsgrupaIzabrani.delete(robaId);
+  document.getElementById('uvsgrupa-izabrano-brojac').textContent=`Izabrano: ${uvsgrupaIzabrani.size} artikala`;
+}
+
+document.getElementById('uvsgrupa-drop-zona').addEventListener('click', ()=>{
+  document.getElementById('uvsgrupa-file-input').click();
+});
+document.getElementById('uvsgrupa-drop-zona').addEventListener('dragover', e=>{ e.preventDefault(); e.currentTarget.style.background='#f0f4fa'; });
+document.getElementById('uvsgrupa-drop-zona').addEventListener('dragleave', e=>{ e.currentTarget.style.background=''; });
+document.getElementById('uvsgrupa-drop-zona').addEventListener('drop', e=>{
+  e.preventDefault();
+  e.currentTarget.style.background='';
+  if(e.dataTransfer.files[0]) uvsgrupaPosaljiSliku(e.dataTransfer.files[0]);
+});
+document.getElementById('uvsgrupa-file-input').addEventListener('change', e=>{
+  if(e.target.files[0]) uvsgrupaPosaljiSliku(e.target.files[0]);
+  e.target.value='';
+});
+
+async function uvsgrupaPosaljiSliku(file){
+  const statusDiv=document.getElementById('uvsgrupa-status');
+  if(!uvsgrupaIzabrani.size){
+    statusDiv.style.display='block'; statusDiv.style.color='var(--red)';
+    statusDiv.textContent='✗ Prvo izaberi bar jedan artikal (kvadratići iznad).';
+    return;
+  }
+  statusDiv.style.display='block'; statusDiv.style.color='#8b96a5'; statusDiv.textContent='Obrada slike...';
+  let smanjena;
+  try{ smanjena=await uvslikaSmanjiSliku(file); }
+  catch(e){ statusDiv.style.color='var(--red)'; statusDiv.textContent='✗ '+e.message; return; }
+
+  statusDiv.textContent=`Otpremanje za ${uvsgrupaIzabrani.size} artikala...`;
+  const fd=new FormData();
+  fd.append('slika', smanjena);
+  fd.append('roba_ids', JSON.stringify([...uvsgrupaIzabrani]));
+  try{
+    const r=await fetch(`${API}/api/roba/slika-grupa`, {method:'POST', body:fd});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška.');
+    statusDiv.style.color='var(--green)';
+    statusDiv.textContent=`✓ Slika povezana sa ${data.broj_artikala} artikala.`;
+  }catch(e){
+    statusDiv.style.color='var(--red)'; statusDiv.textContent='✗ '+e.message;
+  }
 }
 
 async function otvoriIzmjenuDebljine(robaId, naziv, trenutnaDebljina){
