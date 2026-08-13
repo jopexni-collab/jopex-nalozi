@@ -496,6 +496,88 @@ router.get('/kretanje-dnevno', zahtijevaRobaMagacin, async (req, res) => {
 });
 
 // GET /api/roba/:id?objekt_id=1
+// GET /api/roba/trazi-po-nazivu?tekst=X — vraća aktivne artikle čiji NAZIV odgovara datom
+// tekstu (koristi se za grupni uvoz slika — naziv fajla slike se poredi sa nazivom
+// artikla, ne sa šifrom). Poređenje je u OBA smjera i bez razlike velika/mala slova i
+// razmaka/crtica — da uhvati i "Bengal_black_3cm.jpg" za artikal "Bengal black 3cm Par".
+router.get('/trazi-po-nazivu', zahtijevaProdaju, async (req, res) => {
+  try {
+    const tekst = (req.query.tekst || '').trim();
+    if (tekst.length < 3) return res.status(400).json({ error: 'Prekratak naziv za pretragu.' });
+    // Normalizacija UKLANJA sve razmake/crtice/donje crte (ne zamjenjuje ih razmakom) — da
+    // se "ts-30" poklopi sa "TS30" bez razmaka unutar naziva ("Metalne nogare za sto
+    // TS30"). Zamjena razmakom bi ovdje promašila (razmak vs. bez razmaka su različiti).
+    const r = await pool.query(
+      `SELECT id, sifra, naziv FROM roba
+       WHERE aktivan=true
+         AND (
+           regexp_replace(lower(naziv), '[-_\\s]', '', 'g') = regexp_replace(lower($1), '[-_\\s]', '', 'g')
+           OR regexp_replace(lower($1), '[-_\\s]', '', 'g') LIKE '%' || regexp_replace(lower(naziv), '[-_\\s]', '', 'g') || '%'
+           OR regexp_replace(lower(naziv), '[-_\\s]', '', 'g') LIKE '%' || regexp_replace(lower($1), '[-_\\s]', '', 'g') || '%'
+         )
+       ORDER BY length(naziv) DESC
+       LIMIT 10`,
+      [tekst]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/roba/pretraga-za-grupu?tekst=X — ŠIRA pretraga po nazivu (za biranje GRUPE
+// artikala kroz kvadratiće — npr. "Bengal" vraća SVE Bengal varijante, korisnik bira koje
+// tačno idu u tu grupu). Za razliku od trazi-po-nazivu, ovde je dovoljna obična
+// podudarnost teksta (ne mora biti skoro tačno poklapanje), i vraća više rezultata.
+router.get('/pretraga-za-grupu', zahtijevaProdaju, async (req, res) => {
+  try {
+    const tekst = (req.query.tekst || '').trim();
+    if (tekst.length < 2) return res.status(400).json({ error: 'Prekratak tekst za pretragu.' });
+    const r = await pool.query(
+      `SELECT id, sifra, naziv FROM roba WHERE aktivan=true AND naziv ILIKE '%' || $1 || '%' ORDER BY naziv LIMIT 60`,
+      [tekst]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/roba/slika-grupa — DODAJE JEDNU sliku, ali je poveže sa VIŠE artikala odjednom
+// (npr. Bengal u različitim debljinama — ista slika, različite šifre). Slika se upload-uje
+// na R2 SAMO JEDNOM (ne duplira se prostor/vreme), a u bazu se upisuje po JEDAN roba_slike
+// red za SVAKI izabrani artikal, sve pokazuju na ISTI R2 url.
+router.post('/slika-grupa', zahtijevaProdaju, upload.single('slika'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Nema fajla.' });
+  if (!req.file.mimetype.startsWith('image/'))
+    return res.status(400).json({ error: 'Fajl mora biti slika.' });
+  let robaIds;
+  try { robaIds = JSON.parse(req.body.roba_ids || '[]'); } catch (e) { robaIds = []; }
+  if (!Array.isArray(robaIds) || !robaIds.length)
+    return res.status(400).json({ error: 'Nije izabran nijedan artikal za grupu.' });
+
+  try {
+    const ekstenzija = (req.file.originalname.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const kljuc = `roba-slike/grupa-${Date.now()}.${ekstenzija}`;
+    const url = await uploadFile(kljuc, req.file.buffer, req.file.mimetype); // JEDAN upload za sve
+
+    let uspjesno = 0;
+    for (const robaId of robaIds) {
+      const postojeceRes = await pool.query('SELECT COUNT(*) AS n, COALESCE(MAX(redosled),-1) AS max_red FROM roba_slike WHERE roba_id=$1', [robaId]);
+      const jePrva = parseInt(postojeceRes.rows[0].n) === 0;
+      const noviRedosled = parseInt(postojeceRes.rows[0].max_red) + 1;
+      await pool.query(
+        'INSERT INTO roba_slike (roba_id, url, redosled, glavna) VALUES ($1,$2,$3,$4)',
+        [robaId, url, noviRedosled, jePrva]
+      );
+      uspjesno++;
+    }
+    res.json({ ok: true, url, broj_artikala: uspjesno });
+  } catch (err) {
+    res.status(500).json({ error: 'Greška pri otpremanju slike: ' + err.message });
+  }
+});
+
 router.get('/:id', zahtijevaProdaju, async (req, res) => {
   try {
     const objektId = trebaObjekat(req.query.objekt_id);
@@ -1590,86 +1672,7 @@ router.delete('/:id/slike/:slikaId', zahtijevaProdaju, async (req, res) => {
   }
 });
 
-// GET /api/roba/trazi-po-nazivu?tekst=X — vraća aktivne artikle čiji NAZIV odgovara datom
-// tekstu (koristi se za grupni uvoz slika — naziv fajla slike se poredi sa nazivom
-// artikla, ne sa šifrom). Poređenje je u OBA smjera i bez razlike velika/mala slova i
-// razmaka/crtica — da uhvati i "Bengal_black_3cm.jpg" za artikal "Bengal black 3cm Par".
-router.get('/trazi-po-nazivu', zahtijevaProdaju, async (req, res) => {
-  try {
-    const tekst = (req.query.tekst || '').trim();
-    if (tekst.length < 3) return res.status(400).json({ error: 'Prekratak naziv za pretragu.' });
-    // Normalizacija UKLANJA sve razmake/crtice/donje crte (ne zamjenjuje ih razmakom) — da
-    // se "ts-30" poklopi sa "TS30" bez razmaka unutar naziva ("Metalne nogare za sto
-    // TS30"). Zamjena razmakom bi ovdje promašila (razmak vs. bez razmaka su različiti).
-    const r = await pool.query(
-      `SELECT id, sifra, naziv FROM roba
-       WHERE aktivan=true
-         AND (
-           regexp_replace(lower(naziv), '[-_\\s]', '', 'g') = regexp_replace(lower($1), '[-_\\s]', '', 'g')
-           OR regexp_replace(lower($1), '[-_\\s]', '', 'g') LIKE '%' || regexp_replace(lower(naziv), '[-_\\s]', '', 'g') || '%'
-           OR regexp_replace(lower(naziv), '[-_\\s]', '', 'g') LIKE '%' || regexp_replace(lower($1), '[-_\\s]', '', 'g') || '%'
-         )
-       ORDER BY length(naziv) DESC
-       LIMIT 10`,
-      [tekst]
-    );
-    res.json(r.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
-// POST /api/roba/slika-grupa — DODAJE JEDNU sliku, ali je poveže sa VIŠE artikala odjednom
-// (npr. Bengal u različitim debljinama — ista slika, različite šifre). Slika se upload-uje
-// na R2 SAMO JEDNOM (ne duplira se prostor/vreme), a u bazu se upisuje po JEDAN roba_slike
-// red za SVAKI izabrani artikal, sve pokazuju na ISTI R2 url.
-router.post('/slika-grupa', zahtijevaProdaju, upload.single('slika'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'Nema fajla.' });
-  if (!req.file.mimetype.startsWith('image/'))
-    return res.status(400).json({ error: 'Fajl mora biti slika.' });
-  let robaIds;
-  try { robaIds = JSON.parse(req.body.roba_ids || '[]'); } catch (e) { robaIds = []; }
-  if (!Array.isArray(robaIds) || !robaIds.length)
-    return res.status(400).json({ error: 'Nije izabran nijedan artikal za grupu.' });
 
-  try {
-    const ekstenzija = (req.file.originalname.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-    const kljuc = `roba-slike/grupa-${Date.now()}.${ekstenzija}`;
-    const url = await uploadFile(kljuc, req.file.buffer, req.file.mimetype); // JEDAN upload za sve
-
-    let uspjesno = 0;
-    for (const robaId of robaIds) {
-      const postojeceRes = await pool.query('SELECT COUNT(*) AS n, COALESCE(MAX(redosled),-1) AS max_red FROM roba_slike WHERE roba_id=$1', [robaId]);
-      const jePrva = parseInt(postojeceRes.rows[0].n) === 0;
-      const noviRedosled = parseInt(postojeceRes.rows[0].max_red) + 1;
-      await pool.query(
-        'INSERT INTO roba_slike (roba_id, url, redosled, glavna) VALUES ($1,$2,$3,$4)',
-        [robaId, url, noviRedosled, jePrva]
-      );
-      uspjesno++;
-    }
-    res.json({ ok: true, url, broj_artikala: uspjesno });
-  } catch (err) {
-    res.status(500).json({ error: 'Greška pri otpremanju slike: ' + err.message });
-  }
-});
-
-// GET /api/roba/pretraga-za-grupu?tekst=X — ŠIRA pretraga po nazivu (za biranje GRUPE
-// artikala kroz kvadratiće — npr. "Bengal" vraća SVE Bengal varijante, korisnik bira koje
-// tačno idu u tu grupu). Za razliku od trazi-po-nazivu, ovde je dovoljna obična
-// podudarnost teksta (ne mora biti skoro tačno poklapanje), i vraća više rezultata.
-router.get('/pretraga-za-grupu', zahtijevaProdaju, async (req, res) => {
-  try {
-    const tekst = (req.query.tekst || '').trim();
-    if (tekst.length < 2) return res.status(400).json({ error: 'Prekratak tekst za pretragu.' });
-    const r = await pool.query(
-      `SELECT id, sifra, naziv FROM roba WHERE aktivan=true AND naziv ILIKE '%' || $1 || '%' ORDER BY naziv LIMIT 60`,
-      [tekst]
-    );
-    res.json(r.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 module.exports = router;
