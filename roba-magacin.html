@@ -1458,16 +1458,18 @@ document.getElementById('uvslika-file-input').addEventListener('change', async e
     napredakDiv.textContent=`Pretraga poklapanja... (${i+1}/${foldNazivi.length} foldera)`;
     const kljuc=folderNaziv.trim();
     let kandidati=[];
+    let greskaMreze=null;
     if(kljuc.length>=3){
       try{
         const r=await fetch(`${API}/api/roba/trazi-po-nazivu?tekst=${encodeURIComponent(kljuc)}`);
-        if(r.ok) kandidati=await r.json();
-      }catch(err){}
+        if(r.ok){ kandidati=await r.json(); }
+        else{ const d=await r.json().catch(()=>({})); greskaMreze=d.error||`Greška servera (${r.status})`; }
+      }catch(err){ greskaMreze='Mrežna greška: '+err.message; }
     }
     uvslikaStavke.push({
-      folderNaziv, fajlovi: grupePoFolderu.get(folderNaziv), kandidati,
+      folderNaziv, fajlovi: grupePoFolderu.get(folderNaziv), kandidati, greskaMreze,
       izabranoId: kandidati.length===1 ? kandidati[0].id : null,
-      status: kandidati.length===0?'nema-poklapanja':kandidati.length===1?'spremno':'nejasno',
+      status: greskaMreze?'greska':kandidati.length===0?'nema-poklapanja':kandidati.length===1?'spremno':'nejasno',
     });
   }
   napredakDiv.style.display='none';
@@ -1496,7 +1498,8 @@ function uvslikaRenderLista(){
           <td style="padding:4px 6px;">📁 ${esc(s.folderNaziv)}</td>
           <td style="padding:4px 6px;color:#999;">${s.fajlovi.length}</td>
           <td style="padding:4px 6px;">
-            ${s.status==='nema-poklapanja'?'<i style="color:#c0392b;">Nijedan naziv artikla se ne poklapa</i>'
+            ${s.status==='greska'?`<i style="color:#c0392b;">⚠ ${esc(s.greskaMreze)}</i>`
+              :s.status==='nema-poklapanja'?'<i style="color:#c0392b;">Nijedan naziv artikla se ne poklapa</i>'
               :s.kandidati.length===1?`${esc(s.kandidati[0].sifra)} — ${esc(s.kandidati[0].naziv)}`
               :`<select onchange="uvslikaIzaberi(${i},this.value)" style="padding:3px 6px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;">
                   <option value="">— izaberi tačan artikal —</option>
