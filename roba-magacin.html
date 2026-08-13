@@ -426,6 +426,35 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 <div id="tab-lager">
 
+<div id="modal-slika-artikla" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:600;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:16px;max-width:420px;width:90vw;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <h3 id="msa-naziv" style="margin:0;font-size:14.5px;"></h3>
+      <button onclick="document.getElementById('modal-slika-artikla').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+    </div>
+
+    <!-- Karusel — vidljiv samo ako artikal VEĆ ima bar jednu sliku -->
+    <div id="msa-karusel" style="display:none;margin-bottom:12px;">
+      <div style="position:relative;background:#f5f5f5;border-radius:8px;overflow:hidden;">
+        <img id="msa-karusel-img" style="width:100%;height:260px;object-fit:contain;display:block;">
+        <button onclick="msaPomjeri(-1)" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;">‹</button>
+        <button onclick="msaPomjeri(1)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;">›</button>
+        <div id="msa-brojac" style="position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:2px 7px;border-radius:10px;"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button id="msa-btn-glavna" class="ce-tip-btn" style="flex:1;font-size:12px;" onclick="msaPostaviGlavnu()">★ Postavi kao glavnu</button>
+        <button class="ce-tip-btn" style="flex:0 0 auto;font-size:12px;background:var(--red,#c0392b);color:#fff;" onclick="msaObrisiTrenutnu()">🗑 Obriši (undo)</button>
+      </div>
+    </div>
+
+    <div id="msa-drop-zona" style="border:2px dashed var(--border,#ccc);border-radius:10px;padding:20px 12px;text-align:center;color:#8b96a5;font-size:13px;cursor:pointer;margin-bottom:10px;">
+      📷 Klikni da izabereš sliku<br><span style="font-size:11px;">(ili prevuci fajl ovde — dodaje se, ne briše postojeće)</span>
+    </div>
+    <input type="file" id="msa-file-input" accept="image/*" style="display:none;">
+    <div id="msa-status" style="font-size:12px;color:var(--red);margin-bottom:8px;display:none;"></div>
+  </div>
+</div>
+
 <div id="rucni-unos-popup" style="display:none;position:fixed;z-index:501;background:#fffde7;border:2px solid var(--blue,#1a5fa8);border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.25);width:240px;min-width:200px;min-height:200px;resize:both;overflow:auto;">
   <div id="rucni-unos-drag-rucka" style="cursor:move;background:var(--blue,#1a5fa8);color:#fff;padding:6px 10px;border-radius:8px 8px 0 0;font-size:11px;font-weight:700;user-select:none;">✏️ Ručni unos ⠿⠿</div>
   <div style="padding:12px;">
@@ -1453,6 +1482,117 @@ function uvslikaSmanjiSliku(file){
   });
 }
 
+/* ── SLIKE ARTIKLA — karusel (više slika po artiklu), upload na R2. Isti sistem kao u
+   maloprodaji, dodat i ovde u glavni Lager (roba-magacin.html) — do sad ovde nije postojao
+   nijedan način da se doda pojedinačna slika, samo grupni/bulk uvoz. ── */
+let msaTrenutniRobaId=null, msaSlike=[], msaTrenutniIndeks=0;
+
+async function otvoriKaruselSlika(robaId, naziv){
+  msaTrenutniRobaId=robaId;
+  document.getElementById('msa-naziv').textContent=naziv;
+  document.getElementById('msa-status').style.display='none';
+  document.getElementById('modal-slika-artikla').style.display='flex';
+  document.getElementById('msa-karusel').style.display='none';
+  msaSlike=[]; msaTrenutniIndeks=0;
+  try{
+    const r=await fetch(`${API}/api/roba/${robaId}/slike`);
+    msaSlike=await r.json();
+    if(msaSlike.length) msaPrikaziTrenutnu();
+  }catch(e){}
+}
+
+function msaPrikaziTrenutnu(){
+  if(!msaSlike.length){ document.getElementById('msa-karusel').style.display='none'; return; }
+  document.getElementById('msa-karusel').style.display='block';
+  const s=msaSlike[msaTrenutniIndeks];
+  document.getElementById('msa-karusel-img').src=s.url;
+  document.getElementById('msa-brojac').textContent=`${msaTrenutniIndeks+1}/${msaSlike.length}`;
+  const btnGlavna=document.getElementById('msa-btn-glavna');
+  if(s.glavna){ btnGlavna.textContent='★ Glavna slika'; btnGlavna.disabled=true; btnGlavna.style.opacity='.6'; }
+  else{ btnGlavna.textContent='☆ Postavi kao glavnu'; btnGlavna.disabled=false; btnGlavna.style.opacity='1'; }
+}
+function msaPomjeri(smjer){
+  if(!msaSlike.length) return;
+  msaTrenutniIndeks=(msaTrenutniIndeks+smjer+msaSlike.length)%msaSlike.length;
+  msaPrikaziTrenutnu();
+}
+async function msaPostaviGlavnu(){
+  const s=msaSlike[msaTrenutniIndeks];
+  try{
+    const r=await fetch(`${API}/api/roba/${msaTrenutniRobaId}/slike/${s.id}/glavna`, {method:'POST'});
+    if(!r.ok) throw new Error((await r.json()).error||'Greška.');
+    msaSlike.forEach(x=>x.glavna=false);
+    s.glavna=true;
+    msaPrikaziTrenutnu();
+    const stavka=lagerPodaci.find(x=>x.id===msaTrenutniRobaId);
+    if(stavka) stavka.glavna_slika=s.url;
+    renderLagerRedovi();
+  }catch(e){ alert('✗ '+e.message); }
+}
+// "Undo" za pogrešno unesenu sliku — briše je bez traga.
+async function msaObrisiTrenutnu(){
+  const s=msaSlike[msaTrenutniIndeks];
+  if(!confirm('Obrisati ovu sliku? (undo pogrešnog unosa)')) return;
+  try{
+    const r=await fetch(`${API}/api/roba/${msaTrenutniRobaId}/slike/${s.id}`, {method:'DELETE'});
+    if(!r.ok) throw new Error((await r.json()).error||'Greška.');
+    msaSlike.splice(msaTrenutniIndeks,1);
+    if(msaTrenutniIndeks>=msaSlike.length) msaTrenutniIndeks=Math.max(0,msaSlike.length-1);
+    if(s.glavna && msaSlike.length) msaSlike[0].glavna=true;
+    msaPrikaziTrenutnu();
+    const stavka=lagerPodaci.find(x=>x.id===msaTrenutniRobaId);
+    if(stavka){ stavka.glavna_slika=msaSlike[0]?.url||null; stavka.broj_slika=msaSlike.length; }
+    renderLagerRedovi();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+document.getElementById('msa-drop-zona').addEventListener('click', ()=>{
+  document.getElementById('msa-file-input').click();
+});
+document.getElementById('msa-drop-zona').addEventListener('dragover', e=>{ e.preventDefault(); e.currentTarget.style.background='#f0f4fa'; e.currentTarget.style.borderColor='var(--blue,#1a5fa8)'; });
+document.getElementById('msa-drop-zona').addEventListener('dragleave', e=>{ e.currentTarget.style.background=''; e.currentTarget.style.borderColor=''; });
+document.getElementById('msa-drop-zona').addEventListener('drop', e=>{
+  e.preventDefault();
+  e.currentTarget.style.background=''; e.currentTarget.style.borderColor='';
+  if(e.dataTransfer.files[0]) posaljiSlikuArtikla(e.dataTransfer.files[0]);
+});
+document.getElementById('msa-file-input').addEventListener('change', e=>{
+  if(e.target.files[0]) posaljiSlikuArtikla(e.target.files[0]);
+  e.target.value='';
+});
+async function posaljiSlikuArtikla(file){
+  const statusDiv=document.getElementById('msa-status');
+  // POTVRDA da je fajl stvarno uhvaćen (drop ili izbor) — vidi se ODMAH, prije obrade,
+  // da korisnik zna da je prevlačenje uspjelo (ne čeka u neizvjesnosti).
+  statusDiv.style.display='block'; statusDiv.style.color='#8b96a5';
+  statusDiv.textContent=`✓ Fajl "${file.name}" uhvaćen — obrada slike...`;
+  let smanjena;
+  try{ smanjena=await uvslikaSmanjiSliku(file); }
+  catch(e){ statusDiv.style.color='var(--red)'; statusDiv.textContent='✗ '+e.message; return; }
+  statusDiv.textContent='Otpremanje...';
+  const fd=new FormData();
+  fd.append('slika', smanjena);
+  try{
+    const r=await fetch(`${API}/api/roba/${msaTrenutniRobaId}/slika`, {method:'POST', body:fd});
+    const data=await r.json();
+    if(!r.ok) throw new Error(data.error||'Greška.');
+    statusDiv.style.color='var(--green)'; statusDiv.textContent='✓ Sačuvano.';
+    if(data.glavna) msaSlike.forEach(x=>x.glavna=false);
+    msaSlike.push({id:data.slika_id, url:data.url, glavna:data.glavna});
+    msaTrenutniIndeks=msaSlike.length-1;
+    msaPrikaziTrenutnu();
+    const stavka=lagerPodaci.find(s=>s.id===msaTrenutniRobaId);
+    if(stavka){
+      if(data.glavna) stavka.glavna_slika=data.url;
+      stavka.broj_slika=msaSlike.length;
+    }
+    renderLagerRedovi();
+    setTimeout(()=>{ statusDiv.style.display='none'; }, 1200);
+  }catch(e){
+    statusDiv.style.color='var(--red)'; statusDiv.textContent='✗ '+e.message;
+  }
+}
+
 document.getElementById('uvslika-file-input').addEventListener('change', async e=>{
   const fajlovi=[...e.target.files].filter(f=>f.type.startsWith('image/'));
   if(!fajlovi.length) return;
@@ -1646,7 +1786,8 @@ async function uvsgrupaPosaljiSliku(file){
     statusDiv.textContent='✗ Prvo izaberi bar jedan artikal (kvadratići iznad).';
     return;
   }
-  statusDiv.style.display='block'; statusDiv.style.color='#8b96a5'; statusDiv.textContent='Obrada slike...';
+  statusDiv.style.display='block'; statusDiv.style.color='#8b96a5';
+  statusDiv.textContent=`✓ Fajl "${file.name}" uhvaćen — obrada slike...`;
   let smanjena;
   try{ smanjena=await uvslikaSmanjiSliku(file); }
   catch(e){ statusDiv.style.color='var(--red)'; statusDiv.textContent='✗ '+e.message; return; }
@@ -2086,6 +2227,7 @@ function renderLagerZaglavlje(){
               </div>
             </th>
           `).join('')}
+          <th style="padding:4px 6px;text-align:center;font-size:10.5px;position:sticky;top:0;background:#1f3864;z-index:30;">Slika</th>
         </tr>
       </thead>
       <tbody id="lager-tbody"></tbody>
@@ -2334,6 +2476,14 @@ function renderLagerRedovi(){
         ${currentUser?.rola==='admin'?`<button onclick="otvoriNivelaciju(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.cijena})" title="Promijeni cijenu (nivelacija)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
       </td>
       <td style="padding:3px 6px;text-align:right;font-weight:700;">${lagerFmMoney(s.ukupno)}</td>
+      <td style="padding:3px 6px;text-align:center;">
+        <div onclick="otvoriKaruselSlika(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')" style="position:relative;display:inline-block;cursor:pointer;">
+          ${s.glavna_slika
+            ?`<img src="${esc(s.glavna_slika)}" loading="lazy" style="width:36px;height:36px;object-fit:cover;border-radius:5px;border:1px solid #ddd;">`
+            :`<div style="width:36px;height:36px;border:1px dashed #ccc;border-radius:5px;background:#fafafa;display:flex;align-items:center;justify-content:center;font-size:14px;color:#aaa;">＋</div>`}
+          ${parseInt(s.broj_slika)>1?`<span style="position:absolute;bottom:-4px;right:-4px;background:var(--blue,#1a5fa8);color:#fff;font-size:8.5px;font-weight:700;padding:1px 3px;border-radius:6px;line-height:1;">${s.broj_slika}</span>`:''}
+        </div>
+      </td>
     </tr>
   `).join('');
 
