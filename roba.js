@@ -1633,6 +1633,25 @@ router.patch('/:id/debljina', async (req, res) => {
 // POST /api/roba/:id/model3d — otprema FBX (3D model) uz artikal. Jedan model po artiklu
 // (nova otprema zamjenjuje prethodni). Fajl ide na R2, u bazu samo URL — isti obrazac kao
 // slike, ali BEZ kompresije (3D geometrija se ne može smanjiti kao slika).
+// GET /api/roba/:id/model3d — proxy koji ČITA FBX sa R2 i prosleđuje ga pregledaču.
+// Potreban jer R2 (kao i ranije kod ponuda) ne šalje CORS zaglavlja, pa pregledač odbija
+// da direktno učita fajl sa druge adrese — server nema to ograničenje.
+router.get('/:id/model3d', zahtijevaProdaju, async (req, res) => {
+  try {
+    const r = await pool.query('SELECT model_3d_url FROM roba WHERE id=$1', [req.params.id]);
+    const url = r.rows[0]?.model_3d_url;
+    if (!url) return res.status(404).json({ error: 'Artikal nema 3D model.' });
+    const odgovor = await fetch(url);
+    if (!odgovor.ok) return res.status(502).json({ error: `Model nije dostupan na skladištu (${odgovor.status}).` });
+    const buffer = Buffer.from(await odgovor.arrayBuffer());
+    res.set('Content-Type', 'application/octet-stream');
+    res.set('Cache-Control', 'public, max-age=3600'); // isti model se često gleda više puta
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).json({ error: 'Greška pri čitanju modela: ' + err.message });
+  }
+});
+
 router.post('/:id/model3d', zahtijevaProdaju, upload.single('model'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Nema fajla.' });
   const ime = (req.file.originalname || '').toLowerCase();

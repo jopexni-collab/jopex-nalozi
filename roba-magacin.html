@@ -1569,7 +1569,10 @@ function m3dOcistiScenu(){
   m3dScena=null;
 }
 
-async function m3dPrikazi(url){
+async function m3dPrikazi(){
+  // Model se UVIJEK čita preko servera (proxy), ne direktno sa R2 — R2 ne šalje CORS
+  // zaglavlja pa bi pregledač odbio direktno učitavanje.
+  const url=`${API}/api/roba/${msaTrenutniRobaId}/model3d`;
   const viewer=document.getElementById('m3d-viewer');
   const ucitavanjeDiv=document.getElementById('m3d-ucitavanje');
   ucitavanjeDiv.style.display='flex';
@@ -1611,7 +1614,11 @@ async function m3dPrikazi(url){
       scene.add(obj);
       ucitavanjeDiv.style.display='none';
     }, undefined, err=>{
-      ucitavanjeDiv.textContent='✗ Model se nije mogao učitati.';
+      // Prikaži STVARNI razlog — ranije je generička poruka gutala pravi uzrok (najčešće
+      // CORS: R2 ne dozvoljava direktno čitanje sa ovog domena, ili je fajl oštećen).
+      const poruka=err?.message || err?.type || 'nepoznata greška';
+      ucitavanjeDiv.innerHTML=`<div style="text-align:center;padding:12px;font-size:12px;line-height:1.5;">✗ Model se nije mogao učitati.<br><span style="color:#8b96a5;font-size:11px;">${esc(String(poruka))}</span></div>`;
+      console.error('FBX greška:', err);
     });
 
     m3dScena={renderer};
@@ -1654,7 +1661,7 @@ async function m3dPosalji(file){
     const stavka=lagerPodaci.find(s=>s.id===msaTrenutniRobaId);
     if(stavka) stavka.model_3d_url=data.model_3d_url;
     document.getElementById('m3d-postojeci').style.display='block';
-    m3dPrikazi(data.model_3d_url);
+    m3dPrikazi();
     setTimeout(()=>{ statusDiv.style.display='none'; }, 2000);
   }catch(e){
     statusDiv.style.color='var(--red)'; statusDiv.textContent='✗ '+e.message;
@@ -1687,7 +1694,7 @@ async function otvoriKaruselSlika(robaId, naziv){
   const stavka=lagerPodaci.find(s=>s.id===robaId);
   if(stavka?.model_3d_url){
     document.getElementById('m3d-postojeci').style.display='block';
-    m3dPrikazi(stavka.model_3d_url);
+    m3dPrikazi();
   }else{
     document.getElementById('m3d-postojeci').style.display='none';
   }
