@@ -1537,31 +1537,28 @@ let m3dUcitanaBiblioteka=false, m3dScena=null, m3dAnimacija=null;
 
 function m3dUcitajBiblioteku(){
   if(m3dUcitanaBiblioteka) return Promise.resolve();
-  return new Promise((resolve,reject)=>{
-    const s1=document.createElement('script');
-    s1.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
-    s1.onload=()=>{
-      const s2=document.createElement('script');
-      s2.src='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js';
-      s2.onload=()=>{
-        const s3=document.createElement('script');
-        s3.src='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/inflate.min.js';
-        s3.onload=()=>{
-          const s4=document.createElement('script');
-          s4.src='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
-          s4.onload=()=>{ m3dUcitanaBiblioteka=true; resolve(); };
-          s4.onerror=()=>reject(new Error('Neuspešno učitavanje kontrola.'));
-          document.head.appendChild(s4);
-        };
-        s3.onerror=()=>reject(new Error('Neuspešno učitavanje dekompresije.'));
-        document.head.appendChild(s3);
-      };
-      s2.onerror=()=>reject(new Error('Neuspešno učitavanje FBX čitača.'));
-      document.head.appendChild(s2);
-    };
-    s1.onerror=()=>reject(new Error('Neuspešno učitavanje 3D biblioteke.'));
-    document.head.appendChild(s1);
-  });
+  // Redosled je BITAN: three (osnova) → fflate (dekompresija, FBXLoader je koristi za
+  // binarne FBX fajlove) → FBXLoader → OrbitControls. Ranije je fflate stajao POSLE
+  // FBXLoader-a i pod pogrešnim imenom ("inflate.min.js" — u three@0.128 fajl se zove
+  // "fflate.min.js"), pa je učitavanje padalo.
+  const putanje=[
+    'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
+    'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/fflate.min.js',
+    'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js',
+    'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js',
+  ];
+  function ucitajJedan(src){
+    return new Promise((resolve,reject)=>{
+      const s=document.createElement('script');
+      s.src=src;
+      s.onload=resolve;
+      s.onerror=()=>reject(new Error('Neuspešno učitavanje: '+src.split('/').pop()));
+      document.head.appendChild(s);
+    });
+  }
+  // Redom, jedan po jedan (ne paralelno) — svaki sledeći zavisi od prethodnog.
+  return putanje.reduce((lanac,src)=>lanac.then(()=>ucitajJedan(src)), Promise.resolve())
+    .then(()=>{ m3dUcitanaBiblioteka=true; });
 }
 
 function m3dOcistiScenu(){
