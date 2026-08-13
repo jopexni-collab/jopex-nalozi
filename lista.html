@@ -209,6 +209,29 @@ a.lk{color:var(--blue);text-decoration:none;}
 </div>
 <div id="note-tooltip"></div>
 
+<div id="modal-linkovi" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:700;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:18px;max-width:520px;width:92vw;max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 id="ml-naslov" style="margin:0;font-size:14.5px;"></h3>
+      <button onclick="document.getElementById('modal-linkovi').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+    </div>
+    <div id="ml-lista" style="margin-bottom:12px;"></div>
+    <div style="border-top:1px solid #eee;padding-top:10px;">
+      <input type="text" id="ml-novi" placeholder="Nalepi novi link ovde..." style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:13px;box-sizing:border-box;margin-bottom:8px;">
+      <button onclick="mlDodajLink()" style="width:100%;padding:8px;border:none;border-radius:8px;background:var(--blue,#1a5fa8);color:#fff;font-size:13px;cursor:pointer;">+ Dodaj link</button>
+    </div>
+    <div id="ml-status" style="font-size:12px;margin-top:8px;display:none;"></div>
+  </div>
+</div>
+
+<div id="kn-pun-ekran" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:900;align-items:center;justify-content:center;cursor:zoom-out;" onclick="knZatvoriPuniEkran()">
+  <img id="kn-pun-ekran-img" style="max-width:96vw;max-height:92vh;object-fit:contain;">
+  <button onclick="event.stopPropagation();knZatvoriPuniEkran()" style="position:absolute;top:14px;right:18px;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:50%;width:38px;height:38px;font-size:20px;cursor:pointer;">✕</button>
+  <button onclick="event.stopPropagation();knPomjeriPuniEkran(-1)" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:22px;cursor:pointer;">‹</button>
+  <button onclick="event.stopPropagation();knPomjeriPuniEkran(1)" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:22px;cursor:pointer;">›</button>
+  <div id="kn-pun-ekran-brojac" style="position:absolute;bottom:18px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#fff;font-size:13px;padding:4px 12px;border-radius:14px;"></div>
+</div>
+
 <div id="modal-slike-naloga" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:600;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:12px;padding:16px;max-width:460px;width:92vw;max-height:90vh;overflow-y:auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -217,7 +240,7 @@ a.lk{color:var(--blue);text-decoration:none;}
     </div>
     <div id="kn-karusel" style="display:none;margin-bottom:12px;">
       <div style="position:relative;background:#f5f5f5;border-radius:8px;overflow:hidden;">
-        <img id="kn-img" style="width:100%;height:300px;object-fit:contain;display:block;">
+        <img id="kn-img" onclick="knOtvoriPuniEkran()" title="Klikni za prikaz preko celog ekrana" style="width:100%;height:300px;object-fit:contain;display:block;cursor:zoom-in;">
         <button onclick="knPomjeri(-1)" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;">‹</button>
         <button onclick="knPomjeri(1)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;">›</button>
         <div id="kn-brojac" style="position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:2px 7px;border-radius:10px;"></div>
@@ -369,12 +392,16 @@ function skratiIme(puno){
   return dijelovi[0]+' '+dijelovi[dijelovi.length-1][0]+'.';
 }
 function jeGotovinaOpis(v){return /^got\b/i.test(String(v||'').trim());}
-function lk(u){
+function lk(u, rBr, polje){
   if(!u) return '';
-  // Polje može sadržati više linkova odvojenih zarezom (dodano preko kamere, više puta
-  // klik = više fotografija) — svaki se prikazuje kao svoja 🔗 ikonica, redom.
+  // Polje može sadržati više linkova odvojenih zarezom. Prikazuje se SAMO JEDNA ikonica
+  // (sa malim brojem ako ih je više) — ranije se crtala po jedna 🔗 za svaki link, što je
+  // razvlačilo kolonu kad nalog ima 4+ linka.
   const linkovi=u.split(',').map(s=>s.trim()).filter(Boolean);
-  return linkovi.map((link,i)=>`<a class="lk" href="${esc(link)}" target="_blank" title="${linkovi.length>1?`Slika ${i+1}/${linkovi.length}`:''}">🔗</a>`).join(' ');
+  if(!linkovi.length) return '';
+  const visestruki=linkovi.length>1;
+  const naslov=visestruki?`${linkovi.length} linkova — klikni za pregled/brisanje`:'Klikni za otvaranje ili brisanje';
+  return `<a class="lk" href="#" onclick="event.preventDefault();event.stopPropagation();otvoriUpravljanjeLinkovima(${rBr},'${polje}');" title="${esc(naslov)}" style="position:relative;display:inline-block;">🔗${visestruki?`<span style="position:absolute;top:-4px;right:-7px;background:var(--blue,#1a5fa8);color:#fff;font-size:8px;font-weight:700;padding:0 3px;border-radius:6px;line-height:1.4;">${linkovi.length}</span>`:''}</a>`;
 }
 function gv(id){return(document.getElementById(id)||{}).value||'';}
 
@@ -405,8 +432,8 @@ function getCols(){
     {k:'reklamacija_dodatni_rad',l:'Rek.',w:60,filter:'sel',opts:['DA','NE'],render:r=>`<td class="center">${chipR(r.reklamacija_dodatni_rad)}</td>`,edit:{type:'select',opts:['','NE','DA'],field:'reklamacija_dodatni_rad',label:'Reklamacija'}},
     {k:'napomena',l:'Napomena',w:220,filter:'text',render:r=>`<td class="note-cell${r.napomena?' has-note':''}" data-note="${esc(r.napomena)}"><div class="clamp2-inner">${esc(r.napomena)}</div></td>`,edit:{type:'textarea',field:'napomena',label:'Napomena / upute operateru'}},
     {k:'labele',l:'Labele',w:60,filter:null,render:r=>`<td class="center"><button onclick="otvoriLabele(${r.r_br})" title="Printaj labele za ovaj nalog" style="background:none;border:none;cursor:pointer;font-size:16px;">🏷️</button></td>`},
-    {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center">${lk(r.link_skica)}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
-    {k:'link_ponuda',l:'R.Nalog',w:50,filter:null,render:r=>`<td class="center">${lk(r.link_ponuda)}</td>`,edit:{type:'text',field:'link_ponuda',label:'Link radni nalog'}},
+    {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center">${lk(r.link_skica, r.r_br, 'link_skica')}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
+    {k:'link_ponuda',l:'R.Nalog',w:50,filter:null,render:r=>`<td class="center">${lk(r.link_ponuda, r.r_br, 'link_ponuda')}</td>`,edit:{type:'text',field:'link_ponuda',label:'Link radni nalog'}},
     {k:'slike',l:'📷',w:44,filter:null,render:r=>`<td class="center">
       <div onclick="event.stopPropagation();otvoriKaruselNaloga(${r.r_br})" style="position:relative;display:inline-block;cursor:pointer;" title="Slike naloga">
         ${r.glavna_slika
@@ -1564,6 +1591,105 @@ function knPrikaziTrenutnu(){
   if(s.glavna){ btn.textContent='★ Glavna'; btn.disabled=true; btn.style.opacity='.6'; }
   else{ btn.textContent='☆ Postavi kao glavnu'; btn.disabled=false; btn.style.opacity='1'; }
 }
+// Prikaz preko CELOG ekrana — klik na sliku u karuselu. Strelice rade i ovde, pa se može
+// listati kroz sve slike u punoj veličini bez izlaska.
+/* ═══ UPRAVLJANJE LINKOVIMA (Skica / R.Nalog) ═══
+   Polje može sadržati više linkova odvojenih zarezom. Ovde se svaki prikazuje kao poseban
+   red sa dugmetom za otvaranje i brisanje — ranije je jedini način bio ručno prepravljati
+   ceo tekst u jednom malom polju, što je bilo nezgodno kad ima 4+ linka. */
+let mlRBr=null, mlPolje=null;
+const ML_NAZIVI={link_skica:'Skica (DXF)', link_ponuda:'Radni nalog'};
+
+function otvoriUpravljanjeLinkovima(rBr, polje){
+  mlRBr=rBr; mlPolje=polje;
+  document.getElementById('ml-naslov').textContent=`${ML_NAZIVI[polje]||polje} — nalog R.Br ${rBr}`;
+  document.getElementById('ml-novi').value='';
+  document.getElementById('ml-status').style.display='none';
+  document.getElementById('modal-linkovi').style.display='flex';
+  mlRenderListu();
+}
+
+function mlTrenutniLinkovi(){
+  const nalog=all.find(r=>r.r_br===mlRBr);
+  const vrijednost=nalog?.[mlPolje]||'';
+  return vrijednost.split(',').map(s=>s.trim()).filter(Boolean);
+}
+
+function mlRenderListu(){
+  const linkovi=mlTrenutniLinkovi();
+  const cont=document.getElementById('ml-lista');
+  if(!linkovi.length){ cont.innerHTML='<div style="color:#8b96a5;font-size:12.5px;padding:8px 0;">Nema linkova.</div>'; return; }
+  cont.innerHTML=linkovi.map((link,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f2f5;">
+      <span style="color:#999;font-size:11px;min-width:16px;">${i+1}.</span>
+      <a href="${esc(link)}" target="_blank" style="flex:1;font-size:11.5px;color:var(--blue,#1a5fa8);word-break:break-all;text-decoration:none;">${esc(link)}</a>
+      <button onclick="mlObrisiLink(${i})" title="Obriši ovaj link" style="flex-shrink:0;background:var(--red,#c0392b);color:#fff;border:none;border-radius:5px;width:26px;height:26px;font-size:12px;cursor:pointer;">🗑</button>
+    </div>`).join('');
+}
+
+async function mlSacuvaj(noviNiz){
+  const statusDiv=document.getElementById('ml-status');
+  const novaVrijednost=noviNiz.join(', ');
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/${mlRBr}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({[mlPolje]: novaVrijednost || null}),
+    });
+    if(!r.ok) throw new Error((await r.json()).error||'Greška.');
+    const nalog=all.find(x=>x.r_br===mlRBr);
+    if(nalog) nalog[mlPolje]=novaVrijednost||null;
+    mlRenderListu();
+    render();
+    statusDiv.style.display='block'; statusDiv.style.color='var(--green)';
+    statusDiv.textContent='✓ Sačuvano.';
+    setTimeout(()=>{ statusDiv.style.display='none'; }, 1500);
+  }catch(e){
+    statusDiv.style.display='block'; statusDiv.style.color='var(--red)';
+    statusDiv.textContent='✗ '+e.message;
+  }
+}
+
+function mlObrisiLink(indeks){
+  const linkovi=mlTrenutniLinkovi();
+  if(!confirm(`Obrisati ovaj link?\n\n${linkovi[indeks]}`)) return;
+  linkovi.splice(indeks,1);
+  mlSacuvaj(linkovi);
+}
+
+function mlDodajLink(){
+  const polje=document.getElementById('ml-novi');
+  const novi=polje.value.trim();
+  if(!novi) return;
+  const linkovi=mlTrenutniLinkovi();
+  linkovi.push(novi);
+  polje.value='';
+  mlSacuvaj(linkovi);
+}
+
+function knOtvoriPuniEkran(){
+  if(!knSlike.length) return;
+  document.getElementById('kn-pun-ekran-img').src=knSlike[knIndeks].url;
+  document.getElementById('kn-pun-ekran-brojac').textContent=`${knIndeks+1}/${knSlike.length}`;
+  document.getElementById('kn-pun-ekran').style.display='flex';
+}
+function knZatvoriPuniEkran(){
+  document.getElementById('kn-pun-ekran').style.display='none';
+}
+function knPomjeriPuniEkran(smjer){
+  if(!knSlike.length) return;
+  knIndeks=(knIndeks+smjer+knSlike.length)%knSlike.length;
+  document.getElementById('kn-pun-ekran-img').src=knSlike[knIndeks].url;
+  document.getElementById('kn-pun-ekran-brojac').textContent=`${knIndeks+1}/${knSlike.length}`;
+  knPrikaziTrenutnu(); // drži i mali karusel usklađen
+}
+// Tastatura u punom ekranu — strelice za listanje, Esc za izlaz.
+document.addEventListener('keydown', e=>{
+  if(document.getElementById('kn-pun-ekran')?.style.display!=='flex') return;
+  if(e.key==='Escape') knZatvoriPuniEkran();
+  else if(e.key==='ArrowLeft') knPomjeriPuniEkran(-1);
+  else if(e.key==='ArrowRight') knPomjeriPuniEkran(1);
+});
+
 function knPomjeri(smjer){
   if(!knSlike.length) return;
   knIndeks=(knIndeks+smjer+knSlike.length)%knSlike.length;
