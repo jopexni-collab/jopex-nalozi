@@ -1344,9 +1344,17 @@ router.post('/presek/pregled', upload.single('file'), async (req, res) => {
 // stornirati kao cjelina, isti obrazac kao uvoz_batch).
 router.post('/presek/primeni', async (req, res) => {
   if (req.session?.user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin.' });
-  const { objekt_id, stavke, naziv_fajla } = req.body || {};
+  const { objekt_id, stavke, naziv_fajla, azuriraj_cene, azuriraj_stanje } = req.body || {};
   if (!objekt_id || !Array.isArray(stavke) || !stavke.length)
     return res.status(400).json({ error: 'Nema stavki za primjenu.' });
+  // Podrazumevano NE dira cene — presek nekad dolazi iz izvora (npr. Bluesoft) gdje
+  // "cena" kolona NIJE prodajna cena koju JoPeX koristi, pa bi je nesvesno pregazila.
+  // Admin mora eksplicitno da uključi "Ažuriraj i cene" da bi se cena uopšte dirala.
+  const dirajCene = azuriraj_cene === true;
+  // Podrazumevano SE dira stanje (postojeće ponašanje) — eksplicitno false znači "ovaj fajl
+  // je star/samo za cene, ne diraj stanje" (npr. stariji Bluesoft izvoz sa ispravnim
+  // cenama koje treba vratiti, bez uticaja na trenutne stvarne količine).
+  const dirajStanje = azuriraj_stanje !== false;
 
   const user = req.session.user;
   const client = await pool.connect();
@@ -1383,22 +1391,31 @@ router.post('/presek/primeni', async (req, res) => {
 
       const stanjeNovo = parseFloat(s.stanje_novo) || 0;
       const cijenaNova = parseFloat(s.cijena_nova) || 0;
-
+      const postojeciRes = await client.query('SELECT cijena, stanje FROM roba_pj WHERE roba_id=$1 AND objekt_id=$2', [robaId, objekt_id]);
+      const cijenaStara = postojeciRes.rows[0] ? parseFloat(postojeciRes.rows[0].cijena) : null;
+      const stanjeStaroIzBaze = postojeciRes.rows[0] ? parseFloat(postojeciRes.rows[0].stanje) : null;
+      // Ako admin NIJE uključio "Ažuriraj i cene" — zadrži POSTOJEĆU cenu.
+      // Ako je isključio "Ažuriraj stanje" (npr. stari fajl, samo za ispravku cena) —
+      // zadrži POSTOJEĆE stanje, ne piši novo iz fajla.
+      const stanjeZaUpis = dirajStanje ? stanjeNovo : (stanjeStaroIzBaze ?? stanjeNovo);
       await client.query(
         `INSERT INTO roba_pj (roba_id, objekt_id, cijena, stanje)
          VALUES ($1,$2,$3,$4)
          ON CONFLICT (roba_id, objekt_id) DO UPDATE SET cijena=$3, stanje=$4, azurirano=now()`,
-        [robaId, objekt_id, cijenaNova, stanjeNovo]
+        [robaId, objekt_id, dirajCene ? cijenaNova : (cijenaStara ?? cijenaNova), stanjeZaUpis]
       );
 
       const staroStanje = parseFloat(s.stanje_staro) || 0;
-      const razlika = +(stanjeNovo - staroStanje).toFixed(3);
-      if (Math.abs(razlika) > 0.001) {
+      const razlika = dirajStanje ? +(stanjeNovo - staroStanje).toFixed(3) : 0;
+      const cijenaSePromijenila = dirajCene && cijenaStara !== null && Math.abs(cijenaStara - cijenaNova) > 0.001;
+      // Beleži audit trag ako se PROMIJENILA kolicina ILI cena (ranije se beležilo SAMO
+      // ako se kolicina promijenila — promjena SAMO cene je prolazila potpuno bez traga).
+      if (Math.abs(razlika) > 0.001 || cijenaSePromijenila) {
         await client.query(
-          `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_nova, napomena, korisnik_id, korisnik_ime, presek_batch_id)
-           VALUES ($1,$2,'korekcija-preseka',$3,$4,$5,$6,$7,$8)`,
-          [robaId, objekt_id, razlika, cijenaNova,
-           `Presek/usaglašavanje — staro stanje ${staroStanje}, novo ${stanjeNovo}`,
+          `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_stara, cijena_nova, napomena, korisnik_id, korisnik_ime, presek_batch_id)
+           VALUES ($1,$2,'korekcija-preseka',$3,$4,$5,$6,$7,$8,$9)`,
+          [robaId, objekt_id, razlika, cijenaStara, dirajCene ? cijenaNova : cijenaStara,
+           `Presek/usaglašavanje — ${dirajStanje?`staro stanje ${staroStanje}, novo ${stanjeNovo}`:'stanje NIJE dirano (samo cene)'}${cijenaSePromijenila?` | cena: ${cijenaStara} → ${cijenaNova}`:''}`,
            user.id, user.ime_prezime, batchId]
         );
       }

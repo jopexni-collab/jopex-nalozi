@@ -528,8 +528,21 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <div id="presek-greska" style="display:none;background:#fce8e6;color:var(--red);padding:10px;border-radius:8px;margin-bottom:12px;white-space:pre-line;"></div>
     <div id="presek-sazetak" style="display:none;margin-bottom:12px;"></div>
     <div id="presek-tabela-wrap"></div>
-    <div id="presek-primeni-wrap" style="display:none;margin-top:14px;text-align:right;">
-      <button type="button" class="btn" style="background:var(--green,#1f8a4c);" onclick="presekPrimeni()">✓ Primeni usaglašavanje</button>
+    <div id="presek-primeni-wrap" style="display:none;margin-top:14px;">
+      <div style="background:#f7f8fa;border-radius:8px;padding:10px 12px;margin-bottom:10px;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;margin-bottom:6px;">
+          <input type="checkbox" id="presek-azuriraj-stanje" checked>
+          Ažuriraj stanje (količinu)
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;">
+          <input type="checkbox" id="presek-azuriraj-cene">
+          Ažuriraj cene
+        </label>
+        <div style="font-size:11px;color:#8b96a5;margin-top:6px;">Uključi/isključi nezavisno — npr. za stariji fajl koji ima ispravne cene ali zastarelo stanje, isključi "Ažuriraj stanje" i ostavi samo "Ažuriraj cene".</div>
+      </div>
+      <div style="text-align:right;">
+        <button type="button" class="btn" style="background:var(--green,#1f8a4c);" onclick="presekPrimeni()">✓ Primeni usaglašavanje</button>
+      </div>
     </div>
   </div>
   <div class="import-box" style="margin-top:16px;">
@@ -2808,12 +2821,16 @@ function presekIzmeniPolje(indeks, polje, vrijednost){
 
 async function presekPrimeni(){
   const objektId=document.getElementById('presek-objekat').value;
+  const azurirajCene=document.getElementById('presek-azuriraj-cene').checked;
+  const azurirajStanje=document.getElementById('presek-azuriraj-stanje').checked;
+  if(!azurirajCene && !azurirajStanje){ alert('Izaberi bar jedno — stanje ili cene (ili oba).'); return; }
   const brojZaPrimjenu=presekStavke.filter(s=>s.status!=='greska').length;
-  if(!confirm(`Primeniti usaglašavanje za ${brojZaPrimjenu} stavki? Redovi sa greškom se preskaču (ostaju kako su bili). Ovo se može stornirati kao celina posle.`)) return;
+  const sta=[azurirajStanje?'STANJE':null, azurirajCene?'CENE':null].filter(Boolean).join(' i ');
+  if(!confirm(`Primeniti usaglašavanje za ${brojZaPrimjenu} stavki (ažurira se: ${sta})? Redovi sa greškom se preskaču (ostaju kako su bili). Ovo se može stornirati kao celina posle.`)) return;
   try{
     const r=await fetch(`${API}/api/roba/presek/primeni`,{
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ objekt_id:objektId, stavke:presekStavke, naziv_fajla:presekNazivFajla }),
+      body:JSON.stringify({ objekt_id:objektId, stavke:presekStavke, naziv_fajla:presekNazivFajla, azuriraj_cene:azurirajCene, azuriraj_stanje:azurirajStanje }),
     });
     const data=await r.json();
     if(!r.ok){ alert('✗ '+data.error); return; }
