@@ -209,6 +209,41 @@ a.lk{color:var(--blue);text-decoration:none;}
 </div>
 <div id="note-tooltip"></div>
 
+<div id="modal-slike-naloga" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:600;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:16px;max-width:460px;width:92vw;max-height:90vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <h3 id="kn-naziv" style="margin:0;font-size:14.5px;"></h3>
+      <button onclick="document.getElementById('modal-slike-naloga').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+    </div>
+    <div id="kn-karusel" style="display:none;margin-bottom:12px;">
+      <div style="position:relative;background:#f5f5f5;border-radius:8px;overflow:hidden;">
+        <img id="kn-img" style="width:100%;height:300px;object-fit:contain;display:block;">
+        <button onclick="knPomjeri(-1)" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;">‹</button>
+        <button onclick="knPomjeri(1)" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;">›</button>
+        <div id="kn-brojac" style="position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:2px 7px;border-radius:10px;"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button id="kn-btn-glavna" onclick="knPostaviGlavnu()" style="flex:1;font-size:12px;padding:7px;border:1px solid var(--border,#ddd);border-radius:6px;background:#fff;cursor:pointer;">★ Postavi kao glavnu</button>
+        <button onclick="knObrisiTrenutnu()" style="flex:0 0 auto;font-size:12px;padding:7px 12px;border:none;border-radius:6px;background:var(--red,#c0392b);color:#fff;cursor:pointer;">🗑 Obriši</button>
+      </div>
+    </div>
+    <div id="kn-drop" style="border:3px dashed var(--border,#ccc);border-radius:12px;padding:38px 16px;text-align:center;color:#8b96a5;font-size:14px;cursor:pointer;margin-bottom:10px;">
+      <div style="font-size:32px;margin-bottom:6px;">📷</div>
+      <b>Klikni da izabereš slike</b><br><span style="font-size:12px;">ili prevuci jednu ili više ovde</span>
+    </div>
+    <input type="file" id="kn-file" accept="image/*" multiple style="display:none;">
+    <div id="kn-cekaju-blok" style="display:none;margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px;">Spremno za dodavanje (<span id="kn-cekaju-broj">0</span>):</div>
+      <div id="kn-cekaju-lista" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="knOtkaziCekaju()" style="flex:1;font-size:12px;padding:7px;border:1px solid var(--border,#ddd);border-radius:6px;background:#fff;cursor:pointer;">Otkaži</button>
+        <button onclick="knPotvrdiCekaju()" style="flex:2;font-size:12px;padding:7px;border:none;border-radius:6px;background:var(--green,#1f8a4c);color:#fff;font-weight:700;cursor:pointer;">✓ Potvrdi i dodaj</button>
+      </div>
+    </div>
+    <div id="kn-status" style="font-size:12px;color:var(--red);display:none;"></div>
+  </div>
+</div>
+
 <script>
 const API='';
 const STATUSI=['Nije Započeto','Zakazano','U radu','Čeka isporuku','Isporučeno','Kasni','Otkazano'];
@@ -372,6 +407,13 @@ function getCols(){
     {k:'labele',l:'Labele',w:60,filter:null,render:r=>`<td class="center"><button onclick="otvoriLabele(${r.r_br})" title="Printaj labele za ovaj nalog" style="background:none;border:none;cursor:pointer;font-size:16px;">🏷️</button></td>`},
     {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center">${lk(r.link_skica)}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
     {k:'link_ponuda',l:'R.Nalog',w:50,filter:null,render:r=>`<td class="center">${lk(r.link_ponuda)}</td>`,edit:{type:'text',field:'link_ponuda',label:'Link radni nalog'}},
+    {k:'slike',l:'📷',w:44,filter:null,render:r=>`<td class="center">
+      <div onclick="event.stopPropagation();otvoriKaruselNaloga(${r.r_br})" style="position:relative;display:inline-block;cursor:pointer;" title="Slike naloga">
+        ${r.glavna_slika
+          ?`<img src="${esc(r.glavna_slika)}" loading="lazy" style="width:30px;height:30px;object-fit:cover;border-radius:4px;border:1px solid #ddd;vertical-align:middle;">`
+          :`<div style="width:30px;height:30px;border:1px dashed #ccc;border-radius:4px;background:#fafafa;display:flex;align-items:center;justify-content:center;font-size:12px;color:#bbb;">＋</div>`}
+        ${parseInt(r.broj_slika)>1?`<span style="position:absolute;bottom:-3px;right:-3px;background:var(--blue,#1a5fa8);color:#fff;font-size:8px;font-weight:700;padding:1px 3px;border-radius:6px;line-height:1;">${r.broj_slika}</span>`:''}
+      </div></td>`},
   ];
   const fin=[
     {k:'ugovorena_suma',l:'Ugovoreno',w:90,filter:null,render:r=>mozeVidjetiFin(r)?`<td class="num">${fm(r.ugovorena_suma)}</td>`:'<td class="num">—</td>',edit:{type:'number',field:'ugovorena_suma',label:'Ugovorena suma (KM)'}},
@@ -1471,8 +1513,158 @@ async function load(){
   }
 }
 
+/* ═══ SLIKE RADNOG NALOGA — karusel (isti sistem kao u lageru) ═══
+   Odvojeno od link_skica (DXF) i link_ponuda (PDF) — ta dva polja rade kao i dosad. */
+let knTrenutniRBr=null, knSlike=[], knIndeks=0, knCekaju=[];
+
+function knSmanjiSliku(file){
+  return new Promise((resolve, reject)=>{
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const MAX=1000; // nalozi mogu imati detaljnije slike od lagera — malo veći limit
+      let {width:w, height:h}=img;
+      if(w>MAX||h>MAX){ if(w>h){ h=Math.round(h*MAX/w); w=MAX; } else { w=Math.round(w*MAX/h); h=MAX; } }
+      const canvas=document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      canvas.toBlob(blob=>{
+        if(!blob){ reject(new Error('Neuspešna obrada slike.')); return; }
+        resolve(new File([blob], file.name.replace(/\.[^.]+$/,'')+'.jpg', {type:'image/jpeg'}));
+      }, 'image/jpeg', 0.8);
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Fajl nije prepoznat kao slika.')); };
+    img.src=url;
+  });
+}
+
+async function otvoriKaruselNaloga(rBr){
+  knTrenutniRBr=rBr;
+  document.getElementById('kn-naziv').textContent='Nalog R.Br '+rBr;
+  document.getElementById('kn-status').style.display='none';
+  document.getElementById('modal-slike-naloga').style.display='flex';
+  document.getElementById('kn-karusel').style.display='none';
+  knOtkaziCekaju();
+  knSlike=[]; knIndeks=0;
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/${rBr}/slike`);
+    knSlike=await r.json();
+    if(knSlike.length) knPrikaziTrenutnu();
+  }catch(e){}
+}
+
+function knPrikaziTrenutnu(){
+  if(!knSlike.length){ document.getElementById('kn-karusel').style.display='none'; return; }
+  document.getElementById('kn-karusel').style.display='block';
+  const s=knSlike[knIndeks];
+  document.getElementById('kn-img').src=s.url;
+  document.getElementById('kn-brojac').textContent=`${knIndeks+1}/${knSlike.length}`;
+  const btn=document.getElementById('kn-btn-glavna');
+  if(s.glavna){ btn.textContent='★ Glavna'; btn.disabled=true; btn.style.opacity='.6'; }
+  else{ btn.textContent='☆ Postavi kao glavnu'; btn.disabled=false; btn.style.opacity='1'; }
+}
+function knPomjeri(smjer){
+  if(!knSlike.length) return;
+  knIndeks=(knIndeks+smjer+knSlike.length)%knSlike.length;
+  knPrikaziTrenutnu();
+}
+async function knPostaviGlavnu(){
+  const s=knSlike[knIndeks];
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/${knTrenutniRBr}/slike/${s.id}/glavna`, {method:'POST'});
+    if(!r.ok) throw new Error((await r.json()).error||'Greška.');
+    knSlike.forEach(x=>x.glavna=false); s.glavna=true;
+    knPrikaziTrenutnu(); knOsvjeziRedULysti();
+  }catch(e){ alert('✗ '+e.message); }
+}
+async function knObrisiTrenutnu(){
+  const s=knSlike[knIndeks];
+  if(!confirm('Obrisati ovu sliku sa naloga?')) return;
+  try{
+    const r=await fetch(`${API}/api/proizvodnja/${knTrenutniRBr}/slike/${s.id}`, {method:'DELETE'});
+    if(!r.ok) throw new Error((await r.json()).error||'Greška.');
+    knSlike.splice(knIndeks,1);
+    if(knIndeks>=knSlike.length) knIndeks=Math.max(0,knSlike.length-1);
+    if(s.glavna && knSlike.length) knSlike[0].glavna=true;
+    knPrikaziTrenutnu(); knOsvjeziRedULysti();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+function knOsvjeziRedULysti(){
+  const nalog=all.find(x=>x.r_br===knTrenutniRBr);
+  if(nalog){
+    nalog.glavna_slika=knSlike.find(x=>x.glavna)?.url || knSlike[0]?.url || null;
+    nalog.broj_slika=knSlike.length;
+    render();
+  }
+}
+
+document.getElementById('kn-drop').addEventListener('click', ()=>document.getElementById('kn-file').click());
+document.getElementById('kn-drop').addEventListener('dragover', e=>{ e.preventDefault(); e.currentTarget.style.background='#eaf2fb'; e.currentTarget.style.borderColor='var(--blue,#1a5fa8)'; });
+document.getElementById('kn-drop').addEventListener('dragleave', e=>{ e.currentTarget.style.background=''; e.currentTarget.style.borderColor=''; });
+document.getElementById('kn-drop').addEventListener('drop', e=>{
+  e.preventDefault(); e.currentTarget.style.background=''; e.currentTarget.style.borderColor='';
+  knDodajUCekanje([...e.dataTransfer.files]);
+});
+document.getElementById('kn-file').addEventListener('change', e=>{ knDodajUCekanje([...e.target.files]); e.target.value=''; });
+
+function knDodajUCekanje(fajlovi){
+  const slike=fajlovi.filter(f=>f.type.startsWith('image/'));
+  if(!slike.length) return;
+  slike.forEach(f=>knCekaju.push({fajl:f, pregledUrl:URL.createObjectURL(f)}));
+  knRenderCekaju();
+}
+function knRenderCekaju(){
+  const blok=document.getElementById('kn-cekaju-blok');
+  if(!knCekaju.length){ blok.style.display='none'; return; }
+  blok.style.display='block';
+  document.getElementById('kn-cekaju-broj').textContent=knCekaju.length;
+  document.getElementById('kn-cekaju-lista').innerHTML=knCekaju.map((s,i)=>`
+    <div style="position:relative;">
+      <img src="${s.pregledUrl}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #ddd;">
+      <button onclick="knUkloniIzCekanja(${i})" style="position:absolute;top:-6px;right:-6px;background:var(--red,#c0392b);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer;line-height:1;">✕</button>
+    </div>`).join('');
+}
+function knUkloniIzCekanja(i){ URL.revokeObjectURL(knCekaju[i].pregledUrl); knCekaju.splice(i,1); knRenderCekaju(); }
+function knOtkaziCekaju(){ knCekaju.forEach(s=>URL.revokeObjectURL(s.pregledUrl)); knCekaju=[]; knRenderCekaju(); }
+
+async function knPotvrdiCekaju(){
+  if(!knCekaju.length) return;
+  const statusDiv=document.getElementById('kn-status');
+  statusDiv.style.display='block'; statusDiv.style.color='#8b96a5';
+  let uspjesno=0, neuspjesno=[];
+  for(let i=0;i<knCekaju.length;i++){
+    const s=knCekaju[i];
+    statusDiv.textContent=`Otpremanje ${i+1}/${knCekaju.length} — ${s.fajl.name}...`;
+    try{
+      const smanjena=await knSmanjiSliku(s.fajl);
+      const fd=new FormData(); fd.append('slika', smanjena);
+      const r=await fetch(`${API}/api/proizvodnja/${knTrenutniRBr}/slika`, {method:'POST', body:fd});
+      const data=await r.json();
+      if(!r.ok) throw new Error(data.error||'Greška.');
+      if(data.glavna) knSlike.forEach(x=>x.glavna=false);
+      knSlike.push({id:data.slika_id, url:data.url, glavna:data.glavna});
+      uspjesno++;
+    }catch(e){ neuspjesno.push(`${s.fajl.name}: ${e.message}`); }
+  }
+  knOtkaziCekaju();
+  knIndeks=Math.max(0, knSlike.length-1);
+  knPrikaziTrenutnu(); knOsvjeziRedULysti();
+  if(neuspjesno.length){
+    statusDiv.style.color='var(--red)';
+    statusDiv.textContent=`✓ ${uspjesno} dodato, ✗ ${neuspjesno.length} neuspešno: ${neuspjesno.join('; ')}`;
+  }else{
+    statusDiv.style.color='var(--green)';
+    statusDiv.textContent=`✓ Dodato ${uspjesno} slika.`;
+    setTimeout(()=>{ statusDiv.style.display='none'; }, 1500);
+  }
+}
+
 document.getElementById('logout').onclick=async e=>{e.preventDefault();await fetch(API+'/api/auth/logout',{method:'POST'});location.href='login.html';};
 document.getElementById('search').addEventListener('input',render);
 checkAuth();
 </script>
+
+
 </body></html>

@@ -2,6 +2,10 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('./db');
+const multer = require('multer');
+const { uploadFile } = require('./storage');
+
+const uploadSlika = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 // Finansijske kolone - vide ih samo admini
 const ADMIN_COLS = `
@@ -32,7 +36,9 @@ const BASE_COLS = `
   p.gotovo, p.reklamacija_dodatni_rad, p.napomena,
   p.link_skica, p.link_ponuda, p.datum_kreiranja, p.nova_procjena,
   p.naplaceno, p.naplaceno_opis, COALESCE(p.stornirano,false) AS stornirano,
-  COALESCE(p.izvor,'velika_ponuda') AS izvor
+  COALESCE(p.izvor,'velika_ponuda') AS izvor,
+  (SELECT url FROM nalog_slike WHERE nalog_r_br=p.r_br AND glavna=true LIMIT 1) AS glavna_slika,
+  (SELECT COUNT(*) FROM nalog_slike WHERE nalog_r_br=p.r_br) AS broj_slika
 `;
 
 // Finansijska polja (iz ADMIN_COLS) — vidljiva adminu, ILI osobi koja je upisana kao
@@ -1005,6 +1011,92 @@ router.get('/:r_br/ponuda-json', async (req, res) => {
     res.json(json);
   } catch (err) {
     res.status(500).json({ error: 'Greška pri čitanju ponude: ' + err.message });
+  }
+});
+
+/* ═══ SLIKE RADNOG NALOGA ═══════════════════════════════════════════════════
+   Odvojeno od link_skica (DXF crtež) i link_ponuda (PDF/JSON radnog naloga) — te dvije
+   kolone ostaju netaknute i rade kao i dosad. Ovdje idu SAMO fotografije (JPG/PNG), po
+   uzoru na roba_slike sistem: više slika po nalogu, jedna glavna, karusel prikaz.
+   Razlog: kad mali nalog ima 4 slike, ranije su se pojavljivala 4 linka nabijena u jedno
+   tekstualno polje — nepregledno i lako se sudara sa PDF linkom iz velikog naloga. */
+
+// POST /api/proizvodnja/:r_br/slika — dodaje sliku na nalog. Prva ikad dodana postaje glavna.
+router.post('/:r_br/slika', uploadSlika.single('slika'), async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  if (!req.file) return res.status(400).json({ error: 'Nema fajla.' });
+  if (!req.file.mimetype.startsWith('image/')) return res.status(400).json({ error: 'Fajl mora biti slika.' });
+  try {
+    const ekstenzija = (req.file.originalname.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const kljuc = `nalog-slike/${req.params.r_br}-${Date.now()}.${ekstenzija}`;
+    const url = await uploadFile(kljuc, req.file.buffer, req.file.mimetype);
+
+    const postojeceRes = await pool.query('SELECT COUNT(*) AS n, COALESCE(MAX(redosled),-1) AS max_red FROM nalog_slike WHERE nalog_r_br=$1', [req.params.r_br]);
+    const jePrva = parseInt(postojeceRes.rows[0].n) === 0;
+    const noviRedosled = parseInt(postojeceRes.rows[0].max_red) + 1;
+
+    const ins = await pool.query(
+      'INSERT INTO nalog_slike (nalog_r_br, url, redosled, glavna) VALUES ($1,$2,$3,$4) RETURNING id',
+      [req.params.r_br, url, noviRedosled, jePrva]
+    );
+    res.json({ ok: true, slika_id: ins.rows[0].id, url, glavna: jePrva });
+  } catch (err) {
+    res.status(500).json({ error: 'Greška pri otpremanju slike: ' + err.message });
+  }
+});
+
+// GET /api/proizvodnja/:r_br/slike — lista svih slika naloga, glavna prva.
+router.get('/:r_br/slike', async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  try {
+    const r = await pool.query(
+      'SELECT id, url, redosled, glavna FROM nalog_slike WHERE nalog_r_br=$1 ORDER BY glavna DESC, redosled ASC',
+      [req.params.r_br]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/proizvodnja/:r_br/slike/:slikaId/glavna — postavlja jednu kao glavnu.
+router.post('/:r_br/slike/:slikaId/glavna', async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('UPDATE nalog_slike SET glavna=false WHERE nalog_r_br=$1', [req.params.r_br]);
+    const r = await client.query('UPDATE nalog_slike SET glavna=true WHERE id=$1 AND nalog_r_br=$2 RETURNING id', [req.params.slikaId, req.params.r_br]);
+    if (!r.rows.length) throw Object.assign(new Error('Slika nije pronađena.'), { status: 404 });
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /api/proizvodnja/:r_br/slike/:slikaId — briše jednu sliku (undo pogrešnog unosa).
+router.delete('/:r_br/slike/:slikaId', async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const obr = await client.query('DELETE FROM nalog_slike WHERE id=$1 AND nalog_r_br=$2 RETURNING glavna', [req.params.slikaId, req.params.r_br]);
+    if (!obr.rows.length) throw Object.assign(new Error('Slika nije pronađena.'), { status: 404 });
+    if (obr.rows[0].glavna) {
+      const sljedeca = await client.query('SELECT id FROM nalog_slike WHERE nalog_r_br=$1 ORDER BY redosled ASC LIMIT 1', [req.params.r_br]);
+      if (sljedeca.rows.length) await client.query('UPDATE nalog_slike SET glavna=true WHERE id=$1', [sljedeca.rows[0].id]);
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
