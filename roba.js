@@ -43,17 +43,21 @@ router.get('/', zahtijevaProdaju, async (req, res) => {
     if (objektId) {
       if (!term) {
         const r = await pool.query(
-          `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, r.grupa, rp.cijena, rp.stanje
+          `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, r.grupa, rp.cijena, rp.stanje,
+                  EXISTS(SELECT 1 FROM roba_slike WHERE roba_id=r.id) AS ima_sliku
            FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
            WHERE r.aktivan=true ORDER BY r.naziv LIMIT $2`,
           [objektId, lim]
         );
         return res.json(r.rows);
       }
+      // Pretraga gleda i GRUPU (ne samo šifru i naziv) — komercijalista često zna kojoj
+      // grupi artikal pripada ("bengal") iako ne zna tačan naziv varijante.
       const r = await pool.query(
-        `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, r.grupa, rp.cijena, rp.stanje
+        `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, r.grupa, rp.cijena, rp.stanje,
+                EXISTS(SELECT 1 FROM roba_slike WHERE roba_id=r.id) AS ima_sliku
          FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
-         WHERE r.aktivan=true AND (r.sifra ILIKE $2 OR r.naziv ILIKE $3)
+         WHERE r.aktivan=true AND (r.sifra ILIKE $2 OR r.naziv ILIKE $3 OR r.grupa ILIKE $3)
          ORDER BY (r.sifra ILIKE $2) DESC, r.naziv
          LIMIT $4`,
         [objektId, `${term}%`, `%${term}%`, lim]
@@ -70,7 +74,7 @@ router.get('/', zahtijevaProdaju, async (req, res) => {
     }
     const r = await pool.query(
       `SELECT id, sifra, naziv, jed_mjera, aktivan, grupa FROM roba
-       WHERE aktivan=true AND (sifra ILIKE $1 OR naziv ILIKE $2)
+       WHERE aktivan=true AND (sifra ILIKE $1 OR naziv ILIKE $2 OR grupa ILIKE $2)
        ORDER BY (sifra ILIKE $1) DESC, naziv
        LIMIT $3`,
       [`${term}%`, `%${term}%`, lim]
