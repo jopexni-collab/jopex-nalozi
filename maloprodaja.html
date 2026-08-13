@@ -1864,21 +1864,38 @@ function prLagerOtvoriFilterPanel(kolona,dugmeEl){
   panel.style.top=prLagerFilterPanelPozicija.top;
   panel.style.left=prLagerFilterPanelPozicija.left;
   panel.style.display='flex';
-  prLagerRenderFilterPanel();
+  // STATIČNA struktura se pravi SAMO JEDNOM ovdje — polje za pretragu se nikad ne
+  // uništava/pravi iznova dok je panel otvoren, pa ne gubi fokus posle svakog slova.
+  panel.innerHTML=`
+    <div style="padding:8px;border-bottom:1px solid #eee;">
+      <input type="text" id="prlager-filter-search-input" placeholder="Pretraga... (sačekaj tren)" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box;">
+    </div>
+    <div id="prlager-filter-checkbox-lista" style="overflow-y:auto;flex:1;padding:6px 8px;"></div>
+    <div style="display:flex;gap:6px;padding:8px;border-top:1px solid #eee;">
+      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;" onclick="prLagerZatvoriFilterPanel()">Otkaži</button>
+      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;" onclick="prLagerFilterOcisti()">Obriši filter</button>
+      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;background:var(--blue,#1a5fa8);color:#fff;font-weight:700;" onclick="prLagerFilterPrimijeni()">✓ OK</button>
+    </div>`;
+  const searchInput=document.getElementById('prlager-filter-search-input');
+  let debounceTimer=null;
+  searchInput.addEventListener('input', e=>{
+    prLagerFilterPanelPretraga=e.target.value;
+    clearTimeout(debounceTimer);
+    debounceTimer=setTimeout(()=>{
+      prLagerRenderCheckboxListaSamo();
+      renderPrLagerRedovi();
+    }, 250);
+  });
+  searchInput.focus();
+  prLagerRenderCheckboxListaSamo();
 }
-function prLagerRenderFilterPanel(){
+function prLagerRenderCheckboxListaSamo(){
   const kolona=prLagerFilterPanelKolona;
-  const panel=document.getElementById('prlager-filter-panel');
-  if(prLagerFilterPanelPozicija){ panel.style.top=prLagerFilterPanelPozicija.top; panel.style.left=prLagerFilterPanelPozicija.left; }
   const sve=prLagerDistinctVrijednosti(kolona);
   const pretraga=prLagerFilterPanelPretraga.toLowerCase();
   const prikazane=sve.filter(v=>String(v).toLowerCase().includes(pretraga));
   const sveOznaceno=prikazane.every(v=>!prLagerFilterDraft.has(v));
-  panel.innerHTML=`
-    <div style="padding:8px;border-bottom:1px solid #eee;">
-      <input type="text" placeholder="Pretraga... (odmah filtrira tabelu)" value="${esc(prLagerFilterPanelPretraga)}" oninput="prLagerFilterPanelPretraga=this.value;prLagerRenderFilterPanel();renderPrLagerRedovi();" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box;" autofocus>
-    </div>
-    <div style="overflow-y:auto;flex:1;padding:6px 8px;">
+  document.getElementById('prlager-filter-checkbox-lista').innerHTML=`
       <label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-weight:700;cursor:pointer;border-bottom:1px solid #eee;margin-bottom:3px;">
         <input type="checkbox" ${sveOznaceno?'checked':''} onchange="prLagerFilterOznaciSve(this.checked)"> (Izaberi sve)
       </label>
@@ -1886,13 +1903,7 @@ function prLagerRenderFilterPanel(){
         <label style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11.5px;cursor:pointer;">
           <input type="checkbox" ${prLagerFilterDraft.has(v)?'':'checked'} onchange="prLagerFilterToggle('${esc(String(v)).replace(/'/g,"\\'")}',this.checked)"> ${v===''?'<i style="color:#8b96a5;">(prazno)</i>':esc(String(v))}
         </label>
-      `).join('')}
-    </div>
-    <div style="display:flex;gap:6px;padding:8px;border-top:1px solid #eee;">
-      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;" onclick="prLagerZatvoriFilterPanel()">Otkaži</button>
-      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;" onclick="prLagerFilterOcisti()">Obriši filter</button>
-      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;background:var(--blue,#1a5fa8);color:#fff;font-weight:700;" onclick="prLagerFilterPrimijeni()">✓ OK</button>
-    </div>`;
+      `).join('')}`;
 }
 function prLagerFilterToggle(v,oznaceno){
   if(oznaceno) prLagerFilterDraft.delete(v); else prLagerFilterDraft.add(v);
@@ -1908,7 +1919,7 @@ function prLagerFilterOznaciSve(oznaceno){
   prLagerDistinctVrijednosti(prLagerFilterPanelKolona).filter(v=>String(v).toLowerCase().includes(pretraga)).forEach(v=>{
     if(oznaceno) prLagerFilterDraft.delete(v); else prLagerFilterDraft.add(v);
   });
-  prLagerRenderFilterPanel();
+  prLagerRenderCheckboxListaSamo();
 }
 function prLagerFilterOcisti(){
   prLagerKolonaFilteri[prLagerFilterPanelKolona]=new Set();

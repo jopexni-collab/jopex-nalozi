@@ -714,9 +714,9 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
     <div id="uvslika-grupa-blok" style="display:none;">
       <div class="uzorak-hint">
-        Za slučaj kad ISTA slika pokriva VIŠE artikala (npr. "Bengal" u različitim debljinama, ista boja/izgled) — slika se otprema SAMO JEDNOM, poveže se sa svim izabranim artiklima. Prvo pretraži i izaberi koji artikli idu u ovu grupu, zatim dodaj sliku.
+        Za slučaj kad ISTA slika pokriva VIŠE artikala (npr. "Bengal" u različitim debljinama, ista boja/izgled) — slika se otprema SAMO JEDNOM, poveže se sa svim izabranim artiklima. Unesi naziv GRUPE (kategorije) — automatski se izlistaju SVI artikli u toj grupi, svi već čekirani, samo odčekiraj one koje ne želiš.
       </div>
-      <input type="text" id="uvsgrupa-pretraga" placeholder="Pretraži po nazivu (npr. Bengal)..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
+      <input type="text" id="uvsgrupa-pretraga" placeholder="Unesi naziv GRUPE (npr. Bengal)..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
       <div id="uvsgrupa-rezultati" style="max-height:280px;overflow-y:auto;border:1px solid var(--border,#ddd);border-radius:8px;padding:8px;margin-bottom:12px;"></div>
       <div id="uvsgrupa-izabrano-brojac" style="font-size:12px;color:#8b96a5;margin-bottom:10px;">Izabrano: 0 artikala</div>
       <div id="uvsgrupa-drop-zona" style="border:2px dashed var(--border,#ccc);border-radius:10px;padding:20px 12px;text-align:center;color:#8b96a5;font-size:13px;cursor:pointer;margin-bottom:10px;">
@@ -1599,6 +1599,11 @@ async function uvsgrupaPretrazi(tekst){
     const data=await r.json();
     if(!r.ok){ cont.innerHTML=`<div style="color:var(--red);font-size:12px;padding:6px;">${esc(data.error)}</div>`; return; }
     uvsgrupaRezultati=data;
+    // Svi NOVI rezultati su ODMAH čekirani po defaultu — korisnik samo odčekira one koje
+    // NE želi u grupi, umesto da mora sam da čekira svaki. Dodaje se u postojeći izbor
+    // (ne briše prethodni), za slučaj da se traži u više navrata da se sastavi grupa.
+    data.forEach(a=>uvsgrupaIzabrani.add(a.id));
+    document.getElementById('uvsgrupa-izabrano-brojac').textContent=`Izabrano: ${uvsgrupaIzabrani.size} artikala`;
     uvsgrupaRenderRezultati();
   }catch(e){ cont.innerHTML='<div style="color:var(--red);font-size:12px;padding:6px;">Greška pri pretrazi.</div>'; }
 }
@@ -2157,25 +2162,47 @@ function lagerOtvoriFilterPanel(kolona, dugmeEl){
   panel.style.top=lagerFilterPanelPozicija.top;
   panel.style.left=lagerFilterPanelPozicija.left;
   panel.style.display='flex';
-  lagerRenderFilterPanel();
+  // STATIČNA struktura (traka za pretragu + prazan prostor za listu + dugmad) se pravi
+  // SAMO JEDNOM ovdje, pri otvaranju — NE pri svakom slovu koje se otkuca. Polje za
+  // pretragu se nikad ne uništava/pravi iznova dok je panel otvoren, pa nikad ne gubi
+  // fokus (ranije je CIJEO panel — uključujući i samo polje za kucanje — bio ponovo
+  // pravljen na svaki taster, pa je fokus odlazio posle SVAKOG slova).
+  panel.innerHTML=`
+    <div style="padding:8px;border-bottom:1px solid #eee;">
+      <input type="text" id="lager-filter-search-input" placeholder="Pretraga... (sačekaj tren da se primeni)" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box;">
+    </div>
+    <div id="lager-filter-checkbox-lista" style="overflow-y:auto;flex:1;padding:6px 8px;"></div>
+    <div style="display:flex;gap:6px;padding:8px;border-top:1px solid #eee;">
+      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;" onclick="lagerZatvoriFilterPanel()">Otkaži</button>
+      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;" onclick="lagerFilterOcisti()">Obriši filter</button>
+      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;background:var(--blue,#1a5fa8);color:#fff;font-weight:700;" onclick="lagerFilterPrimijeni()">✓ OK</button>
+    </div>`;
+  const searchInput=document.getElementById('lager-filter-search-input');
+  let debounceTimer=null;
+  searchInput.addEventListener('input', e=>{
+    lagerFilterPanelPretraga=e.target.value;
+    // Debounce — sačeka kratku pauzu u kucanju (250ms) prije nego što stvarno filtrira,
+    // umesto da reaguje na SVAKO pojedinačno slovo dok korisnik još uvek kuca broj
+    // (npr. "9" pa "1" pa "3" — treba da sačeka "913", ne da odmah filtrira na "9").
+    clearTimeout(debounceTimer);
+    debounceTimer=setTimeout(()=>{
+      lagerRenderCheckboxListaSamo();
+      renderLagerRedovi();
+    }, 250);
+  });
+  searchInput.focus();
+  lagerRenderCheckboxListaSamo();
 }
 
-function lagerRenderFilterPanel(){
+// Osvježava SAMO listu kvadratića (ne dira polje za pretragu niti dugmad) — bezbedno se
+// poziva i pri svakom pojedinačnom čekiranju, i posle debounce-a pri kucanju.
+function lagerRenderCheckboxListaSamo(){
   const kolona=lagerFilterPanelKolona;
-  const panel=document.getElementById('lager-filter-panel');
-  // Ponovo eksplicitno postavi poziciju — odbrambena mjera protiv toga da neki browseri
-  // pomjere position:fixed elemente na vrh ekrana pri interakciji sa checkbox-om unutra.
-  if(lagerFilterPanelPozicija){ panel.style.top=lagerFilterPanelPozicija.top; panel.style.left=lagerFilterPanelPozicija.left; }
   const sve=lagerDistinctVrijednosti(kolona);
   const pretraga=lagerFilterPanelPretraga.toLowerCase();
   const prikazane=sve.filter(v=>String(v).toLowerCase().includes(pretraga));
   const sveOznaceno=prikazane.every(v=>!lagerFilterDraft.has(v));
-
-  panel.innerHTML=`
-    <div style="padding:8px;border-bottom:1px solid #eee;">
-      <input type="text" placeholder="Pretraga... (odmah filtrira tabelu)" value="${esc(lagerFilterPanelPretraga)}" oninput="lagerFilterPanelPretraga=this.value;lagerRenderFilterPanel();renderLagerRedovi();" style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box;" autofocus>
-    </div>
-    <div style="overflow-y:auto;flex:1;padding:6px 8px;">
+  document.getElementById('lager-filter-checkbox-lista').innerHTML=`
       <label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-weight:700;cursor:pointer;border-bottom:1px solid #eee;margin-bottom:3px;">
         <input type="checkbox" ${sveOznaceno?'checked':''} onchange="lagerFilterOznaciSve(this.checked)"> (Izaberi sve)
       </label>
@@ -2183,13 +2210,7 @@ function lagerRenderFilterPanel(){
         <label style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11.5px;cursor:pointer;">
           <input type="checkbox" ${lagerFilterDraft.has(v)?'':'checked'} onchange="lagerFilterToggleVrijednost('${esc(String(v)).replace(/'/g,"\\'")}',this.checked)"> ${v===''?'<i style="color:#8b96a5;">(prazno)</i>':esc(String(v))}
         </label>
-      `).join('')}
-    </div>
-    <div style="display:flex;gap:6px;padding:8px;border-top:1px solid #eee;">
-      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;" onclick="lagerZatvoriFilterPanel()">Otkaži</button>
-      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;" onclick="lagerFilterOcisti()">Obriši filter</button>
-      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;background:var(--blue,#1a5fa8);color:#fff;font-weight:700;" onclick="lagerFilterPrimijeni()">✓ OK</button>
-    </div>`;
+      `).join('')}`;
 }
 
 // Kvadratić se promijeni — mijenja SAMO draft, ponovo iscrtava SAMO panel (ne tabelu, ne
@@ -2216,7 +2237,7 @@ function lagerFilterOznaciSve(oznaceno){
     if(oznaceno) lagerFilterDraft.delete(v);
     else lagerFilterDraft.add(v);
   });
-  lagerRenderFilterPanel();
+  lagerRenderCheckboxListaSamo();
 }
 
 // "Obriši filter" — brza akcija, primjenjuje ODMAH (prazan filter = prikaži sve).

@@ -529,12 +529,28 @@ router.get('/trazi-po-nazivu', zahtijevaProdaju, async (req, res) => {
 // artikala kroz kvadratiće — npr. "Bengal" vraća SVE Bengal varijante, korisnik bira koje
 // tačno idu u tu grupu). Za razliku od trazi-po-nazivu, ovde je dovoljna obična
 // podudarnost teksta (ne mora biti skoro tačno poklapanje), i vraća više rezultata.
+// GET /api/roba/liste-grupa — SVE jedinstvene vrijednosti grupa polja (za autocomplete
+// pri unosu, da korisnik zna tačan naziv grupe).
+router.get('/liste-grupa', zahtijevaProdaju, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT DISTINCT grupa FROM roba WHERE aktivan=true AND grupa IS NOT NULL AND grupa != '' ORDER BY grupa`
+    );
+    res.json(r.rows.map(row => row.grupa));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/roba/pretraga-za-grupu?tekst=X — vraća SVE artikle čije GRUPA polje (formalna
+// kategorija, ne naziv) odgovara datom tekstu — npr. "Bengal" kao grupa vraća SVE artikle
+// u toj grupi (razne debljine/varijante), ne pojedinačne artikle čiji NAZIV sadrži "Bengal".
 router.get('/pretraga-za-grupu', zahtijevaProdaju, async (req, res) => {
   try {
     const tekst = (req.query.tekst || '').trim();
     if (tekst.length < 2) return res.status(400).json({ error: 'Prekratak tekst za pretragu.' });
     const r = await pool.query(
-      `SELECT id, sifra, naziv FROM roba WHERE aktivan=true AND naziv ILIKE '%' || $1 || '%' ORDER BY naziv LIMIT 60`,
+      `SELECT id, sifra, naziv, grupa FROM roba WHERE aktivan=true AND grupa ILIKE '%' || $1 || '%' ORDER BY naziv LIMIT 100`,
       [tekst]
     );
     res.json(r.rows);
