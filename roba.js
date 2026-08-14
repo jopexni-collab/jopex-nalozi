@@ -554,9 +554,19 @@ router.get('/liste-grupa', zahtijevaProdaju, async (req, res) => {
 router.get('/pretraga-za-grupu', zahtijevaProdaju, async (req, res) => {
   try {
     const tekst = (req.query.tekst || '').trim();
+    // Prazan tekst = izlistaj CEO magacin (za slučaj kad korisnik ne zna šta traži, pa
+    // hoće da prelista i sam izabere). Inače traži po GRUPI, ŠIFRI ili NAZIVU.
+    if (!tekst) {
+      const r = await pool.query(
+        `SELECT id, sifra, naziv, grupa FROM roba WHERE aktivan=true ORDER BY sifra LIMIT 500`
+      );
+      return res.json(r.rows);
+    }
     if (tekst.length < 2) return res.status(400).json({ error: 'Prekratak tekst za pretragu.' });
     const r = await pool.query(
-      `SELECT id, sifra, naziv, grupa FROM roba WHERE aktivan=true AND grupa ILIKE '%' || $1 || '%' ORDER BY naziv LIMIT 100`,
+      `SELECT id, sifra, naziv, grupa FROM roba
+       WHERE aktivan=true AND (grupa ILIKE '%' || $1 || '%' OR naziv ILIKE '%' || $1 || '%' OR sifra ILIKE $1 || '%')
+       ORDER BY naziv LIMIT 200`,
       [tekst]
     );
     res.json(r.rows);

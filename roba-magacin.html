@@ -795,9 +795,15 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <div class="uzorak-hint">
         Za slučaj kad ISTA slika pokriva VIŠE artikala (npr. "Bengal" u različitim debljinama, ista boja/izgled) — slika se otprema SAMO JEDNOM, poveže se sa svim izabranim artiklima. Unesi naziv GRUPE (kategorije) — automatski se izlistaju SVI artikli u toj grupi, svi već čekirani, samo odčekiraj one koje ne želiš.
       </div>
-      <input type="text" id="uvsgrupa-pretraga" placeholder="Unesi naziv GRUPE (npr. Bengal)..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:10px;box-sizing:border-box;">
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <input type="text" id="uvsgrupa-pretraga" placeholder="Traži po grupi, nazivu ili šifri..." style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
+        <button type="button" onclick="uvsgrupaPrikaziSve()" title="Izlistaj ceo magacin" style="flex-shrink:0;padding:0 14px;background:var(--blue,#1a5fa8);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:12.5px;white-space:nowrap;">📋 Prikaži sve</button>
+      </div>
       <div id="uvsgrupa-rezultati" style="max-height:280px;overflow-y:auto;border:1px solid var(--border,#ddd);border-radius:8px;padding:8px;margin-bottom:12px;"></div>
-      <div id="uvsgrupa-izabrano-brojac" style="font-size:12px;color:#8b96a5;margin-bottom:10px;">Izabrano: 0 artikala</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div id="uvsgrupa-izabrano-brojac" style="font-size:12px;color:#8b96a5;">Izabrano: 0 artikala</div>
+        <button type="button" onclick="uvsgrupaPonistiIzbor()" style="font-size:11px;padding:3px 8px;border:1px solid var(--border,#ddd);border-radius:5px;background:#fff;cursor:pointer;">Poništi izbor</button>
+      </div>
       <div id="uvsgrupa-drop-zona" style="border:2px dashed var(--border,#ccc);border-radius:10px;padding:20px 12px;text-align:center;color:#8b96a5;font-size:13px;cursor:pointer;margin-bottom:10px;">
         📷 Klikni da izabereš sliku, ili prevuci ovde
       </div>
@@ -2024,30 +2030,45 @@ document.getElementById('uvsgrupa-pretraga').addEventListener('input', e=>{
   uvsgrupaPretragaTimer=setTimeout(()=>uvsgrupaPretrazi(tekst), 300);
 });
 
-async function uvsgrupaPretrazi(tekst){
+async function uvsgrupaPretrazi(tekst, autoCekiraj=true){
   const cont=document.getElementById('uvsgrupa-rezultati');
-  cont.innerHTML='<div style="color:#8b96a5;font-size:12px;padding:6px;">Pretraga...</div>';
+  cont.innerHTML='<div style="color:#8b96a5;font-size:12px;padding:6px;">Učitavanje...</div>';
   try{
     const r=await fetch(`${API}/api/roba/pretraga-za-grupu?tekst=${encodeURIComponent(tekst)}`);
     const data=await r.json();
     if(!r.ok){ cont.innerHTML=`<div style="color:var(--red);font-size:12px;padding:6px;">${esc(data.error)}</div>`; return; }
     uvsgrupaRezultati=data;
-    // Svi NOVI rezultati su ODMAH čekirani po defaultu — korisnik samo odčekira one koje
-    // NE želi u grupi, umesto da mora sam da čekira svaki. Dodaje se u postojeći izbor
-    // (ne briše prethodni), za slučaj da se traži u više navrata da se sastavi grupa.
-    data.forEach(a=>uvsgrupaIzabrani.add(a.id));
+    // Kod PRETRAGE (npr. "bengal") svi rezultati se ODMAH čekiraju — korisnik samo
+    // odčekira one koje ne želi. Kod "Prikaži sve" (cijeli magacin) NE čekira se ništa —
+    // besmisleno bi bilo označiti stotine artikala pa ih ručno odčekiravati.
+    if(autoCekiraj) data.forEach(a=>uvsgrupaIzabrani.add(a.id));
     document.getElementById('uvsgrupa-izabrano-brojac').textContent=`Izabrano: ${uvsgrupaIzabrani.size} artikala`;
     uvsgrupaRenderRezultati();
-  }catch(e){ cont.innerHTML='<div style="color:var(--red);font-size:12px;padding:6px;">Greška pri pretrazi.</div>'; }
+  }catch(e){ cont.innerHTML='<div style="color:var(--red);font-size:12px;padding:6px;">Greška pri učitavanju.</div>'; }
+}
+
+// Izlistaj CEO magacin — bez auto-čekiranja, korisnik sam bira šta mu treba.
+function uvsgrupaPrikaziSve(){
+  document.getElementById('uvsgrupa-pretraga').value='';
+  uvsgrupaPretrazi('', false);
+}
+
+function uvsgrupaPonistiIzbor(){
+  uvsgrupaIzabrani.clear();
+  document.getElementById('uvsgrupa-izabrano-brojac').textContent='Izabrano: 0 artikala';
+  uvsgrupaRenderRezultati();
 }
 
 function uvsgrupaRenderRezultati(){
   const cont=document.getElementById('uvsgrupa-rezultati');
   if(!uvsgrupaRezultati.length){ cont.innerHTML='<div style="color:#8b96a5;font-size:12px;padding:6px;">Nema rezultata.</div>'; return; }
-  cont.innerHTML=uvsgrupaRezultati.map(a=>`
+  cont.innerHTML=`<div style="font-size:11px;color:#8b96a5;padding:2px 2px 6px;border-bottom:1px solid #eee;margin-bottom:4px;">${uvsgrupaRezultati.length} artikala</div>`
+    +uvsgrupaRezultati.map(a=>`
     <label style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:12.5px;cursor:pointer;border-bottom:1px solid #f0f2f5;">
       <input type="checkbox" ${uvsgrupaIzabrani.has(a.id)?'checked':''} onchange="uvsgrupaToggle(${a.id},this.checked)">
-      <span style="color:#999;">${esc(a.sifra)}</span> — ${esc(a.naziv)}
+      <span style="color:#999;min-width:42px;">${esc(a.sifra)}</span>
+      <span style="flex:1;">${esc(a.naziv)}</span>
+      ${a.grupa?`<span style="color:#8b96a5;font-size:11px;flex-shrink:0;">${esc(a.grupa)}</span>`:''}
     </label>
   `).join('');
 }
