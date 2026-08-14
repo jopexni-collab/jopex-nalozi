@@ -515,7 +515,9 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     #qr-nalepnice-grid > *:last-child { page-break-after:avoid !important; break-after:avoid !important; }
   }
   .qr-nalepnica{
-    display:flex; align-items:center; gap:2mm; padding:1mm 1.5mm;
+    /* Veći unutrašnji razmak — sadržaj se drži DALJE od ivica, pa male greške u
+       poravnanju štampača (±1-2mm) ne izbace QR/tekst van nalepnice. */
+    display:flex; align-items:center; gap:2mm; padding:2mm 3mm;
     box-sizing:border-box; overflow:hidden; break-inside:avoid;
   }
   .qr-nalepnica .qr-slika{ flex-shrink:0; display:flex; align-items:center; }
@@ -2858,8 +2860,13 @@ async function qrGenerisi(lista){
   grid.style.setProperty('--qr-pomak-x', `${pomakX}mm`);
   grid.style.setProperty('--qr-pomak-y', `${pomakY}mm`);
 
-  // QR se skalira prema visini nalepnice (uvijek kvadrat, sa malo prostora oko).
-  const qrPx=Math.max(40, Math.round((f.visina-3)*3.78)); // mm→px (~3.78px po mm)
+  // QR se skalira prema visini nalepnice, ali sa VELIKOM sigurnosnom zonom — štampači
+  // uvijek malo odstupaju (±1-2mm), pa ako QR ide do same ivice, dio ispadne van nalepnice
+  // i postane neupotrebljiv za skeniranje. Rezerviše se 30% visine (min 5mm) kao prazan
+  // prostor okolo — QR ostaje unutar nalepnice čak i kad se poravnanje pomjeri.
+  const sigurnosnaZona=Math.max(5, f.visina*0.30);
+  const qrMm=Math.max(8, f.visina-sigurnosnaZona);
+  const qrPx=Math.round(qrMm*3.78); // mm→px (~3.78px po mm)
   // Veličina teksta prema visini nalepnice — na maloj nalepnici mora biti sitnije.
   const sifraPt=Math.max(6, Math.min(11, f.visina*0.42));
   const nazivPt=Math.max(5, Math.min(8.5, f.visina*0.30));
