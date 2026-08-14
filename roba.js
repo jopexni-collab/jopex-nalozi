@@ -579,9 +579,11 @@ router.get('/pretraga-za-grupu', zahtijevaProdaju, async (req, res) => {
 // (npr. Bengal u različitim debljinama — ista slika, različite šifre). Slika se upload-uje
 // na R2 SAMO JEDNOM (ne duplira se prostor/vreme), a u bazu se upisuje po JEDAN roba_slike
 // red za SVAKI izabrani artikal, sve pokazuju na ISTI R2 url.
-router.post('/slika-grupa', zahtijevaProdaju, upload.single('slika'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'Nema fajla.' });
-  if (!req.file.mimetype.startsWith('image/'))
+router.post('/slika-grupa', zahtijevaProdaju, upload.fields([{name:'slika',maxCount:1},{name:'thumb',maxCount:1}]), async (req, res) => {
+  const glavniFajl = req.files?.slika?.[0];
+  const thumbFajl = req.files?.thumb?.[0];
+  if (!glavniFajl) return res.status(400).json({ error: 'Nema fajla.' });
+  if (!glavniFajl.mimetype.startsWith('image/'))
     return res.status(400).json({ error: 'Fajl mora biti slika.' });
   let robaIds;
   try { robaIds = JSON.parse(req.body.roba_ids || '[]'); } catch (e) { robaIds = []; }
@@ -589,9 +591,14 @@ router.post('/slika-grupa', zahtijevaProdaju, upload.single('slika'), async (req
     return res.status(400).json({ error: 'Nije izabran nijedan artikal za grupu.' });
 
   try {
-    const ekstenzija = (req.file.originalname.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-    const kljuc = `roba-slike/grupa-${Date.now()}.${ekstenzija}`;
-    const url = await uploadFile(kljuc, req.file.buffer, req.file.mimetype); // JEDAN upload za sve
+    const ekstenzija = (glavniFajl.originalname.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const vrijeme = Date.now();
+    const url = await uploadFile(`roba-slike/grupa-${vrijeme}.${ekstenzija}`, glavniFajl.buffer, glavniFajl.mimetype); // JEDAN upload za sve
+    // Mala verzija za tabelu — takođe se otprema SAMO JEDNOM, dijele je svi artikli.
+    let thumbUrl = null;
+    if (thumbFajl) {
+      thumbUrl = await uploadFile(`roba-slike/grupa-${vrijeme}-t.jpg`, thumbFajl.buffer, 'image/jpeg');
+    }
 
     let uspjesno = 0;
     for (const robaId of robaIds) {
@@ -599,12 +606,12 @@ router.post('/slika-grupa', zahtijevaProdaju, upload.single('slika'), async (req
       const jePrva = parseInt(postojeceRes.rows[0].n) === 0;
       const noviRedosled = parseInt(postojeceRes.rows[0].max_red) + 1;
       await pool.query(
-        'INSERT INTO roba_slike (roba_id, url, redosled, glavna) VALUES ($1,$2,$3,$4)',
-        [robaId, url, noviRedosled, jePrva]
+        'INSERT INTO roba_slike (roba_id, url, thumb_url, redosled, glavna) VALUES ($1,$2,$3,$4,$5)',
+        [robaId, url, thumbUrl, noviRedosled, jePrva]
       );
       uspjesno++;
     }
-    res.json({ ok: true, url, broj_artikala: uspjesno });
+    res.json({ ok: true, url, thumb_url: thumbUrl, broj_artikala: uspjesno });
   } catch (err) {
     res.status(500).json({ error: 'Greška pri otpremanju slike: ' + err.message });
   }
