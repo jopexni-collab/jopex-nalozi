@@ -871,7 +871,7 @@ function getShapeOutline(sh,d,vOrientArg){
   var vo=vOrientArg||0;
   // Slobodan (rucno nacrtan) oblik - kontura SU sama tjemena, bez izvodjenja
   // iz imenovanih mjera. Normalizovana su tako da pocinju u (0,0).
-  if(sh==='SK'){
+  if(sh==='SK'||sh==='skica'){
     var t=d._tj||[];
     return (t.length>=3)?t.map(function(q){return [q[0],q[1]];}):[];
   }
@@ -2130,6 +2130,7 @@ function _slavinaDimEditDesc(idx,field,label){
 // (npr. za U oblik aH = dubina gornjeg kraka, a ne puna visina), pa je otvor
 // završavao van ploče u DXF-u.
 function _bbMM(sh,d,vo){
+  if(sh==='skica'){ var _bt=_bbPolyTj((d&&d._tj)||[]); return {w:_bt.w,h:_bt.h}; }
   var outl=getShapeOutline(sh!=null?sh:shape, d||dims,
     vo!=null?vo:(((sh||shape)==='L'||(sh||shape)==='V'||(sh||shape)==='U')?vOrient:0));
   var maxX=0,maxY=0;
@@ -2329,6 +2330,14 @@ function otvorUzStranu(t,i,duz,odmak,w,h){
           [ox+f.nx*h, oy+f.ny*h]];
 }
 // Bounding box tog (moguce zarotiranog) otvora - za crtanje i provjere.
+function _bbPolyTj(t){
+  var mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
+  t.forEach(function(q){
+    if(q[0]<mnx)mnx=q[0]; if(q[0]>mxx)mxx=q[0];
+    if(q[1]<mny)mny=q[1]; if(q[1]>mxy)mxy=q[1];
+  });
+  return {w:mxx-mnx,h:mxy-mny};
+}
 function _bbPoly(pts){
   var mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
   pts.forEach(function(p){
@@ -4632,6 +4641,7 @@ var TABLE_SHAPES=[
   {id:'radijus',lbl:'Sa radijusom'},
   {id:'bure',lbl:'Bure'},
   {id:'fbure',lbl:'Full bure'},
+  {id:'skica',lbl:'Slobodan oblik'},
 ];
 function buildTableShapeGrid(){
   var g=ge('sto-shp-grid');if(!g)return;
@@ -4648,6 +4658,11 @@ function buildTableShapeGrid(){
 function setTableShape(shapeId){
   _saveUndo();
   syncToActive();
+  if(shapeId==='skica'&&(!dims._tj||dims._tj.length<3)){
+    // Zadani pravougaonik dok korisnik ne nacrta svoj oblik
+    dims._tj=[[0,0],[gi('sto-a')||1600,0],[gi('sto-a')||1600,gi('sto-b')||900],[0,gi('sto-b')||900]];
+    SKICA=[];
+  }
   shape=shapeId;
   getAct().shape=shapeId;
   if(shapeId==='okrugao') dims.B=dims.A;
@@ -4665,6 +4680,26 @@ function setTableShape(shapeId){
 }
 function buildTableDimWrap(){
   var con=ge('sto-dim-wrap');if(!con)return;
+  // Slobodan oblik: iste alatke kao kod kuhinje - crtanje rukom, dotjerivanje
+  // tjemena i zaobljenje svakog ugla. Mjere se ne unose brojcano.
+  if(shape==='skica'){
+    con.innerHTML='';
+    var skw=ge('skica-wrap');
+    if(skw){
+      skw.style.display='';
+      var roditelj=con.parentNode;
+      if(roditelj&&skw.parentNode!==roditelj) roditelj.appendChild(skw);
+      _skVezi();
+    }
+    if(!dims._tj||dims._tj.length<3){
+      dims._tj=[[0,0],[1600,0],[1600,900],[0,900]];
+      getAct().dims=dims;
+    }
+    buildSkicaPanel(); crtajDigitalno();
+    return;
+  }
+  var skw2=ge('skica-wrap');
+  if(skw2&&tip==='sto') skw2.style.display='none';
   var isRound=(shape==='okrugao');
   var aLbl=isRound?'Prečnik (mm)':'A – širina (mm)';
   var html='<div class="r2">'
@@ -4683,7 +4718,70 @@ function saveTableDim(key,val){
   if(shape==='okrugao') dims.B=v; // okrugao: B=A (prečnik)
 }
 
-// ═══ DIM TABLE ════════════════════════════════════
+// Sto slobodnog oblika: kontura iz tjemena + radijusi po uglovima
+function drawStoSkica(ctx,W,H){
+  var t=(dims&&dims._tj)||[];
+  if(t.length<3){
+    ctx.fillStyle='#8a93a3'; ctx.font='14px Segoe UI,Arial';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('Nacrtaj oblik u lijevom panelu',W/2,H/2);
+    return;
+  }
+  var PAD=104;
+  var bb=_bbPolyTj(t);
+  var sc=Math.min((W-PAD*2)/Math.max(bb.w,1),(H-PAD*2)/Math.max(bb.h,1))*0.92;
+  ctx.save(); ctx.translate(PAD,PAD);
+
+  var fin=getFinalOutline('skica',dims,0);
+  var out=drawOutlineFinal(ctx,fin.outline,fin.radii,sc);
+  ctx.fillStyle='#ffffff'; ctx.fill();
+  ctx.strokeStyle='#000'; ctx.lineWidth=1.3;
+  ctx.setLineDash([9,3,1.4,3]); ctx.stroke(); ctx.setLineDash([]);
+
+  // Radijus svakog ugla - dupli klik otvara unos, isto kao kod ostalih stolova
+  drawCornerLabels(ctx,out.pts,out.radiiMM,sc,'#corner-con',true,function(i){
+    return {kind:'number',label:'Radijus ugla '+SLOVA_T[i]+' (mm)',unit:'mm',min:0,step:1,
+      get:function(){return getCornerRadiusMM(i);},
+      set:function(v){cornerR[i]=v;buildCornerR();refresh();}};
+  });
+
+  // Slova strana i duzine
+  var cx=0,cy=0; t.forEach(function(q){cx+=q[0];cy+=q[1];});
+  cx/=t.length; cy/=t.length;
+  t.forEach(function(_,i){
+    var a=t[i], b=t[(i+1)%t.length];
+    var mx=(a[0]+b[0])/2*sc, my=(a[1]+b[1])/2*sc;
+    var dx=cx*sc-mx, dy=cy*sc-my, dl=Math.hypot(dx,dy)||1;
+    edgeLbl(ctx,mx+dx/dl*16,my+dy/dl*16,SLOVA_S[i],'sk'+i,
+      Math.abs(b[0]-a[0])>=Math.abs(b[1]-a[1])?'h':'v');
+    kota(ctx,a[0]*sc-dx/dl*14,a[1]*sc-dy/dl*14,b[0]*sc-dx/dl*14,b[1]*sc-dy/dl*14,
+      Math.round(stranaDuzina(t,i))+' mm');
+  });
+  // Ukupne mjere
+  kota(ctx,0,-34,bb.w*sc,-34,Math.round(bb.w)+' mm');
+  kota(ctx,-44,0,-44,bb.h*sc,Math.round(bb.h)+' mm');
+
+  var br=Math.max(1,gi('sto-br'));
+  if(br>1){
+    ctx.fillStyle='#1a5fa8'; ctx.font='bold 22px Segoe UI,Arial';
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText('\u00d7'+br,bb.w*sc+24,bb.h*sc/2);
+  }
+  ctx.restore();
+
+  ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle='#333'; ctx.font='bold 14px Segoe UI,Arial';
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText('Sto \u2014 slobodan oblik'+(gs('sto-n')?(' \u00b7 '+gs('sto-n')):''),12,10);
+  ctx.font='11.5px Segoe UI,Arial'; ctx.fillStyle='#6b7a8d';
+  ctx.fillText(Math.round(bb.w)+' \u00d7 '+Math.round(bb.h)+' mm \u00b7 '+t.length+' strana \u00b7 '
+    +getMatV()+(gs('mat-naziv')?(' \u2013 '+gs('mat-naziv')):'')+' \u00b7 '+getMatD()+' mm',12,29);
+  ctx.restore();
+  drawLegenda(ctx,W,H);
+  _flushKotes();
+}
+
+// \u2550\u2550\u2550 DIM TABLE \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550════
 function buildDimTable(){
   var con=ge('dim-wrap');if(!con)return;
   // Slobodan oblik nema imenovane mjere (A/B/C...) - umjesto tabele se
@@ -4837,7 +4935,7 @@ function setExt(sideId,optId){
 function getIvSegs(sh,d){
   // Slobodan oblik: svaka strana poligona dobija slovo po redu obilaska,
   // pa obrada ivica i rezanje rade bez ijedne dodatne izmjene.
-  if(sh==='SK'){
+  if(sh==='SK'||sh==='skica'){
     var t=(d&&d._tj)||[];
     if(t.length<3) return [];
     return t.map(function(_,i){
@@ -5523,6 +5621,13 @@ function buildTableHoleUI(){
 
 // ═══ CALC ══════════════════════════════════════════
 function getArea(){
+  // Slobodan oblik (kuhinja ili sto) - povrsina je bounding box poligona
+  if(shape==='SK'||shape==='skica'){
+    var _t=(dims&&dims._tj)||[];
+    if(_t.length<3) return 0;
+    var _b=_bbPolyTj(_t);
+    return _b.w*_b.h/1e6;
+  }
   // Površina za obračun = bounding box (najduža strana × najduža širina)
   // Ne oduzimaju se otvori (sudopera, ploča za kuvanje) niti prazan prostor
   // između krakova (L, U, V oblici) — materijal se naručuje po bounding boxu.
@@ -5792,7 +5897,9 @@ function calcItemCost(){
     rows+=trow('Ugradnja',kk+' kom',_editableUnitPrice(gi('kl-u'),'','setItemFieldPrice',[activeIdx,'kl-u']),f(gi('kl-u')*kk));
     rows+=trow('Mjerenje','1',_editableUnitPrice(gi('kl-m'),'','setItemFieldPrice',[activeIdx,'kl-m']),f(gi('kl-m')));
   } else if(tip==='sto'){
-    var stoA2=dims.A||0, stoB2=(shape==='okrugao')?stoA2:(dims.B||0);
+    var _bbS0=(shape==='skica')?_bbPolyTj((dims&&dims._tj)||[]):null;
+    var stoA2=_bbS0?_bbS0.w:(dims.A||0);
+    var stoB2=_bbS0?_bbS0.h:((shape==='okrugao')?stoA2:(dims.B||0));
     var stoBr2=Math.max(1,gi('sto-br')||1);
     var m3o=(stoA2*stoB2)/1e6*stoBr2;
     mat=Math.round(m3o*gi('mat-c')*100)/100;
@@ -5803,7 +5910,7 @@ function calcItemCost(){
     uk=mat+iv+usl;
     var stoShLbl={okrugao:'Okrugao',jajasto:'Elipsa',oblutak:'Oblutak',radijus:'Sa radijusom',bure:'Bure',fbure:'Full bure'}[shape]||shape;
     var stonap=gs('sto-n')?(' ('+gs('sto-n')+')'):'';
-    var stoDimTxt=shape==='okrugao'?('ø'+stoA2+' mm'):(stoA2+'×'+stoB2+' mm');
+    var stoDimTxt=(shape==='skica')?('slobodan oblik '+Math.round(stoA2)+'×'+Math.round(stoB2)+' mm'):(shape==='okrugao'?('ø'+stoA2+' mm'):(stoA2+'×'+stoB2+' mm'));
     rows+=trow('Stol – '+stoShLbl+stonap+' '+stoDimTxt+' ('+ms+')',stoBr2+' kom ('+m3o.toFixed(4)+' m²)',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
     ivdSto2.forEach(function(iv2){rows+=trow('Ivica '+iv2.lbl+' – '+iv2.profLbl+' (×'+stoBr2+')',iv2.m.toFixed(2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-sto-',iv2.prof]),f(iv2.uk*stoBr2));});
     var _rzSto=_rezRedovi(stoBr2); rows+=_rzSto.rows; rez=_rzSto.uk; uk+=rez;
@@ -5915,7 +6022,9 @@ function refresh(){
     usl=gi('kl-u')*k+gi('kl-m');
     uk=mat+iv+usl; pov=m2.toFixed(4)+' m² ('+k+' kom)';
   } else if(tip==='sto'){
-    var stoA=dims.A||0, stoB=(shape==='okrugao')?stoA:(dims.B||0);
+    var _bbS=(shape==='skica')?_bbPolyTj((dims&&dims._tj)||[]):null;
+    var stoA=_bbS?_bbS.w:(dims.A||0);
+    var stoB=_bbS?_bbS.h:((shape==='okrugao')?stoA:(dims.B||0));
     var stoBr=Math.max(1,gi('sto-br')||1);
     var m3=(stoA*stoB)/1e6*stoBr; // obracun: max sirina x max visina (bounding box) x kom
     mat=Math.round(m3*gi('mat-c')*100)/100;
@@ -7200,7 +7309,9 @@ function getCanvasSizeForItem(){
     return {w:_baseW, h:_hasExt?Math.max(_baseH+100,560):_baseH};
   }
   if(tip==='sto'){
-    var stoA=gi('sto-a')||1600, stoB=(shape==='okrugao')?stoA:(gi('sto-b')||900);
+    var _bbS2=(shape==='skica')?_bbPolyTj((dims&&dims._tj)||[]):null;
+    var stoA=_bbS2?_bbS2.w:(gi('sto-a')||1600);
+    var stoB=_bbS2?_bbS2.h:((shape==='okrugao')?stoA:(gi('sto-b')||900));
     var ratioSto=stoA>0?(stoB/stoA):0.6;
     var wSto=900, hSto=Math.min(700,Math.max(380,Math.round(wSto*ratioSto*1.15)));
     return {w:wSto, h:hSto};
@@ -7995,6 +8106,9 @@ function drawKl(ctx,W,H){
 }
 
 function drawSto(ctx,W,H){
+  // Slobodan oblik - crta se ista kontura kao kod kuhinje, sa zaobljenjem
+  // svakog ugla, samo bez otvora i produzetaka.
+  if(shape==='skica') return drawStoSkica(ctx,W,H);
   var PAD=110;
   var A=dims.A||1600, B=(shape==='okrugao')?A:(dims.B||900);
   var sc=Math.min((W-PAD*2-90)/Math.max(A,1),(H-PAD*2)/Math.max(B,1))*0.92;
@@ -8784,7 +8898,7 @@ function genPon(currency){
   var _totalUk=0;
   _results.forEach(function(res,i){
     var it=items[i];
-    var tipLbl=(it.tip==='kl')?nazivKlupice(it):({'k':'Kuhinjska radna ploča','st':'Gazište stepenica','sto':'Stol'}[it.tip]||'Stavka');
+    var tipLbl=(it.tip==='kl')?nazivKlupice(it):({'k':'Kuhinjska radna ploča','st':'Gazište stepenica','sto':(it.shape==='skica'?'Sto — slobodan oblik':'Stol')}[it.tip]||'Stavka');
     _totalUk+=res.uk;
     // Crtez za ovu stavku
     activeIdx=i; syncFromActive(); loadItemInputs();
@@ -9295,6 +9409,22 @@ function genDXF(){
       });
       bbox_h=gi('kl-b')+(_rzKlD.length?50+_rzKlD.length*8:0);
       }
+    } else if(tip==='sto'&&shape==='skica'){
+      // Slobodan oblik stola - kontura iz tjemena sa radijusima uglova
+      var _finStoSK=getFinalOutline('skica',dims,0);
+      dxfRoundedPoly(outlineToPts(_finStoSK.outline),_finStoSK.radii,'KONTURA',yOff);
+      dxfCornerLabels(outlineToPts(_finStoSK.outline),_finStoSK.radii);
+      var _bbStoSK=_bbPolyTj((dims&&dims._tj)||[]);
+      dHY(0,0,_bbStoSK.w,'\u0160='+Math.round(_bbStoSK.w)+' mm',55);
+      dVY(-65,0,_bbStoSK.h,'V='+Math.round(_bbStoSK.h)+' mm');
+      var _tStoSK=(dims._tj)||[];
+      _tStoSK.forEach(function(_,i){
+        var a=_tStoSK[i], b=_tStoSK[(i+1)%_tStoSK.length];
+        txY((a[0]+b[0])/2,(a[1]+b[1])/2,14,SLOVA_S[i],'TEKST');
+      });
+      var _brSK=Math.max(1,gi('sto-br'));
+      if(_brSK>1) txY(_bbStoSK.w+80,_bbStoSK.h/2,30,'x'+_brSK,'TEKST');
+      bbox_h=_bbStoSK.h;
     } else if(tip==='sto'){
       var stoAD=d.A||0, stoBD=(shape==='okrugao')?stoAD:(d.B||0);
       var rrD=getTableRadiusMM();
