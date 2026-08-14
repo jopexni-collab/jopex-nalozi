@@ -397,11 +397,15 @@ function lk(u, rBr, polje){
   // Polje može sadržati više linkova odvojenih zarezom. Prikazuje se SAMO JEDNA ikonica
   // (sa malim brojem ako ih je više) — ranije se crtala po jedna 🔗 za svaki link, što je
   // razvlačilo kolonu kad nalog ima 4+ linka.
+  // LIJEVI klik = otvori link odmah (kao i ranije, najčešća radnja).
+  // DESNI klik  = upravljanje (pregled svih, brisanje, dodavanje novog).
   const linkovi=u.split(',').map(s=>s.trim()).filter(Boolean);
   if(!linkovi.length) return '';
   const visestruki=linkovi.length>1;
-  const naslov=visestruki?`${linkovi.length} linkova — klikni za pregled/brisanje`:'Klikni za otvaranje ili brisanje';
-  return `<a class="lk" href="#" onclick="event.preventDefault();event.stopPropagation();otvoriUpravljanjeLinkovima(${rBr},'${polje}');" title="${esc(naslov)}" style="position:relative;display:inline-block;">🔗${visestruki?`<span style="position:absolute;top:-4px;right:-7px;background:var(--blue,#1a5fa8);color:#fff;font-size:8px;font-weight:700;padding:0 3px;border-radius:6px;line-height:1.4;">${linkovi.length}</span>`:''}</a>`;
+  const naslov=visestruki
+    ? `${linkovi.length} linkova — klik otvara prvi, DESNI klik za sve/brisanje`
+    : 'Klik otvara · DESNI klik za brisanje/dodavanje';
+  return `<a class="lk" href="${esc(linkovi[0])}" target="_blank" oncontextmenu="event.preventDefault();event.stopPropagation();otvoriUpravljanjeLinkovima(${rBr},'${polje}');return false;" title="${esc(naslov)}" style="position:relative;display:inline-block;">🔗${visestruki?`<span style="position:absolute;top:-4px;right:-7px;background:var(--blue,#1a5fa8);color:#fff;font-size:8px;font-weight:700;padding:0 3px;border-radius:6px;line-height:1.4;">${linkovi.length}</span>`:''}</a>`;
 }
 function gv(id){return(document.getElementById(id)||{}).value||'';}
 
