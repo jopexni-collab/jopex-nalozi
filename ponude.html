@@ -4183,8 +4183,28 @@ function buildVelikiAlati(){
       +';background:'+(boja?'#e6f4ea':'#eef4fb')+';color:'+(boja||'#1a5fa8')
       +';border-radius:5px;cursor:pointer;font-weight:600">'+txt+'</button>';
   };
-  // Izravnavanje po polozaju - uvijek dostupno
-  var h='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
+  // Ukupne mjere - uvijek dostupne, skaliraju cijeli oblik
+  var _bbA=_bbPolyTj(t);
+  var _imaZ=_imaZakljucanih();
+  var h='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;'
+    +'padding:7px 9px;background:#f0f4fa;border-radius:6px">'
+    +'<span style="font-size:11px;color:#6b7a8d;font-weight:600">Ukupno</span>'
+    +'<label style="font-size:10.5px;color:#8a93a3">\u0160</label>'
+    +'<input type="number" min="50" value="'+Math.round(_bbA.w)+'" style="width:78px;font:inherit;'
+    +'font-size:12px;padding:5px 7px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
+    +' onchange="fixComma(this);skicaSkaliraj(\'w\',this.value,gc(\'sk-prop\'))">'
+    +'<span style="font-size:10px;color:#8a93a3">\u00d7</span>'
+    +'<label style="font-size:10.5px;color:#8a93a3">V</label>'
+    +'<input type="number" min="50" value="'+Math.round(_bbA.h)+'" style="width:78px;font:inherit;'
+    +'font-size:12px;padding:5px 7px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
+    +' onchange="fixComma(this);skicaSkaliraj(\'h\',this.value,gc(\'sk-prop\'))">'
+    +'<span style="font-size:10px;color:#8a93a3">mm</span>'
+    +'<label style="font-size:10.5px;color:#134a85;display:flex;align-items:center;gap:4px;'
+    +'cursor:pointer"><input type="checkbox" id="sk-prop"> proporcionalno</label>'
+    +(_imaZ?('<span style="font-size:9.5px;color:#e67e22;margin-left:auto" '
+      +'title="Skaliranje mijenja i zaklju\u010dane mjere">'
+      +'\u26a0 mijenja i zaklju\u010dane</span>'):'')+'</div>'
+    +'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">'
     +'<span style="font-size:11px;color:#6b7a8d;font-weight:600" '
     +'title="Zaokre\u0107e CIJELI oblik tako da izabrana strana legne ravno">Poravnaj po strani:</span>'
     +d('\u2b13 donjoj',  "skicaIzravnajPolozaj('dolje')", null,'Najni\u017eu vodoravnu stranu')
@@ -4336,6 +4356,42 @@ function _napraviOtvorIzPravougaonika(A,B){
   buildCustomOtvoriUI(); crtajDigitalno(); refresh();
   _skPoruka('Otvor <b>'+Math.round(w)+'\u00d7'+Math.round(h)+' mm</b> ucrtan. '
     +'Orijentaciju i ta\u010dne mjere podesi u lijevom panelu.');
+}
+// ── SKALIRANJE CIJELOG OBLIKA ────────────────────────────────────
+// Mijenja ukupnu sirinu/visinu; sve mjere se srazmjerno prilagode.
+// NAPOMENA: zakljucavanje ne stiti od skaliranja. Ono vazi za povlacenje
+// tjemena i unos duzine strane, a skaliranje po prirodi mijenja sve mjere.
+// (Tacka oko koje se skalira ne mijenja rezultat, jer se oblik poslije
+// normalizuje na (0,0) - zato se i ne nudi izbor sidra.)
+function _imaZakljucanih(){ return SK_ZAK_T.length>0||SK_ZAK_S.length>0; }
+function skicaSkaliraj(osa,val,proporcionalno){
+  var t=(dims&&dims._tj)||[];
+  if(t.length<3) return;
+  var nova=parseFloat((val||'0').toString().replace(',','.'))||0;
+  if(nova<50) return;
+  var bb=_bbPolyTj(t);
+  var trenutno=(osa==='w')?bb.w:bb.h;
+  if(trenutno<=0) return;
+  var k=nova/trenutno;
+  if(Math.abs(k-1)<0.0001) return;
+  if(_imaZakljucanih()){
+    if(!confirm('Skaliranje mijenja SVE mjere, pa i zaklju\u010dane.\n\n'
+      +'Zaklju\u010davanje \u0161titi od povla\u010denja i unosa du\u017eine, ali ne od skaliranja.\n\n'
+      +'Nastaviti?')) return;
+  }
+  _saveUndo();
+  var kx=(osa==='w'||proporcionalno)?k:1;
+  var ky=(osa==='h'||proporcionalno)?k:1;
+  dims._tj=_normalizujTjemena(t.map(function(q){
+    return [q[0]*kx, q[1]*ky];
+  }));
+  getAct().dims=dims;
+  // Zakljucane duzine komada nemaju smisla poslije skaliranja oblika
+  buildSkicaPanel(); crtajDigitalno(); osvjeziOtvorRezim();
+  buildIvice(); buildCornerR(); refresh();
+  _skPoruka('Oblik skaliran \u2014 '
+    +(proporcionalno?'proporcionalno na ':(osa==='w'?'\u0161irina ':'visina '))
+    +Math.round(nova)+' mm. Sve mjere su srazmjerno promijenjene.');
 }
 function _trenRad(v){ try{ return getCornerRadiusMM(v)||0; }catch(e){ return 0; } }
 // Radijus ugla na slobodnom obliku - isti nacin kao kod ostalih stolova,
