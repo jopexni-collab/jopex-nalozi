@@ -496,9 +496,9 @@ function buildHeader(){
           <option>Custom...</option>
         </select>
         <div id="custom-od-do" style="display:none;margin-top:2px;">
-          <input type="date" id="filter-od" oninput="render()" placeholder="Od"
+          <input type="date" lang="hr-HR" id="filter-od" oninput="render()" placeholder="Od"
             style="width:100%;font:inherit;font-size:10px;padding:2px 3px;background:#1e3566;color:#fff;border:1px solid #3a5590;border-radius:2px;margin-bottom:2px;">
-          <input type="date" id="filter-do" oninput="render()" placeholder="Do"
+          <input type="date" lang="hr-HR" id="filter-do" oninput="render()" placeholder="Do"
             style="width:100%;font:inherit;font-size:10px;padding:2px 3px;background:#1e3566;color:#fff;border:1px solid #3a5590;border-radius:2px;">
         </div>
       </div>`;
@@ -938,7 +938,7 @@ function openPop(td,row,editCfg){
   } else if(editCfg.type==='date'){
     const dv=val?val.split('T')[0]:'';
     fEl.innerHTML=`
-      <input type="date" id="pop-cal" value="${dv}" style="font:inherit;width:100%;padding:5px 7px;border:1px solid #ccc;border-radius:4px;cursor:pointer;margin-bottom:4px;">
+      <input type="date" lang="hr-HR" id="pop-cal" value="${dv}" style="font:inherit;width:100%;padding:5px 7px;border:1px solid #ccc;border-radius:4px;cursor:pointer;margin-bottom:4px;">
       <input type="text" id="pop-inp" placeholder="ili ukucaj: 22.7 ili 22/7/28" value=""
         style="font:inherit;width:100%;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:11px;color:#555;">
       <div style="font-size:10px;color:#aaa;margin-top:2px;">Bez godine = ${new Date().getFullYear()}, dvocifrena = 20XX</div>`;
@@ -990,7 +990,7 @@ function openPop(td,row,editCfg){
         ${vrste.map(([v,l])=>`<option value="${esc(v)}"${v===trenVrsta?' selected':''}>${l}</option>`).join('')}
       </select>
       <div style="margin-top:8px;font-size:10.5px;color:#888;font-weight:600">Datum uplate:</div>
-      <input type="date" id="naplata-datum-picker" value="${todayIso}" style="width:100%;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;margin-top:4px;" onchange="updateOpisCombo('naplata')">
+      <input type="date" lang="hr-HR" id="naplata-datum-picker" value="${todayIso}" style="width:100%;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;margin-top:4px;" onchange="updateOpisCombo('naplata')">
       <div style="margin-top:8px;font-size:10.5px;color:#888;font-weight:600">ili slobodan unos imena (gotovina):</div>
       <input type="text" id="naplata-ime" placeholder="npr. Petar" value=""
         style="width:100%;font:inherit;font-size:12px;padding:4px 7px;border:1px solid #ccc;border-radius:4px;margin-top:4px;"
