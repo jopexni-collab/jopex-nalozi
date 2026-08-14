@@ -937,26 +937,33 @@ function openPop(td,row,editCfg){
     fEl.innerHTML=`<select id="pop-inp"><option value="true"${val?' selected':''}>✓ Da</option><option value="false"${!val?' selected':''}>✗ Ne</option></select>`;
   } else if(editCfg.type==='date'){
     const dv=val?val.split('T')[0]:'';
+    // SOPSTVENI kalendar umjesto ugradjenog (<input type="date">) — ugradjeni uzima format
+    // i prvi dan sedmice iz podesavanja pregledaca/sistema i IGNORISE sve sto mu kod kaze
+    // (probano i sa lang atributom). Ovaj je pod punom kontrolom: uvijek dd.mm.gggg i
+    // sedmica UVIJEK pocinje ponedjeljkom, isto za svakog korisnika.
     fEl.innerHTML=`
-      <input type="date" lang="hr-HR" id="pop-cal" value="${dv}" style="font:inherit;width:100%;padding:5px 7px;border:1px solid #ccc;border-radius:4px;cursor:pointer;margin-bottom:4px;">
+      <input type="hidden" id="pop-cal" value="${dv}">
+      <div id="pop-kal"></div>
       <input type="text" id="pop-inp" placeholder="ili ukucaj: 22.7 ili 22/7/28" value=""
-        style="font:inherit;width:100%;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:11px;color:#555;">
+        style="font:inherit;width:100%;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:11px;color:#555;margin-top:6px;">
       <div style="font-size:10px;color:#aaa;margin-top:2px;">Bez godine = ${new Date().getFullYear()}, dvocifrena = 20XX</div>`;
     setTimeout(()=>{
-      const cal=document.getElementById('pop-cal');
+      kalIscrtaj(dv||new Date().toISOString().split('T')[0], dv);
       const txt=document.getElementById('pop-inp');
-      // Text → kalendar (live preview)
+      // Text -> kalendar (live preview)
       txt.addEventListener('input',()=>{
-        const parts=txt.value.trim().split(/[.\\/]/).map(p=>p.trim());
+        const parts=txt.value.trim().split(/[.\/]/).map(p=>p.trim());
         if(parts.length>=2){
           const d=parseInt(parts[0]),m=parseInt(parts[1]);
           let y=parts[2]?parseInt(parts[2]):new Date().getFullYear();
           if(y<100) y=2000+y;
-          if(d&&m&&y) cal.value=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+          if(d&&m&&y){
+            const iso=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            document.getElementById('pop-cal').value=iso;
+            kalIscrtaj(iso, iso);
+          }
         }
       });
-      try{cal.showPicker();}catch(e){}
-      cal.focus();
     },50);
   } else if(editCfg.type==='ugovorio'){
     ugovorioIzabraniId=null; ugovorioSlobodniTekst=null;
@@ -1201,6 +1208,77 @@ async function sacuvajRatuAvansa(){
   }catch(e){
     msg.style.color='red'; msg.textContent='✗ '+e.message;
   }
+}
+
+
+/* ═══ SOPSTVENI KALENDAR ═══
+   Ugradjeni <input type="date"> uzima format datuma i prvi dan sedmice iz podesavanja
+   pregledaca/sistema — ne moze se promijeniti iz koda (probano i sa lang atributom).
+   Ovaj kalendar je pod punom kontrolom: UVIJEK dd.mm.gggg i sedmica UVIJEK pocinje
+   ponedjeljkom, bez obzira na to kako je cija masina podesena. */
+const KAL_MJESECI=['Januar','Februar','Mart','April','Maj','Jun','Jul','Avgust','Septembar','Oktobar','Novembar','Decembar'];
+const KAL_DANI=['Po','Ut','Sr','Če','Pe','Su','Ne']; // ponedjeljak PRVI
+let kalPrikazMjesec=null; // {godina, mjesec} — koji se mjesec trenutno gleda
+
+function kalIscrtaj(isoZaPrikaz, isoIzabran){
+  const cont=document.getElementById('pop-kal');
+  if(!cont) return;
+  const bazni=isoZaPrikaz?new Date(isoZaPrikaz+'T12:00:00'):new Date();
+  if(!kalPrikazMjesec || isoZaPrikaz) kalPrikazMjesec={godina:bazni.getFullYear(), mjesec:bazni.getMonth()};
+  const {godina,mjesec}=kalPrikazMjesec;
+
+  const prvi=new Date(godina,mjesec,1);
+  // getDay(): 0=nedjelja..6=subota. Pretvara se tako da 0=PONEDJELJAK.
+  const pomak=(prvi.getDay()+6)%7;
+  const danaUMjesecu=new Date(godina,mjesec+1,0).getDate();
+  const danas=new Date().toISOString().split('T')[0];
+
+  let celije='';
+  for(let i=0;i<pomak;i++) celije+='<div></div>';
+  for(let d=1;d<=danaUMjesecu;d++){
+    const iso=`${godina}-${String(mjesec+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const jeIzabran=iso===isoIzabran;
+    const jeDanas=iso===danas;
+    const stil=jeIzabran
+      ? 'background:var(--blue,#1a5fa8);color:#fff;font-weight:700;'
+      : jeDanas ? 'background:#e8f0fe;font-weight:700;' : '';
+    celije+=`<div onclick="kalIzaberi('${iso}')" style="padding:5px 0;text-align:center;cursor:pointer;border-radius:4px;font-size:12px;${stil}">${d}</div>`;
+  }
+
+  cont.innerHTML=`
+    <div style="border:1px solid #ddd;border-radius:6px;padding:6px;background:#fff;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <button type="button" onclick="kalPomjeriMjesec(-1)" style="border:none;background:#f0f2f5;border-radius:4px;width:26px;height:26px;cursor:pointer;font-size:14px;">‹</button>
+        <div style="font-weight:700;font-size:12.5px;">${KAL_MJESECI[mjesec]} ${godina}</div>
+        <button type="button" onclick="kalPomjeriMjesec(1)" style="border:none;background:#f0f2f5;border-radius:4px;width:26px;height:26px;cursor:pointer;font-size:14px;">›</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;font-size:10.5px;color:#8b96a5;text-align:center;margin-bottom:3px;">
+        ${KAL_DANI.map((d,i)=>`<div style="padding:2px 0;${i>=5?'color:#c0392b;':''}">${d}</div>`).join('')}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;">${celije}</div>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button type="button" onclick="kalIzaberi('${danas}')" style="flex:1;border:1px solid #ddd;background:#fff;border-radius:4px;padding:4px;cursor:pointer;font-size:11px;">Danas</button>
+        <button type="button" onclick="kalIzaberi('')" style="flex:1;border:1px solid #ddd;background:#fff;border-radius:4px;padding:4px;cursor:pointer;font-size:11px;">Obriši datum</button>
+      </div>
+    </div>`;
+}
+
+function kalPomjeriMjesec(smjer){
+  if(!kalPrikazMjesec) return;
+  let {godina,mjesec}=kalPrikazMjesec;
+  mjesec+=smjer;
+  if(mjesec<0){ mjesec=11; godina--; }
+  if(mjesec>11){ mjesec=0; godina++; }
+  kalPrikazMjesec={godina,mjesec};
+  kalIscrtaj(null, document.getElementById('pop-cal')?.value||'');
+}
+
+function kalIzaberi(iso){
+  const cal=document.getElementById('pop-cal');
+  if(cal) cal.value=iso;
+  const txt=document.getElementById('pop-inp');
+  if(txt) txt.value=''; // rucni unos se ponistava kad se klikne datum u kalendaru
+  kalIscrtaj(iso||new Date().toISOString().split('T')[0], iso);
 }
 
 async function popSave(){
