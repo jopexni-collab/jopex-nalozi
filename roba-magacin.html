@@ -420,8 +420,26 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       </div>
       <div id="qr-format-info" style="font-size:11px;color:#8b96a5;margin-top:5px;"></div>
     </div>
+    <div style="margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px;">2. Dodatni tekst na nalepnici (opciono):</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+        <button class="ce-tip-btn" style="font-size:11px;padding:4px 8px;" onclick="qrPostaviTekst('')">— bez teksta —</button>
+        <button class="ce-tip-btn" style="font-size:11px;padding:4px 8px;" onclick="qrPostaviTekst('IZLOŽBENI MODEL')">IZLOŽBENI MODEL</button>
+        <button class="ce-tip-btn" style="font-size:11px;padding:4px 8px;" onclick="qrPostaviTekst('AKCIJA')">AKCIJA</button>
+        <button class="ce-tip-btn" style="font-size:11px;padding:4px 8px;" onclick="qrPostaviTekst('Cijena važi samo za izloženi model')">Cijena samo za izloženi</button>
+        <button class="ce-tip-btn" style="font-size:11px;padding:4px 8px;" onclick="qrPostaviTekst('RASPRODAJA')">RASPRODAJA</button>
+        <button class="ce-tip-btn" style="font-size:11px;padding:4px 8px;" onclick="qrPostaviTekst('NOVO')">NOVO</button>
+        <button class="ce-tip-btn" style="font-size:11px;padding:4px 8px;" onclick="qrPostaviTekst('POSLEDNJI KOMAD')">POSLEDNJI KOMAD</button>
+        <button class="ce-tip-btn" style="font-size:11px;padding:4px 8px;" onclick="qrPostaviTekst('PO NARUDŽBI')">PO NARUDŽBI</button>
+        <button class="ce-tip-btn" style="font-size:11px;padding:4px 8px;" onclick="qrPostaviTekst('SA OŠTEĆENJEM')">SA OŠTEĆENJEM</button>
+      </div>
+      <input type="text" id="qr-dodatni-tekst" placeholder="Ili ukucaj svoj tekst..." oninput="qrOsvjeziAkoTreba()" maxlength="60" style="width:100%;max-width:400px;padding:6px 9px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12px;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;margin-top:6px;cursor:pointer;">
+        <input type="checkbox" id="qr-prikazi-cijenu" onchange="qrOsvjeziAkoTreba()"> Prikaži i cijenu na nalepnici
+      </label>
+    </div>
     <div style="margin-bottom:8px;">
-      <div style="font-size:12px;font-weight:700;margin-bottom:6px;">2. Koji artikli:</div>
+      <div style="font-size:12px;font-weight:700;margin-bottom:6px;">3. Koji artikli:</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="ce-tip-btn" onclick="qrFilterPrimijeni('sve')">Svi artikli</button>
         <button class="ce-tip-btn" onclick="qrFilterPrimijeni('stanje')">Samo sa stanjem &gt; 0</button>
@@ -447,6 +465,21 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   }
   /* Grid se postavlja iz JS-a prema izabranom formatu (broj kolona + dimenzije u mm). */
   #qr-nalepnice-grid { display:grid; }
+  /* Na EKRANU: centriran, sa bijelom "stranicom" i sjenkom — da se vidi kako će izgledati
+     tabak. Pri ŠTAMPI se ovo poništava (nema margina, sjenke ni centriranja). */
+  @media screen {
+    #qr-nalepnice-grid {
+      justify-content:center;
+      margin:20px auto;
+      background:#fff;
+      box-shadow:0 2px 12px rgba(0,0,0,.15);
+      width:max-content;
+    }
+    #ov-qr-nalepnice { background:#e8eaed !important; }
+  }
+  @media print {
+    #qr-nalepnice-grid { margin:0; box-shadow:none; justify-content:start; width:auto; }
+  }
   .qr-nalepnica{
     display:flex; align-items:center; gap:2mm; padding:1mm 1.5mm;
     box-sizing:border-box; overflow:hidden; break-inside:avoid;
@@ -2693,6 +2726,17 @@ function qrPrikaziInfoFormata(){
            : '<span style="color:var(--red,#c0392b);">⚠ PREKORAČUJE A4 (210×297) — provjeri brojeve</span>');
 }
 
+// Dodatni tekst na nalepnici (npr. "AKCIJA", "IZLOŽBENI MODEL") — postavlja se klikom na
+// gotov predlog ili se ukuca ručno.
+function qrPostaviTekst(tekst){
+  document.getElementById('qr-dodatni-tekst').value=tekst;
+  qrOsvjeziAkoTreba();
+}
+// Ako su nalepnice već generisane, odmah ih preiscrtaj sa novim tekstom/cijenom.
+function qrOsvjeziAkoTreba(){
+  if(qrPoslednjaLista.length) qrGenerisi(qrPoslednjaLista);
+}
+
 function otvoriQrNalepnice(){
   if(!lagerPodaci||!lagerPodaci.length){ alert('Prvo prikaži lager listu (dugme "Prikaži").'); return; }
   document.getElementById('ov-qr-nalepnice').style.display='block';
@@ -2709,13 +2753,38 @@ function qrPopuniRucniIzbor(){
   const cont=document.getElementById('qr-rucna-lista');
   const filtrirano=lagerPodaci.filter(a=>!q || a.sifra.toLowerCase().includes(q) || a.naziv.toLowerCase().includes(q) || (a.grupa||'').toLowerCase().includes(q));
   if(!filtrirano.length){ cont.innerHTML='<div style="padding:8px;color:#999;font-size:12px;">Nema rezultata.</div>'; return; }
-  cont.innerHTML=filtrirano.slice(0,200).map(a=>`
+  // Ranije je stajalo slice(0,200) — artikli preko 200. se NISU ni prikazivali, pa se
+  // nisu mogli ni čekirati. Sad se prikazuju SVI koji odgovaraju pretrazi.
+  const sviCekirani=filtrirano.every(a=>qrRucniIzabrani.has(a.sifra));
+  cont.innerHTML=`
+    <div style="display:flex;gap:8px;align-items:center;padding:6px;border-bottom:2px solid #ddd;background:#f7f8fa;position:sticky;top:0;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;cursor:pointer;">
+        <input type="checkbox" ${sviCekirani?'checked':''} onchange="qrCekirajSveFiltrirane(this.checked)">
+        Izaberi sve prikazane (${filtrirano.length})
+      </label>
+      <button onclick="qrPonistiSveIzabrane()" style="margin-left:auto;font-size:11px;padding:3px 8px;border:1px solid #ddd;border-radius:5px;background:#fff;cursor:pointer;">Poništi sve</button>
+    </div>`
+    +filtrirano.map(a=>`
     <label style="display:flex;align-items:center;gap:8px;padding:5px 6px;font-size:12px;cursor:pointer;border-bottom:1px solid #f3f3f3;">
       <input type="checkbox" data-sifra="${esc(a.sifra)}" ${qrRucniIzabrani.has(a.sifra)?'checked':''} onchange="qrRucniToggle('${esc(a.sifra).replace(/'/g,"\\'")}', this.checked)">
       <span><b>${esc(a.sifra)}</b> — ${esc(a.naziv)} <span style="color:#8b96a5;">(stanje: ${a.stanje})</span></span>
     </label>
   `).join('');
   document.getElementById('qr-rucni-broj').textContent=qrRucniIzabrani.size;
+}
+
+// Čekira/odčekira SVE trenutno prikazane (posle pretrage) — ne dira ostale.
+function qrCekirajSveFiltrirane(oznaceno){
+  const q=(document.getElementById('qr-rucna-pretraga').value||'').toLowerCase().trim();
+  lagerPodaci
+    .filter(a=>!q || a.sifra.toLowerCase().includes(q) || a.naziv.toLowerCase().includes(q) || (a.grupa||'').toLowerCase().includes(q))
+    .forEach(a=>{ if(oznaceno) qrRucniIzabrani.add(a.sifra); else qrRucniIzabrani.delete(a.sifra); });
+  qrPopuniRucniIzbor();
+}
+
+function qrPonistiSveIzabrane(){
+  qrRucniIzabrani.clear();
+  qrPopuniRucniIzbor();
 }
 
 function qrRucniToggle(sifra, checked){
@@ -2757,6 +2826,10 @@ async function qrGenerisi(lista){
   const nazivPt=Math.max(5, Math.min(8.5, f.visina*0.30));
   // Koliko redova naziva staje (ostatak se odseca da ne prelije nalepnicu).
   const redovaNaziva=f.visina>=35?3:f.visina>=25?2:1;
+  // Dodatni tekst (npr. "AKCIJA") i cijena — smanjuju prostor za naziv kad su uključeni.
+  const dodatniTekst=(document.getElementById('qr-dodatni-tekst')?.value||'').trim();
+  const prikaziCijenu=document.getElementById('qr-prikazi-cijenu')?.checked;
+  const dodatniPt=Math.max(5, Math.min(8, f.visina*0.26));
 
   for(const a of lista){
     const box=document.createElement('div');
@@ -2774,15 +2847,30 @@ async function qrGenerisi(lista){
     sifraEl.className='sifra';
     sifraEl.style.fontSize=`${sifraPt}pt`;
     sifraEl.textContent=a.sifra;
+    tekst.appendChild(sifraEl);
+
     const nazivEl=document.createElement('div');
     nazivEl.className='naziv';
     nazivEl.style.fontSize=`${nazivPt}pt`;
     nazivEl.style.display='-webkit-box';
-    nazivEl.style.webkitLineClamp=String(redovaNaziva);
+    // Ako ima dodatni tekst/cijenu, naziv dobija manje redova (da sve stane).
+    nazivEl.style.webkitLineClamp=String(Math.max(1, redovaNaziva - (dodatniTekst?1:0) - (prikaziCijenu?1:0)));
     nazivEl.style.webkitBoxOrient='vertical';
     nazivEl.textContent=a.naziv;
-    tekst.appendChild(sifraEl);
     tekst.appendChild(nazivEl);
+
+    if(prikaziCijenu && a.cijena!=null){
+      const cijenaEl=document.createElement('div');
+      cijenaEl.style.cssText=`font-size:${sifraPt}pt;font-weight:800;line-height:1.1;`;
+      cijenaEl.textContent=lagerFmMoney(a.cijena);
+      tekst.appendChild(cijenaEl);
+    }
+    if(dodatniTekst){
+      const dodatniEl=document.createElement('div');
+      dodatniEl.style.cssText=`font-size:${dodatniPt}pt;font-weight:700;line-height:1.1;color:#c0392b;text-transform:uppercase;`;
+      dodatniEl.textContent=dodatniTekst;
+      tekst.appendChild(dodatniEl);
+    }
     box.appendChild(tekst);
 
     grid.appendChild(box);
