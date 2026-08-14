@@ -799,15 +799,28 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         <input type="text" id="uvsgrupa-pretraga" placeholder="Traži po grupi, nazivu ili šifri..." style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box;">
         <button type="button" onclick="uvsgrupaPrikaziSve()" title="Izlistaj ceo magacin" style="flex-shrink:0;padding:0 14px;background:var(--blue,#1a5fa8);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:12.5px;white-space:nowrap;">📋 Prikaži sve</button>
       </div>
-      <div id="uvsgrupa-rezultati" style="max-height:280px;overflow-y:auto;border:1px solid var(--border,#ddd);border-radius:8px;padding:8px;margin-bottom:12px;"></div>
+      <div id="uvsgrupa-rezultati" style="max-height:380px;overflow:auto;border:1px solid var(--border,#ddd);border-radius:8px;margin-bottom:12px;"></div>
+      <div id="uvsgrupa-filter-panel" onclick="event.stopPropagation()" style="display:none;position:fixed;z-index:520;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.2);width:220px;max-height:340px;flex-direction:column;"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
         <div id="uvsgrupa-izabrano-brojac" style="font-size:12px;color:#8b96a5;">Izabrano: 0 artikala</div>
         <button type="button" onclick="uvsgrupaPonistiIzbor()" style="font-size:11px;padding:3px 8px;border:1px solid var(--border,#ddd);border-radius:5px;background:#fff;cursor:pointer;">Poništi izbor</button>
       </div>
-      <div id="uvsgrupa-drop-zona" style="border:2px dashed var(--border,#ccc);border-radius:10px;padding:20px 12px;text-align:center;color:#8b96a5;font-size:13px;cursor:pointer;margin-bottom:10px;">
-        📷 Klikni da izabereš sliku, ili prevuci ovde
+      <div id="uvsgrupa-drop-zona" style="border:3px dashed var(--border,#ccc);border-radius:12px;padding:36px 16px;text-align:center;color:#8b96a5;font-size:14px;cursor:pointer;margin-bottom:10px;transition:background .15s,border-color .15s;">
+        <div style="font-size:32px;margin-bottom:6px;">📷</div>
+        <b>Klikni da izabereš slike</b><br><span style="font-size:12px;">ili prevuci jednu ili više ovde</span>
       </div>
-      <input type="file" id="uvsgrupa-file-input" accept="image/*" style="display:none;">
+      <input type="file" id="uvsgrupa-file-input" accept="image/*" multiple style="display:none;">
+
+      <!-- Pregled ubačenih slika PRIJE slanja — isto kao u maloprodaji -->
+      <div id="uvsgrupa-cekaju-blok" style="display:none;margin-bottom:10px;">
+        <div style="font-size:12px;font-weight:700;margin-bottom:6px;">Spremno za dodavanje (<span id="uvsgrupa-cekaju-broj">0</span>):</div>
+        <div id="uvsgrupa-cekaju-lista" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;">
+          <button class="ce-tip-btn" style="flex:1;font-size:12px;" onclick="uvsgrupaOtkaziCekaju()">Otkaži</button>
+          <button class="ce-tip-btn" style="flex:2;font-size:12px;background:var(--green,#1f8a4c);color:#fff;font-weight:700;" onclick="uvsgrupaPotvrdiCekaju()">✓ Potvrdi i dodaj svima</button>
+        </div>
+      </div>
+
       <div id="uvsgrupa-status" style="font-size:12px;color:var(--red);margin-bottom:8px;display:none;"></div>
     </div>
   </div>
@@ -2038,6 +2051,7 @@ async function uvsgrupaPretrazi(tekst, autoCekiraj=true){
     const data=await r.json();
     if(!r.ok){ cont.innerHTML=`<div style="color:var(--red);font-size:12px;padding:6px;">${esc(data.error)}</div>`; return; }
     uvsgrupaRezultati=data;
+    uvsgrupaFilteri={}; // novi rezultati — stari filteri bi mogli sakriti sve, pa se čiste
     // Kod PRETRAGE (npr. "bengal") svi rezultati se ODMAH čekiraju — korisnik samo
     // odčekira one koje ne želi. Kod "Prikaži sve" (cijeli magacin) NE čekira se ništa —
     // besmisleno bi bilo označiti stotine artikala pa ih ručno odčekiravati.
@@ -2059,65 +2073,257 @@ function uvsgrupaPonistiIzbor(){
   uvsgrupaRenderRezultati();
 }
 
+/* Tabela sa Excel-stil filterima (isti obrazac kao Lager lista) — BEZ cene/stanja, jer se
+   ovde bira SAMO na koje artikle ide slika, ne prodaje se ništa. */
+const UVSGRUPA_KOLONE=[
+  {k:'sifra',lbl:'Šifra',align:'left'},
+  {k:'naziv',lbl:'Naziv',align:'left'},
+  {k:'grupa',lbl:'Grupa',align:'left'},
+];
+let uvsgrupaFilteri={}, uvsgrupaSort={kolona:'sifra',smjer:'asc'};
+
+function uvsgrupaVrijednost(a,k){ return a[k]; }
+
+function uvsgrupaFiltrirano(){
+  let prikaz=uvsgrupaRezultati.filter(a=>
+    UVSGRUPA_KOLONE.every(({k})=>{
+      const iskljuceno=uvsgrupaFilteri[k];
+      if(!iskljuceno||iskljuceno.size===0) return true;
+      const v=uvsgrupaVrijednost(a,k);
+      return !iskljuceno.has(v) && !(iskljuceno.has('') && (v==null||v===''));
+    })
+  );
+  const {kolona,smjer}=uvsgrupaSort;
+  prikaz=[...prikaz].sort((x,y)=>{
+    const vx=uvsgrupaVrijednost(x,kolona), vy=uvsgrupaVrijednost(y,kolona);
+    const cmp=kolona==='sifra'?(parseFloat(vx)||0)-(parseFloat(vy)||0):String(vx??'').localeCompare(String(vy??''),'sr-Latn-BA');
+    return smjer==='asc'?cmp:-cmp;
+  });
+  return prikaz;
+}
+
 function uvsgrupaRenderRezultati(){
   const cont=document.getElementById('uvsgrupa-rezultati');
-  if(!uvsgrupaRezultati.length){ cont.innerHTML='<div style="color:#8b96a5;font-size:12px;padding:6px;">Nema rezultata.</div>'; return; }
-  cont.innerHTML=`<div style="font-size:11px;color:#8b96a5;padding:2px 2px 6px;border-bottom:1px solid #eee;margin-bottom:4px;">${uvsgrupaRezultati.length} artikala</div>`
-    +uvsgrupaRezultati.map(a=>`
-    <label style="display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:12.5px;cursor:pointer;border-bottom:1px solid #f0f2f5;">
-      <input type="checkbox" ${uvsgrupaIzabrani.has(a.id)?'checked':''} onchange="uvsgrupaToggle(${a.id},this.checked)">
-      <span style="color:#999;min-width:42px;">${esc(a.sifra)}</span>
-      <span style="flex:1;">${esc(a.naziv)}</span>
-      ${a.grupa?`<span style="color:#8b96a5;font-size:11px;flex-shrink:0;">${esc(a.grupa)}</span>`:''}
-    </label>
-  `).join('');
+  if(!uvsgrupaRezultati.length){ cont.innerHTML='<div style="color:#8b96a5;font-size:12px;padding:10px;">Nema rezultata.</div>'; return; }
+  const prikaz=uvsgrupaFiltrirano();
+  const strelica=k=>uvsgrupaSort.kolona===k?(uvsgrupaSort.smjer==='asc'?' ▲':' ▼'):'';
+  const filterDugme=k=>{
+    const aktivan=uvsgrupaFilteri[k]&&uvsgrupaFilteri[k].size>0;
+    return `<span onclick="event.stopPropagation();uvsgrupaOtvoriFilter('${k}',this)" style="cursor:pointer;margin-left:4px;padding:1px 3px;border-radius:3px;background:${aktivan?'#4a90d9':'rgba(255,255,255,.15)'};">▼</span>`;
+  };
+  // Kvadratić u zaglavlju — čekira/odčekira SVE trenutno vidljive (posle filtera) redove.
+  const sviVidljiviCekirani=prikaz.length>0 && prikaz.every(a=>uvsgrupaIzabrani.has(a.id));
+  cont.innerHTML=`
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+      <thead>
+        <tr style="background:#1f3864;color:#fff;">
+          <th style="padding:4px 6px;position:sticky;top:0;background:#1f3864;z-index:30;width:28px;">
+            <input type="checkbox" ${sviVidljiviCekirani?'checked':''} onchange="uvsgrupaCekirajSveVidljive(this.checked)" title="Izaberi sve prikazane">
+          </th>
+          ${UVSGRUPA_KOLONE.map(c=>`
+            <th style="padding:4px 6px;text-align:${c.align};white-space:nowrap;font-size:10.5px;position:sticky;top:0;background:#1f3864;z-index:30;">
+              <div style="display:flex;align-items:center;gap:2px;">
+                <span style="cursor:pointer;" onclick="uvsgrupaKlikNaslov('${c.k}')">${c.lbl}${strelica(c.k)}</span>${filterDugme(c.k)}
+              </div>
+            </th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>${prikaz.map((a,i)=>`
+        <tr style="background:${uvsgrupaIzabrani.has(a.id)?'#eaf4ea':(i%2?'#f7f8fa':'#fff')};border-bottom:1px solid #eee;cursor:pointer;" onclick="uvsgrupaToggleRed(${a.id})">
+          <td style="padding:3px 6px;text-align:center;"><input type="checkbox" ${uvsgrupaIzabrani.has(a.id)?'checked':''} onclick="event.stopPropagation();uvsgrupaToggle(${a.id},this.checked)"></td>
+          <td style="padding:3px 6px;color:#999;">${esc(a.sifra)}</td>
+          <td style="padding:3px 6px;">${esc(a.naziv)}</td>
+          <td style="padding:3px 6px;color:#6b7a8d;">${esc(a.grupa||'—')}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    <div style="font-size:11px;color:#8b96a5;padding:6px;border-top:1px solid #eee;">Prikazano ${prikaz.length} od ${uvsgrupaRezultati.length} artikala</div>`;
 }
+
+function uvsgrupaToggleRed(robaId){
+  const bio=uvsgrupaIzabrani.has(robaId);
+  uvsgrupaToggle(robaId, !bio);
+}
+
+function uvsgrupaCekirajSveVidljive(oznaceno){
+  uvsgrupaFiltrirano().forEach(a=>{
+    if(oznaceno) uvsgrupaIzabrani.add(a.id); else uvsgrupaIzabrani.delete(a.id);
+  });
+  document.getElementById('uvsgrupa-izabrano-brojac').textContent=`Izabrano: ${uvsgrupaIzabrani.size} artikala`;
+  uvsgrupaRenderRezultati();
+}
+
+function uvsgrupaKlikNaslov(kolona){
+  if(uvsgrupaSort.kolona===kolona) uvsgrupaSort.smjer=uvsgrupaSort.smjer==='asc'?'desc':'asc';
+  else uvsgrupaSort={kolona,smjer:'asc'};
+  uvsgrupaRenderRezultati();
+}
+
+/* ── Excel-stil filter panel (isti obrazac kao u Lager listi) ── */
+let uvsgrupaFPKolona=null, uvsgrupaFPPretraga='', uvsgrupaFPDraft=new Set(), uvsgrupaFPPozicija=null;
+
+function uvsgrupaDistinct(k){
+  const sve=uvsgrupaRezultati.map(a=>uvsgrupaVrijednost(a,k));
+  const neprazne=[...new Set(sve.filter(v=>v!=null&&v!==''))].sort((x,y)=>String(x).localeCompare(String(y),'sr-Latn-BA'));
+  return sve.some(v=>v==null||v==='') ? [...neprazne,''] : neprazne;
+}
+
+function uvsgrupaOtvoriFilter(kolona, dugmeEl){
+  uvsgrupaFPKolona=kolona; uvsgrupaFPPretraga='';
+  uvsgrupaFPDraft=new Set(uvsgrupaFilteri[kolona]||[]);
+  const panel=document.getElementById('uvsgrupa-filter-panel');
+  const r=dugmeEl.getBoundingClientRect();
+  uvsgrupaFPPozicija={top:(r.bottom+4)+'px', left:Math.min(r.left,window.innerWidth-230)+'px'};
+  panel.style.top=uvsgrupaFPPozicija.top; panel.style.left=uvsgrupaFPPozicija.left;
+  panel.style.display='flex';
+  panel.innerHTML=`
+    <div style="padding:8px;border-bottom:1px solid #eee;">
+      <input type="text" id="uvsgrupa-fp-search" placeholder="Pretraga..." style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box;">
+    </div>
+    <div id="uvsgrupa-fp-lista" style="overflow-y:auto;flex:1;padding:6px 8px;"></div>
+    <div style="display:flex;gap:6px;padding:8px;border-top:1px solid #eee;">
+      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;" onclick="uvsgrupaZatvoriFilter()">Otkaži</button>
+      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;" onclick="uvsgrupaFilterOcisti()">Obriši</button>
+      <button class="ce-tip-btn" style="flex:1;font-size:11px;padding:5px;background:var(--blue,#1a5fa8);color:#fff;font-weight:700;" onclick="uvsgrupaFilterPrimijeni()">✓ OK</button>
+    </div>`;
+  const si=document.getElementById('uvsgrupa-fp-search');
+  let t=null;
+  si.addEventListener('input', e=>{
+    uvsgrupaFPPretraga=e.target.value;
+    clearTimeout(t); t=setTimeout(()=>uvsgrupaFPRenderListu(), 250);
+  });
+  si.focus();
+  uvsgrupaFPRenderListu();
+}
+
+function uvsgrupaFPRenderListu(){
+  const sve=uvsgrupaDistinct(uvsgrupaFPKolona);
+  const pretraga=uvsgrupaFPPretraga.toLowerCase();
+  const prikazane=sve.filter(v=>String(v).toLowerCase().includes(pretraga));
+  const sveOznaceno=prikazane.every(v=>!uvsgrupaFPDraft.has(v));
+  document.getElementById('uvsgrupa-fp-lista').innerHTML=`
+    <label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-weight:700;cursor:pointer;border-bottom:1px solid #eee;margin-bottom:3px;">
+      <input type="checkbox" ${sveOznaceno?'checked':''} onchange="uvsgrupaFPOznaciSve(this.checked)"> (Izaberi sve)
+    </label>
+    ${prikazane.map(v=>`
+      <label style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11.5px;cursor:pointer;">
+        <input type="checkbox" ${uvsgrupaFPDraft.has(v)?'':'checked'} onchange="uvsgrupaFPToggle('${esc(String(v)).replace(/'/g,"\\'")}',this.checked)"> ${v===''?'<i style="color:#8b96a5;">(prazno)</i>':esc(String(v))}
+      </label>`).join('')}`;
+}
+function uvsgrupaFPToggle(v,oznaceno){
+  if(oznaceno) uvsgrupaFPDraft.delete(v); else uvsgrupaFPDraft.add(v);
+  const prikazane=uvsgrupaDistinct(uvsgrupaFPKolona).filter(x=>String(x).toLowerCase().includes(uvsgrupaFPPretraga.toLowerCase()));
+  const cb=document.querySelector('#uvsgrupa-fp-lista input[type="checkbox"]');
+  if(cb) cb.checked=prikazane.every(x=>!uvsgrupaFPDraft.has(x));
+}
+function uvsgrupaFPOznaciSve(oznaceno){
+  uvsgrupaDistinct(uvsgrupaFPKolona).filter(v=>String(v).toLowerCase().includes(uvsgrupaFPPretraga.toLowerCase()))
+    .forEach(v=>{ if(oznaceno) uvsgrupaFPDraft.delete(v); else uvsgrupaFPDraft.add(v); });
+  uvsgrupaFPRenderListu();
+}
+function uvsgrupaFilterOcisti(){
+  uvsgrupaFilteri[uvsgrupaFPKolona]=new Set();
+  uvsgrupaZatvoriFilter(); uvsgrupaRenderRezultati();
+}
+function uvsgrupaFilterPrimijeni(){
+  uvsgrupaFilteri[uvsgrupaFPKolona]=uvsgrupaFPDraft;
+  uvsgrupaZatvoriFilter(); uvsgrupaRenderRezultati();
+}
+function uvsgrupaZatvoriFilter(){
+  document.getElementById('uvsgrupa-filter-panel').style.display='none';
+  uvsgrupaFPKolona=null;
+}
+document.addEventListener('click', e=>{
+  const panel=document.getElementById('uvsgrupa-filter-panel');
+  if(panel && panel.style.display!=='none' && !panel.contains(e.target)){
+    panel.style.display='none'; uvsgrupaFPKolona=null;
+  }
+});
 
 function uvsgrupaToggle(robaId, oznaceno){
   if(oznaceno) uvsgrupaIzabrani.add(robaId); else uvsgrupaIzabrani.delete(robaId);
   document.getElementById('uvsgrupa-izabrano-brojac').textContent=`Izabrano: ${uvsgrupaIzabrani.size} artikala`;
+  uvsgrupaRenderRezultati(); // osvježi bojenje izabranih redova
 }
+
+// Slike UHVAĆENE ali još neposlate — čekaju potvrdu (isti obrazac kao u maloprodaji).
+let uvsgrupaCekaju=[];
 
 document.getElementById('uvsgrupa-drop-zona').addEventListener('click', ()=>{
   document.getElementById('uvsgrupa-file-input').click();
 });
-document.getElementById('uvsgrupa-drop-zona').addEventListener('dragover', e=>{ e.preventDefault(); e.currentTarget.style.background='#f0f4fa'; });
-document.getElementById('uvsgrupa-drop-zona').addEventListener('dragleave', e=>{ e.currentTarget.style.background=''; });
+document.getElementById('uvsgrupa-drop-zona').addEventListener('dragover', e=>{ e.preventDefault(); e.currentTarget.style.background='#eaf2fb'; e.currentTarget.style.borderColor='var(--blue,#1a5fa8)'; });
+document.getElementById('uvsgrupa-drop-zona').addEventListener('dragleave', e=>{ e.currentTarget.style.background=''; e.currentTarget.style.borderColor=''; });
 document.getElementById('uvsgrupa-drop-zona').addEventListener('drop', e=>{
   e.preventDefault();
-  e.currentTarget.style.background='';
-  if(e.dataTransfer.files[0]) uvsgrupaPosaljiSliku(e.dataTransfer.files[0]);
+  e.currentTarget.style.background=''; e.currentTarget.style.borderColor='';
+  uvsgrupaDodajUCekanje([...e.dataTransfer.files]);
 });
 document.getElementById('uvsgrupa-file-input').addEventListener('change', e=>{
-  if(e.target.files[0]) uvsgrupaPosaljiSliku(e.target.files[0]);
+  uvsgrupaDodajUCekanje([...e.target.files]);
   e.target.value='';
 });
 
-async function uvsgrupaPosaljiSliku(file){
+function uvsgrupaDodajUCekanje(fajlovi){
+  const slike=fajlovi.filter(f=>f.type.startsWith('image/'));
+  if(!slike.length) return;
+  slike.forEach(f=>uvsgrupaCekaju.push({fajl:f, pregledUrl:URL.createObjectURL(f)}));
+  uvsgrupaRenderCekaju();
+}
+function uvsgrupaRenderCekaju(){
+  const blok=document.getElementById('uvsgrupa-cekaju-blok');
+  if(!uvsgrupaCekaju.length){ blok.style.display='none'; return; }
+  blok.style.display='block';
+  document.getElementById('uvsgrupa-cekaju-broj').textContent=uvsgrupaCekaju.length;
+  document.getElementById('uvsgrupa-cekaju-lista').innerHTML=uvsgrupaCekaju.map((s,i)=>`
+    <div style="position:relative;">
+      <img src="${s.pregledUrl}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #ddd;">
+      <button onclick="uvsgrupaUkloniIzCekanja(${i})" title="Ukloni ovu" style="position:absolute;top:-6px;right:-6px;background:var(--red,#c0392b);color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer;line-height:1;">✕</button>
+    </div>`).join('');
+}
+function uvsgrupaUkloniIzCekanja(i){
+  URL.revokeObjectURL(uvsgrupaCekaju[i].pregledUrl);
+  uvsgrupaCekaju.splice(i,1);
+  uvsgrupaRenderCekaju();
+}
+function uvsgrupaOtkaziCekaju(){
+  uvsgrupaCekaju.forEach(s=>URL.revokeObjectURL(s.pregledUrl));
+  uvsgrupaCekaju=[];
+  uvsgrupaRenderCekaju();
+}
+
+async function uvsgrupaPotvrdiCekaju(){
   const statusDiv=document.getElementById('uvsgrupa-status');
   if(!uvsgrupaIzabrani.size){
     statusDiv.style.display='block'; statusDiv.style.color='var(--red)';
-    statusDiv.textContent='✗ Prvo izaberi bar jedan artikal (kvadratići iznad).';
+    statusDiv.textContent='✗ Prvo izaberi bar jedan artikal (kvadratići u tabeli iznad).';
     return;
   }
+  if(!uvsgrupaCekaju.length) return;
+  const brojArtikala=uvsgrupaIzabrani.size;
   statusDiv.style.display='block'; statusDiv.style.color='#8b96a5';
-  statusDiv.textContent=`✓ Fajl "${file.name}" uhvaćen — obrada slike...`;
-  let smanjena;
-  try{ smanjena=await uvslikaSmanjiSliku(file); }
-  catch(e){ statusDiv.style.color='var(--red)'; statusDiv.textContent='✗ '+e.message; return; }
-
-  statusDiv.textContent=`Otpremanje za ${uvsgrupaIzabrani.size} artikala...`;
-  const fd=new FormData();
-  fd.append('slika', smanjena);
-  fd.append('roba_ids', JSON.stringify([...uvsgrupaIzabrani]));
-  try{
-    const r=await fetch(`${API}/api/roba/slika-grupa`, {method:'POST', body:fd});
-    const data=await r.json();
-    if(!r.ok) throw new Error(data.error||'Greška.');
+  let uspjesno=0, neuspjesno=[];
+  for(let i=0;i<uvsgrupaCekaju.length;i++){
+    const s=uvsgrupaCekaju[i];
+    statusDiv.textContent=`Otpremanje ${i+1}/${uvsgrupaCekaju.length} — ${s.fajl.name} (za ${brojArtikala} artikala)...`;
+    try{
+      const smanjena=await uvslikaSmanjiSliku(s.fajl);
+      const fd=new FormData();
+      fd.append('slika', smanjena);
+      fd.append('roba_ids', JSON.stringify([...uvsgrupaIzabrani]));
+      const r=await fetch(`${API}/api/roba/slika-grupa`, {method:'POST', body:fd});
+      const data=await r.json();
+      if(!r.ok) throw new Error(data.error||'Greška.');
+      uspjesno++;
+    }catch(e){ neuspjesno.push(`${s.fajl.name}: ${e.message}`); }
+  }
+  uvsgrupaOtkaziCekaju();
+  if(neuspjesno.length){
+    statusDiv.style.color='var(--red)';
+    statusDiv.textContent=`✓ ${uspjesno} slika dodato, ✗ ${neuspjesno.length} neuspešno: ${neuspjesno.join('; ')}`;
+  }else{
     statusDiv.style.color='var(--green)';
-    statusDiv.textContent=`✓ Slika povezana sa ${data.broj_artikala} artikala.`;
-  }catch(e){
-    statusDiv.style.color='var(--red)'; statusDiv.textContent='✗ '+e.message;
+    statusDiv.textContent=`✓ ${uspjesno} ${uspjesno===1?'slika povezana':'slika povezano'} sa ${brojArtikala} artikala.`;
   }
 }
 
