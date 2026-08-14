@@ -666,6 +666,10 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <div class="sec-hd" style="color:#1d8a6e">Oblik stola</div>
       <div class="shp-grid" id="sto-shp-grid"></div>
       <div id="sto-dim-wrap"></div>
+      <div id="sto-corner-sec" style="display:none;margin-top:8px">
+        <div class="hint">Svaki ugao može imati svoj radijus zaokruženja (R mm)</div>
+        <div id="sto-corner-con"></div>
+      </div>
       <div class="fg"><label>Broj komada</label><input type="number" id="sto-br" value="1" min="1" oninput="fixComma(this);refresh()"></div>
     </div>
     <div class="sec" id="sto-radius-sec" style="display:none">
@@ -2346,7 +2350,11 @@ function _bbPoly(pts){
   });
   return {x:mnx,y:mny,w:mxx-mnx,h:mxy-mny};
 }
-function jeSlobodan(){ return shape==='SK'; }
+// Slobodan (rucno nacrtan) oblik postoji u DVA tipa: kuhinja ('SK') i
+// sto ('skica'). Sve alatke - crtanje, dotjerivanje, poravnanje, radijusi -
+// rade jednako za oba, pa se svuda koristi ova provjera.
+function jeSkicaOblik(){ return shape==='SK'||shape==='skica'; }
+function jeSlobodan(){ return shape==='SK'; }   // otvori postoje samo kod kuhinje
 // Koja je strana izabrana za dati otvor (indeks), uz zastitu od nepostojece.
 function _otvorStrana(prefix){
   var t=(dims&&dims._tj)||[];
@@ -2671,6 +2679,7 @@ function setTip(t){
     var bl=ge('blok-'+x); if(bl) bl.className='blok'+(x===t?' on':'');
   });
   try{ buildKlPodtip(); }catch(e){}
+  try{ crtajDigitalno(); }catch(e){}
 }
 
 function tcb(id){
@@ -3976,6 +3985,7 @@ function skicaPrimijeni(){
   showV('crtez');   // veliki prozor je tamo
   buildSkicaPanel(); crtajDigitalno(); osvjeziOtvorRezim();
   buildIvice(); buildCornerR(); buildCustomOtvoriUI(); buildSlavinaUI();
+  if(tip==='sto'){ buildTableDimWrap(); }
   buildItemList(); refresh();
 }
 // ══ DONJI PROZOR: digitalizovani oblik ══════════════════════════════
@@ -3994,7 +4004,7 @@ var _skVucem=null, _skPreslikaVelika=null;
 function _crtajOblikUSvg(svgId, W, H, R){
   var svg=ge(svgId); if(!svg) return null;
   var t=(dims&&dims._tj)||[];
-  if(shape!=='SK'||t.length<3){ svg.innerHTML=''; return null; }
+  if(!jeSkicaOblik()||t.length<3){ svg.innerHTML=''; return null; }
   R=R||1;
   var lijevo=54*R, dolje=46*R, gore=18*R, desno=46*R;
   var mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
@@ -4066,9 +4076,10 @@ function _crtajOblikUSvg(svgId, W, H, R){
         +'" font-weight="700" fill="'+o.boja+'">'+o.naziv+'</text></g>';
     }
   });
-  // TJEMENA - velika slova
+  // TJEMENA - velika slova + oznaka radijusa ako je postavljen
   t.forEach(function(p,v){
     var x=px(p), y=py(p), prav=tjemeJePrav(t,v);
+    var rmm=0; try{ rmm=getCornerRadiusMM(v)||0; }catch(e){}
     s+='<g style="cursor:grab" onclick="skIzaberiTjeme('+v+')">'
       +'<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="'+f(14)+'" fill="transparent"/>'
       +(prav?'<rect x="'+(x-4.5*R).toFixed(1)+'" y="'+(y-4.5*R).toFixed(1)+'" width="'+f(9)+'" height="'+f(9)+'" fill="#fff" stroke="#1f8a4c" stroke-width="'+f(1.8)+'"/>'
@@ -4077,6 +4088,8 @@ function _crtajOblikUSvg(svgId, W, H, R){
         +'<text x="'+(x-3.5*R).toFixed(1)+'" y="'+(y+17*R).toFixed(1)+'" font-size="'+f(9)+'">\ud83d\udd12</text>':'')
       +(SK_IZABRANO_TJEME===v?'<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="'+f(11)+'" fill="none" stroke="#1a5fa8" stroke-width="'+f(1.5)+'"/>':'')
       +'<text x="'+(x+9*R).toFixed(1)+'" y="'+(y-7*R).toFixed(1)+'" font-size="'+f(12)+'" font-weight="800" fill="#134a85">'+SLOVA_T[v]+'</text>'
+      +(rmm>0?('<text x="'+(x+9*R).toFixed(1)+'" y="'+(y+9*R).toFixed(1)+'" font-size="'+f(9)
+        +'" font-weight="700" fill="#b8860b">R'+rmm+'</text>'):'')
       +'</g>';
   });
   // STRANE - mala slova
@@ -4144,7 +4157,7 @@ function _mmUDuzOdmak(stranaIdx,P){
 function crtajDigitalno(){
   var vomot=ge('sk-veliki-omot');
   var t=(dims&&dims._tj)||[];
-  var ima=(shape==='SK'&&t.length>=3);
+  var ima=(jeSkicaOblik()&&t.length>=3);
   if(vomot) vomot.style.display=ima?'block':'none';
   if(!ima) return;
   // Samo veliki radni prozor (desni panel) - mali pregled je uklonjen jer
@@ -4213,7 +4226,21 @@ function buildVelikiAlati(){
       +(prav?'<span style="font-size:11px;color:#6b7a8d">Ugao je ve\u0107 prav.</span>'
             :d('\u2220 Zaklju\u010daj 90\u00b0','skicaPrav('+v+')'))
       +d((zakT?'\ud83d\udd13 Otklju\u010daj tjeme':'\ud83d\udd12 Zaklju\u010daj tjeme'),'skToggleZakTjeme('+v+')',zakT?'#c0392b':null)
-      +'</div></div>';
+      +'</div>'
+      +'<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:6px;'
+      +'padding-top:6px;border-top:1px dashed #dde2ea">'
+      +'<span style="font-size:11px;color:#6b7a8d;min-width:52px">Radijus</span>'
+      +'<select onchange="skicaRadijus('+v+',this.value)" style="font:inherit;font-size:11px;'
+      +'padding:4px 6px;border:1px solid #dde2ea;border-radius:4px">'
+      +RAD_PRESETS.map(function(pr){
+        return '<option value="'+pr+'"'+(_trenRad(v)===pr?' selected':'')+'>'
+          +(pr===0?'O\u0161tar':'R'+pr+' mm')+'<\/option>'; }).join('')
+      +'<option value="custom"'+(RAD_PRESETS.indexOf(_trenRad(v))<0?' selected':'')+'>Proizvoljno<\/option>'
+      +'</select>'
+      +'<input type="number" min="0" step="1" value="'+_trenRad(v)+'" style="width:64px;'
+      +'font:inherit;font-size:11px;padding:4px 6px;border:1px solid #dde2ea;border-radius:4px;'
+      +'text-align:right" oninput="fixComma(this);skicaRadijus('+v+',this.value)">'
+      +'<span style="font-size:10px;color:#8a93a3">mm</span></div></div>';
   } else if(SK_IZABRAN_OTVOR){
     var _oo=_sviOtvoriMM().filter(function(x){
       return x.vrsta===SK_IZABRAN_OTVOR.vrsta&&x.idx===SK_IZABRAN_OTVOR.idx; })[0];
@@ -4309,6 +4336,16 @@ function _napraviOtvorIzPravougaonika(A,B){
   buildCustomOtvoriUI(); crtajDigitalno(); refresh();
   _skPoruka('Otvor <b>'+Math.round(w)+'\u00d7'+Math.round(h)+' mm</b> ucrtan. '
     +'Orijentaciju i ta\u010dne mjere podesi u lijevom panelu.');
+}
+function _trenRad(v){ try{ return getCornerRadiusMM(v)||0; }catch(e){ return 0; } }
+// Radijus ugla na slobodnom obliku - isti nacin kao kod ostalih stolova,
+// samo sto svaki ugao ima svoju vrijednost.
+function skicaRadijus(v,val){
+  var n=parseFloat((val||'0').toString().replace(',','.'));
+  if(isNaN(n)||n<0) n=0;
+  cornerR[v]=n;
+  getAct().cornerR=JSON.parse(JSON.stringify(cornerR));
+  buildCornerR(); crtajDigitalno(); refresh();
 }
 function skResetIzbor(){ SK_IZABRANO_TJEME=null; SK_IZABRANA_STRANA=null; }
 function skIzaberiTjeme(v){
@@ -4482,7 +4519,7 @@ function osvjeziOtvorRezim(){
 function buildSkicaPanel(){
   var con=ge('sk-tjemena'); if(!con) return;
   var t=(dims&&dims._tj)||[];
-  if(shape!=='SK'||t.length<3){ con.innerHTML=''; return; }
+  if(!jeSkicaOblik()||t.length<3){ con.innerHTML=''; return; }
   var h='<div class="hint" style="margin-top:8px">Strana <b>a</b> ide od tjemena A do B, itd. '
     +'Za dotjerivanje koristi <b>desni prozor</b> (tab Crtež).</div>';
   t.forEach(function(p,i){
@@ -4658,6 +4695,7 @@ function buildTableShapeGrid(){
 function setTableShape(shapeId){
   _saveUndo();
   syncToActive();
+  if(shapeId!=='skica') cornerR={};   // radijusi vaze samo za slobodan oblik
   if(shapeId==='skica'&&(!dims._tj||dims._tj.length<3)){
     // Zadani pravougaonik dok korisnik ne nacrta svoj oblik
     dims._tj=[[0,0],[gi('sto-a')||1600,0],[gi('sto-a')||1600,gi('sto-b')||900],[0,gi('sto-b')||900]];
@@ -4695,7 +4733,7 @@ function buildTableDimWrap(){
       dims._tj=[[0,0],[1600,0],[1600,900],[0,900]];
       getAct().dims=dims;
     }
-    buildSkicaPanel(); crtajDigitalno();
+    buildSkicaPanel(); crtajDigitalno(); buildCornerR();
     return;
   }
   var skw2=ge('skica-wrap');
@@ -4767,6 +4805,12 @@ function drawStoSkica(ctx,W,H){
     ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.fillText('\u00d7'+br,bb.w*sc+24,bb.h*sc/2);
   }
+  // VAZNO: kota() pamti SIROVE koordinate, a _flushKotes ih crta sa trenutnim
+  // transformom - zato se kote moraju iscrtati DOK je translate(PAD,PAD) jos
+  // aktivan. Ranije je restore() dolazio prije flush-a, pa su sve kote bile
+  // pomjerene za PAD u oba smjera.
+  drawLegenda(ctx,W,H);
+  _flushKotes();
   ctx.restore();
 
   ctx.save(); ctx.setTransform(1,0,0,1,0,0);
@@ -4777,8 +4821,6 @@ function drawStoSkica(ctx,W,H){
   ctx.fillText(Math.round(bb.w)+' \u00d7 '+Math.round(bb.h)+' mm \u00b7 '+t.length+' strana \u00b7 '
     +getMatV()+(gs('mat-naziv')?(' \u2013 '+gs('mat-naziv')):'')+' \u00b7 '+getMatD()+' mm',12,29);
   ctx.restore();
-  drawLegenda(ctx,W,H);
-  _flushKotes();
 }
 
 // \u2550\u2550\u2550 DIM TABLE \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550════
@@ -5160,14 +5202,21 @@ function getOutlineEdgeLetters(sh,d,vOrientArg){
 }
 
 function buildCornerR(){
-  var con=ge('corner-con'); if(!con) return;
+  // Sto slobodnog oblika ima svoju sekciju radijusa (u bloku stolova),
+  // jer je 'corner-con' unutar sekcije kuhinje.
+  var jeStoSkica=(tip==='sto'&&shape==='skica');
+  var sekcija=ge('sto-corner-sec');
+  if(sekcija) sekcija.style.display=jeStoSkica?'':'none';
+  var con=ge(jeStoSkica?'sto-corner-con':'corner-con'); if(!con) return;
   // NAPOMENA: cornerR se ažurira direktno kroz onCornerRChange/onCornerRInput
   // (na svaku promjenu), pa ovdje SAMO renderujemo HTML iz trenutnog cornerR -
   // ne čitamo nazad iz DOM-a (DOM može biti zastarjeo, npr. od prethodne stavke).
-  var outline=(tip==='k')?getShapeOutline(shape,dims,vOrient):[];
+  var outline=(tip==='k'||jeStoSkica)?getShapeOutline(shape,dims,vOrient):[];
   if(!outline||outline.length===0){con.innerHTML='';return;}
   var n=outline.length;
-  var edgeLetters=getOutlineEdgeLetters(shape,dims,vOrient);
+  var edgeLetters=(shape==='SK'||shape==='skica')
+    ? ((dims._tj)||[]).map(function(_,i){return SLOVA_S[i];})
+    : getOutlineEdgeLetters(shape,dims,vOrient);
   var html='';
   outline.forEach(function(v,i){
     var val=getCornerRadiusMM(i);
@@ -6068,7 +6117,7 @@ function refresh(){
   // Veliki prozor slobodnog oblika mora pratiti SVAKU promjenu (dodat otvor,
   // izmijenjena dimenzija, cijena...) - inace bi ostao na starom stanju dok
   // se ne dodirne skica. Ne crta se ako nije skica, pa ne kosta nista.
-  if(shape==='SK'&&!_skVucem){ try{ crtajDigitalno(); }catch(e){} }
+  if(jeSkicaOblik()&&!_skVucem){ try{ crtajDigitalno(); }catch(e){} }
 }
 
 // ═══ CANVAS ════════════════════════════════════════
@@ -6272,7 +6321,9 @@ function rrect(ctx,x,y,w,h,r){
 }
 
 // ═══ RADIJUS UGLOVA — generički canvas helperi ═════════════
-var RAD_PRESETS=[0,5,10,20];
+// Ponudjeni radijusi. Vece vrijednosti su za slobodne oblike i stolove,
+// gdje se ugao zna zaobliti i na 50-150 mm; sitni (5-20) su za radne ploce.
+var RAD_PRESETS=[0,5,10,20,30,50,80,100,150];
 
 function _distPt(a,b){return Math.hypot(b.x-a.x,b.y-a.y);}
 
