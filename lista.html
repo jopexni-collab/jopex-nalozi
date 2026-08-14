@@ -943,13 +943,14 @@ function openPop(td,row,editCfg){
     // sedmica UVIJEK pocinje ponedjeljkom, isto za svakog korisnika.
     fEl.innerHTML=`
       <input type="hidden" id="pop-cal" value="${dv}">
-      <div id="pop-kal"></div>
-      <input type="text" id="pop-inp" placeholder="ili ukucaj: 22.7 ili 22/7/28" value=""
-        style="font:inherit;width:100%;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:11px;color:#555;margin-top:6px;">
-      <div style="font-size:10px;color:#aaa;margin-top:2px;">Bez godine = ${new Date().getFullYear()}, dvocifrena = 20XX</div>`;
+      <input type="text" id="pop-inp" placeholder="Ukucaj: 22.7 ili 22/7/28" value=""
+        style="font:inherit;width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:4px;font-size:13px;font-weight:600;text-align:center;">
+      <div style="font-size:10px;color:#aaa;margin:3px 0 7px;text-align:center;">Bez godine = ${new Date().getFullYear()}, dvocifrena = 20XX · ili izaberi ispod</div>
+      <div id="pop-kal"></div>`;
     setTimeout(()=>{
       kalIscrtaj(dv||new Date().toISOString().split('T')[0], dv);
       const txt=document.getElementById('pop-inp');
+      txt.focus(); // odmah spremno za kucanje, bez dodatnog klika
       // Text -> kalendar (live preview)
       txt.addEventListener('input',()=>{
         const parts=txt.value.trim().split(/[.\/]/).map(p=>p.trim());
@@ -1277,7 +1278,9 @@ function kalIzaberi(iso){
   const cal=document.getElementById('pop-cal');
   if(cal) cal.value=iso;
   const txt=document.getElementById('pop-inp');
-  if(txt) txt.value=''; // rucni unos se ponistava kad se klikne datum u kalendaru
+  // Klik u kalendaru UPISUJE datum u gornje polje (dd.mm.gggg) — korisnik uvijek vidi
+  // šta je izabrano na jednom mjestu, i može odatle da doradi rukom ako treba.
+  if(txt) txt.value = iso ? iso.split('-').reverse().join('.') : '';
   kalIscrtaj(iso||new Date().toISOString().split('T')[0], iso);
 }
 
