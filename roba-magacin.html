@@ -2062,7 +2062,7 @@ async function uvsgrupaPretrazi(tekst, autoCekiraj=true){
     // odčekira one koje ne želi. Kod "Prikaži sve" (cijeli magacin) NE čekira se ništa —
     // besmisleno bi bilo označiti stotine artikala pa ih ručno odčekiravati.
     if(autoCekiraj) data.forEach(a=>uvsgrupaIzabrani.add(a.id));
-    document.getElementById('uvsgrupa-izabrano-brojac').textContent=`Izabrano: ${uvsgrupaIzabrani.size} artikala`;
+    uvsgrupaAzurirajBrojac();
     uvsgrupaRenderRezultati();
   }catch(e){ cont.innerHTML='<div style="color:var(--red);font-size:12px;padding:6px;">Greška pri učitavanju.</div>'; }
 }
@@ -2106,6 +2106,18 @@ function uvsgrupaFiltrirano(){
     return smjer==='asc'?cmp:-cmp;
   });
   return prikaz;
+}
+
+// Brojač pokazuje SAMO vidljive izabrane — tačno ono što će se poslati kad se potvrdi.
+// (Skup uvsgrupaIzabrani može sadržati i artikle sakrivene filterom.)
+function uvsgrupaAzurirajBrojac(){
+  const vidljiviIzabrani=uvsgrupaRezultati.length ? uvsgrupaFiltrirano().filter(a=>uvsgrupaIzabrani.has(a.id)).length : 0;
+  const ukupnoIzabrano=uvsgrupaIzabrani.size;
+  const el=document.getElementById('uvsgrupa-izabrano-brojac');
+  if(!el) return;
+  el.textContent = ukupnoIzabrano > vidljiviIzabrani
+    ? `Izabrano: ${vidljiviIzabrani} vidljivih (${ukupnoIzabrano - vidljiviIzabrani} sakriveno filterom — NEĆE se slati)`
+    : `Izabrano: ${vidljiviIzabrani} artikala`;
 }
 
 function uvsgrupaRenderRezultati(){
@@ -2155,7 +2167,7 @@ function uvsgrupaCekirajSveVidljive(oznaceno){
   uvsgrupaFiltrirano().forEach(a=>{
     if(oznaceno) uvsgrupaIzabrani.add(a.id); else uvsgrupaIzabrani.delete(a.id);
   });
-  document.getElementById('uvsgrupa-izabrano-brojac').textContent=`Izabrano: ${uvsgrupaIzabrani.size} artikala`;
+  uvsgrupaAzurirajBrojac();
   uvsgrupaRenderRezultati();
 }
 
@@ -2229,11 +2241,11 @@ function uvsgrupaFPOznaciSve(oznaceno){
 }
 function uvsgrupaFilterOcisti(){
   uvsgrupaFilteri[uvsgrupaFPKolona]=new Set();
-  uvsgrupaZatvoriFilter(); uvsgrupaRenderRezultati();
+  uvsgrupaZatvoriFilter(); uvsgrupaRenderRezultati(); uvsgrupaAzurirajBrojac();
 }
 function uvsgrupaFilterPrimijeni(){
   uvsgrupaFilteri[uvsgrupaFPKolona]=uvsgrupaFPDraft;
-  uvsgrupaZatvoriFilter(); uvsgrupaRenderRezultati();
+  uvsgrupaZatvoriFilter(); uvsgrupaRenderRezultati(); uvsgrupaAzurirajBrojac();
 }
 function uvsgrupaZatvoriFilter(){
   document.getElementById('uvsgrupa-filter-panel').style.display='none';
@@ -2248,7 +2260,7 @@ document.addEventListener('click', e=>{
 
 function uvsgrupaToggle(robaId, oznaceno){
   if(oznaceno) uvsgrupaIzabrani.add(robaId); else uvsgrupaIzabrani.delete(robaId);
-  document.getElementById('uvsgrupa-izabrano-brojac').textContent=`Izabrano: ${uvsgrupaIzabrani.size} artikala`;
+  uvsgrupaAzurirajBrojac();
   uvsgrupaRenderRezultati(); // osvježi bojenje izabranih redova
 }
 
@@ -2300,13 +2312,18 @@ function uvsgrupaOtkaziCekaju(){
 
 async function uvsgrupaPotvrdiCekaju(){
   const statusDiv=document.getElementById('uvsgrupa-status');
-  if(!uvsgrupaIzabrani.size){
+  // KRITIČNO: šalju se SAMO artikli koji su izabrani I trenutno VIDLJIVI (zeleni redovi).
+  // Ranije se slao ceo uvsgrupaIzabrani skup — koji zadržava i artikle izabrane PRIJE nego
+  // što je filter primijenjen, pa su slike odlazile i artiklima koje korisnik više ne vidi
+  // (i misli da nisu izabrani). Sad je ono što se VIDI tačno ono što se ŠALJE.
+  const vidljiviIzabrani=uvsgrupaFiltrirano().filter(a=>uvsgrupaIzabrani.has(a.id)).map(a=>a.id);
+  if(!vidljiviIzabrani.length){
     statusDiv.style.display='block'; statusDiv.style.color='var(--red)';
-    statusDiv.textContent='✗ Prvo izaberi bar jedan artikal (kvadratići u tabeli iznad).';
+    statusDiv.textContent='✗ Nijedan VIDLJIV artikal nije izabran (zeleni redovi u tabeli iznad).';
     return;
   }
   if(!uvsgrupaCekaju.length) return;
-  const brojArtikala=uvsgrupaIzabrani.size;
+  const brojArtikala=vidljiviIzabrani.length;
   statusDiv.style.display='block'; statusDiv.style.color='#8b96a5';
   let uspjesno=0, neuspjesno=[];
   for(let i=0;i<uvsgrupaCekaju.length;i++){
@@ -2318,7 +2335,7 @@ async function uvsgrupaPotvrdiCekaju(){
       const fd=new FormData();
       fd.append('slika', smanjena);
       fd.append('thumb', thumb);
-      fd.append('roba_ids', JSON.stringify([...uvsgrupaIzabrani]));
+      fd.append('roba_ids', JSON.stringify(vidljiviIzabrani));
       const r=await fetch(`${API}/api/roba/slika-grupa`, {method:'POST', body:fd});
       const data=await r.json();
       if(!r.ok) throw new Error(data.error||'Greška.');
