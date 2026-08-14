@@ -2087,13 +2087,14 @@ document.getElementById('msa-file-input').addEventListener('change', e=>{
 // Smanjuje sliku NA TELEFONU/RAČUNARU pre slanja — telefonske fotografije znaju biti
 // 3-10MB, a za mali thumbnail u tabeli to je potpuno nepotrebno. Ograničava na max 700px
 // (duža strana), JPEG kvalitet 75% — obično svede na par stotina KB.
-function smanjiSliku(file){
+// Smanjuje sliku na zadatu max dimenziju. Zove se DVA puta po slici: 700px (puna, za
+// pregled) i 150px (thumbnail za tabelu — ~7x manje podataka).
+function smanjiSliku(file, MAX=700, kvalitet=0.75){
   return new Promise((resolve, reject)=>{
     const img=new Image();
     const url=URL.createObjectURL(file);
     img.onload=()=>{
       URL.revokeObjectURL(url);
-      const MAX=700;
       let {width:w, height:h}=img;
       if(w>MAX||h>MAX){
         if(w>h){ h=Math.round(h*MAX/w); w=MAX; }
@@ -2105,7 +2106,7 @@ function smanjiSliku(file){
       canvas.toBlob(blob=>{
         if(!blob){ reject(new Error('Neuspešna obrada slike.')); return; }
         resolve(new File([blob], file.name.replace(/\.[^.]+$/,'')+'.jpg', {type:'image/jpeg'}));
-      }, 'image/jpeg', 0.75);
+      }, 'image/jpeg', kvalitet);
     };
     img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Fajl nije prepoznat kao slika.')); };
     img.src=url;
@@ -2115,7 +2116,9 @@ function smanjiSliku(file){
 async function posaljiSlikuArtikla(file){
   const statusDiv=document.getElementById('msa-status');
   statusDiv.style.display='block'; statusDiv.style.color='#8b96a5'; statusDiv.textContent='Obrada slike...';
+  let thumb;
   try{
+    thumb=await smanjiSliku(file, 150, 0.70); // mala verzija za tabelu
     file=await smanjiSliku(file);
   }catch(e){
     statusDiv.style.color='var(--red)'; statusDiv.textContent='✗ '+e.message; return;
@@ -2123,6 +2126,7 @@ async function posaljiSlikuArtikla(file){
   statusDiv.textContent='Otpremanje...';
   const fd=new FormData();
   fd.append('slika', file);
+  fd.append('thumb', thumb);
   try{
     const r=await fetch(`${API}/api/roba/${msaTrenutniRobaId}/slika`, {method:'POST', body:fd});
     const data=await r.json();

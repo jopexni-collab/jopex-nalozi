@@ -119,7 +119,7 @@ router.get('/lager-prodaja', zahtijevaProdaju, async (req, res) => {
     const r = await pool.query(
       `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
               rp.cijena, rp.stanje,
-              (SELECT url FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS glavna_slika,
+              (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS glavna_slika,
               r.model_3d_url,
               (SELECT COUNT(*) FROM roba_slike WHERE roba_id=r.id) AS broj_slika
        FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
@@ -145,7 +145,7 @@ router.get('/lager', zahtijevaRobaMagacin, async (req, res) => {
 
     const r = await pool.query(
       `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
-              (SELECT url FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS glavna_slika,
+              (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS glavna_slika,
               r.model_3d_url,
               (SELECT COUNT(*) FROM roba_slike WHERE roba_id=r.id) AS broj_slika,
               rp.cijena, rp.stanje,
@@ -1690,24 +1690,33 @@ router.delete('/:id/model3d', zahtijevaProdaju, async (req, res) => {
   }
 });
 
-router.post('/:id/slika', zahtijevaProdaju, upload.single('slika'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'Nema fajla.' });
-  if (!req.file.mimetype.startsWith('image/'))
+router.post('/:id/slika', zahtijevaProdaju, upload.fields([{name:'slika',maxCount:1},{name:'thumb',maxCount:1}]), async (req, res) => {
+  const glavniFajl = req.files?.slika?.[0];
+  const thumbFajl = req.files?.thumb?.[0];
+  if (!glavniFajl) return res.status(400).json({ error: 'Nema fajla.' });
+  if (!glavniFajl.mimetype.startsWith('image/'))
     return res.status(400).json({ error: 'Fajl mora biti slika.' });
   try {
-    const ekstenzija = (req.file.originalname.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-    const kljuc = `roba-slike/${req.params.id}-${Date.now()}.${ekstenzija}`;
-    const url = await uploadFile(kljuc, req.file.buffer, req.file.mimetype);
+    const ekstenzija = (glavniFajl.originalname.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const vrijeme = Date.now();
+    const url = await uploadFile(`roba-slike/${req.params.id}-${vrijeme}.${ekstenzija}`, glavniFajl.buffer, glavniFajl.mimetype);
+    // Mala verzija (~150px) za prikaz u TABELI — ~7x manje podataka nego puna slika.
+    // Ako klijent nije poslao thumb (starija verzija stranice), thumb_url ostaje NULL i
+    // prikaz pada nazad na punu sliku.
+    let thumbUrl = null;
+    if (thumbFajl) {
+      thumbUrl = await uploadFile(`roba-slike/${req.params.id}-${vrijeme}-t.jpg`, thumbFajl.buffer, 'image/jpeg');
+    }
 
     const postojeceRes = await pool.query('SELECT COUNT(*) AS n, COALESCE(MAX(redosled),-1) AS max_red FROM roba_slike WHERE roba_id=$1', [req.params.id]);
     const jePrva = parseInt(postojeceRes.rows[0].n) === 0;
     const noviRedosled = parseInt(postojeceRes.rows[0].max_red) + 1;
 
     const ins = await pool.query(
-      'INSERT INTO roba_slike (roba_id, url, redosled, glavna) VALUES ($1,$2,$3,$4) RETURNING id',
-      [req.params.id, url, noviRedosled, jePrva]
+      'INSERT INTO roba_slike (roba_id, url, thumb_url, redosled, glavna) VALUES ($1,$2,$3,$4,$5) RETURNING id',
+      [req.params.id, url, thumbUrl, noviRedosled, jePrva]
     );
-    res.json({ ok: true, slika_id: ins.rows[0].id, url, glavna: jePrva });
+    res.json({ ok: true, slika_id: ins.rows[0].id, url, thumb_url: thumbUrl, glavna: jePrva });
   } catch (err) {
     res.status(500).json({ error: 'Greška pri otpremanju slike: ' + err.message });
   }

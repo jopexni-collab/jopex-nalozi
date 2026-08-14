@@ -1526,13 +1526,15 @@ let uvslikaStavke=[]; // {folderNaziv, fajlovi:[], kandidati:[], izabranoId, sta
 
 // Ista kompresija kao u maloprodaji — Drive fotografije mogu biti ogromne, ovo ih svede
 // na razumnu veličinu PRE slanja (na 700px, JPEG 75%).
-function uvslikaSmanjiSliku(file){
+// Smanjuje sliku na zadatu maksimalnu dimenziju. Koristi se DVA puta po slici:
+//  - MAX=700 (kvalitet .75) → puna verzija, za pregled/uvećanje
+//  - MAX=150 (kvalitet .70) → thumbnail za TABELU (~7x manji, jer se prikazuje na 36x36px)
+function uvslikaSmanjiSliku(file, MAX=700, kvalitet=0.75){
   return new Promise((resolve, reject)=>{
     const img=new Image();
     const url=URL.createObjectURL(file);
     img.onload=()=>{
       URL.revokeObjectURL(url);
-      const MAX=700;
       let {width:w, height:h}=img;
       if(w>MAX||h>MAX){
         if(w>h){ h=Math.round(h*MAX/w); w=MAX; }
@@ -1544,7 +1546,7 @@ function uvslikaSmanjiSliku(file){
       canvas.toBlob(blob=>{
         if(!blob){ reject(new Error('Neuspešna obrada slike.')); return; }
         resolve(new File([blob], file.name.replace(/\.[^.]+$/,'')+'.jpg', {type:'image/jpeg'}));
-      }, 'image/jpeg', 0.75);
+      }, 'image/jpeg', kvalitet);
     };
     img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Fajl nije prepoznat kao slika.')); };
     img.src=url;
@@ -1874,8 +1876,10 @@ async function msaPotvrdiCekaju(){
     statusDiv.textContent=`Otpremanje ${i+1}/${msaCekaju.length} — ${s.fajl.name}...`;
     try{
       const smanjena=await uvslikaSmanjiSliku(s.fajl);
+      const thumb=await uvslikaSmanjiSliku(s.fajl, 150, 0.70); // mala verzija za tabelu
       const fd=new FormData();
       fd.append('slika', smanjena);
+      fd.append('thumb', thumb);
       const r=await fetch(`${API}/api/roba/${msaTrenutniRobaId}/slika`, {method:'POST', body:fd});
       const data=await r.json();
       if(!r.ok) throw new Error(data.error||'Greška.');
@@ -2007,8 +2011,10 @@ async function uvslikaPosaljiSve(){
       napredakDiv.textContent=`Otpremanje... (${obradjeno}/${ukupnoSlika}) — ${s.folderNaziv}/${fajl.name}`;
       try{
         const smanjena=await uvslikaSmanjiSliku(fajl);
+        const thumb=await uvslikaSmanjiSliku(fajl, 150, 0.70);
         const fd=new FormData();
         fd.append('slika', smanjena);
+        fd.append('thumb', thumb);
         const r=await fetch(`${API}/api/roba/${s.izabranoId}/slika`, {method:'POST', body:fd});
         if(!r.ok) throw new Error((await r.json()).error||'Greška.');
         uspjesno++;
@@ -2308,8 +2314,10 @@ async function uvsgrupaPotvrdiCekaju(){
     statusDiv.textContent=`Otpremanje ${i+1}/${uvsgrupaCekaju.length} — ${s.fajl.name} (za ${brojArtikala} artikala)...`;
     try{
       const smanjena=await uvslikaSmanjiSliku(s.fajl);
+      const thumb=await uvslikaSmanjiSliku(s.fajl, 150, 0.70);
       const fd=new FormData();
       fd.append('slika', smanjena);
+      fd.append('thumb', thumb);
       fd.append('roba_ids', JSON.stringify([...uvsgrupaIzabrani]));
       const r=await fetch(`${API}/api/roba/slika-grupa`, {method:'POST', body:fd});
       const data=await r.json();

@@ -37,7 +37,7 @@ const BASE_COLS = `
   p.link_skica, p.link_ponuda, p.datum_kreiranja, p.nova_procjena,
   p.naplaceno, p.naplaceno_opis, COALESCE(p.stornirano,false) AS stornirano,
   COALESCE(p.izvor,'velika_ponuda') AS izvor,
-  (SELECT url FROM nalog_slike WHERE nalog_r_br=p.r_br AND glavna=true LIMIT 1) AS glavna_slika,
+  (SELECT COALESCE(thumb_url, url) FROM nalog_slike WHERE nalog_r_br=p.r_br AND glavna=true LIMIT 1) AS glavna_slika,
   (SELECT COUNT(*) FROM nalog_slike WHERE nalog_r_br=p.r_br) AS broj_slika
 `;
 
@@ -1022,24 +1022,31 @@ router.get('/:r_br/ponuda-json', async (req, res) => {
    tekstualno polje — nepregledno i lako se sudara sa PDF linkom iz velikog naloga. */
 
 // POST /api/proizvodnja/:r_br/slika — dodaje sliku na nalog. Prva ikad dodana postaje glavna.
-router.post('/:r_br/slika', uploadSlika.single('slika'), async (req, res) => {
+router.post('/:r_br/slika', uploadSlika.fields([{name:'slika',maxCount:1},{name:'thumb',maxCount:1}]), async (req, res) => {
   if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
-  if (!req.file) return res.status(400).json({ error: 'Nema fajla.' });
-  if (!req.file.mimetype.startsWith('image/')) return res.status(400).json({ error: 'Fajl mora biti slika.' });
+  const glavniFajl = req.files?.slika?.[0];
+  const thumbFajl = req.files?.thumb?.[0];
+  if (!glavniFajl) return res.status(400).json({ error: 'Nema fajla.' });
+  if (!glavniFajl.mimetype.startsWith('image/')) return res.status(400).json({ error: 'Fajl mora biti slika.' });
   try {
-    const ekstenzija = (req.file.originalname.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
-    const kljuc = `nalog-slike/${req.params.r_br}-${Date.now()}.${ekstenzija}`;
-    const url = await uploadFile(kljuc, req.file.buffer, req.file.mimetype);
+    const ekstenzija = (glavniFajl.originalname.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const vrijeme = Date.now();
+    const url = await uploadFile(`nalog-slike/${req.params.r_br}-${vrijeme}.${ekstenzija}`, glavniFajl.buffer, glavniFajl.mimetype);
+    // Mala verzija za prikaz u tabeli (~7x manje podataka nego puna slika).
+    let thumbUrl = null;
+    if (thumbFajl) {
+      thumbUrl = await uploadFile(`nalog-slike/${req.params.r_br}-${vrijeme}-t.jpg`, thumbFajl.buffer, 'image/jpeg');
+    }
 
     const postojeceRes = await pool.query('SELECT COUNT(*) AS n, COALESCE(MAX(redosled),-1) AS max_red FROM nalog_slike WHERE nalog_r_br=$1', [req.params.r_br]);
     const jePrva = parseInt(postojeceRes.rows[0].n) === 0;
     const noviRedosled = parseInt(postojeceRes.rows[0].max_red) + 1;
 
     const ins = await pool.query(
-      'INSERT INTO nalog_slike (nalog_r_br, url, redosled, glavna) VALUES ($1,$2,$3,$4) RETURNING id',
-      [req.params.r_br, url, noviRedosled, jePrva]
+      'INSERT INTO nalog_slike (nalog_r_br, url, thumb_url, redosled, glavna) VALUES ($1,$2,$3,$4,$5) RETURNING id',
+      [req.params.r_br, url, thumbUrl, noviRedosled, jePrva]
     );
-    res.json({ ok: true, slika_id: ins.rows[0].id, url, glavna: jePrva });
+    res.json({ ok: true, slika_id: ins.rows[0].id, url, thumb_url: thumbUrl, glavna: jePrva });
   } catch (err) {
     res.status(500).json({ error: 'Greška pri otpremanju slike: ' + err.message });
   }
