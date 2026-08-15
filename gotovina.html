@@ -394,7 +394,7 @@ td.num{text-align:right;font-weight:700;}
     <table>
       <thead>
         <tr>
-          <th>Klijent</th><th>Duguje (stvarno)</th>
+          <th>Klijent</th><th>Duguje (aktivno)</th>
           <th>Dug</th><th>Očekivana naplata</th><th>Teško naplativo</th>
           <th>Očekivano (obećano)</th><th>Duguje — preostalo</th>
           <th>Pretplata</th><th>Uplaćeno u banku (istorijski)</th><th>Verifikacija</th>
@@ -1873,7 +1873,7 @@ async function ucitajKlijentiListu(){
           ${esc(k.kupac_naziv||'—')}
           ${!k.registrovan?'<div style="font-size:10px;color:var(--red);font-weight:700;">⚠ Preporučuje se registracija kupca</div>':''}
         </td>
-        <td style="font-weight:700;${k.duguje_ukupno>0?'cursor:pointer;color:var(--blue);text-decoration:underline;':''}" ${k.duguje_ukupno>0?`onclick="otvoriDugDetalji(${k.kupac_id||'null'},'${nazivEsc}')" title="Klikni da vidiš odakle dolazi dug"`:''}>${k.duguje_ukupno>0?fm(k.duguje_ukupno):'—'}</td>
+        <td style="font-weight:700;${k.duguje_ukupno>0?'cursor:pointer;color:var(--blue);text-decoration:underline;':''}" ${k.duguje_ukupno>0?`onclick="otvoriDugDetalji(${k.kupac_id||'null'},'${nazivEsc}')" title="${k.kateg_tesko_naplativo>0?`Teško naplativo (${fm(k.kateg_tesko_naplativo)}) je ODBIJENO — ukupno bi bilo ${fm(k.duguje_ukupno)}`:'Klikni da vidiš odakle dolazi dug'}"`:''}>${k.duguje_aktivno>0?fm(k.duguje_aktivno):'—'}${k.kateg_tesko_naplativo>0?`<div style="font-size:9.5px;color:#8b96a5;font-weight:400;">bez teških</div>`:''}</td>
         <td style="${k.duguje_ukupno>0?'cursor:pointer;':''}" ${k.duguje_ukupno>0?`onclick="otvoriKategorizacijaDuga('${esc(k.kljuc)}',${k.kupac_id||'null'},'${nazivEsc}',${k.duguje_ukupno},${k.kateg_ocekivana_naplata},${k.kateg_tesko_naplativo})" title="Klikni da premjestiš dio u drugu kategoriju"`:''}>${k.duguje_ukupno>0?fm(k.kateg_dug):'—'}</td>
         <td style="${k.kateg_ocekivana_naplata>0?'color:var(--blue);font-weight:700;cursor:pointer;':k.duguje_ukupno>0?'cursor:pointer;':''}" ${k.duguje_ukupno>0?`onclick="otvoriKategorizacijaDuga('${esc(k.kljuc)}',${k.kupac_id||'null'},'${nazivEsc}',${k.duguje_ukupno},${k.kateg_ocekivana_naplata},${k.kateg_tesko_naplativo})"`:''}>${k.kateg_ocekivana_naplata>0?fm(k.kateg_ocekivana_naplata):'—'}</td>
         <td style="${k.kateg_tesko_naplativo>0?'color:var(--red);font-weight:700;cursor:pointer;':k.duguje_ukupno>0?'cursor:pointer;':''}" ${k.duguje_ukupno>0?`onclick="otvoriKategorizacijaDuga('${esc(k.kljuc)}',${k.kupac_id||'null'},'${nazivEsc}',${k.duguje_ukupno},${k.kateg_ocekivana_naplata},${k.kateg_tesko_naplativo})"`:''}>${k.kateg_tesko_naplativo>0?fm(k.kateg_tesko_naplativo):'—'}</td>

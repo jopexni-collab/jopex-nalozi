@@ -343,6 +343,10 @@ router.get('/klijenti', async (req, res) => {
           ...k,
           kljuc,
           duguje_ukupno: dugujeStvarno,
+          // Dug BEZ teško naplativog — to je iznos koji stvarno ulazi u saldo. Teško
+          // naplativo ostaje vidljivo u svojoj koloni (da se ne zaboravi), ali se NE
+          // računa kao potraživanje koje se očekuje.
+          duguje_aktivno: +Math.max(0, dugujeStvarno - iznosTeskoNaplativo).toFixed(2),
           duguje_soft: dugujeSoft,
           duguje_banka: +k.duguje_banka.toFixed(2),
           duguje_gotovina: +k.duguje_gotovina.toFixed(2),
