@@ -61,6 +61,62 @@ main{max-width:680px;margin:16px auto;padding:0 14px 60px;}
 .btn-posalji.whatsapp{color:#25d366;}
 .btn-posalji.email{color:var(--blue);}
 .posalji-link{font-size:10.5px;color:#8b96a5;text-align:center;margin-top:8px;word-break:break-all;}
+
+/* ═══ Katalog sa slikama (ciglice) ═══════════════════════════════════════
+   Oblik je preuzet iz JoPeX logotipa: 340×170 sa radijusom 28,35 — odnos 2:1
+   i radijus 8,34 % sirine. Komercijalista na terenu tako moze da POKAZE kamen
+   kupcu, umjesto da mu cita sifru. */
+.kat-dugme{width:100%;padding:11px;margin-top:6px;border-radius:8px;border:1px solid var(--blue);
+  background:#fff;color:var(--blue);font:inherit;font-size:13.5px;font-weight:700;cursor:pointer;}
+.kat-dugme:hover{background:#eef4fc;}
+
+.kat-preko{position:fixed;inset:0;z-index:200;background:var(--bg);display:none;flex-direction:column;}
+.kat-preko.otvoren{display:flex;}
+.kat-vrh{background:var(--blue);color:#fff;padding:10px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.kat-vrh input,.kat-vrh select{font:inherit;font-size:14px;padding:8px 10px;border:0;border-radius:7px;min-width:0;}
+.kat-vrh input{flex:1 1 150px;}
+.kat-vrh select{flex:0 1 140px;}
+.kat-zatvori{background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:7px;
+  width:36px;height:36px;font-size:20px;line-height:1;cursor:pointer;flex:0 0 auto;}
+.kat-brojac{font-size:11.5px;opacity:.85;flex-basis:100%;}
+.kat-tijelo{flex:1;overflow-y:auto;padding:12px;}
+.kat-mreza{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;}
+
+.kat-cigla{position:relative;aspect-ratio:340/170;border-radius:8.34%/16.68%;overflow:hidden;
+  background:var(--blue) center/cover no-repeat;color:#fff;cursor:pointer;border:0;padding:0;
+  font:inherit;text-align:left;display:block;box-shadow:0 2px 8px rgba(16,24,40,.12);}
+.kat-cigla:active{transform:scale(.985);}
+.kat-cigla .veo{position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(0,0,0,0) 42%,rgba(0,0,0,.6) 100%);}
+.kat-cigla.bez-slike .veo{background:linear-gradient(135deg,var(--blue) 0%,var(--dark) 100%);}
+.kat-cigla .txt{position:absolute;left:0;right:0;bottom:0;padding:10px 12px;}
+.kat-cigla .ime{font-weight:600;font-size:13px;line-height:1.3;text-shadow:0 1px 3px rgba(0,0,0,.5);}
+.kat-cigla .c{font-size:16px;font-weight:800;text-shadow:0 1px 3px rgba(0,0,0,.5);margin-top:2px;}
+.kat-cigla .c small{font-size:10.5px;font-weight:500;opacity:.85;}
+.kat-cigla .zn{position:absolute;top:8px;left:10px;background:rgba(255,255,255,.92);color:var(--blue);
+  font-size:10px;font-weight:800;padding:2px 7px;border-radius:12px;text-transform:uppercase;}
+.kat-cigla .st{position:absolute;top:8px;right:10px;background:rgba(0,0,0,.45);color:#fff;
+  font-size:10px;font-weight:700;padding:2px 7px;border-radius:12px;}
+.kat-cigla .st.nema{background:var(--red);}
+
+/* Uvecavanje na puni ekran — da se kupcu pokaze kamen izbliza. */
+.kat-zum-pozadina{position:fixed;inset:0;z-index:210;background:rgba(10,20,35,0);
+  transition:background .3s ease;}
+.kat-zum-pozadina.vidljiva{background:rgba(10,20,35,.9);}
+.kat-let{position:fixed;z-index:211;border-radius:8.34%/16.68%;overflow:hidden;
+  background:var(--blue) center/cover no-repeat;transform-origin:top left;
+  will-change:transform;box-shadow:0 24px 60px rgba(0,0,0,.5);}
+.kat-panel{position:fixed;left:0;right:0;bottom:0;z-index:212;padding:16px;
+  background:#fff;border-radius:14px 14px 0 0;opacity:0;transition:opacity .2s ease;}
+.kat-panel.vidljiv{opacity:1;}
+.kat-panel h3{margin:0 0 4px;font-size:15px;color:var(--dark);}
+.kat-panel .meta{font-size:12.5px;color:#6b7a8d;margin-bottom:12px;}
+.kat-panel .cijena{font-size:22px;font-weight:800;color:var(--dark);margin-bottom:12px;}
+.kat-zum-zatvori{position:fixed;top:14px;right:14px;z-index:213;width:40px;height:40px;
+  border-radius:50%;border:0;background:rgba(255,255,255,.2);color:#fff;font-size:22px;cursor:pointer;}
+@media (prefers-reduced-motion:reduce){
+  .kat-zum-pozadina,.kat-panel{transition:none;}
+}
 </style>
 </head>
 <body>
@@ -139,6 +195,7 @@ main{max-width:680px;margin:16px auto;padding:0 14px 60px;}
           <input type="text" id="lager-search" placeholder="Počni da kucaš..." oninput="pretraziLager()">
           <div class="rez-list" id="lager-rezultati" style="display:none;"></div>
         </div>
+        <button type="button" class="kat-dugme" onclick="otvoriKatalog()">🖼 Katalog sa slikama</button>
         <div id="lager-izabrano" style="display:none;background:#f7f8fa;border-radius:8px;padding:10px;margin-bottom:10px;font-size:13px;font-weight:700;"></div>
         <div class="row2">
           <div class="fg"><label>Količina</label><input type="number" id="lager-kolicina" step="0.01" min="0"></div>
@@ -578,6 +635,173 @@ function oznaciKaoNovogKupca(){
   status.style.background='#fff8e6'; status.style.color='var(--orange)';
   status.textContent='🆕 Biće registrovan kao NOVI kupac.';
 }
+
+
+/* ═══ Katalog sa slikama ═══════════════════════════════════════════════════
+   Cita postojeci ERP endpoint /api/roba/lager-prodaja (isti koji koristi
+   maloprodaja) — nista novo na serveru. Izbor artikla ide kroz postojecu
+   funkciju izaberiLagerArtikal(), pa se ostatak forme ponasa isto kao da je
+   artikal nadjen pretragom. */
+let katSvi=[];          // svi artikli izabranog objekta
+let katObjekat=null;    // za koji objekat su ucitani
+let katOtvorena=null;   // trenutno uvecana ciglica
+
+async function otvoriKatalog(){
+  const objId=document.getElementById('objekat-select').value;
+  if(!objId){ alert('Prvo izaberi prodajni objekat gore.'); return; }
+
+  let preko=document.getElementById('kat-preko');
+  if(!preko){
+    preko=document.createElement('div');
+    preko.id='kat-preko';
+    preko.className='kat-preko';
+    preko.innerHTML=
+      '<div class="kat-vrh">'+
+        '<input type="text" id="kat-trazi" placeholder="Pretraga: naziv ili šifra" oninput="katNacrtaj()">'+
+        '<select id="kat-grupa" onchange="katNacrtaj()"></select>'+
+        '<button class="kat-zatvori" onclick="zatvoriKatalog()" aria-label="Zatvori">×</button>'+
+        '<label class="kat-brojac"><input type="checkbox" id="kat-samo-stanje" checked onchange="katNacrtaj()" style="vertical-align:-2px"> samo na stanju &nbsp;·&nbsp; <span id="kat-broj"></span></label>'+
+      '</div>'+
+      '<div class="kat-tijelo"><div class="kat-mreza" id="kat-mreza"></div></div>';
+    document.body.appendChild(preko);
+  }
+  preko.classList.add('otvoren');
+  document.body.style.overflow='hidden';
+
+  if(katObjekat!==objId){
+    document.getElementById('kat-mreza').innerHTML='<div class="empty-msg">Učitavanje…</div>';
+    try{
+      const r=await fetch(API+'/api/roba/lager-prodaja?objekt_id='+encodeURIComponent(objId));
+      const d=await r.json();
+      if(!r.ok) throw new Error(d.error||'Greška');
+      katSvi=d.stavke||[];
+      katObjekat=objId;
+    }catch(e){
+      document.getElementById('kat-mreza').innerHTML='<div class="empty-msg">Greška: '+esc(e.message)+'</div>';
+      return;
+    }
+    const grupe=[...new Set(katSvi.map(a=>a.grupa).filter(Boolean))].sort();
+    document.getElementById('kat-grupa').innerHTML=
+      '<option value="">sve kolekcije</option>'+grupe.map(g=>'<option>'+esc(g)+'</option>').join('');
+  }
+  katNacrtaj();
+}
+
+function zatvoriKatalog(){
+  const p=document.getElementById('kat-preko');
+  if(p) p.classList.remove('otvoren');
+  document.body.style.overflow='';
+}
+
+function katNacrtaj(){
+  const q=(document.getElementById('kat-trazi').value||'').trim().toLowerCase();
+  const grupa=document.getElementById('kat-grupa').value;
+  const samoStanje=document.getElementById('kat-samo-stanje').checked;
+
+  const lista=katSvi.filter(a=>{
+    if(samoStanje && !(Number(a.stanje)>0)) return false;
+    if(grupa && a.grupa!==grupa) return false;
+    if(q && !((a.naziv||'')+' '+(a.sifra||'')).toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  // Artikli sa slikom idu naprijed — zbog njih se katalog i otvara.
+  lista.sort((x,y)=>(y.glavna_slika?1:0)-(x.glavna_slika?1:0)||String(x.naziv).localeCompare(String(y.naziv)));
+
+  document.getElementById('kat-broj').textContent=lista.length+' od '+katSvi.length+' artikala';
+  const m=document.getElementById('kat-mreza');
+  if(!lista.length){ m.innerHTML='<div class="empty-msg">Nema artikala za te uslove.</div>'; return; }
+
+  m.innerHTML=lista.map(a=>{
+    const nema=!(Number(a.stanje)>0);
+    return '<button type="button" class="kat-cigla'+(a.glavna_slika?'':' bez-slike')+'" data-id="'+a.id+'"'+
+      (a.glavna_slika?' style="background-image:url(\''+esc(a.glavna_slika)+'\')"':'')+'>'+
+      '<span class="veo"></span>'+
+      (a.grupa?'<span class="zn">'+esc(a.grupa)+'</span>':'')+
+      '<span class="st'+(nema?' nema':'')+'">'+(nema?'nema':fm(a.stanje)+' '+esc(a.jed_mjera||''))+'</span>'+
+      '<span class="txt"><span class="ime">'+esc(a.naziv)+'</span>'+
+      '<span class="c">'+fm(a.cijena)+' <small>KM / '+esc(a.jed_mjera||'')+'</small></span></span>'+
+    '</button>';
+  }).join('');
+
+  m.querySelectorAll('.kat-cigla').forEach(el=>{
+    el.onclick=()=>katUvecaj(katSvi.find(x=>String(x.id)===el.dataset.id), el);
+  });
+}
+
+/* Ciglica naraste do punog ekrana — da se kupcu pokaze kamen izbliza.
+   Animira se samo transform (FLIP), pa je gladko i na starijem telefonu. */
+function katUvecaj(a, izvor){
+  if(katOtvorena||!a) return;
+  const mirno=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const p=izvor.getBoundingClientRect();
+  const M=12, visina=Math.min(innerHeight*0.52, innerWidth*0.5);
+  const kraj={left:M, top:M, width:innerWidth-2*M, height:visina};
+
+  const poz=document.createElement('div'); poz.className='kat-zum-pozadina';
+  const let_=document.createElement('div'); let_.className='kat-let';
+  let_.style.backgroundImage=getComputedStyle(izvor).backgroundImage;
+  Object.assign(let_.style,{left:kraj.left+'px',top:kraj.top+'px',
+    width:kraj.width+'px',height:kraj.height+'px'});
+  const sx=p.width/kraj.width, sy=p.height/kraj.height;
+  let_.style.transform='translate('+(p.left-kraj.left)+'px,'+(p.top-kraj.top)+'px) scale('+sx+','+sy+')';
+
+  const panel=document.createElement('div'); panel.className='kat-panel';
+  panel.innerHTML='<h3>'+esc(a.naziv)+'</h3>'+
+    '<div class="meta">Šifra '+esc(a.sifra)+(a.debljina_cm?' · '+fm(a.debljina_cm)+' cm':'')+
+      ' · raspoloživo '+fm(a.stanje)+' '+esc(a.jed_mjera||'')+'</div>'+
+    '<div class="cijena">'+fm(a.cijena)+' KM <span style="font-size:13px;font-weight:500;color:#6b7a8d">/ '+esc(a.jed_mjera||'')+'</span></div>'+
+    '<button type="button" class="btn" id="kat-izaberi">✓ Izaberi ovaj artikal</button>';
+
+  const x=document.createElement('button'); x.className='kat-zum-zatvori'; x.innerHTML='×';
+
+  document.body.append(poz,let_,panel,x);
+  katOtvorena={poz,let_,panel,x,izvor};
+  requestAnimationFrame(()=>poz.classList.add('vidljiva'));
+
+  const anim=let_.animate(
+    [{transform:let_.style.transform,borderRadius:'8.34% / 16.68%'},
+     {transform:'none',borderRadius:'12px'}],
+    {duration:mirno?1:420,easing:'cubic-bezier(.22,.9,.28,1.04)',fill:'forwards'});
+
+  // Prikaz ne smije da zavisi od kraja animacije — u pozadinskoj kartici je
+  // vrijeme zamrznuto, pa bi obecanje "finished" umjelo da ne stigne nikad.
+  Promise.race([anim.finished.catch(()=>{}), new Promise(r=>setTimeout(r,mirno?10:520))])
+    .then(()=>{ if(katOtvorena) panel.classList.add('vidljiv'); });
+
+  panel.querySelector('#kat-izaberi').onclick=()=>{
+    izaberiLagerArtikal(a);
+    katZatvoriZum();
+    zatvoriKatalog();
+  };
+  x.onclick=katZatvoriZum;
+  poz.onclick=katZatvoriZum;
+}
+
+async function katZatvoriZum(){
+  if(!katOtvorena) return;
+  const {poz,let_,panel,x,izvor}=katOtvorena;
+  katOtvorena=null;
+  const mirno=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  panel.classList.remove('vidljiv');
+  poz.classList.remove('vidljiva');
+
+  const nazad=izvor.getBoundingClientRect();
+  const sad=let_.getBoundingClientRect();
+  const a=let_.animate(
+    [{transform:'none',borderRadius:'12px'},
+     {transform:'translate('+(nazad.left-sad.left)+'px,'+(nazad.top-sad.top)+'px) scale('+
+       (nazad.width/(sad.width||1))+','+(nazad.height/(sad.height||1))+')',
+      borderRadius:'8.34% / 16.68%'}],
+    {duration:mirno?1:320,easing:'cubic-bezier(.4,0,.3,1)',fill:'forwards'});
+
+  await Promise.race([a.finished.catch(()=>{}), new Promise(r=>setTimeout(r,mirno?10:400))]);
+  [poz,let_,panel,x].forEach(e=>e.remove());
+}
+
+// Promjena poslovnice mijenja i cjenovnik i stanje — katalog se mora ponovo ucitati.
+document.getElementById('objekat-select').addEventListener('change',()=>{ katObjekat=null; });
 
 checkAuth();
 ucitajObjekte();
