@@ -686,7 +686,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
 
     <div id="msa-drop-zona" style="border:2px dashed var(--border,#ccc);border-radius:10px;padding:20px 12px;text-align:center;color:#8b96a5;font-size:13px;cursor:pointer;margin-bottom:10px;">
-      📷 Dodirni da fotografišeš/izabereš sliku<br><span style="font-size:11px;">(na računaru: klikni ili prevuci fajl ovde — dodaje se, ne briše postojeće)</span>
+      📷 Dodirni da fotografišeš/izabereš sliku<br><span style="font-size:11px;">na računaru: klikni, prevuci fajl, ili nalijepi snimak ekrana sa <b>Ctrl+V</b></span>
     </div>
     <input type="file" id="msa-file-input" accept="image/*" capture="environment" style="display:none;">
     <div id="msa-status" style="font-size:12px;color:var(--red);margin-bottom:8px;display:none;"></div>
@@ -2083,6 +2083,16 @@ document.getElementById('msa-drop-zona').addEventListener('drop', e=>{
 document.getElementById('msa-file-input').addEventListener('change', e=>{
   if(e.target.files[0]) posaljiSlikuArtikla(e.target.files[0]);
   e.target.value=''; // da isti fajl moze ponovo da se izabere ako treba
+});
+
+// LIJEPLJENJE (Ctrl+V) — snimak ekrana ide direktno iz memorije, bez spremanja na disk.
+document.addEventListener('paste', e=>{
+  const modal=document.getElementById('modal-slika-artikla');
+  if(!modal || modal.style.display!=='flex') return;
+  const slika=[...(e.clipboardData?.items||[])].find(it=>it.type.startsWith('image/'))?.getAsFile();
+  if(!slika) return;
+  e.preventDefault();
+  posaljiSlikuArtikla(new File([slika], slika.name||`snimak-ekrana-${Date.now()}.png`, {type:slika.type}));
 });
 // Smanjuje sliku NA TELEFONU/RAČUNARU pre slanja — telefonske fotografije znaju biti
 // 3-10MB, a za mali thumbnail u tabeli to je potpuno nepotrebno. Ograničava na max 700px

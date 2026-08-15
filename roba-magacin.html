@@ -561,7 +561,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
     <div id="msa-drop-zona" style="border:3px dashed var(--border,#ccc);border-radius:12px;padding:44px 16px;text-align:center;color:#8b96a5;font-size:14px;cursor:pointer;margin-bottom:10px;transition:background .15s,border-color .15s;">
       <div style="font-size:34px;margin-bottom:8px;">📷</div>
-      <b>Klikni da izabereš slike</b><br><span style="font-size:12px;">ili prevuci jednu ili više ovde</span>
+      <b>Klikni da izabereš slike</b><br><span style="font-size:12px;">prevuci ovde · ili nalijepi snimak ekrana sa <b>Ctrl+V</b></span>
     </div>
     <input type="file" id="msa-file-input" accept="image/*" multiple style="display:none;">
 
@@ -912,7 +912,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       </div>
       <div id="uvsgrupa-drop-zona" style="border:3px dashed var(--border,#ccc);border-radius:12px;padding:36px 16px;text-align:center;color:#8b96a5;font-size:14px;cursor:pointer;margin-bottom:10px;transition:background .15s,border-color .15s;">
         <div style="font-size:32px;margin-bottom:6px;">📷</div>
-        <b>Klikni da izabereš slike</b><br><span style="font-size:12px;">ili prevuci jednu ili više ovde</span>
+        <b>Klikni da izabereš slike</b><br><span style="font-size:12px;">prevuci ovde · ili nalijepi snimak ekrana sa <b>Ctrl+V</b></span>
       </div>
       <input type="file" id="uvsgrupa-file-input" accept="image/*" multiple style="display:none;">
 
@@ -1937,6 +1937,22 @@ document.getElementById('msa-file-input').addEventListener('change', e=>{
   e.target.value='';
 });
 
+// LIJEPLJENJE (Ctrl+V) — snimak ekrana ide direktno iz memorije, bez potrebe da se prvo
+// sprema kao fajl na disk. Radi samo dok je prozor sa slikama otvoren.
+document.addEventListener('paste', e=>{
+  const modal=document.getElementById('modal-slika-artikla');
+  if(!modal || modal.style.display!=='flex') return;
+  const slike=[...(e.clipboardData?.items||[])]
+    .filter(it=>it.type.startsWith('image/'))
+    .map(it=>it.getAsFile())
+    .filter(Boolean);
+  if(!slike.length) return;
+  e.preventDefault();
+  // Snimak ekrana iz memorije nema ime — daje mu se prepoznatljivo.
+  const imenovane=slike.map((f,i)=>new File([f], f.name||`snimak-ekrana-${Date.now()}-${i+1}.png`, {type:f.type}));
+  msaDodajUCekanje(imenovane);
+});
+
 // Ubačene slike se NE šalju odmah — prvo se prikažu kao sličice da korisnik VIDI šta je
 // uhvaćeno (i koliko), pa tek na "Potvrdi" kreće otpremanje.
 function msaDodajUCekanje(fajlovi){
@@ -2385,6 +2401,21 @@ document.getElementById('uvsgrupa-drop-zona').addEventListener('drop', e=>{
 document.getElementById('uvsgrupa-file-input').addEventListener('change', e=>{
   uvsgrupaDodajUCekanje([...e.target.files]);
   e.target.value='';
+});
+
+// LIJEPLJENJE (Ctrl+V) u grupnom uvozu — radi samo kad je taj tab/režim otvoren.
+document.addEventListener('paste', e=>{
+  const blok=document.getElementById('uvslika-grupa-blok');
+  const tab=document.getElementById('tab-uvoz-slike');
+  if(!blok || blok.style.display==='none' || !tab || tab.style.display==='none') return;
+  const slike=[...(e.clipboardData?.items||[])]
+    .filter(it=>it.type.startsWith('image/'))
+    .map(it=>it.getAsFile())
+    .filter(Boolean);
+  if(!slike.length) return;
+  e.preventDefault();
+  const imenovane=slike.map((f,i)=>new File([f], f.name||`snimak-ekrana-${Date.now()}-${i+1}.png`, {type:f.type}));
+  uvsgrupaDodajUCekanje(imenovane);
 });
 
 function uvsgrupaDodajUCekanje(fajlovi){

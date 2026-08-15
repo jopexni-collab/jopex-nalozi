@@ -252,7 +252,7 @@ a.lk{color:var(--blue);text-decoration:none;}
     </div>
     <div id="kn-drop" style="border:3px dashed var(--border,#ccc);border-radius:12px;padding:38px 16px;text-align:center;color:#8b96a5;font-size:14px;cursor:pointer;margin-bottom:10px;">
       <div style="font-size:32px;margin-bottom:6px;">📷</div>
-      <b>Klikni da izabereš slike</b><br><span style="font-size:12px;">ili prevuci jednu ili više ovde</span>
+      <b>Klikni da izabereš slike</b><br><span style="font-size:12px;">prevuci ovde · ili nalijepi snimak ekrana sa <b>Ctrl+V</b></span>
     </div>
     <input type="file" id="kn-file" accept="image/*" multiple style="display:none;">
     <div id="kn-cekaju-blok" style="display:none;margin-bottom:10px;">
@@ -1820,6 +1820,19 @@ document.getElementById('kn-drop').addEventListener('drop', e=>{
   knDodajUCekanje([...e.dataTransfer.files]);
 });
 document.getElementById('kn-file').addEventListener('change', e=>{ knDodajUCekanje([...e.target.files]); e.target.value=''; });
+
+// LIJEPLJENJE (Ctrl+V) — snimak ekrana ide direktno iz memorije, bez spremanja na disk.
+document.addEventListener('paste', e=>{
+  const modal=document.getElementById('modal-slike-naloga');
+  if(!modal || modal.style.display!=='flex') return;
+  const slike=[...(e.clipboardData?.items||[])]
+    .filter(it=>it.type.startsWith('image/'))
+    .map(it=>it.getAsFile())
+    .filter(Boolean);
+  if(!slike.length) return;
+  e.preventDefault();
+  knDodajUCekanje(slike.map((f,i)=>new File([f], f.name||`snimak-ekrana-${Date.now()}-${i+1}.png`, {type:f.type})));
+});
 
 function knDodajUCekanje(fajlovi){
   const slike=fajlovi.filter(f=>f.type.startsWith('image/'));
