@@ -1392,6 +1392,10 @@ router.post('/presek/primeni', async (req, res) => {
     const batchId = batchRes.rows[0].id;
 
     let novih = 0, povecanih = 0, smanjenih = 0, nepromijenjenih = 0;
+    // Brojač STVARNO promijenjenih cijena — služi kao DOKAZ u izvještaju. Kad je
+    // "Ažuriraj cene" isključeno, ovaj broj MORA biti 0 (osim za potpuno nove artikle
+    // koji nemaju postojeću cijenu pa je uzimaju iz fajla).
+    let cijenaPromijenjeno = 0, cijenaZadrzana = 0;
 
     for (const s of stavke) {
       if (s.status === 'greska' || s.status === 'isto') { if (s.status === 'isto') nepromijenjenih++; continue; }
@@ -1421,11 +1425,15 @@ router.post('/presek/primeni', async (req, res) => {
       // Ako je isključio "Ažuriraj stanje" (npr. stari fajl, samo za ispravku cena) —
       // zadrži POSTOJEĆE stanje, ne piši novo iz fajla.
       const stanjeZaUpis = dirajStanje ? stanjeNovo : (stanjeStaroIzBaze ?? stanjeNovo);
+      const cijenaZaUpis = dirajCene ? cijenaNova : (cijenaStara ?? cijenaNova);
+      // Prati se STVARNA promjena cijene (za izvještaj/dokaz).
+      if (cijenaStara !== null && Math.abs(cijenaStara - cijenaZaUpis) > 0.001) cijenaPromijenjeno++;
+      else if (cijenaStara !== null) cijenaZadrzana++;
       await client.query(
         `INSERT INTO roba_pj (roba_id, objekt_id, cijena, stanje)
          VALUES ($1,$2,$3,$4)
          ON CONFLICT (roba_id, objekt_id) DO UPDATE SET cijena=$3, stanje=$4, azurirano=now()`,
-        [robaId, objekt_id, dirajCene ? cijenaNova : (cijenaStara ?? cijenaNova), stanjeZaUpis]
+        [robaId, objekt_id, cijenaZaUpis, stanjeZaUpis]
       );
 
       const staroStanje = parseFloat(s.stanje_staro) || 0;
@@ -1450,7 +1458,9 @@ router.post('/presek/primeni', async (req, res) => {
     );
 
     await client.query('COMMIT');
-    res.json({ ok: true, batch_id: batchId, novih, povecanih, smanjenih, nepromijenjenih });
+    res.json({ ok: true, batch_id: batchId, novih, povecanih, smanjenih, nepromijenjenih,
+               cijena_promijenjeno: cijenaPromijenjeno, cijena_zadrzana: cijenaZadrzana,
+               dirane_cene: dirajCene, dirano_stanje: dirajStanje });
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: 'Greška: ' + err.message });

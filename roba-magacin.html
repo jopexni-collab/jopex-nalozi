@@ -3614,8 +3614,12 @@ async function presekPrimeni(){
   const azurirajStanje=document.getElementById('presek-azuriraj-stanje').checked;
   if(!azurirajCene && !azurirajStanje){ alert('Izaberi bar jedno — stanje ili cene (ili oba).'); return; }
   const brojZaPrimjenu=presekStavke.filter(s=>s.status!=='greska').length;
-  const sta=[azurirajStanje?'STANJE':null, azurirajCene?'CENE':null].filter(Boolean).join(' i ');
-  if(!confirm(`Primeniti usaglašavanje za ${brojZaPrimjenu} stavki (ažurira se: ${sta})? Redovi sa greškom se preskaču (ostaju kako su bili). Ovo se može stornirati kao celina posle.`)) return;
+  const potvrda=
+    `Primeniti usaglašavanje za ${brojZaPrimjenu} stavki?\n\n`+
+    `${azurirajStanje?'✓':'✗'} Stanje (količine) — ${azurirajStanje?'BIĆE ažurirano':'NEĆE se dirati'}\n`+
+    `${azurirajCene?'✓':'✗'} Cene — ${azurirajCene?'BIĆE ažurirane':'NEĆE se dirati (ostaju postojeće)'}\n\n`+
+    `Redovi sa greškom se preskaču. Ovo se može stornirati kao celina posle.`;
+  if(!confirm(potvrda)) return;
   try{
     const r=await fetch(`${API}/api/roba/presek/primeni`,{
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -3623,7 +3627,19 @@ async function presekPrimeni(){
     });
     const data=await r.json();
     if(!r.ok){ alert('✗ '+data.error); return; }
-    alert(`✓ Usaglašeno — ${data.novih} novih, ${data.povecanih} povećano, ${data.smanjenih} smanjeno.`);
+    // Izvještaj — uključuje DOKAZ o cijenama (koliko ih je stvarno promijenjeno).
+    const izvjestaj=
+      `✓ USAGLAŠAVANJE ZAVRŠENO\n\n`+
+      `KOLIČINE:\n`+
+      `  • Novih artikala: ${data.novih}\n`+
+      `  • Povećano: ${data.povecanih}\n`+
+      `  • Smanjeno: ${data.smanjenih}\n`+
+      `  • Nepromenjeno (preskočeno): ${data.nepromijenjenih}\n\n`+
+      `CENE:\n`+
+      (data.dirane_cene
+        ? `  • Promenjeno: ${data.cijena_promijenjeno}\n  • Ostalo isto: ${data.cijena_zadrzana}`
+        : `  • ✓ NIJEDNA cena nije dirana (promenjeno: ${data.cijena_promijenjeno})\n  • Zadržane postojeće: ${data.cijena_zadrzana}`);
+    alert(izvjestaj);
     presekStavke=[];
     document.getElementById('presek-tabela-wrap').innerHTML='';
     document.getElementById('presek-sazetak').style.display='none';
