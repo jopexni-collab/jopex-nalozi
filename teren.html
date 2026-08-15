@@ -646,6 +646,26 @@ let katSvi=[];          // svi artikli izabranog objekta
 let katObjekat=null;    // za koji objekat su ucitani
 let katOtvorena=null;   // trenutno uvecana ciglica
 
+/* Endpoint lager-prodaja vraca SAMO umanjenu sliku (thumb, 150×150 px, 8 KB).
+   Za ciglicu i za uvecanje to je premalo — razvuce se i vidi kao mrlja. Puna
+   verzija na R2 ima isto ime bez zavrsetka "-t", pa se izvodi odavde.
+   Ako je pogodak promasen, slika se prosto ne ucita i ostaje thumb — zato se
+   uvijek prvo prikaze thumb, pa se zamijeni tek kad se puna stvarno ucita. */
+function katPunaSlika(thumb){
+  if(!thumb) return null;
+  const puna=thumb.replace(/-t(\.[a-z0-9]+)$/i, function(_,n){ return n; });
+  return puna===thumb?null:puna;
+}
+
+// Zamijeni pozadinu punom slikom, ali tek kad se ucita — bez treptanja u prazno.
+function katNadogradiSliku(el, thumb){
+  const puna=katPunaSlika(thumb);
+  if(!puna) return;
+  const s=new Image();
+  s.onload=()=>{ el.style.backgroundImage="url('"+puna+"')"; };
+  s.src=puna;
+}
+
 async function otvoriKatalog(){
   const objId=document.getElementById('objekat-select').value;
   if(!objId){ alert('Prvo izaberi prodajni objekat gore.'); return; }
@@ -715,7 +735,7 @@ function katNacrtaj(){
   m.innerHTML=lista.map(a=>{
     const nema=!(Number(a.stanje)>0);
     return '<button type="button" class="kat-cigla'+(a.glavna_slika?'':' bez-slike')+'" data-id="'+a.id+'"'+
-      (a.glavna_slika?' style="background-image:url(\''+esc(a.glavna_slika)+'\')"':'')+'>'+
+      (a.glavna_slika?' data-thumb="'+esc(a.glavna_slika)+'" style="background-image:url(\''+esc(a.glavna_slika)+'\')"':'')+'>'+
       '<span class="veo"></span>'+
       (a.grupa?'<span class="zn">'+esc(a.grupa)+'</span>':'')+
       '<span class="st'+(nema?' nema':'')+'">'+(nema?'nema':fm(a.stanje)+' '+esc(a.jed_mjera||''))+'</span>'+
@@ -724,8 +744,16 @@ function katNacrtaj(){
     '</button>';
   }).join('');
 
+  // Puna slika se dovlaci tek kad ciglica dodje na ekran — inace bi se na terenu,
+  // na mobilnom internetu, povuklo par stotina slika odjednom.
+  const posmatrac=('IntersectionObserver' in window)?new IntersectionObserver((u,o)=>{
+    u.forEach(x=>{ if(x.isIntersecting){ o.unobserve(x.target);
+      katNadogradiSliku(x.target, x.target.dataset.thumb); } });
+  },{rootMargin:'400px'}):null;
+
   m.querySelectorAll('.kat-cigla').forEach(el=>{
     el.onclick=()=>katUvecaj(katSvi.find(x=>String(x.id)===el.dataset.id), el);
+    if(el.dataset.thumb){ if(posmatrac) posmatrac.observe(el); else katNadogradiSliku(el, el.dataset.thumb); }
   });
 }
 
@@ -741,6 +769,8 @@ function katUvecaj(a, izvor){
   const poz=document.createElement('div'); poz.className='kat-zum-pozadina';
   const let_=document.createElement('div'); let_.className='kat-let';
   let_.style.backgroundImage=getComputedStyle(izvor).backgroundImage;
+  // Na punom ekranu uvijek puna slika — ovdje se kupcu pokazuje kamen izbliza.
+  katNadogradiSliku(let_, izvor.dataset.thumb);
   Object.assign(let_.style,{left:kraj.left+'px',top:kraj.top+'px',
     width:kraj.width+'px',height:kraj.height+'px'});
   const sx=p.width/kraj.width, sy=p.height/kraj.height;
