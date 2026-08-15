@@ -10901,18 +10901,39 @@ async function usvojiPonudu(){
     if(_jeIzmjena){
       showMsg('Upisujem izmjenu na nalog #'+_nalogInfo.r_br+'...',true);
       var _danas=new Date().toLocaleDateString('hr',{day:'2-digit',month:'2-digit',year:'numeric'});
-      var _upoz='⚠ UPDATE v'+_novaVerzija+' — '+_danas+', '+
-        ((_currentUser&&_currentUser.ime_prezime)||'nepoznat')+
-        '. Ponuda je izmijenjena i pregazila prethodnu. POTREBNA POTVRDA. Ponuda: '+(_sacuvanoKao||'');
+      // Kratko - napomena se dopisuje pri svakoj izmjeni, pa duga recenica
+      // brzo pretrpa polje. Naziv ponude ide samo uz PRVU izmjenu.
+      var _upoz='⚠ UPDATE v'+_novaVerzija+' ('+_danas+', '+
+        ((_currentUser&&_currentUser.ime_prezime)||'nepoznat')+') — potrebna potvrda'
+        +((_novaVerzija===1&&_sacuvanoKao)?(' · '+_sacuvanoKao):'');
+      // Napomena je OPERATEROVO polje ("upute operateru") - ne smije se
+      // pregaziti. Cita se postojeci sadrzaj pa se upozorenje DOPISUJE sa "|",
+      // isti obrazac koji lista.html vec koristi. Sve verzije ostaju.
+      var _staraNap='';
+      try{
+        var _gr=await fetch(url+'/api/proizvodnja/'+_nalogInfo.r_br);
+        if(_gr.ok){
+          var _gd=await _gr.json().catch(function(){return null;});
+          var _n=(_gd&&(_gd.napomena||(_gd.nalog&&_gd.nalog.napomena)))||'';
+          _staraNap=String(_n||'').trim();
+        }
+      }catch(e){ /* ako ne mozemo procitati, radije ne diramo napomenu */ }
+      var _novaNap=_staraNap
+        ? (_staraNap.indexOf(_upoz)>=0 ? _staraNap : (_staraNap+' | '+_upoz))
+        : _upoz;
       // Salje se SAMO ono sto ponuda smije mijenjati. Avans, status i datum
       // pocetka se izbacuju - njih operater vodi u listi dok posao traje, pa
       // bi ih ponuda inace vratila na nulu.
       var patchBody=Object.assign({},body,{
-        napomena:_upoz,
+        napomena:_novaNap,
         verzija:_novaVerzija,
         izmjena_ceka_potvrdu:true,   // lista.html: prikazi upozorenje dok se ne potvrdi
       });
       NE_DIRAJ_PRI_IZMJENI.forEach(function(k){ delete patchBody[k]; });
+      // Ako stara napomena nije procitana, a nalog je mozda ima - radije NE
+      // saljemo napomenu nego da izbrisemo upute operateru. Trag i dalje
+      // postoji u istoriji ponude i u polju verzija.
+      if(!_staraNap&&_novaVerzija>1) delete patchBody.napomena;
       var pr=await fetch(url+'/api/proizvodnja/'+_nalogInfo.r_br,{
         method:'PATCH',
         headers:{'Content-Type':'application/json'},
