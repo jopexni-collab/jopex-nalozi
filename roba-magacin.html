@@ -539,7 +539,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 </div>
 
 <div id="modal-slika-artikla" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:600;align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:12px;padding:16px;max-width:420px;width:90vw;">
+  <div style="background:#fff;border-radius:12px;padding:16px;max-width:420px;width:90vw;max-height:92vh;overflow-y:auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
       <h3 id="msa-naziv" style="margin:0;font-size:14.5px;"></h3>
       <button onclick="document.getElementById('modal-slika-artikla').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
@@ -581,7 +581,8 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <div style="border-top:1px solid #eee;margin-top:12px;padding-top:12px;">
       <div style="font-size:12.5px;font-weight:700;margin-bottom:8px;">🧊 3D model (FBX)</div>
       <div id="m3d-postojeci" style="display:none;margin-bottom:8px;">
-        <div id="m3d-viewer" style="width:100%;height:300px;background:#2b3240;border-radius:8px;overflow:hidden;position:relative;">
+        <div id="m3d-viewer" style="width:100%;height:200px;background:#2b3240;border-radius:8px;overflow:hidden;position:relative;">
+          <button onclick="m3dPuniEkran()" title="Prikaži preko celog ekrana" style="position:absolute;top:6px;right:6px;z-index:5;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:5px;width:28px;height:28px;font-size:14px;cursor:pointer;">⛶</button>
           <div id="m3d-ucitavanje" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#c9d4e3;font-size:13px;">Učitavanje 3D modela...</div>
         </div>
         <div style="font-size:11px;color:#8b96a5;margin-top:4px;text-align:center;">Prevuci mišem da rotiraš · točkić za zum</div>
@@ -1811,6 +1812,30 @@ async function m3dPosalji(file){
     statusDiv.style.color='var(--red)'; statusDiv.textContent='✗ '+e.message;
   }
 }
+
+// 3D prikaz preko CIJELOG ekrana — u prozorčiću je namjerno nizak (200px) da dugmad
+// ostanu vidljiva, a za detaljan pregled se otvara ovako.
+function m3dPuniEkran(){
+  const viewer=document.getElementById('m3d-viewer');
+  if(!viewer) return;
+  const jePun=viewer.dataset.pun==='1';
+  if(jePun){
+    viewer.dataset.pun='0';
+    viewer.style.cssText='width:100%;height:200px;background:#2b3240;border-radius:8px;overflow:hidden;position:relative;';
+  }else{
+    viewer.dataset.pun='1';
+    viewer.style.cssText='position:fixed;inset:0;width:100vw;height:100vh;background:#2b3240;border-radius:0;overflow:hidden;z-index:950;';
+  }
+  // Platno mora da prati novu veličinu, inače model ostane rastegnut/sitan.
+  setTimeout(()=>{ if(msaTrenutniRobaId) m3dPrikazi(); }, 60);
+}
+
+// Esc izlazi iz punog ekrana 3D prikaza (inače bi prekrio sve, bez očiglednog izlaza).
+document.addEventListener('keydown', e=>{
+  if(e.key!=='Escape') return;
+  const viewer=document.getElementById('m3d-viewer');
+  if(viewer?.dataset.pun==='1') m3dPuniEkran();
+});
 
 async function m3dObrisi(){
   if(!confirm('Ukloniti 3D model sa ovog artikla?')) return;
