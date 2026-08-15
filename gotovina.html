@@ -455,6 +455,40 @@ td.num{text-align:right;font-weight:700;}
   </div>
 </div>
 
+<div id="modal-novi-kupac" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:800;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:20px;max-width:400px;width:92vw;max-height:88vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h3 style="margin:0;font-size:15px;">+ Novi kupac</h3>
+      <button onclick="document.getElementById('modal-novi-kupac').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+    </div>
+    <div style="margin-bottom:10px;">
+      <label style="font-size:11.5px;font-weight:600;color:#555;display:block;margin-bottom:3px;">Ime / naziv kupca *</label>
+      <input type="text" id="nkb-naziv" placeholder="Ime i prezime ili firma..." style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:13px;box-sizing:border-box;">
+    </div>
+    <div style="margin-bottom:10px;">
+      <label style="font-size:11.5px;font-weight:600;color:#555;display:block;margin-bottom:3px;">Telefon</label>
+      <input type="tel" id="nkb-telefon" placeholder="+387 6X XXX XXX" style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:13px;box-sizing:border-box;">
+    </div>
+    <div style="margin-bottom:10px;">
+      <label style="font-size:11.5px;font-weight:600;color:#555;display:block;margin-bottom:3px;">Grad</label>
+      <input type="text" id="nkb-grad" placeholder="npr. Banja Luka" style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:13px;box-sizing:border-box;">
+    </div>
+    <div style="margin-bottom:10px;">
+      <label style="font-size:11.5px;font-weight:600;color:#555;display:block;margin-bottom:3px;">Adresa</label>
+      <input type="text" id="nkb-adresa" placeholder="Ulica, broj..." style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:13px;box-sizing:border-box;">
+    </div>
+    <div style="margin-bottom:12px;">
+      <label style="font-size:11.5px;font-weight:600;color:#555;display:block;margin-bottom:3px;">E-mail</label>
+      <input type="email" id="nkb-email" placeholder="ime@primjer.com" style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:13px;box-sizing:border-box;">
+    </div>
+    <div id="nkb-greska" style="display:none;color:var(--red,#c0392b);font-size:12px;margin-bottom:8px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="document.getElementById('modal-novi-kupac').style.display='none'" style="flex:1;padding:9px;border:1px solid var(--border,#ddd);background:#fff;border-radius:6px;cursor:pointer;font-size:13px;">Otkaži</button>
+      <button onclick="sacuvajNovogKupcaBlagajna()" style="flex:2;padding:9px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">✓ Sačuvaj i izaberi</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="modal-brzi-otp" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:300;align-items:center;justify-content:center;">
   <div class="modal-box" style="background:#fff;border-radius:12px;padding:20px;max-width:520px;width:92vw;max-height:82vh;overflow-y:auto;">
     <div id="brzi-otp-sadrzaj"><div style="text-align:center;color:#999;padding:30px;">Učitavanje...</div></div>
@@ -1292,21 +1326,43 @@ function debounceTraziKomitenta(prefix){
 
 // Pravi kupca direktno iz blagajne i ODMAH ga bira — da se ne mora izlaziti u drugi modul
 // samo zato što kupac još nije u šifrarniku (čest slučaj kod avansa za novog kupca).
-async function napraviKupcaBrzo(prefix, naziv){
-  const cont=document.getElementById(prefix+'-kom-rezultati');
-  const telefon=prompt(`Telefon za "${naziv}" (može se preskočiti):`, '');
-  if(telefon===null) return; // otkazano
-  cont.innerHTML='<div style="padding:8px;color:#8b96a5;font-size:12px;">Kreiranje...</div>';
+// Puna forma (ista polja kao u maloprodaji), ne samo ime — kupac odmah ulazi u šifrarnik
+// kompletan, pa se ne mora naknadno dopunjavati.
+let nkbPrefix=null;
+function napraviKupcaBrzo(prefix, naziv){
+  nkbPrefix=prefix;
+  document.getElementById('nkb-naziv').value=naziv||'';
+  document.getElementById('nkb-telefon').value='';
+  document.getElementById('nkb-grad').value='';
+  document.getElementById('nkb-adresa').value='';
+  document.getElementById('nkb-email').value='';
+  document.getElementById('nkb-greska').style.display='none';
+  document.getElementById('modal-novi-kupac').style.display='flex';
+  setTimeout(()=>document.getElementById(naziv?'nkb-telefon':'nkb-naziv').focus(),50);
+}
+
+async function sacuvajNovogKupcaBlagajna(){
+  const greska=document.getElementById('nkb-greska');
+  const naziv=document.getElementById('nkb-naziv').value.trim();
+  if(!naziv){ greska.style.display='block'; greska.textContent='Ime / naziv kupca je obavezan.'; return; }
   try{
     const r=await fetch(`${API}/api/kupci`,{
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({naziv, telefon:telefon.trim()||null, objekt_id:blagajnaObjektId||null}),
+      body:JSON.stringify({
+        naziv,
+        telefon: document.getElementById('nkb-telefon').value.trim()||null,
+        grad:    document.getElementById('nkb-grad').value.trim()||null,
+        adresa:  document.getElementById('nkb-adresa').value.trim()||null,
+        email:   document.getElementById('nkb-email').value.trim()||null,
+        objekt_id: blagajnaObjektId||null,
+      }),
     });
     const kupac=await r.json();
     if(!r.ok) throw new Error(kupac.error||'Greška.');
-    izaberiKomitenta(prefix, kupac); // odmah izabran, bez dodatnog traženja
+    document.getElementById('modal-novi-kupac').style.display='none';
+    izaberiKomitenta(nkbPrefix, kupac); // odmah izabran, bez dodatnog traženja
   }catch(e){
-    cont.innerHTML=`<div style="padding:8px;color:var(--red);font-size:12px;">✗ ${esc(e.message)}</div>`;
+    greska.style.display='block'; greska.textContent='✗ '+e.message;
   }
 }
 
