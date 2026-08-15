@@ -4,6 +4,10 @@ const router = express.Router();
 const pool = require('./db');
 
 const BANKE = ['rfb', 'uni', 'mf', 'nlb', 'uni1'];
+// Isti kurs koji koristi i blagajna (gotovina.js) — PJ u EUR (npr. Niš) se svode na KM da
+// bi se ukupan dug klijenta mogao sabrati; bez ovoga su se EUR i KM sabirali kao da su ista
+// valuta, pa je dug iz Niša bio prikazan kao ~2x manji nego što stvarno jeste.
+const KURS_EUR_KM = 1.95;
 
 function jeDozvoljeno(user) {
   return !!user && (user.rola === 'admin' || user.je_blagajnik || user.moze_prodavati);
@@ -169,12 +173,20 @@ router.get('/klijenti', async (req, res) => {
       // "nepoznat" način dok se stvarno ne naplati (bira se tek pri samoj naplati).
       pool.query(`
         SELECT
-          COALESCE(kupac_id::text, 'ime:'||LOWER(TRIM(kupac_naziv))) AS kljuc,
-          kupac_id, kupac_naziv,
-          SUM(ukupan_iznos - iznos_placeno) AS iznos
-        FROM otpremnice
-        WHERE status_placanja != 'placeno' AND status = 'potvrdjena' AND kupac_naziv IS NOT NULL
-        GROUP BY kljuc, kupac_id, kupac_naziv
+          COALESCE(o.kupac_id::text, 'ime:'||LOWER(TRIM(o.kupac_naziv))) AS kljuc,
+          o.kupac_id, o.kupac_naziv,
+          SUM(CASE WHEN p.valuta = 'EUR'
+                   THEN (o.ukupan_iznos - o.iznos_placeno) * ${KURS_EUR_KM}
+                   ELSE (o.ukupan_iznos - o.iznos_placeno) END) AS iznos,
+          -- Koliko od tog duga dolazi iz PJ u EUR (u ORIGINALNOJ valuti) — da se u prikazu
+          -- može naglasiti da je iznos preračunat, a ne izvorno u KM.
+          SUM(CASE WHEN p.valuta = 'EUR' THEN (o.ukupan_iznos - o.iznos_placeno) ELSE 0 END) AS iznos_eur_original,
+          -- Najskoriji datum otpremnice sa dugom — pokazuje koliko je dug "svjež"/star.
+          MAX(o.datum) AS zadnja_promjena
+        FROM otpremnice o
+        LEFT JOIN prodajni_objekti p ON p.id = o.objekt_id
+        WHERE o.status_placanja != 'placeno' AND o.status = 'potvrdjena' AND o.kupac_naziv IS NOT NULL
+        GROUP BY kljuc, o.kupac_id, o.kupac_naziv
       `),
 
       // Koliko od tih dugovnih otpremnica JOŠ NIJE pregledao/potvrdio blagajnik ("kontrola")
@@ -284,6 +296,8 @@ router.get('/klijenti', async (req, res) => {
           kupac_id: kupacId || null, kupac_naziv: naziv,
           registrovan: !!kupacId,
           duguje_banka: 0, duguje_gotovina: 0, duguje_nepoznato: 0,
+          dug_iz_eur_original: 0, // koliko duga izvorno nastalo u EUR (prije preračuna)
+          zadnja_promjena: null,  // najskoriji datum promjene duga (za kolonu i filter)
           uplaceno_banka_istorijski: 0, pretplata: 0, ocekivano: 0, nije_verifikovano_broj: 0,
         };
       }
@@ -292,6 +306,10 @@ router.get('/klijenti', async (req, res) => {
     for (const row of dugMalo.rows) {
       const k = osiguraj(row.kljuc, row.kupac_id, row.kupac_naziv);
       k.duguje_nepoznato += +row.iznos;
+      k.dug_iz_eur_original += +(row.iznos_eur_original || 0);
+      // Najskoriji datum među svim izvorima duga tog klijenta.
+      if (row.zadnja_promjena && (!k.zadnja_promjena || row.zadnja_promjena > k.zadnja_promjena))
+        k.zadnja_promjena = row.zadnja_promjena;
     }
     for (const row of dugNalozi.rows) {
       const k = osiguraj(row.kljuc, row.kupac_id, row.kupac_naziv);
@@ -351,6 +369,8 @@ router.get('/klijenti', async (req, res) => {
           duguje_banka: +k.duguje_banka.toFixed(2),
           duguje_gotovina: +k.duguje_gotovina.toFixed(2),
           duguje_nepoznato: +k.duguje_nepoznato.toFixed(2),
+          dug_iz_eur_original: +k.dug_iz_eur_original.toFixed(2),
+          zadnja_promjena: k.zadnja_promjena,
           uplaceno_banka_istorijski: +k.uplaceno_banka_istorijski.toFixed(2),
           pretplata: +k.pretplata.toFixed(2),
           ocekivano: +k.ocekivano.toFixed(2),

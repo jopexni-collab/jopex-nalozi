@@ -390,19 +390,9 @@ td.num{text-align:right;font-weight:700;}
     sa dugom i naplatiš konkretnu.
   </div>
   <button class="btn-sm" onclick="otvoriIstorijskiUnos()" style="margin-bottom:12px;">+ Istorijski unos (početno stanje)</button>
-  <div class="wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Klijent</th><th>Duguje (aktivno)</th>
-          <th>Dug</th><th>Očekivana naplata</th><th>Teško naplativo</th>
-          <th>Očekivano (obećano)</th><th>Duguje — preostalo</th>
-          <th>Pretplata</th><th>Uplaćeno u banku (istorijski)</th><th>Verifikacija</th>
-        </tr>
-      </thead>
-      <tbody id="klijenti-tbody"><tr><td colspan="10" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr></tbody>
-    </table>
-  </div>
+  <div id="klijenti-zbir" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;font-size:11.5px;"></div>
+  <div id="klijenti-wrap" style="overflow:auto;max-height:calc(100vh - 260px);border:1px solid var(--border,#ddd);border-radius:8px;"></div>
+  <div id="klijenti-filter-panel" onclick="event.stopPropagation()" style="display:none;position:fixed;z-index:520;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.2);width:230px;max-height:340px;flex-direction:column;"></div>
 </div>
 
 <!-- ═══ MODAL: ISTORIJSKI UNOS ═══ -->
@@ -1943,43 +1933,218 @@ async function dodijeliBanku(id, banka){
   }catch(e){ alert('✗ Greška pri dodjeli.'); }
 }
 
+/* ═══ KLIJENTI I FINANSIJE — Excel-stil tabela ═══════════════════════════════
+   Filter po SVAKOJ koloni (kvadratići), sortiranje, zbir koji prati filter.
+   "Veći filter isključuje manji" — filteri se KOMBINUJU (I-logika): svaki dodatni filter
+   sužava ono što je prethodni ostavio, kao u Excelu. */
+let klijentiSvi=[];               // svi redovi sa servera (nefiltrirani)
+let klijentiFilteri={};           // kolona -> Set iskljucenih vrijednosti
+let klijentiSort={kolona:'duguje_aktivno', smjer:'desc'};
+
+const KLIJENTI_KOLONE=[
+  {k:'kupac_naziv',      lbl:'Klijent',                     tip:'text'},
+  {k:'duguje_aktivno',   lbl:'Duguje (aktivno)',            tip:'num'},
+  {k:'kateg_dug',        lbl:'Dug',                         tip:'num'},
+  {k:'kateg_ocekivana_naplata', lbl:'Očekivana naplata',    tip:'num'},
+  {k:'kateg_tesko_naplativo',   lbl:'Teško naplativo',      tip:'num'},
+  {k:'ocekivano',        lbl:'Očekivano (obećano)',         tip:'num'},
+  {k:'duguje_soft',      lbl:'Duguje — preostalo',          tip:'num'},
+  {k:'pretplata',        lbl:'Pretplata',                   tip:'num'},
+  {k:'uplaceno_banka_istorijski', lbl:'Uplaćeno u banku',   tip:'num'},
+  {k:'zadnja_promjena',  lbl:'Zadnja promjena',             tip:'text'},
+  {k:'registrovan',      lbl:'Verifikacija',                tip:'bool'},
+];
+
+function klijentiVrijednost(k, kolona){
+  if(kolona==='registrovan') return k.registrovan?'Registrovan':'Nije registrovan';
+  if(kolona==='zadnja_promjena') return k.zadnja_promjena ? k.zadnja_promjena.split('T')[0].split('-').reverse().join('.') : '(nema)';
+  return k[kolona];
+}
+
 async function ucitajKlijentiListu(){
-  const tbody=document.getElementById('klijenti-tbody');
-  tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:20px;color:#999">Učitavanje...</td></tr>';
+  const wrap=document.getElementById('klijenti-wrap');
+  wrap.innerHTML='<div style="text-align:center;padding:20px;color:#999;">Učitavanje...</div>';
   try{
     const r=await fetch(`${API}/api/finansije/klijenti`);
     const rows=await r.json();
-    if(!r.ok){ tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--red);">✗ Greška: ${esc(rows.error||'nepoznata greška servera')}</td></tr>`; return; }
-    if(!rows.length){ tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:20px;color:#999">Nema klijenata sa dugom/pretplatom.</td></tr>'; return; }
-    tbody.innerHTML=rows.map(k=>{
-      const nazivEsc=esc(k.kupac_naziv||'').replace(/'/g,"\\'");
-      return `
-      <tr>
-        <td>
-          ${esc(k.kupac_naziv||'—')}
-          ${!k.registrovan?'<div style="font-size:10px;color:var(--red);font-weight:700;">⚠ Preporučuje se registracija kupca</div>':''}
-        </td>
-        <td style="font-weight:700;${k.duguje_ukupno>0?'cursor:pointer;color:var(--blue);text-decoration:underline;':''}" ${k.duguje_ukupno>0?`onclick="otvoriDugDetalji(${k.kupac_id||'null'},'${nazivEsc}')" title="${[
-          k.kateg_tesko_naplativo>0?`Teško naplativo (${fm(k.kateg_tesko_naplativo)}) je ODBIJENO — ukupno bi bilo ${fm(k.duguje_ukupno)}`:'',
-          k.dug_iz_eur_original>0?`Sadrži ${fm(k.dug_iz_eur_original)} € preračunato u KM (kurs 1,95)`:''
-        ].filter(Boolean).join(' · ')||'Klikni da vidiš odakle dolazi dug'}"`:''}>${k.duguje_aktivno>0?fm(k.duguje_aktivno):'—'}${
-          k.dug_iz_eur_original>0?`<div style="font-size:9.5px;color:#8b6914;font-weight:600;">€→KM: ${fm(k.dug_iz_eur_original)} €</div>`:''
-        }${k.kateg_tesko_naplativo>0?`<div style="font-size:9.5px;color:#8b96a5;font-weight:400;">bez teških</div>`:''}</td>
-        <td style="${k.duguje_ukupno>0?'cursor:pointer;':''}" ${k.duguje_ukupno>0?`onclick="otvoriKategorizacijaDuga('${esc(k.kljuc)}',${k.kupac_id||'null'},'${nazivEsc}',${k.duguje_ukupno},${k.kateg_ocekivana_naplata},${k.kateg_tesko_naplativo})" title="Klikni da premjestiš dio u drugu kategoriju"`:''}>${k.duguje_ukupno>0?fm(k.kateg_dug):'—'}</td>
-        <td style="${k.kateg_ocekivana_naplata>0?'color:var(--blue);font-weight:700;cursor:pointer;':k.duguje_ukupno>0?'cursor:pointer;':''}" ${k.duguje_ukupno>0?`onclick="otvoriKategorizacijaDuga('${esc(k.kljuc)}',${k.kupac_id||'null'},'${nazivEsc}',${k.duguje_ukupno},${k.kateg_ocekivana_naplata},${k.kateg_tesko_naplativo})"`:''}>${k.kateg_ocekivana_naplata>0?fm(k.kateg_ocekivana_naplata):'—'}</td>
-        <td style="${k.kateg_tesko_naplativo>0?'color:var(--red);font-weight:700;cursor:pointer;':k.duguje_ukupno>0?'cursor:pointer;':''}" ${k.duguje_ukupno>0?`onclick="otvoriKategorizacijaDuga('${esc(k.kljuc)}',${k.kupac_id||'null'},'${nazivEsc}',${k.duguje_ukupno},${k.kateg_ocekivana_naplata},${k.kateg_tesko_naplativo})"`:''}>${k.kateg_tesko_naplativo>0?fm(k.kateg_tesko_naplativo):'—'}</td>
-        <td style="${k.ocekivano>0?'color:var(--orange,#b8860b);':''}">${k.ocekivano>0?fm(k.ocekivano):'—'}</td>
-        <td>${k.duguje_soft>0?fm(k.duguje_soft):'—'}</td>
-        <td style="${k.pretplata>0?'color:var(--green);font-weight:700;':''}">${k.pretplata>0?'+ '+fm(k.pretplata):'—'}</td>
-        <td style="${k.uplaceno_banka_istorijski>0?'cursor:pointer;color:var(--blue);text-decoration:underline;':''}" ${k.uplaceno_banka_istorijski>0?`onclick="otvoriUplateIstorija(${k.kupac_id||'null'},'${nazivEsc}')" title="Klikni da vidiš kada su uplate stigle"`:''}>${k.uplaceno_banka_istorijski>0?fm(k.uplaceno_banka_istorijski):'—'}</td>
-        <td>${k.nije_verifikovano_broj>0?`<span style="color:var(--red);font-weight:700;font-size:11px;">🚚 ${k.nije_verifikovano_broj} neverifik.</span>`:'<span style="color:var(--green);font-size:11px;">✓ sve</span>'}</td>
-      </tr>
-    `;}).join('');
-  }catch(e){ tbody.innerHTML='<tr><td colspan="10" style="text-align:center;color:red">Greška pri učitavanju.</td></tr>'; }
+    if(!r.ok){ wrap.innerHTML=`<div style="text-align:center;padding:20px;color:var(--red);">✗ Greška: ${esc(rows.error||'nepoznata greška servera')}</div>`; return; }
+    klijentiSvi=rows;
+    klijentiFilteri={};
+    renderKlijentiTabelu();
+  }catch(e){
+    wrap.innerHTML='<div style="text-align:center;padding:20px;color:var(--red);">✗ Greška pri učitavanju.</div>';
+  }
 }
 
-/* ── ISTORIJSKI UNOS ─────────────────────────────────────────────────── */
-let istorijskiTipTrenutni='gotovina', istorijskiKupacId=null;
+function klijentiFiltrirano(){
+  let prikaz=klijentiSvi.filter(k=>
+    KLIJENTI_KOLONE.every(({k:kol})=>{
+      const iskljuceno=klijentiFilteri[kol];
+      if(!iskljuceno || iskljuceno.size===0) return true;
+      const v=klijentiVrijednost(k, kol);
+      return !iskljuceno.has(String(v)) && !(iskljuceno.has('') && (v==null||v===''));
+    })
+  );
+  const {kolona, smjer}=klijentiSort;
+  const tip=KLIJENTI_KOLONE.find(c=>c.k===kolona)?.tip;
+  prikaz=[...prikaz].sort((a,b)=>{
+    const va=klijentiVrijednost(a,kolona), vb=klijentiVrijednost(b,kolona);
+    const cmp = tip==='num' ? (parseFloat(va)||0)-(parseFloat(vb)||0)
+                            : String(va??'').localeCompare(String(vb??''),'sr-Latn-BA');
+    return smjer==='asc'?cmp:-cmp;
+  });
+  return prikaz;
+}
+
+function renderKlijentiTabelu(){
+  const wrap=document.getElementById('klijenti-wrap');
+  if(!klijentiSvi.length){ wrap.innerHTML='<div style="text-align:center;padding:20px;color:#999;">Nema klijenata sa dugom/pretplatom.</div>'; document.getElementById('klijenti-zbir').innerHTML=''; return; }
+  const prikaz=klijentiFiltrirano();
+  const strelica=k=>klijentiSort.kolona===k?(klijentiSort.smjer==='asc'?' ▲':' ▼'):'';
+  const filterDugme=k=>{
+    const aktivan=klijentiFilteri[k]&&klijentiFilteri[k].size>0;
+    return `<span onclick="event.stopPropagation();klijentiOtvoriFilter('${k}',this)" style="cursor:pointer;margin-left:4px;padding:1px 3px;border-radius:3px;background:${aktivan?'#4a90d9':'rgba(255,255,255,.15)'};">▼</span>`;
+  };
+  wrap.innerHTML=`
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+      <thead>
+        <tr style="background:#1f3864;color:#fff;">
+          ${KLIJENTI_KOLONE.map(c=>`
+            <th style="padding:5px 7px;text-align:${c.tip==='num'?'right':'left'};white-space:nowrap;font-size:10.5px;position:sticky;top:0;background:#1f3864;z-index:30;">
+              <div style="display:flex;align-items:center;gap:2px;justify-content:${c.tip==='num'?'flex-end':'flex-start'};">
+                <span style="cursor:pointer;" onclick="klijentiKlikNaslov('${c.k}')">${c.lbl}${strelica(c.k)}</span>${filterDugme(c.k)}
+              </div>
+            </th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>${prikaz.map((k,i)=>{
+        const nazivEsc=esc(k.kupac_naziv||'').replace(/'/g,"\\'");
+        const kategKlik=k.duguje_ukupno>0?`onclick="otvoriKategorizacijaDuga('${esc(k.kljuc)}',${k.kupac_id||'null'},'${nazivEsc}',${k.duguje_ukupno},${k.kateg_ocekivana_naplata},${k.kateg_tesko_naplativo})" title="Klikni da premjestiš dio u drugu kategoriju"`:'';
+        return `
+        <tr style="background:${i%2?'#f7f8fa':'#fff'};border-bottom:1px solid #eee;">
+          <td style="padding:4px 7px;">
+            ${esc(k.kupac_naziv||'—')}
+            ${!k.registrovan?'<div style="font-size:9.5px;color:var(--red);font-weight:700;">⚠ Nije registrovan</div>':''}
+          </td>
+          <td style="padding:4px 7px;text-align:right;font-weight:700;${k.duguje_ukupno>0?'cursor:pointer;color:var(--blue);text-decoration:underline;':''}" ${k.duguje_ukupno>0?`onclick="otvoriDugDetalji(${k.kupac_id||'null'},'${nazivEsc}')" title="${[
+            k.kateg_tesko_naplativo>0?`Teško naplativo (${fm(k.kateg_tesko_naplativo)}) je ODBIJENO — ukupno bi bilo ${fm(k.duguje_ukupno)}`:'',
+            k.dug_iz_eur_original>0?`Sadrži ${fm(k.dug_iz_eur_original)} € preračunato u KM (kurs 1,95)`:''
+          ].filter(Boolean).join(' · ')||'Klikni da vidiš odakle dolazi dug'}"`:''}>${k.duguje_aktivno>0?fm(k.duguje_aktivno):'—'}${
+            k.dug_iz_eur_original>0?`<div style="font-size:9px;color:#8b6914;font-weight:600;">€→KM: ${fm(k.dug_iz_eur_original)} €</div>`:''
+          }${k.kateg_tesko_naplativo>0?`<div style="font-size:9px;color:#8b96a5;font-weight:400;">bez teških</div>`:''}</td>
+          <td style="padding:4px 7px;text-align:right;${k.duguje_ukupno>0?'cursor:pointer;':''}" ${kategKlik}>${k.duguje_ukupno>0?fm(k.kateg_dug):'—'}</td>
+          <td style="padding:4px 7px;text-align:right;${k.kateg_ocekivana_naplata>0?'color:var(--blue);font-weight:700;cursor:pointer;':k.duguje_ukupno>0?'cursor:pointer;':''}" ${kategKlik}>${k.kateg_ocekivana_naplata>0?fm(k.kateg_ocekivana_naplata):'—'}</td>
+          <td style="padding:4px 7px;text-align:right;${k.kateg_tesko_naplativo>0?'color:var(--red);font-weight:700;cursor:pointer;':k.duguje_ukupno>0?'cursor:pointer;':''}" ${kategKlik}>${k.kateg_tesko_naplativo>0?fm(k.kateg_tesko_naplativo):'—'}</td>
+          <td style="padding:4px 7px;text-align:right;${k.ocekivano>0?'color:var(--orange,#b8860b);':''}">${k.ocekivano>0?fm(k.ocekivano):'—'}</td>
+          <td style="padding:4px 7px;text-align:right;">${k.duguje_soft>0?fm(k.duguje_soft):'—'}</td>
+          <td style="padding:4px 7px;text-align:right;${k.pretplata>0?'color:var(--green);font-weight:700;':''}">${k.pretplata>0?fm(k.pretplata):'—'}</td>
+          <td style="padding:4px 7px;text-align:right;">${k.uplaceno_banka_istorijski>0?fm(k.uplaceno_banka_istorijski):'—'}</td>
+          <td style="padding:4px 7px;color:#8b96a5;font-size:10.5px;">${esc(klijentiVrijednost(k,'zadnja_promjena'))}</td>
+          <td style="padding:4px 7px;">${k.nije_verifikovano_broj>0?`<span style="color:var(--red);font-weight:700;">⚠ ${k.nije_verifikovano_broj}</span>`:(k.registrovan?'<span style="color:var(--green);">✓</span>':'—')}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+  klijentiPrikaziZbir(prikaz);
+}
+
+// Zbir PRATI FILTER — kad filtriraš, zbir se odmah preračuna na ono što je prikazano.
+function klijentiPrikaziZbir(prikaz){
+  const zbir=(polje)=>prikaz.reduce((s,k)=>s+(parseFloat(k[polje])||0),0);
+  const stavke=[
+    ['Duguje (aktivno)', zbir('duguje_aktivno'), 'var(--red,#c0392b)'],
+    ['Očekivana naplata', zbir('kateg_ocekivana_naplata'), 'var(--blue,#1a5fa8)'],
+    ['Teško naplativo', zbir('kateg_tesko_naplativo'), '#8b96a5'],
+    ['Pretplata', zbir('pretplata'), 'var(--green,#1f8a4c)'],
+  ];
+  const filtriran=Object.values(klijentiFilteri).some(s=>s&&s.size>0);
+  document.getElementById('klijenti-zbir').innerHTML=
+    `<div style="background:#eef2f7;border-radius:6px;padding:5px 10px;font-weight:700;">
+       ${prikaz.length} od ${klijentiSvi.length} klijenata${filtriran?' <span style="color:var(--blue);font-weight:400;">(filtrirano)</span>':''}
+     </div>`
+    +stavke.map(([lbl,v,boja])=>`
+      <div style="background:#fff;border:1px solid var(--border,#ddd);border-radius:6px;padding:5px 10px;">
+        <span style="color:#8b96a5;">${lbl}:</span> <b style="color:${boja};">${fm(v)}</b>
+      </div>`).join('');
+}
+
+function klijentiKlikNaslov(kolona){
+  if(klijentiSort.kolona===kolona) klijentiSort.smjer=klijentiSort.smjer==='asc'?'desc':'asc';
+  else klijentiSort={kolona, smjer:'desc'};
+  renderKlijentiTabelu();
+}
+
+/* ── Excel-stil filter panel ── */
+let klFPKolona=null, klFPPretraga='', klFPDraft=new Set(), klFPPozicija=null;
+
+function klijentiDistinct(kolona){
+  const sve=klijentiSvi.map(k=>String(klijentiVrijednost(k,kolona)??''));
+  const tip=KLIJENTI_KOLONE.find(c=>c.k===kolona)?.tip;
+  const neprazne=[...new Set(sve.filter(v=>v!==''&&v!=='null'&&v!=='undefined'))];
+  neprazne.sort((a,b)=> tip==='num' ? (parseFloat(a)||0)-(parseFloat(b)||0) : a.localeCompare(b,'sr-Latn-BA'));
+  return sve.some(v=>v===''||v==='null'||v==='undefined') ? [...neprazne,''] : neprazne;
+}
+
+function klijentiOtvoriFilter(kolona, dugmeEl){
+  klFPKolona=kolona; klFPPretraga='';
+  klFPDraft=new Set(klijentiFilteri[kolona]||[]);
+  const panel=document.getElementById('klijenti-filter-panel');
+  const r=dugmeEl.getBoundingClientRect();
+  klFPPozicija={top:(r.bottom+4)+'px', left:Math.min(r.left,window.innerWidth-240)+'px'};
+  panel.style.top=klFPPozicija.top; panel.style.left=klFPPozicija.left;
+  panel.style.display='flex';
+  panel.innerHTML=`
+    <div style="padding:8px;border-bottom:1px solid #eee;">
+      <input type="text" id="kl-fp-search" placeholder="Pretraga..." style="width:100%;padding:5px 7px;border:1px solid var(--border);border-radius:5px;font-size:11.5px;box-sizing:border-box;">
+    </div>
+    <div id="kl-fp-lista" style="overflow-y:auto;flex:1;padding:6px 8px;"></div>
+    <div style="display:flex;gap:6px;padding:8px;border-top:1px solid #eee;">
+      <button class="btn-sm" style="flex:1;font-size:11px;padding:5px;" onclick="klijentiZatvoriFilter()">Otkaži</button>
+      <button class="btn-sm" style="flex:1;font-size:11px;padding:5px;" onclick="klijentiFilterOcisti()">Obriši</button>
+      <button class="btn-sm" style="flex:1;font-size:11px;padding:5px;background:var(--blue,#1a5fa8);color:#fff;font-weight:700;" onclick="klijentiFilterPrimijeni()">✓ OK</button>
+    </div>`;
+  const si=document.getElementById('kl-fp-search');
+  let t=null;
+  si.addEventListener('input', e=>{
+    klFPPretraga=e.target.value;
+    clearTimeout(t); t=setTimeout(()=>klijentiFPRenderListu(), 250);
+  });
+  si.focus();
+  klijentiFPRenderListu();
+}
+
+function klijentiFPRenderListu(){
+  const sve=klijentiDistinct(klFPKolona);
+  const pretraga=klFPPretraga.toLowerCase();
+  const prikazane=sve.filter(v=>String(v).toLowerCase().includes(pretraga));
+  const sveOznaceno=prikazane.every(v=>!klFPDraft.has(v));
+  const jeNum=KLIJENTI_KOLONE.find(c=>c.k===klFPKolona)?.tip==='num';
+  document.getElementById('kl-fp-lista').innerHTML=`
+    <label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-weight:700;cursor:pointer;border-bottom:1px solid #eee;margin-bottom:3px;">
+      <input type="checkbox" ${sveOznaceno?'checked':''} onchange="klijentiFPOznaciSve(this.checked)"> (Izaberi sve)
+    </label>
+    ${prikazane.map(v=>`
+      <label style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11.5px;cursor:pointer;">
+        <input type="checkbox" ${klFPDraft.has(v)?'':'checked'} onchange="klijentiFPToggle('${esc(String(v)).replace(/'/g,"\\'")}',this.checked)"> ${v===''?'<i style="color:#8b96a5;">(prazno)</i>':(jeNum?fm(parseFloat(v)||0):esc(String(v)))}
+      </label>`).join('')}`;
+}
+function klijentiFPToggle(v, oznaceno){
+  if(oznaceno) klFPDraft.delete(v); else klFPDraft.add(v);
+  const prikazane=klijentiDistinct(klFPKolona).filter(x=>String(x).toLowerCase().includes(klFPPretraga.toLowerCase()));
+  const cb=document.querySelector('#kl-fp-lista input[type="checkbox"]');
+  if(cb) cb.checked=prikazane.every(x=>!klFPDraft.has(x));
+}
+function klijentiFPOznaciSve(oznaceno){
+  klijentiDistinct(klFPKolona).filter(v=>String(v).toLowerCase().includes(klFPPretraga.toLowerCase()))
+    .forEach(v=>{ if(oznaceno) klFPDraft.delete(v); else klFPDraft.add(v); });
+  klijentiFPRenderListu();
+}
+function klijentiFilterOcisti(){ klijentiFilteri[klFPKolona]=new Set(); klijentiZatvoriFilter(); renderKlijentiTabelu(); }
+function klijentiFilterPrimijeni(){ klijentiFilteri[klFPKolona]=klFPDraft; klijentiZatvoriFilter(); renderKlijentiTabelu(); }
+function klijentiZatvoriFilter(){ document.getElementById('klijenti-filter-panel').style.display='none'; klFPKolona=null; }
+document.addEventListener('click', e=>{
+  const panel=document.getElementById('klijenti-filter-panel');
+  if(panel && panel.style.display!=='none' && !panel.contains(e.target)){ panel.style.display='none'; klFPKolona=null; }
+});
 
 function otvoriIstorijskiUnos(){
   document.getElementById('modal-istorijski').style.display='flex';
