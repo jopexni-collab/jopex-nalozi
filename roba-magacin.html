@@ -676,12 +676,13 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
           Ažuriraj stanje (količinu)
         </label>
         <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;">
-          <input type="checkbox" id="presek-azuriraj-cene">
+          <input type="checkbox" id="presek-azuriraj-cene" onchange="if(presekStavke.length) renderPresekTabela();">
           Ažuriraj cene
         </label>
         <div style="font-size:11px;color:#8b96a5;margin-top:6px;">Uključi/isključi nezavisno — npr. za stariji fajl koji ima ispravne cene ali zastarelo stanje, isključi "Ažuriraj stanje" i ostavi samo "Ažuriraj cene".</div>
       </div>
       <div style="text-align:right;">
+        <button type="button" class="ce-tip-btn" style="margin-right:8px;" onclick="presekOdustani()">✕ Odustani</button>
         <button type="button" class="btn" style="background:var(--green,#1f8a4c);" onclick="presekPrimeni()">✓ Primeni usaglašavanje</button>
       </div>
     </div>
@@ -3555,6 +3556,14 @@ const PRESEK_STATUS_LABEL={
 
 function renderPresekTabela(){
   const wrap=document.getElementById('presek-tabela-wrap');
+  // Kolone sa cenama se prikazuju SAMO ako se cene stvarno ažuriraju — inače samo smetaju
+  // (korisnik vidi "nova cena" iz fajla koja se NEĆE upisati, pa misli da hoće).
+  // Kolone sa cenama se prikazuju ako se cene ažuriraju ILI ako ima NOVIH artikala —
+  // novi nemaju postojeću cenu u bazi, pa je MORAJU uzeti iz fajla. Za njih je bitno da
+  // se cena vidi i može ispraviti prije potvrde, bez obzira na prekidač.
+  const cijeneUkljucene=document.getElementById('presek-azuriraj-cene')?.checked;
+  const imaNovih=presekStavke.some(s=>s.status==='nova-sifra');
+  const prikaziCijene=cijeneUkljucene || imaNovih;
   wrap.innerHTML=`
     <table style="width:100%;border-collapse:collapse;font-size:11px;">
       <thead>
@@ -3565,13 +3574,19 @@ function renderPresekTabela(){
           <th style="padding:4px 6px;text-align:right;">Staro stanje</th>
           <th style="padding:4px 6px;text-align:right;">Novo stanje</th>
           <th style="padding:4px 6px;text-align:right;">Razlika</th>
+          ${prikaziCijene?`
           <th style="padding:4px 6px;text-align:right;">Stara cena</th>
-          <th style="padding:4px 6px;text-align:right;">Nova cena</th>
+          <th style="padding:4px 6px;text-align:right;">Nova cena</th>`:''}
           <th style="padding:4px 6px;text-align:left;">Status</th>
         </tr>
       </thead>
       <tbody id="presek-tbody"></tbody>
-    </table>`;
+    </table>
+    ${!prikaziCijene
+      ? `<div style="font-size:11px;color:#8b6914;background:#fff8e1;padding:6px 10px;border-radius:0 0 6px 6px;">💡 Cene su sakrivene jer se NEĆE ažurirati. Uključi "Ažuriraj cene" dole ako ipak treba.</div>`
+      : (!cijeneUkljucene && imaNovih
+        ? `<div style="font-size:11px;color:#8b6914;background:#fff8e1;padding:6px 10px;border-radius:0 0 6px 6px;">💡 "Ažuriraj cene" je isključeno — postojećim artiklima se cena <b>NEĆE</b> dirati. Ali <b>NOVI artikli</b> (žuto označeni) nemaju cenu u bazi, pa uzimaju ovu iz fajla — provjeri/ispravi ih prije potvrde.</div>`
+        : '')}`;
   const tbody=document.getElementById('presek-tbody');
   tbody.innerHTML=presekStavke.map((s,i)=>`
     <tr style="background:${PRESEK_STATUS_BOJA[s.status]||'#fff'};border-bottom:1px solid #eee;">
@@ -3581,8 +3596,17 @@ function renderPresekTabela(){
       <td style="padding:3px 6px;text-align:right;color:#999;">${s.stanje_staro??'—'}</td>
       <td style="padding:3px 6px;text-align:right;font-weight:700;" contenteditable="true" onblur="presekIzmeniPolje(${i},'stanje_novo',this.textContent)">${s.stanje_novo}</td>
       <td style="padding:3px 6px;text-align:right;color:${s.razlika>0?'#1f8a4c':s.razlika<0?'#c0392b':'#999'};">${s.razlika!=null?(s.razlika>0?'+':'')+s.razlika:'—'}</td>
+      ${prikaziCijene?`
       <td style="padding:3px 6px;text-align:right;color:#999;">${s.cijena_stara??'—'}</td>
-      <td style="padding:3px 6px;text-align:right;" contenteditable="true" onblur="presekIzmeniPolje(${i},'cijena_nova',this.textContent)">${s.cijena_nova}</td>
+      <td style="padding:3px 6px;text-align:right;${
+        // Cena se STVARNO upisuje samo ako su cene uključene, ILI ako je artikal NOV
+        // (nema staru cenu u bazi). Inače je samo informativna — sivo i precrtano.
+        (cijeneUkljucene || s.status==='nova-sifra')
+          ? 'font-weight:700;background:#fff8e1;'
+          : 'color:#bbb;text-decoration:line-through;'
+      }" contenteditable="true" onblur="presekIzmeniPolje(${i},'cijena_nova',this.textContent)" title="${
+        (cijeneUkljucene || s.status==='nova-sifra') ? 'Ova cena ĆE se upisati' : 'Neće se upisati (cene isključene)'
+      }">${s.cijena_nova}</td>`:''}
       <td style="padding:3px 6px;">${PRESEK_STATUS_LABEL[s.status]||s.status}${s.greske?.length?`<div style="color:#c0392b;font-size:10px;">${s.greske.join('; ')}</div>`:''}</td>
     </tr>
   `).join('');
@@ -3606,6 +3630,19 @@ function presekIzmeniPolje(indeks, polje, vrijednost){
   }
   renderPresekSazetak();
   renderPresekTabela();
+}
+
+// Odustajanje od uvoza — čisti pregled BEZ ijedne izmjene u bazi. Ništa nije upisano dok
+// se ne klikne "Primeni", pa je odustajanje potpuno bezbjedno.
+function presekOdustani(){
+  if(presekStavke.length && !confirm('Odustati od ovog uvoza? Pregled se briše, ništa se neće upisati u bazu.')) return;
+  presekStavke=[];
+  document.getElementById('presek-tabela-wrap').innerHTML='';
+  document.getElementById('presek-sazetak').style.display='none';
+  document.getElementById('presek-primeni-wrap').style.display='none';
+  document.getElementById('presek-greska').style.display='none';
+  document.getElementById('presek-fajl').value='';
+  presekNazivFajla=null;
 }
 
 async function presekPrimeni(){
