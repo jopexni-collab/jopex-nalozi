@@ -1107,4 +1107,100 @@ router.delete('/:r_br/slike/:slikaId', async (req, res) => {
   }
 });
 
+/* ═══ PRETPLATA KUPCA NA RADNOM NALOGU ═══════════════════════════════════════
+   Slučaj: kupac plati avans PRIJE nego što nalog uopšte postoji (npr. dogovor za sto koji
+   se tek treba ugovoriti). Novac se tada primi kroz Blagajnu → Uplata i stoji kod kupca
+   kao PRETPLATA (kupac_transakcije, pozitivan saldo).
+   Kad se nalog kasnije formira, ovdje se ta pretplata "prenosi" na nalog: upisuje se u
+   polje avans I skida sa salda kupca — inače bi isti novac bio brojan DVAPUT (jednom kao
+   pretplata kod kupca, drugi put kao avans na nalogu).
+   Nalog nema kupac_id (samo tekst 'narucilac'), pa se kupac traži po imenu. */
+
+// GET /api/proizvodnja/:r_br/pretplata — koliko slobodne pretplate kupac ima
+router.get('/:r_br/pretplata', async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  try {
+    const n = await pool.query('SELECT narucilac, avans FROM proizvodnja_jopex WHERE r_br=$1', [req.params.r_br]);
+    if (!n.rows.length) return res.status(404).json({ error: 'Nalog nije pronađen.' });
+    const narucilac = (n.rows[0].narucilac || '').trim();
+    if (!narucilac) return res.json({ kupac_id: null, saldo: 0, poruka: 'Nalog nema upisanog naručioca.' });
+
+    // Poklapanje po imenu, bez razlike velika/mala slova i suvišnih razmaka.
+    const k = await pool.query(
+      `SELECT id, naziv FROM kupci WHERE LOWER(TRIM(naziv)) = LOWER(TRIM($1)) LIMIT 1`,
+      [narucilac]
+    );
+    if (!k.rows.length) return res.json({ kupac_id: null, saldo: 0, poruka: `Kupac "${narucilac}" nije pronađen u šifrarniku kupaca.` });
+
+    const s = await pool.query(
+      `SELECT COALESCE(SUM(iznos),0) AS saldo FROM kupac_transakcije WHERE kupac_id=$1`,
+      [k.rows[0].id]
+    );
+    const saldo = +parseFloat(s.rows[0].saldo).toFixed(2);
+    res.json({
+      kupac_id: k.rows[0].id, kupac_naziv: k.rows[0].naziv,
+      saldo, // pozitivan = kupac ima pretplatu; negativan = duguje
+      trenutni_avans_naloga: +parseFloat(n.rows[0].avans || 0).toFixed(2),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/proizvodnja/:r_br/iskoristi-pretplatu — prenosi pretplatu kupca u avans naloga
+router.post('/:r_br/iskoristi-pretplatu', async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  const iznos = parseFloat(req.body.iznos);
+  if (!iznos || iznos <= 0) return res.status(400).json({ error: 'Unesite ispravan iznos.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const n = await client.query('SELECT narucilac, avans, avans_opis FROM proizvodnja_jopex WHERE r_br=$1 FOR UPDATE', [req.params.r_br]);
+    if (!n.rows.length) throw Object.assign(new Error('Nalog nije pronađen.'), { status: 404 });
+    const narucilac = (n.rows[0].narucilac || '').trim();
+
+    const k = await client.query(
+      `SELECT id, naziv FROM kupci WHERE LOWER(TRIM(naziv)) = LOWER(TRIM($1)) LIMIT 1`, [narucilac]
+    );
+    if (!k.rows.length) throw Object.assign(new Error(`Kupac "${narucilac}" nije pronađen u šifrarniku.`), { status: 400 });
+    const kupacId = k.rows[0].id;
+
+    const s = await client.query('SELECT COALESCE(SUM(iznos),0) AS saldo FROM kupac_transakcije WHERE kupac_id=$1', [kupacId]);
+    const saldo = +parseFloat(s.rows[0].saldo).toFixed(2);
+    if (iznos > saldo + 0.005)
+      throw Object.assign(new Error(`Kupac ima samo ${saldo.toFixed(2)} pretplate, traženo je ${iznos.toFixed(2)}.`), { status: 400 });
+
+    // 1) SKIDA se sa salda kupca — negativan zapis (ista konvencija kao kod otpremnica:
+    //    negativan = kredit se troši).
+    await client.query(
+      `INSERT INTO kupac_transakcije (kupac_id, tip, iznos, opis, komercijalista_id, komercijalista_ime)
+       VALUES ($1,'avans_iskoristen',$2,$3,$4,$5)`,
+      [kupacId, -iznos, `Prebačeno u avans radnog naloga #${req.params.r_br}`, user.id, user.ime_prezime]
+    );
+
+    // 2) DODAJE se na avans naloga (na postojeći, ne zamjenjuje ga).
+    const noviAvans = +(parseFloat(n.rows[0].avans || 0) + iznos).toFixed(2);
+    const noviOpis = [n.rows[0].avans_opis, `pretplata kupca ${iznos.toFixed(2)}`].filter(Boolean).join(' | ');
+    await client.query('UPDATE proizvodnja_jopex SET avans=$1, avans_opis=$2 WHERE r_br=$3',
+      [noviAvans, noviOpis, req.params.r_br]);
+
+    // 3) Trag u istoriji naloga (isti mehanizam kao ostale izmjene polja).
+    await client.query(
+      `INSERT INTO status_promjene_log (r_br, kolona, stara_vrijednost, nova_vrijednost, korisnik_id, korisnik_ime)
+       VALUES ($1,'avans',$2,$3,$4,$5)`,
+      [req.params.r_br, String(n.rows[0].avans || 0), String(noviAvans), user.id, user.ime_prezime]
+    );
+
+    await client.query('COMMIT');
+    res.json({ ok: true, novi_avans: noviAvans, preostala_pretplata: +(saldo - iznos).toFixed(2) });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 module.exports = router;
