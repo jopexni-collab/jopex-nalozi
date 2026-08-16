@@ -306,6 +306,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <button type="button" class="glavni-tab-btn" data-tab="uvoz" onclick="prebaciGlavniTabRM('uvoz')">📥 Uvoz robe</button>
   <button type="button" class="glavni-tab-btn" data-tab="uvoz-slike" onclick="prebaciGlavniTabRM('uvoz-slike')">📷 Uvoz slika</button>
   <button type="button" class="glavni-tab-btn" data-tab="uvoz-istorija" onclick="prebaciGlavniTabRM('uvoz-istorija')">🗂️ Istorija uvoza</button>
+  <button type="button" class="glavni-tab-btn" data-tab="master-grupe" onclick="prebaciGlavniTabRM('master-grupe')">🗂️ Master grupe</button>
   <button type="button" class="glavni-tab-btn" data-tab="izvoz-log" id="tab-btn-izvoz-log" style="display:none;" onclick="prebaciGlavniTabRM('izvoz-log')">🔐 Izvozi <span id="izvoz-log-badge" style="display:none;background:var(--red,#c0392b);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;"></span></button>
 </div>
 
@@ -875,6 +876,41 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
 
     <div id="import-msg"></div>
+  </div>
+</div>
+
+<div id="tab-master-grupe" style="display:none;">
+  <div class="import-box">
+    <h3>🗂️ Master grupe</h3>
+    <div class="uzorak-hint">
+      Nivo <b>iznad</b> postojećih grupa. Npr. grupe <i>bengal, rmoc, paradiso</i> pripadaju master grupi <b>Granit</b>.
+      Služi da se katalog šalje ciljano — vlasniku salona namještaja ne šalješ granit.
+      <br><br>
+      <b>Bitno:</b> raspored se pamti po <b>grupi</b>, ne po pojedinačnom artiklu — pa novi artikli iz uvoza i preseka
+      <b>automatski</b> dobiju master grupu i ne treba ih ponovo razvrstavati.
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+      <input type="text" id="mg-nova" placeholder="Naziv nove master grupe..." style="flex:1;min-width:180px;padding:7px 10px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:13px;">
+      <button type="button" class="ce-tip-btn" onclick="mgDodajNovu()">+ Dodaj master grupu</button>
+    </div>
+
+    <div id="mg-pregled" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;"></div>
+
+    <div style="border-top:1px solid #eee;padding-top:12px;">
+      <div style="font-size:12.5px;font-weight:700;margin-bottom:8px;">Razvrstaj grupe (<span id="mg-nerazvrstano">0</span> nerazvrstano):</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+        <input type="text" id="mg-pretraga" placeholder="🔍 Pretraga grupa..." oninput="mgRenderGrupe()" style="flex:1;min-width:160px;padding:6px 9px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12.5px;">
+        <button type="button" class="ce-tip-btn" style="font-size:11.5px;" onclick="mgSveGrupe(true)">Izaberi sve</button>
+        <button type="button" class="ce-tip-btn" style="font-size:11.5px;" onclick="mgSveGrupe(false)">Poništi</button>
+      </div>
+      <div id="mg-dodjela" style="display:none;background:#eef4fc;border:1px solid #b8d4f0;border-radius:8px;padding:9px 12px;margin-bottom:10px;display:none;align-items:center;gap:10px;flex-wrap:wrap;">
+        <b style="font-size:12.5px;"><span id="mg-izabrano-broj">0</span> grupa izabrano</b>
+        <select id="mg-ciljna" style="padding:6px 9px;border:1px solid #ddd;border-radius:6px;font-size:12.5px;"></select>
+        <button type="button" class="btn" onclick="mgDodijeli()" style="font-size:12.5px;">✓ Dodijeli</button>
+      </div>
+      <div id="mg-grupe-lista" style="max-height:340px;overflow-y:auto;border:1px solid var(--border,#ddd);border-radius:8px;"></div>
+    </div>
   </div>
 </div>
 
@@ -3515,6 +3551,8 @@ function prebaciGlavniTabRM(tab){
   document.getElementById('tab-uvoz').style.display = tab==='uvoz' ? 'block' : 'none';
   document.getElementById('tab-uvoz-slike').style.display = tab==='uvoz-slike' ? 'block' : 'none';
   document.getElementById('tab-izvoz-log').style.display = tab==='izvoz-log' ? 'block' : 'none';
+  document.getElementById('tab-master-grupe').style.display = tab==='master-grupe' ? 'block' : 'none';
+  if(tab==='master-grupe') mgUcitaj();
   if(tab==='izvoz-log') izvozLogUcitaj();
   if(tab==='kretanje' && !kretanjeObjektiUcitani) kretanjeUcitajObjekte();
   if(tab==='uvoz-istorija') uvozIstorijaUcitaj();
@@ -3523,6 +3561,100 @@ function prebaciGlavniTabRM(tab){
 
 /* ═══ ISTORIJA UVOZA — pregled i storniranje cijelih XLSX uvoza ═══ */
 let uvozIstPopunjenSelect=false;
+
+/* ═══ MASTER GRUPE ═══════════════════════════════════════════════════════════════
+   Nivo iznad postojecih grupa. Raspored se pamti po GRUPI (ne po artiklu) — zato novi
+   artikli iz uvoza/preseka automatski naslijede master grupu i ne treba ih razvrstavati. */
+let mgSve = [], mgGrupe = [], mgIzabrane = new Set();
+
+async function mgUcitaj(){
+  try{
+    const [a, b] = await Promise.all([
+      fetch(`${API}/api/roba/master-grupe`).then(r=>r.json()),
+      fetch(`${API}/api/roba/grupe-raspored`).then(r=>r.json()),
+    ]);
+    mgSve = Array.isArray(a) ? a : [];
+    mgGrupe = Array.isArray(b) ? b : [];
+    mgIzabrane.clear();
+    mgRenderPregled();
+    mgRenderGrupe();
+  }catch(e){}
+}
+
+function mgRenderPregled(){
+  document.getElementById('mg-pregled').innerHTML = mgSve.map(m=>`
+    <div style="background:#fff;border:1px solid var(--border,#ddd);border-radius:8px;padding:7px 12px;font-size:12.5px;">
+      <b>${esc(m.naziv)}</b>
+      <span style="color:#8b96a5;"> · ${m.broj_grupa} grupa · ${m.broj_artikala} artikala</span>
+    </div>`).join('') || '<div style="color:#8b96a5;font-size:12.5px;">Još nema master grupa.</div>';
+  document.getElementById('mg-ciljna').innerHTML =
+    '<option value="">— skini master grupu —</option>' +
+    mgSve.map(m=>`<option value="${m.id}">${esc(m.naziv)}</option>`).join('');
+}
+
+function mgRenderGrupe(){
+  const q = (document.getElementById('mg-pretraga').value||'').toLowerCase().trim();
+  const prikaz = mgGrupe.filter(g=>!q || g.grupa.toLowerCase().includes(q));
+  document.getElementById('mg-nerazvrstano').textContent = mgGrupe.filter(g=>!g.master_grupa_id).length;
+  document.getElementById('mg-grupe-lista').innerHTML = prikaz.map(g=>`
+    <label style="display:flex;align-items:center;gap:9px;padding:6px 10px;border-bottom:1px solid #f2f3f5;font-size:12.5px;cursor:pointer;background:${mgIzabrane.has(g.grupa)?'#eaf4ea':(g.master_grupa_id?'#fff':'#fff8e1')};">
+      <input type="checkbox" ${mgIzabrane.has(g.grupa)?'checked':''} onchange="mgOznaci('${esc(g.grupa).replace(/'/g,"\\'")}', this.checked)">
+      <span style="flex:1;font-weight:600;">${esc(g.grupa)}</span>
+      <span style="color:#8b96a5;font-size:11px;">${g.broj_artikala} art.</span>
+      <span style="min-width:110px;text-align:right;${g.master_naziv?'color:var(--blue,#1a5fa8);font-weight:700;':'color:#e0a800;font-weight:700;'}">
+        ${g.master_naziv ? esc(g.master_naziv) : '⏳ nerazvrstano'}
+      </span>
+    </label>`).join('') || '<div style="padding:12px;color:#8b96a5;font-size:12.5px;">Nema grupa.</div>';
+}
+
+function mgOznaci(grupa, oznaceno){
+  if(oznaceno) mgIzabrane.add(grupa); else mgIzabrane.delete(grupa);
+  mgOsvjeziTraku();
+  mgRenderGrupe();
+}
+function mgSveGrupe(oznaceno){
+  const q = (document.getElementById('mg-pretraga').value||'').toLowerCase().trim();
+  mgGrupe.filter(g=>!q || g.grupa.toLowerCase().includes(q))
+    .forEach(g=>{ if(oznaceno) mgIzabrane.add(g.grupa); else mgIzabrane.delete(g.grupa); });
+  mgOsvjeziTraku();
+  mgRenderGrupe();
+}
+function mgOsvjeziTraku(){
+  document.getElementById('mg-dodjela').style.display = mgIzabrane.size ? 'flex' : 'none';
+  document.getElementById('mg-izabrano-broj').textContent = mgIzabrane.size;
+}
+
+async function mgDodijeli(){
+  const ciljna = document.getElementById('mg-ciljna').value;
+  const naziv = mgSve.find(m=>String(m.id)===ciljna)?.naziv || '(skida se master grupa)';
+  if(!confirm(`Dodijeliti "${naziv}" za ${mgIzabrane.size} grupa?\n\nSvi artikli iz tih grupa — i svi budući iz uvoza — pripadaće toj master grupi.`)) return;
+  try{
+    const r = await fetch(`${API}/api/roba/grupe-raspored`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ grupe:[...mgIzabrane], master_grupa_id: ciljna ? parseInt(ciljna) : null }),
+    });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    mgUcitaj();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+async function mgDodajNovu(){
+  const polje = document.getElementById('mg-nova');
+  const naziv = polje.value.trim();
+  if(!naziv){ alert('Upiši naziv.'); return; }
+  try{
+    const r = await fetch(`${API}/api/roba/master-grupe`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({naziv}),
+    });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    polje.value='';
+    mgUcitaj();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
 /* ═══ EVIDENCIJA IZVOZA (samo admin) ═══
    Izvoz lagera nosi cijene i ukupnu vrijednost — admin vidi ko ga je preuzeo. */
 async function izvozLogProvjeriNove(){

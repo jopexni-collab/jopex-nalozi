@@ -4302,13 +4302,25 @@ async function otvoriPosaljiKatalog(opcije){
   try{
     const r = await fetch(`${API}/api/katalog/grupe${katObjektId?`?objekt_id=${katObjektId}`:''}`);
     const grupe = await r.json();
+    // Grupisano po MASTER grupi (granit, kvarc...) — pa se jednim klikom bira cijela
+    // kategorija, npr. sav granit, bez prebiranja po pojedinacnim grupama.
+    const poMaster = {};
+    grupe.forEach(g => { (poMaster[g.master_naziv || '⏳ Nerazvrstano'] ||= []).push(g); });
     document.getElementById('kat-grupe').innerHTML = grupe.length
-      ? grupe.map(g=>`
-          <label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12.5px;cursor:pointer;">
-            <input type="checkbox" value="${katEsc(g.grupa)}" onchange="katOsvjeziPregled()">
-            <span style="flex:1;">${katEsc(g.grupa)}</span>
-            <span style="color:#8b96a5;font-size:11px;">${g.broj}</span>
-          </label>`).join('')
+      ? Object.entries(poMaster).map(([master, lista]) => `
+          <div style="margin-bottom:6px;">
+            <label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;font-weight:800;cursor:pointer;border-bottom:1px solid #eee;color:#330066;">
+              <input type="checkbox" onchange="katMasterToggle(this)">
+              <span style="flex:1;">${katEsc(master)}</span>
+              <span style="color:#8b96a5;font-weight:400;font-size:11px;">${lista.length} grupa</span>
+            </label>
+            ${lista.map(g=>`
+              <label style="display:flex;align-items:center;gap:8px;padding:3px 0 3px 18px;font-size:12.5px;cursor:pointer;">
+                <input type="checkbox" value="${katEsc(g.grupa)}" onchange="katOsvjeziPregled()">
+                <span style="flex:1;">${katEsc(g.grupa)}</span>
+                <span style="color:#8b96a5;font-size:11px;">${g.broj}</span>
+              </label>`).join('')}
+          </div>`).join('')
       : '<div style="color:#8b96a5;font-size:12px;padding:6px;">Nema grupa proizvoda.</div>';
   }catch(e){}
 }
@@ -4376,6 +4388,12 @@ function katPrikaziInfoTipa(){
   info.textContent = t.dodaje_pdv
     ? `Maloprodajna cijena — osnovica + PDV`
     : (parseFloat(t.popust_posto)>0 ? `Veleprodaja — popust ${t.popust_posto}%` : 'Veleprodaja — bez popusta (osnovica)');
+}
+
+// Kvadratic MASTER grupe cekira/odcekira sve grupe ispod nje.
+function katMasterToggle(el){
+  el.closest('div').querySelectorAll('input[value]').forEach(i=>i.checked = el.checked);
+  katOsvjeziPregled();
 }
 
 function katGrupeSve(oznaceno){

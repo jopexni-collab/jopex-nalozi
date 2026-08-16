@@ -73,12 +73,19 @@ router.get('/primaoci', smijeSlati, async (req, res) => {
 router.get('/grupe', smijeSlati, async (req, res) => {
   try {
     const objektId = parseInt(req.query.objekt_id);
+    // Uz svaku grupu ide i MASTER grupa (granit, kvarc...) — da se u katalogu moze
+    // birati po master grupi, pa se npr. granit ne salje vlasnicima salona namjestaja.
     const r = await pool.query(
-      `SELECT r.grupa, COUNT(*) AS broj
+      `SELECT r.grupa, COUNT(*) AS broj,
+              COALESCE(r.master_grupa_id, gm.master_grupa_id) AS master_id,
+              mg.naziv AS master_naziv
        FROM roba r
        JOIN roba_pj rp ON rp.roba_id = r.id ${objektId ? 'AND rp.objekt_id = $1' : ''}
+       LEFT JOIN grupa_master gm ON gm.grupa = r.grupa
+       LEFT JOIN master_grupe mg ON mg.id = COALESCE(r.master_grupa_id, gm.master_grupa_id)
        WHERE r.aktivan = true AND r.grupa IS NOT NULL AND r.grupa <> ''
-       GROUP BY r.grupa ORDER BY r.grupa`,
+       GROUP BY r.grupa, COALESCE(r.master_grupa_id, gm.master_grupa_id), mg.naziv
+       ORDER BY (mg.naziv IS NULL), mg.naziv, r.grupa`,
       objektId ? [objektId] : []
     );
     res.json(r.rows);
@@ -152,9 +159,12 @@ async function ucitajStavke({ grupe, objekt_id, tip_kupca_id, samo_dostupno }) {
     `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
             rp.cijena AS osnovica, rp.stanje,
             (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS slika,
-            (SELECT url FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS slika_puna
+            (SELECT url FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS slika_puna,
+            mg.naziv AS master_naziv
      FROM roba r
      JOIN roba_pj rp ON rp.roba_id = r.id ${objektUslov}
+     LEFT JOIN grupa_master gm ON gm.grupa = r.grupa
+     LEFT JOIN master_grupe mg ON mg.id = COALESCE(r.master_grupa_id, gm.master_grupa_id)
      WHERE r.aktivan = true AND r.grupa = ANY($1)
        ${samo_dostupno ? 'AND rp.stanje > 0' : ''}
      ORDER BY r.grupa, r.naziv`,
@@ -167,7 +177,7 @@ async function ucitajStavke({ grupe, objekt_id, tip_kupca_id, samo_dostupno }) {
     const c = izracunajCijenu(s.osnovica, tip, 1, popusti.rows, stopa);
     return {
       id: s.id, sifra: s.sifra, naziv: s.naziv, jed_mjera: s.jed_mjera,
-      grupa: s.grupa, debljina_cm: s.debljina_cm,
+      grupa: s.grupa, master_naziv: s.master_naziv, debljina_cm: s.debljina_cm,
       slika: s.slika, slika_puna: s.slika_puna,
       dostupno: parseFloat(s.stanje) > 0,
       cijena: c.konacna, cijena_bez_pdv: c.bez_pdv, pdv_iznos: c.pdv_iznos,

@@ -644,6 +644,114 @@ router.post('/slika-grupa', zahtijevaProdaju, upload.fields([{name:'slika',maxCo
    i kada preuzeo. */
 
 // GET /api/roba/izvoz-log — spisak svih izvoza (najnoviji prvi)
+/* ═══ MASTER GRUPE ═══════════════════════════════════════════════════════════════
+   Nivo IZNAD roba.grupa. Veza ide preko GRUPE (grupa_master), ne preko pojedinacnog
+   artikla — pa novi artikli iz uvoza/preseka automatski dobijaju master grupu i raspored
+   se ne gubi. Pojedinacni artikal se moze izuzeti preko roba.master_grupa_id. */
+
+// GET /api/roba/master-grupe — spisak master grupa + koliko grupa/artikala pokrivaju
+router.get('/master-grupe', zahtijevaProdaju, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT mg.*,
+              (SELECT COUNT(*) FROM grupa_master gm WHERE gm.master_grupa_id = mg.id) AS broj_grupa,
+              (SELECT COUNT(*) FROM roba r
+                 WHERE r.aktivan = true
+                   AND COALESCE(r.master_grupa_id,
+                       (SELECT gm2.master_grupa_id FROM grupa_master gm2 WHERE gm2.grupa = r.grupa)) = mg.id
+              ) AS broj_artikala
+       FROM master_grupe mg WHERE mg.aktivan = true ORDER BY mg.redosled, mg.naziv`
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/roba/grupe-raspored — sve grupe sa master grupom kojoj pripadaju (za razvrstavanje)
+router.get('/grupe-raspored', zahtijevaProdaju, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT r.grupa,
+              COUNT(*) AS broj_artikala,
+              gm.master_grupa_id,
+              mg.naziv AS master_naziv
+       FROM roba r
+       LEFT JOIN grupa_master gm ON gm.grupa = r.grupa
+       LEFT JOIN master_grupe mg ON mg.id = gm.master_grupa_id
+       WHERE r.aktivan = true AND r.grupa IS NOT NULL AND r.grupa <> ''
+       GROUP BY r.grupa, gm.master_grupa_id, mg.naziv
+       ORDER BY (gm.master_grupa_id IS NULL) DESC, r.grupa`
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/roba/grupe-raspored — dodijeli VISE grupa jednoj master grupi odjednom
+router.post('/grupe-raspored', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin' && !req.session?.user?.moze_roba_magacin)
+    return res.status(403).json({ error: 'Nemate dozvolu.' });
+  const { grupe, master_grupa_id } = req.body || {};
+  if (!Array.isArray(grupe) || !grupe.length)
+    return res.status(400).json({ error: 'Nije izabrana nijedna grupa.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const g of grupe) {
+      if (master_grupa_id) {
+        await client.query(
+          `INSERT INTO grupa_master (grupa, master_grupa_id) VALUES ($1,$2)
+           ON CONFLICT (grupa) DO UPDATE SET master_grupa_id = $2`, [g, master_grupa_id]
+        );
+      } else {
+        await client.query('DELETE FROM grupa_master WHERE grupa = $1', [g]);
+      }
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true, broj: grupe.length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /api/roba/master-grupe — nova master grupa
+router.post('/master-grupe', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin.' });
+  const naziv = (req.body?.naziv || '').trim();
+  if (!naziv) return res.status(400).json({ error: 'Naziv je obavezan.' });
+  try {
+    const r = await pool.query(
+      `INSERT INTO master_grupe (naziv, redosled)
+       VALUES ($1, (SELECT COALESCE(MAX(redosled),0)+1 FROM master_grupe)) RETURNING *`, [naziv]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'Master grupa sa tim nazivom već postoji.' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/roba/artikli-master — izuzetak za POJEDINACNE artikle (nadjacava pravilo grupe)
+router.post('/artikli-master', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin' && !req.session?.user?.moze_roba_magacin)
+    return res.status(403).json({ error: 'Nemate dozvolu.' });
+  const { roba_ids, master_grupa_id } = req.body || {};
+  if (!Array.isArray(roba_ids) || !roba_ids.length)
+    return res.status(400).json({ error: 'Nije izabran nijedan artikal.' });
+  try {
+    await pool.query('UPDATE roba SET master_grupa_id = $1 WHERE id = ANY($2::int[])',
+      [master_grupa_id || null, roba_ids]);
+    res.json({ ok: true, broj: roba_ids.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/izvoz-log', async (req, res) => {
   if (req.session?.user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin.' });
   try {
