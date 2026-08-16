@@ -306,6 +306,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <button type="button" class="glavni-tab-btn" data-tab="uvoz" onclick="prebaciGlavniTabRM('uvoz')">📥 Uvoz robe</button>
   <button type="button" class="glavni-tab-btn" data-tab="uvoz-slike" onclick="prebaciGlavniTabRM('uvoz-slike')">📷 Uvoz slika</button>
   <button type="button" class="glavni-tab-btn" data-tab="uvoz-istorija" onclick="prebaciGlavniTabRM('uvoz-istorija')">🗂️ Istorija uvoza</button>
+  <button type="button" class="glavni-tab-btn" data-tab="izvoz-log" id="tab-btn-izvoz-log" style="display:none;" onclick="prebaciGlavniTabRM('izvoz-log')">🔐 Izvozi <span id="izvoz-log-badge" style="display:none;background:var(--red,#c0392b);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;"></span></button>
 </div>
 
 <div id="tab-kalkulacija" style="display:none;">
@@ -874,6 +875,19 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
 
     <div id="import-msg"></div>
+  </div>
+</div>
+
+<div id="tab-izvoz-log" style="display:none;">
+  <div class="import-box">
+    <h3>🔐 Evidencija izvoza u Excel</h3>
+    <div class="uzorak-hint">
+      Izvoz lager liste sadrži <b>cijene i ukupnu vrijednost</b> magacina. Ovdje se bilježi svaki takav izvoz — ko ga je napravio, kada, i za koju PJ. Vidi samo admin.
+    </div>
+    <div style="text-align:right;margin-bottom:10px;">
+      <button type="button" class="ce-tip-btn" onclick="izvozLogOznaciPregledano()">✓ Označi sve kao pregledano</button>
+    </div>
+    <div id="izvoz-log-lista"></div>
   </div>
 </div>
 
@@ -3350,7 +3364,13 @@ function renderLagerRedovi(){
 
   const ukupnoPrikazano=prikaz.reduce((s,r)=>s+parseFloat(r.ukupno||0),0);
   totalDiv.style.display='block';
-  totalDiv.innerHTML=`${lagerFmMoney(ukupnoPrikazano)}<span class="cnt">${prikaz.length} od ${lagerPodaci.length} artikala${prikaz.length!==lagerPodaci.length?' (filtrirano)':''}</span>`;
+  // UKUPNA VRIJEDNOST lagera vidi SAMO admin — ostali (npr. magacin) vide broj artikala,
+  // ali ne i koliko magacin ukupno vrijedi. Server takođe ne šalje 'ukupno' ne-adminu,
+  // pa se ovo ne može zaobići ni preko alata pregledača.
+  const brojac=`${prikaz.length} od ${lagerPodaci.length} artikala${prikaz.length!==lagerPodaci.length?' (filtrirano)':''}`;
+  totalDiv.innerHTML = currentUser?.rola==='admin'
+    ? `${lagerFmMoney(ukupnoPrikazano)}<span class="cnt">${brojac}</span>`
+    : `<span class="cnt" style="font-weight:600;">${brojac}</span>`;
 }
 
 function lagerVrijednostZaKolonu(s, k){
@@ -3494,6 +3514,8 @@ function prebaciGlavniTabRM(tab){
   document.getElementById('tab-kretanje').style.display = tab==='kretanje' ? 'block' : 'none';
   document.getElementById('tab-uvoz').style.display = tab==='uvoz' ? 'block' : 'none';
   document.getElementById('tab-uvoz-slike').style.display = tab==='uvoz-slike' ? 'block' : 'none';
+  document.getElementById('tab-izvoz-log').style.display = tab==='izvoz-log' ? 'block' : 'none';
+  if(tab==='izvoz-log') izvozLogUcitaj();
   if(tab==='kretanje' && !kretanjeObjektiUcitani) kretanjeUcitajObjekte();
   if(tab==='uvoz-istorija') uvozIstorijaUcitaj();
   if(tab==='presek' && !presekObjektiUcitani) presekUcitajObjekte();
@@ -3501,6 +3523,60 @@ function prebaciGlavniTabRM(tab){
 
 /* ═══ ISTORIJA UVOZA — pregled i storniranje cijelih XLSX uvoza ═══ */
 let uvozIstPopunjenSelect=false;
+/* ═══ EVIDENCIJA IZVOZA (samo admin) ═══
+   Izvoz lagera nosi cijene i ukupnu vrijednost — admin vidi ko ga je preuzeo. */
+async function izvozLogProvjeriNove(){
+  if(currentUser?.rola!=='admin') return;
+  document.getElementById('tab-btn-izvoz-log').style.display='';
+  try{
+    const r=await fetch(`${API}/api/roba/izvoz-log/nepregledano`);
+    const d=await r.json();
+    const badge=document.getElementById('izvoz-log-badge');
+    if(d.broj>0){ badge.style.display=''; badge.textContent=d.broj; }
+    else badge.style.display='none';
+  }catch(e){}
+}
+
+async function izvozLogUcitaj(){
+  const cont=document.getElementById('izvoz-log-lista');
+  cont.innerHTML='<div style="padding:10px;color:#8b96a5;font-size:12px;">Učitavanje...</div>';
+  try{
+    const r=await fetch(`${API}/api/roba/izvoz-log`);
+    const rows=await r.json();
+    if(!r.ok){ cont.innerHTML=`<div style="padding:10px;color:var(--red);font-size:12px;">✗ ${esc(rows.error||'Greška.')}</div>`; return; }
+    if(!rows.length){ cont.innerHTML='<div style="padding:10px;color:#8b96a5;font-size:12px;">Još nema zabilježenih izvoza.</div>'; return; }
+    cont.innerHTML=`
+      <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+        <thead><tr style="background:#1f3864;color:#fff;">
+          <th style="padding:5px 7px;text-align:left;">Kada</th>
+          <th style="padding:5px 7px;text-align:left;">Ko</th>
+          <th style="padding:5px 7px;text-align:left;">PJ</th>
+          <th style="padding:5px 7px;text-align:right;">Stavki</th>
+          <th style="padding:5px 7px;text-align:left;">IP</th>
+        </tr></thead>
+        <tbody>${rows.map(x=>{
+          const d=new Date(x.kreirano);
+          const kada=`${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getFullYear()).slice(2)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+          return `<tr style="border-bottom:1px solid #eee;background:${x.vidio_procitano?'#fff':'#fff8e1'};">
+            <td style="padding:4px 7px;">${x.vidio_procitano?'':'<b style="color:var(--red);">● </b>'}${kada}</td>
+            <td style="padding:4px 7px;font-weight:600;">${esc(x.korisnik_ime||'—')}</td>
+            <td style="padding:4px 7px;">${esc(x.objekt_naziv||'—')}</td>
+            <td style="padding:4px 7px;text-align:right;">${x.broj_stavki??'—'}</td>
+            <td style="padding:4px 7px;color:#8b96a5;font-size:10.5px;">${esc(x.ip_adresa||'—')}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+  }catch(e){ cont.innerHTML='<div style="padding:10px;color:var(--red);font-size:12px;">✗ Greška pri učitavanju.</div>'; }
+}
+
+async function izvozLogOznaciPregledano(){
+  try{
+    await fetch(`${API}/api/roba/izvoz-log/oznaci-pregledano`,{method:'POST'});
+    izvozLogUcitaj();
+    izvozLogProvjeriNove();
+  }catch(e){ alert('✗ Greška.'); }
+}
+
 async function uvozIstorijaUcitaj(){
   if(!uvozIstPopunjenSelect){
     try{
@@ -4171,6 +4247,7 @@ fetch(`${API}/api/auth/me`).then(r=>{
   popuniLagerObjekat();
   document.getElementById('kalk-datum').value=new Date().toISOString().split('T')[0];
   kalkUcitajObjekte();
+  izvozLogProvjeriNove(); // admin odmah vidi ako je neko izvozio lager
 }).catch(()=>location.href='login.html');
 
 </script>

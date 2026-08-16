@@ -155,8 +155,16 @@ router.get('/lager', zahtijevaRobaMagacin, async (req, res) => {
        ORDER BY r.naziv`,
       vals
     );
+    const jeAdmin = req.session?.user?.rola === 'admin';
+    // Kolona 'ukupno' PO REDU ide svima (cijena × stanje tog artikla) — to je informacija
+    // koja im treba u radu. Ali ZBIR CIJELOG MAGACINA ide samo adminu: vlasnik ne želi da
+    // se ukupna vrijednost lagera vidi na jednom mjestu, iako se redovi mogu ručno sabrati.
     const totalVrijednost = r.rows.reduce((s, row) => s + parseFloat(row.ukupno || 0), 0);
-    res.json({ stavke: r.rows, total_vrijednost: +totalVrijednost.toFixed(2), broj_artikala: r.rows.length });
+    res.json({
+      stavke: r.rows,
+      total_vrijednost: jeAdmin ? +totalVrijednost.toFixed(2) : null,
+      broj_artikala: r.rows.length,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -212,6 +220,20 @@ router.get('/lager/export', zahtijevaRobaMagacin, async (req, res) => {
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
     const fajlNaziv = `lager_${objektNaziv.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    // EVIDENCIJA — izvoz sadrži CIJENE i UKUPNU VRIJEDNOST lagera, pa se bilježi ko ga je
+    // i kada napravio. Admin to vidi u "Istorija izvoza" (sa upozorenjem za nepregledane).
+    // Greška pri upisu NE smije da spriječi izvoz — zato zaseban try.
+    try {
+      const u = req.session?.user;
+      await pool.query(
+        `INSERT INTO izvoz_log (modul, objekt_id, objekt_naziv, broj_stavki, korisnik_id, korisnik_ime, ip_adresa)
+         VALUES ('lager',$1,$2,$3,$4,$5,$6)`,
+        [objektId || null, objektNaziv, podaci.length - 1, u?.id || null, u?.ime_prezime || '(nepoznat)',
+         (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').toString().slice(0, 60)]
+      );
+    } catch (e) { console.error('izvoz_log:', e.message); }
+
     res.setHeader('Content-Disposition', `attachment; filename="${fajlNaziv}"`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.send(buf);
@@ -614,6 +636,46 @@ router.post('/slika-grupa', zahtijevaProdaju, upload.fields([{name:'slika',maxCo
     res.json({ ok: true, url, thumb_url: thumbUrl, broj_artikala: uspjesno });
   } catch (err) {
     res.status(500).json({ error: 'Greška pri otpremanju slike: ' + err.message });
+  }
+});
+
+/* ═══ EVIDENCIJA IZVOZA — samo admin ═══
+   Izvoz lagera u Excel sadrži cijene i ukupnu vrijednost, pa admin treba da zna ko ga je
+   i kada preuzeo. */
+
+// GET /api/roba/izvoz-log — spisak svih izvoza (najnoviji prvi)
+router.get('/izvoz-log', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin.' });
+  try {
+    const r = await pool.query(
+      `SELECT id, modul, objekt_naziv, broj_stavki, korisnik_ime, ip_adresa, vidio_procitano, kreirano
+       FROM izvoz_log ORDER BY kreirano DESC LIMIT 200`
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/roba/izvoz-log/nepregledano — samo BROJ novih (za crvenu oznaku u meniju)
+router.get('/izvoz-log/nepregledano', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin') return res.json({ broj: 0 });
+  try {
+    const r = await pool.query('SELECT COUNT(*) AS n FROM izvoz_log WHERE vidio_procitano = false');
+    res.json({ broj: parseInt(r.rows[0].n) });
+  } catch (err) {
+    res.json({ broj: 0 });
+  }
+});
+
+// POST /api/roba/izvoz-log/oznaci-pregledano — admin potvrdio da je vidio
+router.post('/izvoz-log/oznaci-pregledano', async (req, res) => {
+  if (req.session?.user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin.' });
+  try {
+    await pool.query('UPDATE izvoz_log SET vidio_procitano = true WHERE vidio_procitano = false');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
