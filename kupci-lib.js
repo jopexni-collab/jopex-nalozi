@@ -71,10 +71,16 @@ async function azurirajKupca(id, podaci) {
        napomena = COALESCE($6, napomena),
        aktivan  = COALESCE($7, aktivan),
        tipovi   = COALESCE($8, tipovi),
-       grupa_id = COALESCE($10, grupa_id)
+       grupa_id = COALESCE($10, grupa_id),
+       -- tip_id: NULL se NE ignoriše (za razliku od ostalih polja) — mora se moći
+       -- eksplicitno skinuti tip sa kupca, pa se šalje zaseban prekidač $11.
+       tip_id   = CASE WHEN $11::boolean THEN $12::integer ELSE tip_id END,
+       razvrstan = COALESCE($13, razvrstan)
      WHERE id = $9 RETURNING *`,
     [podaci.naziv, podaci.telefon, podaci.grad, podaci.adresa,
-     podaci.email, podaci.napomena, podaci.aktivan, tipovi, id, podaci.grupa_id]
+     podaci.email, podaci.napomena, podaci.aktivan, tipovi, id, podaci.grupa_id,
+     Object.prototype.hasOwnProperty.call(podaci, 'tip_id'), podaci.tip_id ?? null,
+     podaci.razvrstan ?? null]
   );
   return r.rows[0] || null;
 }
