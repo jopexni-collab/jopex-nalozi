@@ -15,9 +15,40 @@ const POLJA = ['naziv', 'telefon', 'grad', 'adresa', 'email', 'napomena', 'tipov
 // pregled u config.js (samoAktivni:false, da se vide i neaktivni za reaktivaciju)
 // i offline-cache dio istog fajla (samoAktivni:true).
 async function listaKupaca({ samoAktivni = false } = {}) {
-  const where = samoAktivni ? 'WHERE aktivan = true' : '';
-  const r = await pool.query(`SELECT * FROM kupci ${where} ORDER BY naziv`);
+  const where = samoAktivni ? 'WHERE k.aktivan = true' : '';
+  // tip_ids: niz SVIH tipova kupca (kupac moze biti npr. i kamenorezac i vlasnik salona).
+  const r = await pool.query(
+    `SELECT k.*,
+            COALESCE(ARRAY(SELECT kt.tip_id FROM kupac_tipovi kt WHERE kt.kupac_id = k.id), '{}') AS tip_ids
+     FROM kupci k ${where} ORDER BY k.naziv`
+  );
   return r.rows;
+}
+
+// Postavlja SVE tipove kupca odjednom (zamjenjuje postojece).
+async function postaviTipoveKupca(kupacId, tipIds) {
+  const lista = Array.isArray(tipIds) ? tipIds.filter(x => Number.isInteger(+x)).map(Number) : [];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM kupac_tipovi WHERE kupac_id = $1', [kupacId]);
+    for (const tipId of lista) {
+      await client.query(
+        'INSERT INTO kupac_tipovi (kupac_id, tip_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+        [kupacId, tipId]
+      );
+    }
+    // kupci.tip_id ostaje kao "glavni" (prvi izabrani) — radi kompatibilnosti sa
+    // postojecim upitima koji jos citaju tu kolonu.
+    await client.query('UPDATE kupci SET tip_id = $1 WHERE id = $2', [lista[0] || null, kupacId]);
+    await client.query('COMMIT');
+    return lista;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // Pretraga uživo (za POS-stil brzu pretragu dok se kuca) — koristi maloprodaja.
@@ -82,7 +113,16 @@ async function azurirajKupca(id, podaci) {
      Object.prototype.hasOwnProperty.call(podaci, 'tip_id'), podaci.tip_id ?? null,
      podaci.razvrstan ?? null]
   );
+  // Ako je poslat niz tip_ids, postavi SVE tipove (kupac moze imati vise).
+  if (Array.isArray(podaci.tip_ids)) {
+    await postaviTipoveKupca(id, podaci.tip_ids);
+    const osvjezeno = await pool.query(
+      `SELECT k.*, COALESCE(ARRAY(SELECT kt.tip_id FROM kupac_tipovi kt WHERE kt.kupac_id=k.id),'{}') AS tip_ids
+       FROM kupci k WHERE k.id=$1`, [id]
+    );
+    return osvjezeno.rows[0] || null;
+  }
   return r.rows[0] || null;
 }
 
-module.exports = { POLJA, listaKupaca, pretraziKupce, kreirajKupca, azurirajKupca };
+module.exports = { POLJA, listaKupaca, pretraziKupce, kreirajKupca, azurirajKupca, postaviTipoveKupca };

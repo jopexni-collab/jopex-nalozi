@@ -30,6 +30,24 @@ async function pdvStopa() {
  * @param {array}  popusti    redovi iz kolicinski_popusti koji vaze za taj tip
  * @param {number} pdv        stopa PDV-a u procentima
  */
+/**
+ * Kad kupac ima VISE tipova (npr. i kamenorezac i vlasnik salona), bira se JEDAN mjerodavan:
+ *   1. Ako ima BILO KOJI veleprodajni tip (dodaje_pdv=false) → PDV se NE dodaje,
+ *      i uzima se onaj sa NAJVECIM popustom (najpovoljnije za kupca).
+ *   2. Ako ima SAMO "Krajnji kupac" → puna cijena + PDV.
+ * Razlog: ko god je i veleprodajni kupac, kupuje po veleprodajnim uslovima — ne bi imalo
+ * smisla naplatiti mu PDV samo zato sto je usput i krajnji kupac.
+ */
+function odaberiMjerodavanTip(tipovi) {
+  const lista = (tipovi || []).filter(Boolean);
+  if (!lista.length) return null;
+  const veleprodajni = lista.filter(t => !t.dodaje_pdv);
+  const kandidati = veleprodajni.length ? veleprodajni : lista;
+  return kandidati.reduce((naj, t) =>
+    (parseFloat(t.popust_posto) || 0) > (parseFloat(naj.popust_posto) || 0) ? t : naj
+  );
+}
+
 function izracunajCijenu(osnovica, tip, kolicina, popusti, pdv) {
   const baza = parseFloat(osnovica) || 0;
   if (!tip) return { osnovica: baza, popust_tip: 0, popust_kolicina: 0, bez_pdv: baza, pdv_iznos: 0, konacna: baza };
@@ -63,7 +81,7 @@ router.get('/tipovi', async (req, res) => {
   if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
   try {
     const r = await pool.query(
-      `SELECT t.*, (SELECT COUNT(*) FROM kupci k WHERE k.tip_id=t.id) AS broj_kupaca
+      `SELECT t.*, (SELECT COUNT(*) FROM kupac_tipovi kt WHERE kt.tip_id=t.id) AS broj_kupaca
        FROM tipovi_kupaca t WHERE t.aktivan=true ORDER BY t.redosled, t.naziv`
     );
     res.json({ tipovi: r.rows, pdv_stopa: await pdvStopa() });
@@ -186,6 +204,39 @@ router.get('/preracun', async (req, res) => {
   }
 });
 
+// GET /api/cijene/za-kupca?kupac_id=X&osnovica=Y&kolicina=Z
+// Racuna cijenu za KONKRETNOG kupca — sam pronalazi sve njegove tipove i bira mjerodavan.
+router.get('/za-kupca', async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  try {
+    const kupacId = parseInt(req.query.kupac_id);
+    const osnovica = parseFloat(req.query.osnovica) || 0;
+    const kolicina = parseFloat(req.query.kolicina) || 0;
+    if (!kupacId) return res.status(400).json({ error: 'Nedostaje kupac_id.' });
+
+    const t = await pool.query(
+      `SELECT tk.* FROM tipovi_kupaca tk
+       JOIN kupac_tipovi kt ON kt.tip_id = tk.id
+       WHERE kt.kupac_id = $1 AND tk.aktivan = true`,
+      [kupacId]
+    );
+    const mjerodavan = odaberiMjerodavanTip(t.rows);
+    const p = await pool.query(
+      'SELECT * FROM kolicinski_popusti WHERE tip_kupca_id IS NULL OR tip_kupca_id = $1',
+      [mjerodavan?.id || null]
+    );
+    const rezultat = izracunajCijenu(osnovica, mjerodavan, kolicina, p.rows, await pdvStopa());
+    res.json({
+      ...rezultat,
+      svi_tipovi: t.rows.map(x => x.naziv),
+      primijenjen_tip: mjerodavan?.naziv || null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 module.exports.izracunajCijenu = izracunajCijenu;
+module.exports.odaberiMjerodavanTip = odaberiMjerodavanTip;
 module.exports.pdvStopa = pdvStopa;

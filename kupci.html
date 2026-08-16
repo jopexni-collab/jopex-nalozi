@@ -115,7 +115,7 @@ input:checked+.slider:before{transform:translateX(16px);}
     <b style="font-size:13px;white-space:nowrap;"><span id="grupna-broj">0</span> izabranih</b>
     <span style="color:#8b96a5;font-size:12.5px;">Postavi</span>
     <select id="grupna-polje" onchange="grupnaPromjenaPolja()" style="padding:6px 9px;border:1px solid #ddd;border-radius:6px;font-size:12.5px;">
-      <option value="tip_id">Tip kupca</option>
+      <option value="tip_id">Tip kupca (zamjenjuje postojeće)</option>
       <option value="grad">Grad</option>
       <option value="adresa">Adresa</option>
       <option value="napomena">Napomena</option>
@@ -215,11 +215,47 @@ async function ucitajTipove(){
 }
 
 // Padajuca lista tipa u svakom redu — promjena se odmah snima.
+// Kupac moze imati VISE tipova (npr. i kamenorezac i vlasnik salona) — prikazuju se kao
+// oznake, klik otvara izbor sa kvadraticima.
 function tipSelect(k){
-  const opcije=tipovi.map(t=>`<option value="${t.id}" ${k.tip_id===t.id?'selected':''}>${esc(t.naziv)}</option>`).join('');
-  const bezTipa=!k.tip_id;
-  return `<select onchange="dodijeliTip(${k.id}, this.value)" style="padding:3px 5px;border:1px solid ${bezTipa?'#e0a800':'#ddd'};border-radius:5px;font-size:11.5px;background:${bezTipa?'#fff8e1':'#fff'};max-width:150px;">
-    <option value="">— bez tipa —</option>${opcije}</select>`;
+  const moji=(k.tip_ids||[]).map(id=>tipovi.find(t=>t.id===id)).filter(Boolean);
+  if(!moji.length){
+    return `<button onclick="otvoriIzborTipova(${k.id})" style="padding:3px 8px;border:1px solid #e0a800;border-radius:5px;font-size:11px;background:#fff8e1;cursor:pointer;color:#8b6914;">+ dodijeli tip</button>`;
+  }
+  return `<span onclick="otvoriIzborTipova(${k.id})" style="cursor:pointer;display:inline-flex;gap:3px;flex-wrap:wrap;" title="Klikni da izmijeniš">
+    ${moji.map(t=>`<span style="background:#eef4fc;color:#1a5fa8;border:1px solid #b8d4f0;border-radius:10px;padding:1px 7px;font-size:10.5px;white-space:nowrap;">${esc(t.naziv)}</span>`).join('')}
+  </span>`;
+}
+
+// Prozorcic sa kvadraticima — bira se vise tipova odjednom.
+let izborTipovaKupacId=null;
+function otvoriIzborTipova(kupacId){
+  izborTipovaKupacId=kupacId;
+  const k=kupci.find(x=>x.id===kupacId);
+  const moji=new Set(k?.tip_ids||[]);
+  document.getElementById('izbor-tipova-naziv').textContent=k?.naziv||'';
+  document.getElementById('izbor-tipova-lista').innerHTML=tipovi.map(t=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:7px 4px;border-bottom:1px solid #f0f2f5;cursor:pointer;font-size:13px;">
+      <input type="checkbox" value="${t.id}" ${moji.has(t.id)?'checked':''}>
+      <span>${esc(t.naziv)}</span>
+      <span style="margin-left:auto;color:#8b96a5;font-size:11px;">${t.dodaje_pdv?'+PDV':t.popust_posto>0?`−${t.popust_posto}%`:'—'}</span>
+    </label>`).join('');
+  document.getElementById('modal-izbor-tipova').style.display='flex';
+}
+
+async function sacuvajIzborTipova(){
+  const izabrani=[...document.querySelectorAll('#izbor-tipova-lista input:checked')].map(i=>parseInt(i.value));
+  try{
+    const r=await fetch(`${API}/api/config/kupci/${izborTipovaKupacId}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({tip_ids:izabrani, razvrstan:izabrani.length>0}),
+    });
+    if(!r.ok) throw new Error();
+    const k=kupci.find(x=>x.id===izborTipovaKupacId);
+    if(k){ k.tip_ids=izabrani; k.razvrstan=izabrani.length>0; }
+    document.getElementById('modal-izbor-tipova').style.display='none';
+    render();
+  }catch(e){ alert('✗ Greška pri snimanju.'); }
 }
 
 // Dodjela tipa AUTOMATSKI oznacava kupca kao razvrstanog — jedan klik umjesto dva.
@@ -315,7 +351,7 @@ async function grupnoPrimijeni(){
   for(const id of izabraniKupci){
     status.textContent=`Snimanje ${++i}/${izabraniKupci.size}...`;
     // Dodjela tipa istovremeno oznacava kupca kao razvrstanog (jedan korak manje).
-    const tijelo = polje==='tip_id' ? {tip_id:vrijednost, razvrstan:true} : {[polje]:vrijednost};
+    const tijelo = polje==='tip_id' ? {tip_ids:[vrijednost], razvrstan:true} : {[polje]:vrijednost};
     try{
       const r=await fetch(`${API}/api/config/kupci/${id}`,{
         method:'PATCH', headers:{'Content-Type':'application/json'},
@@ -324,7 +360,7 @@ async function grupnoPrimijeni(){
       if(r.ok){
         ok++;
         const k=kupci.find(x=>x.id===id);
-        if(k){ Object.assign(k, tijelo); }
+        if(k){ if(tijelo.tip_ids) k.tip_ids=tijelo.tip_ids; Object.assign(k, tijelo); }
       } else greske++;
     }catch(e){ greske++; }
   }
@@ -355,8 +391,8 @@ function vidljiviKupci(){
   return kupci.filter(k=>{
     if(!prikaziNeakt && k.aktivan===false) return false;
     if(q && !['naziv','telefon','grad','adresa','email'].some(f=>k[f]&&String(k[f]).toLowerCase().includes(q))) return false;
-    if(filTip==='0' && k.tip_id) return false;            // "bez tipa"
-    if(filTip && filTip!=='0' && String(k.tip_id)!==filTip) return false;
+    if(filTip==='0' && (k.tip_ids||[]).length) return false;   // "bez tipa"
+    if(filTip && filTip!=='0' && !(k.tip_ids||[]).includes(parseInt(filTip))) return false;
     const filIzvor=document.getElementById('fil-izvor').value;
     if(filIzvor && (k.izvor||'uvoz')!==filIzvor) return false;
     const filRazvrstan=document.getElementById('fil-razvrstan').value;
@@ -533,5 +569,20 @@ document.addEventListener('keydown', e=>{
   if(e.key==='Enter') popSave();
 });
 </script>
+<div id="modal-izbor-tipova" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:800;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:18px;max-width:380px;width:92vw;max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      <h3 style="margin:0;font-size:15px;">Tipovi kupca</h3>
+      <button onclick="document.getElementById('modal-izbor-tipova').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+    </div>
+    <div id="izbor-tipova-naziv" style="font-size:13px;color:#6b7a8d;margin-bottom:10px;font-weight:600;"></div>
+    <div style="font-size:11.5px;color:#8b96a5;margin-bottom:8px;">Kupac može biti više stvari odjednom (npr. i kamenorezac i vlasnik salona). Za cijenu se uzima <b>najpovoljniji</b> veleprodajni tip.</div>
+    <div id="izbor-tipova-lista" style="margin-bottom:14px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="document.getElementById('modal-izbor-tipova').style.display='none'" style="flex:1;padding:9px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:13px;">Otkaži</button>
+      <button onclick="sacuvajIzborTipova()" style="flex:2;padding:9px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;">✓ Sačuvaj</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
