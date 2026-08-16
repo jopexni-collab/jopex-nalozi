@@ -22,6 +22,7 @@ router.get('/:token', async (req, res) => {
       grupe: kat.grupe || [],
       objekt_id: kat.objekt_id,
       tip_kupca_id: kat.tip_kupca_id,
+      samo_dostupno: kat.samo_dostupno,
     });
 
     // Ako je poslato BEZ cijena, cijene se uklanjaju OVDJE (na serveru) — ne salju se
