@@ -599,6 +599,7 @@ ucitajMaterijale();
       <button onclick="document.getElementById('modal-katalog').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;">✕</button>
     </div>
 
+    <div id="kat-podesavanja">
     <!-- 1. VRSTA KUPCA — određuje koje se cijene prikazuju -->
     <div style="margin-bottom:14px;">
       <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:5px;">1. Vrsta kupca <span style="font-weight:400;color:#8b96a5;">(određuje cijene)</span></label>
@@ -661,6 +662,8 @@ ucitajMaterijale();
       <input type="text" id="kat-kupac" placeholder="Ime kupca ili firme..." style="width:100%;padding:9px 11px;border:1px solid #ddd;border-radius:8px;font-size:13.5px;">
     </div>
 
+    </div><!-- /kat-podesavanja -->
+
     <div id="kat-pregled" style="font-size:12px;color:#8b96a5;margin-bottom:12px;text-align:center;"></div>
     <div id="kat-greska" style="display:none;color:#c0392b;font-size:12.5px;margin-bottom:10px;"></div>
 
@@ -668,7 +671,10 @@ ucitajMaterijale();
 
     <!-- REZULTAT — link + dugmad za slanje (isti obrazac kao otpremnica u maloprodaji) -->
     <div id="kat-rezultat" style="display:none;margin-top:16px;border-top:1px solid #eee;padding-top:14px;">
-      <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:8px;">Katalog je spreman — pošalji kupcu:</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <button onclick="katNazad()" style="border:1px solid #ddd;background:#fff;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px;">← Izmijeni</button>
+        <div style="font-size:12px;font-weight:700;color:#555;">Katalog je spreman — pošalji kupcu:</div>
+      </div>
       <div style="display:flex;gap:8px;margin-bottom:10px;">
         <a id="kat-viber" href="#" style="flex:1;text-align:center;padding:10px 6px;border:1px solid #ddd;border-radius:8px;text-decoration:none;color:#7360f2;font-size:12.5px;font-weight:600;">📱 Viber</a>
         <a id="kat-wa" href="#" target="_blank" rel="noopener" style="flex:1;text-align:center;padding:10px 6px;border:1px solid #ddd;border-radius:8px;text-decoration:none;color:#25d366;font-size:12.5px;font-weight:600;">💬 WhatsApp</a>
@@ -701,6 +707,7 @@ async function otvoriPosaljiKatalog(opcije){
   document.getElementById('kat-rezultat').style.display = 'none';
   document.getElementById('kat-greska').style.display = 'none';
   document.getElementById('kat-kupac').value = katKupac?.naziv || '';
+  katPodesavanjaVidljiva(true);
   document.getElementById('modal-katalog').style.display = 'flex';
 
   // Vrste kupaca
@@ -873,12 +880,30 @@ async function katNapravi(){
     const d = await r.json();
     if(!r.ok) throw new Error(d.error||'Greška.');
     katToken = d.token;
+    katPodesavanjaVidljiva(false);
     katPrikaziRezultat();
   }catch(e){
     greska.style.display='block'; greska.textContent='✗ '+e.message;
   }finally{
     btn.disabled = false; btn.textContent = '✓ Napravi katalog';
   }
+}
+
+/* Prebacivanje izmedju PODESAVANJA i REZULTATA — sve ostaje popunjeno, pa se moze
+   doraditi izbor (druga grupa, bez cijena...) i napraviti nov katalog bez pocetka iznova. */
+function katPodesavanjaVidljiva(prikazi){
+  ['kat-podesavanja'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.style.display = prikazi ? 'block' : 'none';
+  });
+  document.getElementById('kat-btn-napravi').style.display = prikazi ? 'block' : 'none';
+  document.getElementById('kat-pregled').style.display = prikazi ? 'block' : 'none';
+}
+
+function katNazad(){
+  document.getElementById('kat-rezultat').style.display = 'none';
+  katPodesavanjaVidljiva(true);
+  katToken = null;
 }
 
 function katLink(){ return `${location.origin}/katalog-dokument.html?token=${encodeURIComponent(katToken)}`; }
