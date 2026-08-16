@@ -109,13 +109,31 @@ input:checked+.slider:before{transform:translateX(16px);}
   </div>
 
   <!-- Grupna dodjela tipa — za brzo razvrstavanje veceg spiska kupaca odjednom -->
-  <div id="grupna-traka" style="display:none;background:#eef4fc;border:1px solid #b8d4f0;border-radius:8px;padding:10px 12px;margin-bottom:12px;display:none;align-items:center;gap:10px;flex-wrap:wrap;">
-    <b style="font-size:13px;"><span id="grupna-broj">0</span> izabranih kupaca</b>
+  <!-- Grupna izmjena — jedna vrijednost se upisuje SVIM oznacenim kupcima odjednom.
+       Korisno pri razvrstavanju vece uvezene baze (npr. 40 kupaca iz istog grada). -->
+  <div id="grupna-traka" style="display:none;background:#eef4fc;border:1px solid #b8d4f0;border-radius:8px;padding:10px 12px;margin-bottom:12px;align-items:center;gap:10px;flex-wrap:wrap;">
+    <b style="font-size:13px;white-space:nowrap;"><span id="grupna-broj">0</span> izabranih</b>
+    <span style="color:#8b96a5;font-size:12.5px;">Postavi</span>
+    <select id="grupna-polje" onchange="grupnaPromjenaPolja()" style="padding:6px 9px;border:1px solid #ddd;border-radius:6px;font-size:12.5px;">
+      <option value="tip_id">Tip kupca</option>
+      <option value="grad">Grad</option>
+      <option value="adresa">Adresa</option>
+      <option value="napomena">Napomena</option>
+      <option value="aktivan">Status (aktivan)</option>
+      <option value="razvrstan">Oznaka „razvrstan"</option>
+    </select>
+    <span style="color:#8b96a5;font-size:12.5px;">na</span>
     <select id="grupna-tip" style="padding:6px 9px;border:1px solid #ddd;border-radius:6px;font-size:12.5px;">
       <option value="">— izaberi tip —</option>
     </select>
-    <button class="btn btn-primary" onclick="grupnoDodijeliTip()" style="font-size:12.5px;">Dodijeli izabranima</button>
+    <select id="grupna-bool" style="display:none;padding:6px 9px;border:1px solid #ddd;border-radius:6px;font-size:12.5px;">
+      <option value="true">Da</option>
+      <option value="false">Ne</option>
+    </select>
+    <input type="text" id="grupna-tekst" style="display:none;padding:6px 9px;border:1px solid #ddd;border-radius:6px;font-size:12.5px;min-width:180px;" placeholder="Upiši vrijednost...">
+    <button class="btn btn-primary" onclick="grupnoPrimijeni()" style="font-size:12.5px;">✓ Primijeni</button>
     <button class="btn" onclick="ponistiIzbor()" style="font-size:12.5px;">Poništi izbor</button>
+    <div id="grupna-status" style="font-size:12px;width:100%;display:none;"></div>
   </div>
   <div class="card" id="tabela-wrap">
     <div style="overflow-x:auto;">
@@ -249,26 +267,72 @@ function osvjeziGrupnuTraku(){
   document.getElementById('grupna-broj').textContent=izabraniKupci.size;
 }
 
-async function grupnoDodijeliTip(){
-  const tipId=document.getElementById('grupna-tip').value;
-  if(!tipId){ alert('Izaberi tip koji dodjeljuješ.'); return; }
-  const naziv=tipovi.find(t=>String(t.id)===tipId)?.naziv||'';
-  if(!confirm(`Dodijeliti tip "${naziv}" za ${izabraniKupci.size} kupaca?`)) return;
-  let ok=0, greske=0;
+/* ── GRUPNA IZMJENA ──
+   Jedna vrijednost se upisuje SVIM oznacenim kupcima. Polje se bira iz padajuce liste,
+   pa se prikazuje odgovarajuci unos (padajuca lista za tip/da-ne, tekst za grad/adresu). */
+const GRUPNA_POLJA={
+  tip_id:    {lbl:'Tip kupca',            unos:'tip'},
+  grad:      {lbl:'Grad',                 unos:'tekst'},
+  adresa:    {lbl:'Adresa',               unos:'tekst'},
+  napomena:  {lbl:'Napomena',             unos:'tekst'},
+  aktivan:   {lbl:'Status (aktivan)',     unos:'bool'},
+  razvrstan: {lbl:'Oznaka „razvrstan"',   unos:'bool'},
+};
+
+function grupnaPromjenaPolja(){
+  const polje=document.getElementById('grupna-polje').value;
+  const unos=GRUPNA_POLJA[polje].unos;
+  document.getElementById('grupna-tip').style.display   = unos==='tip'   ? '' : 'none';
+  document.getElementById('grupna-bool').style.display  = unos==='bool'  ? '' : 'none';
+  document.getElementById('grupna-tekst').style.display = unos==='tekst' ? '' : 'none';
+  document.getElementById('grupna-status').style.display='none';
+}
+
+async function grupnoPrimijeni(){
+  const polje=document.getElementById('grupna-polje').value;
+  const cfg=GRUPNA_POLJA[polje];
+  let vrijednost, opis;
+
+  if(cfg.unos==='tip'){
+    const tipId=document.getElementById('grupna-tip').value;
+    if(!tipId){ alert('Izaberi tip koji dodjeljuješ.'); return; }
+    vrijednost=parseInt(tipId);
+    opis=tipovi.find(t=>t.id===vrijednost)?.naziv||'';
+  }else if(cfg.unos==='bool'){
+    vrijednost=document.getElementById('grupna-bool').value==='true';
+    opis=vrijednost?'Da':'Ne';
+  }else{
+    vrijednost=document.getElementById('grupna-tekst').value.trim();
+    if(!vrijednost){ alert('Upiši vrijednost.'); return; }
+    opis=vrijednost;
+  }
+
+  if(!confirm(`Postaviti "${cfg.lbl}" na "${opis}" za ${izabraniKupci.size} kupaca?`)) return;
+
+  const status=document.getElementById('grupna-status');
+  status.style.display='block'; status.style.color='#8b96a5';
+  let ok=0, greske=0, i=0;
   for(const id of izabraniKupci){
+    status.textContent=`Snimanje ${++i}/${izabraniKupci.size}...`;
+    // Dodjela tipa istovremeno oznacava kupca kao razvrstanog (jedan korak manje).
+    const tijelo = polje==='tip_id' ? {tip_id:vrijednost, razvrstan:true} : {[polje]:vrijednost};
     try{
       const r=await fetch(`${API}/api/config/kupci/${id}`,{
         method:'PATCH', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({tip_id:parseInt(tipId), razvrstan:true}),
+        body:JSON.stringify(tijelo),
       });
-      if(r.ok){ ok++; const k=kupci.find(x=>x.id===id); if(k){ k.tip_id=parseInt(tipId); k.razvrstan=true; } }
-      else greske++;
+      if(r.ok){
+        ok++;
+        const k=kupci.find(x=>x.id===id);
+        if(k){ Object.assign(k, tijelo); }
+      } else greske++;
     }catch(e){ greske++; }
   }
-  alert(`✓ Dodijeljeno: ${ok}${greske?`\n✗ Neuspješno: ${greske}`:''}`);
+  status.style.color = greske ? 'var(--red,#c0392b)' : 'var(--green,#1f8a4c)';
+  status.textContent = `✓ Izmijenjeno: ${ok}${greske?` · ✗ neuspješno: ${greske}`:''}`;
   izabraniKupci.clear();
-  osvjeziGrupnuTraku();
   render();
+  setTimeout(()=>{ osvjeziGrupnuTraku(); }, 1800);
 }
 
 async function load(){
