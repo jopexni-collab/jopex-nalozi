@@ -306,6 +306,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <nav>
     <a href="home.html">← Početna</a>
     <a href="roba-magacin.html" id="link-roba-magacin" style="display:none">🏭 Magacini</a>
+    <a href="#" onclick="event.preventDefault();otvoriPosaljiKatalog();">📖 Katalog</a>
     <a href="#" id="btn-zakljuci-dan">🔒 Zaključi dan</a>
     <a href="#" id="logout">Izlaz</a>
   </nav>
@@ -4167,5 +4168,227 @@ async function provjeriZakljucanDan(){
 provjeriZakljucanDan();
 
 </script>
+<!-- ══ POŠALJI KATALOG — zajednički prozorčić ═══════════════════════════════════════
+     Ubacuje se u maloprodaja.html, gotovina.html i teren.html. Držan je na JEDNOM
+     mjestu (ovaj fajl) da se ista logika ne prepisuje tri puta pa razidje.
+
+     UPOTREBA: kopirati cijeli sadržaj ovog fajla pred </body>, i dodati dugme:
+       <button onclick="otvoriPosaljiKatalog()">📖 Pošalji katalog</button>
+     Opcionalno: otvoriPosaljiKatalog({objekt_id: 3, kupac: {naziv, telefon, email, tip_id}})
+-->
+<div id="modal-katalog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:900;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:14px;padding:20px;max-width:460px;width:93vw;max-height:90vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h3 style="margin:0;font-size:16px;">📖 Pošalji katalog</h3>
+      <button onclick="document.getElementById('modal-katalog').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;">✕</button>
+    </div>
+
+    <!-- 1. VRSTA KUPCA — određuje koje se cijene prikazuju -->
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:5px;">1. Vrsta kupca <span style="font-weight:400;color:#8b96a5;">(određuje cijene)</span></label>
+      <select id="kat-tip" onchange="katOsvjeziPregled()" style="width:100%;padding:9px 11px;border:1px solid #ddd;border-radius:8px;font-size:13.5px;">
+        <option value="">— izaberi vrstu kupca —</option>
+      </select>
+      <div id="kat-tip-info" style="font-size:11.5px;color:#8b96a5;margin-top:4px;"></div>
+    </div>
+
+    <!-- 2. GRUPE PROIZVODA -->
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:5px;">2. Grupe proizvoda</label>
+      <div style="display:flex;gap:6px;margin-bottom:6px;">
+        <button type="button" onclick="katGrupeSve(true)" style="flex:1;padding:5px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:11px;">Izaberi sve</button>
+        <button type="button" onclick="katGrupeSve(false)" style="flex:1;padding:5px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:11px;">Poništi</button>
+      </div>
+      <div id="kat-grupe" style="max-height:180px;overflow-y:auto;border:1px solid #ddd;border-radius:8px;padding:7px 10px;"></div>
+    </div>
+
+    <!-- 3. IZGLED -->
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:5px;">3. Izgled kataloga</label>
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button type="button" id="kat-btn-mreza" onclick="katPostaviPrikaz('mreza')" style="flex:1;padding:9px;border:2px solid #330066;background:#330066;color:#fff;border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:600;">▦ Mrežni</button>
+        <button type="button" id="kat-btn-lista" onclick="katPostaviPrikaz('lista')" style="flex:1;padding:9px;border:2px solid #ddd;background:#fff;border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:600;">☰ Linijski</button>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 10px;background:#f7f8fa;border-radius:8px;">
+        <input type="checkbox" id="kat-cijene" checked onchange="katOsvjeziPregled()">
+        <span>Prikaži cijene u katalogu</span>
+      </label>
+    </div>
+
+    <!-- 4. KOME (opciono) -->
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:5px;">4. Kome šalješ <span style="font-weight:400;color:#8b96a5;">(opciono — piše na katalogu)</span></label>
+      <input type="text" id="kat-kupac" placeholder="Ime kupca ili firme..." style="width:100%;padding:9px 11px;border:1px solid #ddd;border-radius:8px;font-size:13.5px;">
+    </div>
+
+    <div id="kat-pregled" style="font-size:12px;color:#8b96a5;margin-bottom:12px;text-align:center;"></div>
+    <div id="kat-greska" style="display:none;color:#c0392b;font-size:12.5px;margin-bottom:10px;"></div>
+
+    <button onclick="katNapravi()" id="kat-btn-napravi" style="width:100%;padding:11px;border:none;background:#1f8a4c;color:#fff;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;">✓ Napravi katalog</button>
+
+    <!-- REZULTAT — link + dugmad za slanje (isti obrazac kao otpremnica u maloprodaji) -->
+    <div id="kat-rezultat" style="display:none;margin-top:16px;border-top:1px solid #eee;padding-top:14px;">
+      <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:8px;">Katalog je spreman — pošalji kupcu:</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <a id="kat-viber" href="#" style="flex:1;text-align:center;padding:10px 6px;border:1px solid #ddd;border-radius:8px;text-decoration:none;color:#7360f2;font-size:12.5px;font-weight:600;">📱 Viber</a>
+        <a id="kat-wa" href="#" target="_blank" rel="noopener" style="flex:1;text-align:center;padding:10px 6px;border:1px solid #ddd;border-radius:8px;text-decoration:none;color:#25d366;font-size:12.5px;font-weight:600;">💬 WhatsApp</a>
+        <a id="kat-mail" href="#" style="flex:1;text-align:center;padding:10px 6px;border:1px solid #ddd;border-radius:8px;text-decoration:none;color:#1a5fa8;font-size:12.5px;font-weight:600;">✉️ Email</a>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <a id="kat-otvori" href="#" target="_blank" rel="noopener" style="flex:1;text-align:center;padding:9px;border:1px solid #330066;border-radius:8px;text-decoration:none;color:#330066;font-size:12.5px;font-weight:600;">👁 Pogledaj / PDF</a>
+        <button onclick="katKopirajLink()" style="flex:1;padding:9px;border:1px solid #ddd;background:#fff;border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:600;">🔗 Kopiraj link</button>
+      </div>
+      <div id="kat-link" style="font-size:10.5px;color:#8b96a5;word-break:break-all;margin-top:8px;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══ POŠALJI KATALOG ══════════════════════════════════════════════════════════════
+   Tok: vrsta kupca → grupe proizvoda → izgled → (kome) → napravi → pošalji.
+   Cijene računa server prema izabranoj vrsti kupca (zajednička pravila iz cijene.js). */
+let katTipovi = [], katPrikaz = 'mreza', katObjektId = null, katKupac = null, katToken = null;
+let katPregledTajmer = null;
+
+function katEsc(s){ return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function otvoriPosaljiKatalog(opcije){
+  katObjektId = opcije?.objekt_id ?? (typeof trenutniObjekat!=='undefined' ? trenutniObjekat?.id : null)
+                                   ?? (typeof blagajnaObjektId!=='undefined' ? blagajnaObjektId : null);
+  katKupac = opcije?.kupac || null;
+  katToken = null;
+  document.getElementById('kat-rezultat').style.display = 'none';
+  document.getElementById('kat-greska').style.display = 'none';
+  document.getElementById('kat-kupac').value = katKupac?.naziv || '';
+  document.getElementById('modal-katalog').style.display = 'flex';
+
+  // Vrste kupaca
+  try{
+    const r = await fetch(`${API}/api/cijene/tipovi`);
+    const d = await r.json();
+    katTipovi = d.tipovi || [];
+    document.getElementById('kat-tip').innerHTML =
+      '<option value="">— izaberi vrstu kupca —</option>' +
+      katTipovi.map(t=>`<option value="${t.id}" ${katKupac?.tip_id===t.id?'selected':''}>${katEsc(t.naziv)}</option>`).join('');
+    katPrikaziInfoTipa();
+  }catch(e){}
+
+  // Grupe proizvoda iz lagera
+  try{
+    const r = await fetch(`${API}/api/katalog/grupe${katObjektId?`?objekt_id=${katObjektId}`:''}`);
+    const grupe = await r.json();
+    document.getElementById('kat-grupe').innerHTML = grupe.length
+      ? grupe.map(g=>`
+          <label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12.5px;cursor:pointer;">
+            <input type="checkbox" value="${katEsc(g.grupa)}" onchange="katOsvjeziPregled()">
+            <span style="flex:1;">${katEsc(g.grupa)}</span>
+            <span style="color:#8b96a5;font-size:11px;">${g.broj}</span>
+          </label>`).join('')
+      : '<div style="color:#8b96a5;font-size:12px;padding:6px;">Nema grupa proizvoda.</div>';
+  }catch(e){}
+}
+
+document.getElementById('kat-tip').addEventListener('change', katPrikaziInfoTipa);
+function katPrikaziInfoTipa(){
+  const id = parseInt(document.getElementById('kat-tip').value);
+  const t = katTipovi.find(x=>x.id===id);
+  const info = document.getElementById('kat-tip-info');
+  if(!t){ info.textContent=''; return; }
+  info.textContent = t.dodaje_pdv
+    ? `Maloprodajna cijena — osnovica + PDV`
+    : (parseFloat(t.popust_posto)>0 ? `Veleprodaja — popust ${t.popust_posto}%` : 'Veleprodaja — bez popusta (osnovica)');
+}
+
+function katGrupeSve(oznaceno){
+  document.querySelectorAll('#kat-grupe input').forEach(i=>i.checked=oznaceno);
+  katOsvjeziPregled();
+}
+
+function katPostaviPrikaz(p){
+  katPrikaz = p;
+  const a=document.getElementById('kat-btn-mreza'), b=document.getElementById('kat-btn-lista');
+  a.style.cssText = a.style.cssText.replace(/border:2px solid [^;]+;background:[^;]+;color:[^;]+;/,'');
+  [[a,p==='mreza'],[b,p==='lista']].forEach(([el,akt])=>{
+    el.style.border = akt ? '2px solid #330066' : '2px solid #ddd';
+    el.style.background = akt ? '#330066' : '#fff';
+    el.style.color = akt ? '#fff' : '#1a2733';
+  });
+}
+
+// Živi pregled — koliko artikala ulazi u katalog (da se ne pošalje prazan ili ogroman).
+function katOsvjeziPregled(){
+  clearTimeout(katPregledTajmer);
+  katPregledTajmer = setTimeout(async ()=>{
+    const grupe = [...document.querySelectorAll('#kat-grupe input:checked')].map(i=>i.value);
+    const el = document.getElementById('kat-pregled');
+    if(!grupe.length){ el.textContent='Izaberi bar jednu grupu proizvoda.'; return; }
+    const tipId = document.getElementById('kat-tip').value;
+    try{
+      const r = await fetch(`${API}/api/katalog/pregled?grupe=${encodeURIComponent(grupe.join(','))}`
+        + (katObjektId?`&objekt_id=${katObjektId}`:'') + (tipId?`&tip_kupca_id=${tipId}`:''));
+      const d = await r.json();
+      const dostupnih = d.stavke.filter(s=>s.dostupno).length;
+      el.innerHTML = `<b>${d.stavke.length}</b> artikala u katalogu · ${dostupnih} dostupno`;
+    }catch(e){ el.textContent=''; }
+  }, 300);
+}
+
+async function katNapravi(){
+  const greska = document.getElementById('kat-greska');
+  const grupe = [...document.querySelectorAll('#kat-grupe input:checked')].map(i=>i.value);
+  if(!grupe.length){ greska.style.display='block'; greska.textContent='Izaberi bar jednu grupu proizvoda.'; return; }
+  const saCijenama = document.getElementById('kat-cijene').checked;
+  const tipId = document.getElementById('kat-tip').value;
+  if(saCijenama && !tipId){ greska.style.display='block'; greska.textContent='Za prikaz cijena izaberi vrstu kupca.'; return; }
+  greska.style.display='none';
+
+  const btn = document.getElementById('kat-btn-napravi');
+  btn.disabled = true; btn.textContent = 'Pravljenje...';
+  try{
+    const r = await fetch(`${API}/api/katalog`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        tip_kupca_id: tipId ? parseInt(tipId) : null,
+        grupe, objekt_id: katObjektId, prikaz: katPrikaz,
+        sa_cijenama: saCijenama,
+        kupac_naziv: document.getElementById('kat-kupac').value.trim() || null,
+      }),
+    });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    katToken = d.token;
+    katPrikaziRezultat();
+  }catch(e){
+    greska.style.display='block'; greska.textContent='✗ '+e.message;
+  }finally{
+    btn.disabled = false; btn.textContent = '✓ Napravi katalog';
+  }
+}
+
+function katLink(){ return `${location.origin}/katalog-dokument.html?token=${encodeURIComponent(katToken)}`; }
+
+function katPrikaziRezultat(){
+  const link = katLink();
+  const naslov = 'Katalog proizvoda — JoPeX';
+  const poruka = encodeURIComponent(`${naslov}\n${link}`);
+  const tel = (katKupac?.telefon||'').replace(/[^0-9+]/g,'');
+  document.getElementById('kat-viber').href = `viber://forward?text=${poruka}`;
+  document.getElementById('kat-wa').href = tel
+    ? `https://wa.me/${tel.replace(/^\+/,'')}?text=${poruka}`
+    : `https://wa.me/?text=${poruka}`;
+  document.getElementById('kat-mail').href =
+    `mailto:${katKupac?.email||''}?subject=${encodeURIComponent(naslov)}&body=${poruka}`;
+  document.getElementById('kat-otvori').href = link;
+  document.getElementById('kat-link').textContent = link;
+  document.getElementById('kat-rezultat').style.display = 'block';
+}
+
+function katKopirajLink(){
+  navigator.clipboard.writeText(katLink())
+    .then(()=>alert('✓ Link kopiran.'))
+    .catch(()=>alert('Link: '+katLink()));
+}
+</script>
+
 </body>
 </html>

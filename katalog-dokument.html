@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Katalog — JoPeX</title>
+<style>
+  /* Stil usklađen sa postojećim JoPeX katalogom — ljubičasto zaglavlje, kartice sa
+     slikom kao pozadinom i tekstom preko nje. */
+  :root{ --ljubicasta:#330066; --ljubicasta-svijetla:#4d1a8a; --border:#e3e6ea;
+         --tekst:#1a2733; --sivo:#8b96a5; }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+       background:#f4f5f7;color:var(--tekst);}
+
+  .traka{background:var(--ljubicasta);padding:14px 20px;display:flex;align-items:center;
+         justify-content:space-between;flex-wrap:wrap;gap:10px;}
+  .logo{color:#fff;font-size:22px;font-weight:800;letter-spacing:.5px;}
+  .traka-info{color:#e8d5ef;font-size:12.5px;}
+
+  .omot{max-width:1180px;margin:0 auto;padding:22px 20px 40px;}
+  h1{font-size:26px;margin:0 0 4px;font-weight:700;}
+  .podnaslov{font-size:13px;color:var(--sivo);margin-bottom:20px;}
+
+  .alatke{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;align-items:center;}
+  .btn{padding:8px 14px;border:1px solid var(--border);background:#fff;border-radius:8px;
+       cursor:pointer;font-size:12.5px;font-weight:600;color:var(--tekst);}
+  .btn.aktivan{background:var(--ljubicasta);color:#fff;border-color:var(--ljubicasta);}
+  .btn-pdf{background:var(--ljubicasta);color:#fff;border-color:var(--ljubicasta);margin-left:auto;}
+
+  .grupa-naslov{font-size:15px;font-weight:800;margin:24px 0 12px;color:var(--ljubicasta);}
+
+  /* MREŽNI prikaz — slika je pozadina kartice, tekst preko nje (kao u JoPeX katalogu) */
+  /* Kartice su oblikovane kao CIGLA iz JoPeX loga — odnos 2:1, zaobljenje 16% visine
+     (izmjereno iz originalnog vektora). Svaki artikal = jedna ciglica. */
+  .mreza{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:18px;}
+  .mreza .stavka{position:relative;aspect-ratio:2 / 1;border-radius:24px;overflow:hidden;
+                 background:#d8dce1;box-shadow:0 3px 10px rgba(51,0,102,.13);break-inside:avoid;}
+  .mreza .poz{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+  .mreza .sjena{position:absolute;inset:0;
+                background:linear-gradient(to top,rgba(0,0,0,.72) 0%,rgba(0,0,0,.25) 45%,rgba(0,0,0,.05) 100%);}
+  .mreza .znacka{position:absolute;top:11px;left:11px;background:#fff;color:var(--ljubicasta);
+                 font-size:10.5px;font-weight:800;padding:3px 10px;border-radius:12px;
+                 text-transform:uppercase;letter-spacing:.3px;}
+  .mreza .dno{position:absolute;left:14px;right:14px;bottom:12px;color:#fff;}
+  .mreza .naziv{font-size:13.5px;font-weight:600;line-height:1.25;margin-bottom:4px;
+                text-shadow:0 1px 3px rgba(0,0,0,.5);}
+  .mreza .cijena{font-size:19px;font-weight:800;text-shadow:0 1px 3px rgba(0,0,0,.5);}
+  .mreza .jm{font-size:11px;font-weight:500;opacity:.9;}
+
+  /* LINIJSKI prikaz — kompaktno, za duge spiskove */
+  .lista .stavka{background:#fff;border-radius:10px;margin-bottom:7px;padding:9px 13px;
+                 display:flex;align-items:center;gap:13px;
+                 box-shadow:0 1px 3px rgba(0,0,0,.06);break-inside:avoid;}
+  .lista .slika{width:72px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0;background:#eef0f3;}
+  .lista .nema-slike{width:72px;height:36px;border-radius:6px;background:#eef0f3;flex-shrink:0;
+                     display:flex;align-items:center;justify-content:center;color:#c3c9d1;}
+  .lista .info{flex:1;min-width:0;}
+  .lista .znacka{display:inline-block;background:#f0e6f5;color:var(--ljubicasta);font-size:9.5px;
+                 font-weight:800;padding:2px 8px;border-radius:10px;text-transform:uppercase;margin-bottom:3px;}
+  .lista .naziv{font-size:13px;font-weight:600;line-height:1.3;}
+  .lista .sifra{font-size:11px;color:var(--sivo);}
+  .lista .cijena{font-size:16px;font-weight:800;color:var(--ljubicasta);white-space:nowrap;text-align:right;}
+  .lista .jm{font-size:10.5px;color:var(--sivo);font-weight:600;}
+
+  .oznaka-nema{display:inline-block;font-size:9.5px;background:rgba(192,57,43,.9);color:#fff;
+               padding:1px 7px;border-radius:8px;margin-top:3px;}
+
+  footer{text-align:center;color:var(--sivo);font-size:11.5px;padding:24px 0 0;}
+  .ucitavanje,.greska{text-align:center;padding:50px 20px;color:var(--sivo);}
+  .greska{color:#c0392b;}
+
+  @media print{
+    body{background:#fff;}
+    .alatke{display:none !important;}
+    .omot{max-width:100%;padding:0;}
+    .mreza{grid-template-columns:repeat(3,1fr);}
+    .mreza .stavka,.lista .stavka{box-shadow:none;}
+    @page{margin:10mm;}
+  }
+</style>
+</head>
+<body>
+<div class="traka">
+  <img src="logo-bijeli.png" alt="JoPeX" style="height:34px;display:block;">
+  <div class="traka-info" id="traka-info"></div>
+</div>
+<div class="omot">
+  <h1 id="naslov">Katalog</h1>
+  <div class="podnaslov" id="podnaslov"></div>
+
+  <div class="alatke">
+    <button class="btn" id="btn-mreza" onclick="postaviPrikaz('mreza')">▦ Mrežni prikaz</button>
+    <button class="btn" id="btn-lista" onclick="postaviPrikaz('lista')">☰ Linijski prikaz</button>
+    <button class="btn btn-pdf" onclick="window.print()">⬇ Sačuvaj kao PDF</button>
+  </div>
+
+  <div id="sadrzaj"><div class="ucitavanje">Učitavanje kataloga...</div></div>
+
+  <footer>
+    <div id="podaci-firme">JoPeX — kamen i obrada</div>
+    <div id="info-posiljaoca" style="margin-top:4px;"></div>
+  </footer>
+</div>
+
+<script>
+const API = location.origin;
+let podaci = null, prikaz = 'mreza';
+
+function esc(s){ return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fm(n){ return (parseFloat(n)||0).toLocaleString('bs-BA',{minimumFractionDigits:2,maximumFractionDigits:2})+' KM'; }
+
+async function ucitaj(){
+  const token = new URLSearchParams(location.search).get('token');
+  if(!token){ prikaziGresku('Nedostaje token — link nije potpun.'); return; }
+  try{
+    const r = await fetch(`${API}/api/katalog-javno/${encodeURIComponent(token)}`);
+    const d = await r.json();
+    if(!r.ok){ prikaziGresku(d.error || 'Katalog nije dostupan.'); return; }
+    podaci = d;
+    prikaz = d.prikaz === 'lista' ? 'lista' : 'mreza';
+
+    document.getElementById('naslov').textContent = d.naslov || 'Katalog proizvoda';
+    const dijelovi = [];
+    if(d.kupac_naziv) dijelovi.push(`Za: <b>${esc(d.kupac_naziv)}</b>`);
+    if(d.sa_cijenama && d.tip_naziv) dijelovi.push(`Cijene: ${esc(d.tip_naziv)}${d.sa_pdv?` (sa PDV ${d.pdv_stopa}%)`:' (bez PDV-a)'}`);
+    document.getElementById('podnaslov').innerHTML = dijelovi.join(' · ');
+    document.getElementById('traka-info').textContent = d.sa_cijenama ? 'Cijene u KM' : '';
+    if(d.kreirao_ime){
+      const datum = new Date(d.kreirano);
+      document.getElementById('info-posiljaoca').textContent =
+        `Pripremio: ${d.kreirao_ime} · ${String(datum.getDate()).padStart(2,'0')}.${String(datum.getMonth()+1).padStart(2,'0')}.${datum.getFullYear()}.`;
+    }
+    render();
+  }catch(e){ prikaziGresku('Greška pri učitavanju kataloga.'); }
+}
+
+function prikaziGresku(poruka){
+  document.getElementById('sadrzaj').innerHTML = `<div class="greska">✗ ${esc(poruka)}</div>`;
+  document.querySelector('.alatke').style.display = 'none';
+}
+
+function postaviPrikaz(p){ prikaz = p; render(); }
+
+function render(){
+  if(!podaci) return;
+  document.getElementById('btn-mreza').classList.toggle('aktivan', prikaz==='mreza');
+  document.getElementById('btn-lista').classList.toggle('aktivan', prikaz==='lista');
+
+  if(!podaci.stavke.length){
+    document.getElementById('sadrzaj').innerHTML = '<div class="ucitavanje">Katalog je prazan.</div>';
+    return;
+  }
+  // Grupisanje po grupi proizvoda — kupcu je preglednije nego jedan dugačak spisak.
+  const poGrupama = {};
+  podaci.stavke.forEach(s => { (poGrupama[s.grupa||'Ostalo'] ||= []).push(s); });
+
+  document.getElementById('sadrzaj').innerHTML = Object.entries(poGrupama).map(([grupa, stavke]) => `
+    <div class="grupa-naslov">${esc(grupa)}</div>
+    <div class="${prikaz}">${stavke.map(s => prikaz==='mreza' ? kartica(s) : red(s)).join('')}</div>
+  `).join('');
+}
+
+function slikaHtml(s, klasa){
+  return s.slika
+    ? `<img class="${klasa}" src="${esc(s.slika_puna||s.slika)}" loading="lazy" alt="${esc(s.naziv)}">`
+    : `<div class="nema-slike">🪨</div>`;
+}
+
+function kartica(s){
+  return `<div class="stavka">
+    ${s.slika?`<img class="poz" src="${esc(s.slika_puna||s.slika)}" loading="lazy" alt="${esc(s.naziv)}">`:''}
+    <div class="sjena"></div>
+    <div class="znacka">${esc(s.grupa||'—')}</div>
+    <div class="dno">
+      <div class="naziv">${esc(s.naziv)}</div>
+      ${s.cijena!=null?`<div class="cijena">${fm(s.cijena)} <span class="jm">/ ${esc(s.jed_mjera)}</span></div>`:''}
+      ${!s.dostupno?'<div class="oznaka-nema">Trenutno nedostupno</div>':''}
+    </div>
+  </div>`;
+}
+
+function red(s){
+  return `<div class="stavka">
+    ${slikaHtml(s,'slika')}
+    <div class="info">
+      <div class="znacka">${esc(s.grupa||'—')}</div>
+      <div class="naziv">${esc(s.naziv)}</div>
+      <div class="sifra">Šifra: ${esc(s.sifra)}${s.debljina_cm?` · ${s.debljina_cm} cm`:''}${!s.dostupno?' · <span style="color:#c0392b;">nedostupno</span>':''}</div>
+    </div>
+    ${s.cijena!=null?`<div class="cijena">${fm(s.cijena)}<div class="jm">/ ${esc(s.jed_mjera)}</div></div>`:''}
+  </div>`;
+}
+
+ucitaj();
+</script>
+</body>
+</html>

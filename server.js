@@ -57,6 +57,7 @@ app.use('/api/config', require('./config'));
 app.use('/api/otpremnice-javno', require('./otpremnice-javno'));
 app.use('/api/terenske-ponude-javno', require('./terenske-ponude-javno'));
 app.use('/api/isplate-javno', require('./isplate-javno'));
+app.use('/api/katalog-javno', require('./katalog-javno'));
 app.use('/api/uplate-javno', require('./uplate-javno'));
 // ─── Trening mod ────────────────────────────────────────────────────────────
 // Ako je korisnik u trening modu, SVAKI pokušaj upisa (POST/PATCH/PUT/DELETE) na bilo
@@ -86,6 +87,7 @@ app.use('/api/plate',       requireLoginOrApiKey, require('./plate'));
 app.use('/api/kalkulacije', requireLoginOrApiKey, require('./kalkulacije'));
 app.use('/api/roba',        requireLoginOrApiKey, require('./roba'));
 app.use('/api/cijene',      requireLoginOrApiKey, require('./cijene'));
+app.use('/api/katalog',     requireLoginOrApiKey, require('./katalog'));
 app.use('/api/analitika',   requireLoginOrApiKey, require('./analitika'));
 const otpremniceRouter = require('./otpremnice');
 app.use('/api/otpremnice',  requireLoginOrApiKey, otpremniceRouter);
