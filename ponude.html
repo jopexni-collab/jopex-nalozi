@@ -1840,7 +1840,7 @@ function newItem(tipArg){
   var t=tipArg||'k';
   return {
     tip: t,
-    shape:'I', dims:{}, ivSt:{}, cornerR:{}, cornerRData:{}, customOtvori:[], slavine:[], tableHoles:[], pozicije:[], pozBdDef:{}, klPodtip:'vise',
+    shape:'I', dims:{}, ivSt:{}, cornerR:{}, cornerRData:{}, customOtvori:[], slavine:[], tableHoles:[], pozicije:[], pozBdDef:{}, pozRDef:{}, klPodtip:'vise',
     vOrient:0, wallSides:{},
     wallCfgIdx: (t==='k'?5:0), // k: Nema zida (idx 5)
     extState:{},
@@ -2019,6 +2019,7 @@ function syncFromActive(){
   tableHoles=a.tableHoles?JSON.parse(JSON.stringify(a.tableHoles)):[];
   pozicije=a.pozicije?JSON.parse(JSON.stringify(a.pozicije)):[];
   pozBdDef=a.pozBdDef?JSON.parse(JSON.stringify(a.pozBdDef)):{};
+  pozRDef=a.pozRDef?JSON.parse(JSON.stringify(a.pozRDef)):{};
   vOrient=a.vOrient; wallSides=a.wallSides; wallCfgIdx=a.wallCfgIdx;
   extState=a.extState;
 }
@@ -2032,6 +2033,7 @@ function syncToActive(){
   a.tableHoles=JSON.parse(JSON.stringify(tableHoles));
   a.pozicije=JSON.parse(JSON.stringify(pozicije||[]));
   a.pozBdDef=JSON.parse(JSON.stringify(pozBdDef||{}));
+  a.pozRDef=JSON.parse(JSON.stringify(pozRDef||{}));
   a.vOrient=vOrient; a.wallSides=wallSides; a.wallCfgIdx=wallCfgIdx;
   a.extState=extState;
   saveItemInputs();
@@ -3773,6 +3775,26 @@ function buildPozicijeTabelu(){
     +'\u21c5 Zamijeni A ('+strane[0].kratko+') \u2194 D ('+strane[3].kratko+')</button></div>';
   h+='</div>';
 
+  // Radijus uglova - podrazumijevano za sve pozicije (kao kod kuhinje)
+  if(t==='kl'||t==='st'){
+    h+='<div style="background:#fdf8ef;border:1px solid #e8d9bd;border-radius:6px;'
+      +'padding:7px 9px;margin-bottom:8px">'
+      +'<div style="font-size:10px;font-weight:700;color:#8a6d3b;margin-bottom:5px;'
+      +'letter-spacing:.5px">RADIJUS UGLOVA (mm) \u2014 0 je o\u0161tar ugao</div>'
+      +'<div style="display:flex;gap:5px;flex-wrap:wrap">'
+      +POZ_UGLOVI.map(function(ug){
+        var razl=pozicije.some(function(p){return p.r&&p.r[ug.i]!=null;});
+        return '<span style="display:flex;align-items:center;gap:3px;background:#fff;'
+          +'border:1px solid '+(razl?'#e67e22':'#e8ecf1')+';border-radius:4px;padding:2px 5px">'
+          +'<b style="font-size:9.5px;color:#6b7a8d" title="'+ug.lbl+'">'+ug.strane+'</b>'
+          +'<input type="number" min="0" step="5" value="'+(pozRDef[ug.i]||'')+'" '
+          +'placeholder="0" style="width:46px;font:inherit;font-size:10.5px;padding:1px 3px;'
+          +'border:1px solid #dde2ea;border-radius:3px;text-align:right" '
+          +'onchange="fixComma(this);pozSveRadijus('+ug.i+',this.value)">'
+          +(razl?'<span style="font-size:9px;color:#e67e22">\u26a0</span>':'')
+          +'</span>';
+      }).join('')+'</div></div>';
+  }
   // ── ZIDNA KLUPICA: prikaz po ZIDOVIMA ──
   // Jedan zid = jedna sirina + ukupna duzina koja se dijeli na komade.
   // Novi zid ima svoju sirinu, pa se unosi zasebno.
@@ -3969,7 +3991,20 @@ function buildPozicijeTabelu(){
             }).join('')+'</select></div>';
         }
       }
-      h+='<div style="display:flex;gap:5px;margin-top:5px">'
+      h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'
+        +'<b style="font-size:11px;color:#b8860b;min-width:13px">\u25dc</b>'
+        +'<span style="font-size:10px;color:#8a93a3;min-width:84px">radijus uglova</span>'
+        +POZ_UGLOVI.map(function(ug){
+          var izuz=(p.r&&p.r[ug.i]!=null);
+          return '<span style="display:flex;align-items:center;gap:2px">'
+            +'<b style="font-size:9px;color:'+(izuz?'#7a4fa0':'#8a93a3')+'">'+ug.strane+'</b>'
+            +'<input type="number" min="0" step="5" value="'+(izuz?p.r[ug.i]:'')+'" '
+            +'placeholder="'+(pozRDef[ug.i]||0)+'" style="width:42px;font:inherit;font-size:10.5px;'
+            +'padding:1px 3px;border:1px solid '+(izuz?'#7a4fa0':'#dde2ea')+';border-radius:3px;'
+            +'text-align:right" onchange="fixComma(this);pozRadijus('+i+','+ug.i+',this.value)">'
+            +'</span>';
+        }).join('')+'</div>'
+        +'<div style="display:flex;gap:5px;margin-top:5px">'
         +'<input type="text" value="'+String(p.nap||'').replace(/"/g,'&quot;')+'" placeholder="napomena za ovaj red"'
         +' oninput="pozNapomena('+i+',this.value)" style="flex:1;font-size:11px;padding:4px 6px;'
         +'border:1px solid #dde2ea;border-radius:4px">'
@@ -6041,6 +6076,10 @@ function _prilogPozicija(){
     var napP='';
     if(kanP&&kanP!=='bez') napP='<span style="color:#1d8a6e">\u2248 <b>vodeni kanal:</b> strane '
       +_kanalOpis(kanP)+'</span>';
+    var pr4p=[0,1,2,3].map(function(u){ return _pozR(p,u); });
+    if(pr4p.some(function(x){return x>0;}))
+      opis+=(opis==='—'?'':' · ')+'<span style="color:#b8860b">◜ R: '
+        +POZ_UGLOVI.map(function(ug){return ug.strane+' '+(pr4p[ug.i]||0);}).join(', ')+' mm</span>';
     var ledP=(tip==='kl')?_pozLed(p):'bez';
     if(ledP&&ledP!=='bez'){
       var lmP=_ledMjere();
@@ -7409,6 +7448,13 @@ function buildPozicijeRN(){
       +((kanR2&&kanR2!=='bez')?('<b style="color:#1d8a6e">\u2248 VODENI KANAL: strane '
         +_kanalOpis(kanR2)+'</b><br>'):'')
       +(function(){
+        var pr4r=[0,1,2,3].map(function(u){ return _pozR(p,u); });
+        if(!pr4r.some(function(x){return x>0;})) return '';
+        return '<b style="color:#b8860b">◜ RADIJUS: '
+          +POZ_UGLOVI.map(function(ug){return ug.strane+'='+(pr4r[ug.i]||0);}).join(' ')
+          +' mm</b><br>';
+      })()
+      +(function(){
         var lr=(tip==='kl')?_pozLed(p):'bez';
         if(!lr||lr==='bez') return '';
         var lmr=_ledMjere();
@@ -8145,6 +8191,254 @@ function drawK(ctx,W,H){
 // Sematski crtez za tabelu pozicija: NEMA konkretnih mjera (razne su), nego
 // pokazuje SAMO gdje i kako se koja strana obradjuje - da operater ili kupac
 // ne pomijesa zadnju i prednju stranu.
+// Edit deskriptor za mjere JEDNE pozicije - dupli klik na kotu na crtezu
+// mijenja direktno pozicije[i], bez odlaska u tabelu.
+function _pozEditDesc(i,polje){
+  var nazivi={a:'Du\u017eina',b:'\u0160irina',kom:'Broj komada'};
+  var jeKom=(polje==='kom');
+  return {kind:'number',
+    label:'Poz. '+(i+1)+' \u2014 '+(nazivi[polje]||polje)+(jeKom?'':' (mm)'),
+    unit:jeKom?'kom':'mm', min:1, step:1,
+    get:function(){ var p=pozicije[i]; return p?(p[polje]||0):0; },
+    set:function(v){
+      if(!pozicije[i]) return;
+      if(jeKom){ pozicije[i].kom=Math.max(1,Math.round(v)); }
+      else if(jeZidnaKlupica()&&polje==='a'){ zidPromijeniDuzinu(i,v); return; }
+      else if(jeZidnaKlupica()&&polje==='b'){ zidSirina(pozicije[i].zid!=null?pozicije[i].zid:0,v); return; }
+      else { pozicije[i][polje]=Math.max(1,v); }
+      syncToActive(); buildPozicijeTabelu(); refresh();
+    }};
+}
+// ── RADIJUS UGLOVA PO POZICIJI ───────────────────────────────────
+// Kao kod kuhinje, ali svaka klupica ima svoja cetiri ugla. Uglovi su
+// numerisani po smjeru kazaljke pocevsi od gornjeg-lijevog:
+//   0 = gore-lijevo (D\u2229B)   1 = gore-desno (D\u2229C)
+//   2 = dolje-desno (A\u2229C)   3 = dolje-lijevo (A\u2229B)
+var POZ_UGLOVI=[
+  {i:0,lbl:'gore-lijevo',strane:'D/B'},
+  {i:1,lbl:'gore-desno', strane:'D/C'},
+  {i:2,lbl:'dolje-desno',strane:'A/C'},
+  {i:3,lbl:'dolje-lijevo',strane:'A/B'}
+];
+var pozRDef={};   // podrazumijevani radijusi za SVE pozicije
+function _pozR(p,u){
+  if(p&&p.r&&p.r[u]!=null) return p.r[u];
+  return pozRDef[u]||0;
+}
+function pozRadijus(i,u,val){
+  if(!pozicije[i]) return;
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
+  pozicije[i].r=pozicije[i].r||{};
+  if(v<=0&&(pozRDef[u]||0)===0) delete pozicije[i].r[u];
+  else pozicije[i].r[u]=Math.max(0,v);
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
+function pozSveRadijus(u,val){
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
+  if(v<=0) delete pozRDef[u]; else pozRDef[u]=v;
+  (pozicije||[]).forEach(function(p){ if(p.r) delete p.r[u]; });
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
+function _pozREditDesc(i,u){
+  var ug=POZ_UGLOVI[u];
+  return {kind:'number',
+    label:'Poz. '+(i+1)+' \u2014 radijus ugla '+ug.lbl+' ('+ug.strane+')',
+    unit:'mm', min:0, step:5,
+    get:function(){ return _pozR(pozicije[i],u); },
+    set:function(v){ pozRadijus(i,u,v); }};
+}
+// Crta pravougaonik sa zaobljenim uglovima (radijusi po uglu, u px)
+function _zaobljenPut(ctx,A,B,r){
+  var m=Math.min(A,B)/2;
+  var r0=Math.min(r[0]||0,m), r1=Math.min(r[1]||0,m),
+      r2=Math.min(r[2]||0,m), r3=Math.min(r[3]||0,m);
+  ctx.beginPath();
+  ctx.moveTo(r0,0);
+  ctx.lineTo(A-r1,0);
+  if(r1>0) ctx.arcTo(A,0,A,r1,r1); else ctx.lineTo(A,0);
+  ctx.lineTo(A,B-r2);
+  if(r2>0) ctx.arcTo(A,B,A-r2,B,r2); else ctx.lineTo(A,B);
+  ctx.lineTo(r3,B);
+  if(r3>0) ctx.arcTo(0,B,0,B-r3,r3); else ctx.lineTo(0,B);
+  ctx.lineTo(0,r0);
+  if(r0>0) ctx.arcTo(0,0,r0,0,r0); else ctx.lineTo(0,0);
+  ctx.closePath();
+}
+
+// Obrada ivice za JEDNU poziciju - klik na ivicu na crtezu. Prazna
+// vrijednost vraca na podrazumijevanu (onu iz bloka "vazi za sve").
+function _pozIvEditDesc(i,segId){
+  var sd=_pozStrane().filter(function(x){return x.id===segId;})[0];
+  return {kind:'select',
+    label:'Poz. '+(i+1)+' \u2014 obrada strane '+(sd?(sd.lbl+' ('+sd.kratko+')'):segId),
+    options:[{value:'',label:'\u2014 kao za sve \u2014'}].concat(
+      Object.keys(PLbl).map(function(pr){return {value:pr,label:PSym[pr]+' '+PLbl[pr]};})),
+    get:function(){
+      var p=pozicije[i];
+      return (p&&p.ob&&p.ob[segId]!=null)?p.ob[segId]:'';
+    },
+    set:function(v){ pozObrada(i,segId,v); }};
+}
+// Djelimicna obrada (obradi samo prvih N mm) za jednu poziciju i stranu
+function _pozBdEditDesc(i,segId){
+  var sd=_pozStrane().filter(function(x){return x.id===segId;})[0];
+  return {kind:'number',
+    label:'Poz. '+(i+1)+' \u2014 obradi samo prvih N mm ('+(sd?sd.kratko:segId)+')',
+    unit:'mm', min:0, step:5,
+    get:function(){ var p=pozicije[i]; return p?_pozBd(p,segId):0; },
+    set:function(v){ pozBocna(i,segId,v); buildPozicijeTabelu(); }};
+}
+// Crtez SVAKE pozicije zasebno, sa rednim brojem i kotama koje se mogu
+// mijenjati duplim klikom - isto kao kod kuhinje. Rasporedjuju se u mrezu.
+function drawKlPozicije(ctx,W,H){
+  var t=(pozicije||[]);
+  var n=t.length;
+  if(!n) return drawKlSematski(ctx,W,H);
+  // Mreza: do 3 u redu, pa novi red
+  var uRedu=Math.min(n,(n<=2)?n:(n<=6?2:3));
+  var redova=Math.ceil(n/uRedu);
+  var padX=64, padY=74, razmakX=42, razmakY=66;
+  var celijaW=(W-padX*2-razmakX*(uRedu-1))/uRedu;
+  var celijaH=(H-padY-40-razmakY*(redova-1))/redova;
+  // Najveca pozicija odredjuje mjerilo, da se sve crta u ISTOJ skali
+  var maxA=1, maxB=1;
+  t.forEach(function(p){ if((p.a||0)>maxA)maxA=p.a||0; if((p.b||0)>maxB)maxB=p.b||0; });
+  var sc=Math.min(celijaW/maxA,celijaH/maxB)*0.78;
+  var strane=_pozStrane();
+  var jeKl=(tip!=='st');
+
+  t.forEach(function(p,i){
+    var r=Math.floor(i/uRedu), c=i%uRedu;
+    var ox=padX+c*(celijaW+razmakX);
+    var oy=padY+r*(celijaH+razmakY);
+    var A=(p.a||0)*sc, B=(p.b||0)*sc;
+    ctx.save(); ctx.translate(ox,oy);
+
+    // Ploca sa zaobljenim uglovima (radijus po uglu, kao kod kuhinje)
+    var rpx=[0,1,2,3].map(function(u){ return _pozR(p,u)*sc; });
+    _zaobljenPut(ctx,A,B,rpx);
+    ctx.fillStyle='#fff'; ctx.fill();
+    ctx.strokeStyle='#000'; ctx.lineWidth=1.2;
+    ctx.setLineDash([9,3,1.4,3]); ctx.stroke(); ctx.setLineDash([]);
+    // Klik na ugao mijenja radijus; oznaka R se pise samo kad postoji
+    var uglPoz=[[0,0],[A,0],[A,B],[0,B]];
+    uglPoz.forEach(function(up,u){
+      var rmm=_pozR(p,u);
+      _regClickRect(up[0]-11,up[1]-11,22,22,null,_pozREditDesc(i,u));
+      if(rmm>0){
+        var sx2=up[0]+(u===0||u===3?12:-12), sy2=up[1]+(u<2?12:-12);
+        ctx.save();
+        ctx.fillStyle='#b8860b'; ctx.font='bold 8.5px Segoe UI,Arial';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText('R'+rmm,sx2,sy2);
+        ctx.restore();
+      }
+    });
+
+    // Obrada ivica - puna linija, kod djelimicne samo pocetni dio
+    var geo={'D-pred':[0,0,A,0],'B-lev':[0,B,0,0],'C-des':[A,B,A,0],'A-zad':[0,B,A,B]};
+    strane.forEach(function(sd){
+      var pr=_pozProf(p,sd.id);
+      var puna=(sd.id==='A-zad'||sd.id==='D-pred')?(p.a||0):(p.b||0);
+      var d=_pozBd(p,sd.id);
+      var dj=(d>0&&d<puna);
+      var g=geo[sd.id];
+      if(pr&&pr!=='none'){
+        if(dj){
+          var dio=Math.max(0.12,Math.min(0.85,d/Math.max(puna,1)));
+          var mx=g[0]+(g[2]-g[0])*dio, my=g[1]+(g[3]-g[1])*dio;
+          drawIv(ctx,g[0],g[1],mx,my,pr);
+          ctx.save(); ctx.strokeStyle='#e8a800'; ctx.lineWidth=2.4; ctx.setLineDash([4,3]);
+          ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(g[2],g[3]); ctx.stroke();
+          ctx.setLineDash([]); ctx.restore();
+        } else drawIv(ctx,g[0],g[1],g[2],g[3],pr);
+      }
+      // Klik na IVICU mijenja obradu; klik na oznaku sa mm mijenja
+      // djelimicnu duzinu. Zona je siroka 12 px oko linije.
+      var lx=Math.min(g[0],g[2])-6, ly=Math.min(g[1],g[3])-6;
+      var lw=Math.abs(g[2]-g[0])+12, lh=Math.abs(g[3]-g[1])+12;
+      _regClickRect(lx,ly,lw,lh,null,_pozIvEditDesc(i,sd.id));
+      // Slovo strane + simbol obrade, uvuceno ka centru
+      var mxs=(g[0]+g[2])/2, mys=(g[1]+g[3])/2;
+      var dxs=A/2-mxs, dys=B/2-mys, dls=Math.hypot(dxs,dys)||1;
+      var tx2=mxs+dxs/dls*13, ty2=mys+dys/dls*13;
+      ctx.save();
+      ctx.font='bold 9.5px Segoe UI,Arial';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle=(pr&&pr!=='none')?'#1a5fa8':'#c8d2dd';
+      ctx.fillText(sd.lbl+((pr&&pr!=='none')?(' '+PSym[pr]):''),tx2,ty2);
+      if(dj){
+        ctx.font='bold 8.5px Segoe UI,Arial'; ctx.fillStyle='#8a6d3b';
+        ctx.fillText(d+'mm',tx2,ty2+10);
+        _regClickRect(tx2-18,ty2+4,36,13,null,_pozBdEditDesc(i,sd.id));
+      }
+      ctx.restore();
+    });
+    // Vodeni i LED kanal
+    var kan=jeKl?_pozKanal(p):'bez';
+    if(kan&&kan!=='bez'){
+      var kd=Math.min(13,B*0.16);
+      ctx.save(); ctx.strokeStyle='#1d8a6e'; ctx.lineWidth=1.6; ctx.setLineDash([5,3]);
+      _kanalStrane(kan).forEach(function(id){
+        if(id==='D-pred'){ctx.beginPath();ctx.moveTo(0,kd);ctx.lineTo(A,kd);ctx.stroke();}
+        if(id==='A-zad'){ctx.beginPath();ctx.moveTo(0,B-kd);ctx.lineTo(A,B-kd);ctx.stroke();}
+        if(id==='B-lev'){ctx.beginPath();ctx.moveTo(kd,B-kd);ctx.lineTo(kd,kd);ctx.stroke();}
+        if(id==='C-des'){ctx.beginPath();ctx.moveTo(A-kd,B-kd);ctx.lineTo(A-kd,kd);ctx.stroke();}
+      });
+      ctx.setLineDash([]); ctx.restore();
+    }
+    var led=jeKl?_pozLed(p):'bez';
+    if(led&&led!=='bez'){
+      var ld=Math.min(24,B*0.3);
+      ctx.save(); ctx.strokeStyle='#b8860b'; ctx.lineWidth=1.8; ctx.setLineDash([2,3]);
+      _kanalStrane(led).forEach(function(id){
+        if(id==='D-pred'){ctx.beginPath();ctx.moveTo(0,ld);ctx.lineTo(A,ld);ctx.stroke();}
+        if(id==='A-zad'){ctx.beginPath();ctx.moveTo(0,B-ld);ctx.lineTo(A,B-ld);ctx.stroke();}
+        if(id==='B-lev'){ctx.beginPath();ctx.moveTo(ld,B-ld);ctx.lineTo(ld,ld);ctx.stroke();}
+        if(id==='C-des'){ctx.beginPath();ctx.moveTo(A-ld,B-ld);ctx.lineTo(A-ld,ld);ctx.stroke();}
+      });
+      ctx.setLineDash([]); ctx.restore();
+    }
+    // KOTE - duplim klikom se mijenjaju
+    kota(ctx,0,B+22,A,B+22,Math.round(p.a||0)+' mm',_pozEditDesc(i,'a'));
+    kota(ctx,A+22,0,A+22,B,Math.round(p.b||0)+' mm',_pozEditDesc(i,'b'));
+
+    // Redni broj i broj komada
+    ctx.fillStyle='#7a4fa0'; ctx.font='bold 15px Segoe UI,Arial';
+    ctx.textAlign='left'; ctx.textBaseline='bottom';
+    var oznaka=jeZidnaKlupica()
+      ? ((((p.zid!=null?p.zid:0))+1)+'.'+_zidoviRedniBroj(i))
+      : String(i+1)+'.';
+    ctx.fillText(oznaka,0,-9);
+    var kom=Math.max(1,p.kom||1);
+    ctx.font='bold 13px Segoe UI,Arial'; ctx.fillStyle='#1a5fa8';
+    ctx.fillText('\u00d7'+kom+' kom',30,-9);
+    _regClickRect(24,-24,74,20,null,_pozEditDesc(i,'kom'));
+    if(p.nap){
+      ctx.font='10px Segoe UI,Arial'; ctx.fillStyle='#8a93a3';
+      ctx.textAlign='right';
+      ctx.fillText(p.nap,A,-9);
+    }
+    _flushKotes();
+    ctx.restore();
+  });
+
+  // Zaglavlje
+  ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+  var ukK=t.reduce(function(a,p){return a+Math.max(1,p.kom||1);},0);
+  var ukM=t.reduce(function(a,p){return a+(p.a||0)*(p.b||0)/1e6*Math.max(1,p.kom||1);},0);
+  ctx.fillStyle='#333'; ctx.font='bold 14px Segoe UI,Arial';
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.fillText((jeKl?nazivKlupiceMn():'Gazi\u0161ta stepenica')
+    +' \u2014 '+n+' pozicija'+(gs(jeKl?'kl-n':'st-n')?(' \u00b7 '+gs(jeKl?'kl-n':'st-n')):''),12,10);
+  ctx.font='11.5px Segoe UI,Arial'; ctx.fillStyle='#6b7a8d';
+  ctx.fillText(ukK+' kom \u00b7 '+ukM.toFixed(3)+' m\u00b2 \u00b7 '
+    +getMatV()+(gs('mat-naziv')?(' \u2013 '+gs('mat-naziv')):'')+' \u00b7 '+getMatD()+' mm',12,29);
+  ctx.font='bold 10.5px Segoe UI,Arial'; ctx.fillStyle='#7a4fa0';
+  ctx.fillText('Dupli klik: mjera \u00b7 broj komada \u00b7 ivica (obrada) \u00b7 mm oznaka (djelimicna obrada)',12,47);
+  ctx.restore();
+  drawLegenda(ctx,W,H);
+}
 function drawKlSematski(ctx,W,H){
   var PAD=74;
   var A=W-PAD*2, B=Math.min(H-PAD*2, A*0.42);
@@ -8314,7 +8608,7 @@ function drawKlSematski(ctx,W,H){
 }
 function drawKl(ctx,W,H){
   // Kod tabele pozicija mjere su razne, pa se crta sematski prikaz
-  if(imaPozicije()) return drawKlSematski(ctx,W,H);
+  if(imaPozicije()) return drawKlPozicije(ctx,W,H);
   var PAD=60,k=Math.max(1,gi('kl-k'));
   var A=gi('kl-a'),B=gi('kl-b');
   var sc=Math.min((W-PAD*2-90)/Math.max(A,1),(H-PAD*2)/Math.max(B,1))*0.92;
@@ -8501,7 +8795,7 @@ function drawSto(ctx,W,H){
   ctx.restore();
 }
 function drawSt(ctx,W,H){
-  if(imaPozicije()) return drawKlSematski(ctx,W,H);
+  if(imaPozicije()) return drawKlPozicije(ctx,W,H);
   var PAD=60, br=Math.max(1,gi('st-br'));
   var A=gi('st-a'), B=gi('st-b');
   var hasCel=gc('cb-cel');
@@ -9676,7 +9970,14 @@ function genDXF(){
         var yPoz=0, sveStrane=_pozStrane();
         pozicije.forEach(function(pz,pi){
           var pa=pz.a||0, pb=pz.b||0, pk=Math.max(1,pz.kom||1);
-          rc(0,yPoz,pa,pb,'KONTURA');
+          // Radijusi uglova - kao kod kuhinje, pisu se kao lukovi u konturi
+          var pr4=[0,1,2,3].map(function(u){ return _pozR(pz,u); });
+          if(pr4.some(function(x){return x>0;})){
+            dxfRoundedRect(0,yPoz,pa,pb,pr4[0],pr4[1],pr4[2],pr4[3],'KONTURA',0);
+            tx(0,yPoz+pb+26,2.4,'RADIJUSI: '+POZ_UGLOVI.map(function(ug){
+              return ug.strane+'='+(pr4[ug.i]||0);
+            }).join(' | ')+' mm','TEKST');
+          } else rc(0,yPoz,pa,pb,'KONTURA');
           tx(0,yPoz-12,3.5,'POZ '+(pi+1)+':  '+pa+' x '+pb+' mm   x'+pk+' kom'
             +(pz.nap?('   ('+pz.nap+')'):''),'TEKST');
           // Obrada po stranama, sa oznakom djelimicne
