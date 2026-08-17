@@ -256,6 +256,7 @@ td.num{text-align:right;font-weight:700;}
     <option value="">Svi</option>
   </select>
   <label><input type="checkbox" id="fil-nepredano" onchange="load()"> Samo nepredano</label>
+  <label title="Zapisi koji samo prebacuju kes iz komercijalistine kese u blagajnu — nisu stvarne uplate ni isplate"><input type="checkbox" id="fil-pomocni" onchange="load()"> Prikaži i pomoćne zapise</label>
   <button class="btn-sm" onclick="resetFilteri()">✕ Resetuj</button>
   <span id="stat" style="margin-left:auto;color:#6b7a8d;font-size:11px;"></span>
 </div>
@@ -1181,7 +1182,14 @@ function render(){
   // VP/banka redovi (bruto+dug za neplaćenu prodaju) NE PRIPADAJU ovoj listi — nije bilo
   // stvarne gotovine, imaju svoj poseban tab (VP). Ostaju u "all" (radi tačnosti drugih
   // izračuna koji možda koriste all), samo se ne prikazuju kao redovi OVDJE.
-  const rows=all.filter(r=>!jeVpBankaRed(r));
+  /* POMOCNI zapisi ("Pokrice isplate", "Iskoristeno za isplatu", "Ulaz iz nepredane
+     gotovine", "Razduzenje ... dao kes") samo prebacuju kes iz komercijalistine kese u
+     blagajnu — nisu stvarne uplate ni isplate. U gornjem panelu su potrebni (drze stanje
+     tacnim), ali OVDJE su smetali: isti iznos se pojavljivao tri puta za jednu isplatu.
+     Prikazuju se samo ako se ukljuci prekidac "Prikazi i pomocne zapise". */
+  const jePomocni = r => /^(Pokri.?e isplate|Iskori.?teno za isplatu|Ulaz iz nepredane gotovine|Razdu.?enje .*dao kes)/.test(r.opis||'');
+  const prikaziPomocne = document.getElementById('fil-pomocni')?.checked;
+  const rows=all.filter(r=>!jeVpBankaRed(r) && (prikaziPomocne || !jePomocni(r)));
   const ukupnoKM=rows.reduce((s,r)=>s+parseFloat(r.iznos||0)*(r.valuta==='EUR'?1.95:1),0);
   document.getElementById('stat').textContent=`${rows.length} zapisa | Ukupno: ${fm(ukupnoKM)} KM`;
   if(!rows.length){
