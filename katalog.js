@@ -89,20 +89,35 @@ router.get('/debljine', smijeSlati, async (req, res) => {
 router.get('/grupe', smijeSlati, async (req, res) => {
   try {
     const objektId = parseInt(req.query.objekt_id);
+    // Pretraga hvata i NAZIV/SIFRU artikla, ne samo naziv grupe — pa se ukucavanjem
+    // "bengal" ili "8373" pronadje grupa u kojoj taj artikal jeste.
+    const q = (req.query.q || '').trim();
     // Uz svaku grupu ide i MASTER grupa (granit, kvarc...) — da se u katalogu moze
     // birati po master grupi, pa se npr. granit ne salje vlasnicima salona namjestaja.
+    const vals = [];
+    let objektDio = '';
+    if (objektId) { vals.push(objektId); objektDio = `AND rp.objekt_id = $${vals.length}`; }
+    let uslovPretrage = '';
+    if (q) {
+      vals.push(`%${q}%`);
+      uslovPretrage = `AND (r.grupa ILIKE $${vals.length} OR r.naziv ILIKE $${vals.length} OR r.sifra ILIKE $${vals.length}
+                            OR EXISTS (SELECT 1 FROM master_grupe m2
+                                       WHERE m2.id = COALESCE(r.master_grupa_id, gm.master_grupa_id)
+                                         AND m2.naziv ILIKE $${vals.length}))`;
+    }
     const r = await pool.query(
       `SELECT r.grupa, COUNT(*) AS broj,
               COALESCE(r.master_grupa_id, gm.master_grupa_id) AS master_id,
               mg.naziv AS master_naziv
        FROM roba r
-       JOIN roba_pj rp ON rp.roba_id = r.id ${objektId ? 'AND rp.objekt_id = $1' : ''}
+       JOIN roba_pj rp ON rp.roba_id = r.id ${objektDio}
        LEFT JOIN grupa_master gm ON gm.grupa = r.grupa
        LEFT JOIN master_grupe mg ON mg.id = COALESCE(r.master_grupa_id, gm.master_grupa_id)
        WHERE r.aktivan = true AND r.grupa IS NOT NULL AND r.grupa <> ''
+         ${uslovPretrage}
        GROUP BY r.grupa, COALESCE(r.master_grupa_id, gm.master_grupa_id), mg.naziv
        ORDER BY (mg.naziv IS NULL), mg.naziv, r.grupa`,
-      objektId ? [objektId] : []
+      vals
     );
     res.json(r.rows);
   } catch (err) {

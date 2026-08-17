@@ -623,8 +623,9 @@ ucitajMaterijale();
         Kome šalješ (<span id="kat-primaoci-broj">0</span> izabranih)
       </label>
       <div style="display:flex;gap:6px;margin-bottom:6px;">
-        <button type="button" onclick="katPrimaociSvi(true)" style="flex:1;padding:5px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:11px;">Izaberi sve</button>
-        <button type="button" onclick="katPrimaociSvi(false)" style="flex:1;padding:5px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:11px;">Poništi</button>
+        <input type="text" id="kat-primaoci-pretraga" placeholder="🔍 Pretraga po imenu..." oninput="katRenderPrimaoce()" style="flex:1;padding:5px 9px;border:1px solid #ddd;border-radius:6px;font-size:11.5px;">
+        <button type="button" onclick="katPrimaociSvi(true)" style="padding:5px 9px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:11px;">Sve prikazane</button>
+        <button type="button" onclick="katPrimaociSvi(false)" style="padding:5px 9px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:11px;">Poništi</button>
       </div>
       <div id="kat-primaoci" style="max-height:170px;overflow-y:auto;border:1px solid #ddd;border-radius:8px;padding:7px 10px;"></div>
     </div>
@@ -632,8 +633,9 @@ ucitajMaterijale();
     <!-- 2. GRUPE PROIZVODA -->
     <div style="margin-bottom:14px;">
       <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:5px;">2. Grupe proizvoda</label>
+      <input type="text" id="kat-grupe-pretraga" placeholder="🔍 Traži po grupi, nazivu artikla ili šifri..." oninput="katFiltrirajGrupe()" style="width:100%;padding:6px 9px;border:1px solid #ddd;border-radius:6px;font-size:12px;margin-bottom:6px;box-sizing:border-box;">
       <div style="display:flex;gap:6px;margin-bottom:6px;">
-        <button type="button" onclick="katGrupeSve(true)" style="flex:1;padding:5px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:11px;">Izaberi sve</button>
+        <button type="button" onclick="katGrupeSve(true)" style="flex:1;padding:5px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:11px;">Izaberi prikazane</button>
         <button type="button" onclick="katGrupeSve(false)" style="flex:1;padding:5px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:11px;">Poništi</button>
       </div>
       <div id="kat-grupe" style="max-height:180px;overflow-y:auto;border:1px solid #ddd;border-radius:8px;padding:7px 10px;"></div>
@@ -719,8 +721,9 @@ let katPregledTajmer = null;
 function katEsc(s){ return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 async function otvoriPosaljiKatalog(opcije){
-  katObjektId = opcije?.objekt_id ?? (typeof trenutniObjekat!=='undefined' ? trenutniObjekat?.id : null)
-                                   ?? (typeof blagajnaObjektId!=='undefined' ? blagajnaObjektId : null);
+  katObjektId = opcije?.objekt_id
+    ?? (typeof trenutniObjekat!=='undefined' ? trenutniObjekat?.id : null)
+    ?? (typeof blagajnaObjektId!=='undefined' ? blagajnaObjektId : null);
   katKupac = opcije?.kupac || null;
   katToken = null;
   document.getElementById('kat-rezultat').style.display = 'none';
@@ -740,9 +743,17 @@ async function otvoriPosaljiKatalog(opcije){
     katPrikaziInfoTipa();
   }catch(e){}
 
-  // Grupe proizvoda iz lagera
+  await otvoriPosaljiKatalogGrupe();
+}
+
+// Ucitavanje grupa — izdvojeno da se moze pozvati ponovo kad se promijeni objekat.
+async function otvoriPosaljiKatalogGrupe(){
   try{
-    const r = await fetch(`${API}/api/katalog/grupe${katObjektId?`?objekt_id=${katObjektId}`:''}`);
+    const q = (document.getElementById('kat-grupe-pretraga')?.value||'').trim();
+    const par = new URLSearchParams();
+    if(katObjektId) par.set('objekt_id', katObjektId);
+    if(q) par.set('q', q);
+    const r = await fetch(`${API}/api/katalog/grupe?${par}`);
     const grupe = await r.json();
     // Grupisano po MASTER grupi (granit, kvarc...) — pa se jednim klikom bira cijela
     // kategorija, npr. sav granit, bez prebiranja po pojedinacnim grupama.
@@ -774,6 +785,7 @@ document.getElementById('kat-tip').addEventListener('change', ()=>{ katPrikaziIn
    grad, i dobiješ spisak baš tih kupaca sa dugmadima za slanje svakom pojedinačno. */
 let katPrimaociLista = [];
 
+
 async function katUcitajGradove(){
   const tipId = document.getElementById('kat-tip').value;
   try{
@@ -798,16 +810,31 @@ async function katUcitajPrimaoce(){
     const r = await fetch(`${API}/api/katalog/primaoci?${par}`);
     katPrimaociLista = await r.json();
     blok.style.display = katPrimaociLista.length ? 'block' : 'none';
-    document.getElementById('kat-primaoci').innerHTML = katPrimaociLista.length
-      ? katPrimaociLista.map((k,i)=>`
-          <label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px;cursor:pointer;border-bottom:1px solid #f3f3f3;">
-            <input type="checkbox" data-i="${i}" onchange="katOsvjeziBrojPrimalaca()" ${k.telefon?'checked':''}>
-            <span style="flex:1;">${katEsc(k.naziv)}</span>
-            <span style="color:${k.telefon?'#8b96a5':'#c0392b'};font-size:11px;">${k.telefon?katEsc(k.telefon):'bez telefona'}</span>
-          </label>`).join('')
-      : '';
-    katOsvjeziBrojPrimalaca();
+    const pretraga = document.getElementById('kat-primaoci-pretraga');
+    if(pretraga) pretraga.value = '';
+    katRenderPrimaoce();
   }catch(e){}
+}
+
+/* Prikaz primalaca — NIKO nije unaprijed cekiran. Prvo se suzi izbor (vrsta kupca, grad,
+   pretraga po imenu), pa se tek onda bira kome se salje. Ranije su svi sa telefonom bili
+   odmah cekirani, pa se lako slalo i onima kojima nije trebalo. */
+function katRenderPrimaoce(){
+  const q = (document.getElementById('kat-primaoci-pretraga')?.value||'').toLowerCase().trim();
+  // Cekirani izbor se PAMTI dok se pretrazuje
+  const vecCekirani = new Set([...document.querySelectorAll('#kat-primaoci input:checked')].map(i=>i.dataset.i));
+  const prikaz = katPrimaociLista
+    .map((k,i)=>({k,i}))
+    .filter(({k})=>!q || String(k.naziv||'').toLowerCase().includes(q));
+  document.getElementById('kat-primaoci').innerHTML = prikaz.length
+    ? prikaz.map(({k,i})=>`
+        <label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12.5px;cursor:pointer;border-bottom:1px solid #f3f3f3;">
+          <input type="checkbox" data-i="${i}" ${vecCekirani.has(String(i))?'checked':''} onchange="katOsvjeziBrojPrimalaca()">
+          <span style="flex:1;">${katEsc(k.naziv)}</span>
+          <span style="color:${k.telefon?'#8b96a5':'#c0392b'};font-size:11px;">${k.telefon?katEsc(k.telefon):'bez telefona'}</span>
+        </label>`).join('')
+    : '<div style="color:#8b96a5;font-size:12px;padding:6px;">Nema rezultata pretrage.</div>';
+  katOsvjeziBrojPrimalaca();
 }
 
 function katPrimaociSvi(oznaceno){
@@ -838,6 +865,15 @@ function katMasterToggle(el){
   katUcitajDebljine();
   katUcitajArtikle();
   katOsvjeziPregled();
+}
+
+/* Pretraga grupa — trazi po nazivu GRUPE, ali i po nazivu/sifri ARTIKLA i po MASTER
+   grupi. Tako se ukucavanjem "bengal", "8373" ili "granit" suzi spisak, pa se tek onda
+   cekira ono sto je ostalo. Odgoda od 300ms da se ne salje upit na svako slovo. */
+let katGrupeTajmer = null;
+function katFiltrirajGrupe(){
+  clearTimeout(katGrupeTajmer);
+  katGrupeTajmer = setTimeout(()=>otvoriPosaljiKatalogGrupe(), 300);
 }
 
 function katGrupeSve(oznaceno){
