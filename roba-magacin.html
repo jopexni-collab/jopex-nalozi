@@ -4439,6 +4439,16 @@ fetch(`${API}/api/auth/me`).then(r=>{
       <div id="kat-grupe" style="max-height:180px;overflow-y:auto;border:1px solid #ddd;border-radius:8px;padding:7px 10px;"></div>
     </div>
 
+    <!-- DODATNI FILTERI — ne mora cijela grupa u katalog -->
+    <div id="kat-filteri-blok" style="display:none;margin-bottom:14px;">
+      <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:5px;">Suzi izbor <span style="font-weight:400;color:#8b96a5;">(opciono)</span></label>
+      <div id="kat-debljine-blok" style="display:none;margin-bottom:8px;">
+        <div style="font-size:11.5px;color:#8b96a5;margin-bottom:4px;">Debljina (cm) — ako ne izabereš ništa, idu sve:</div>
+        <div id="kat-debljine" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+      </div>
+      <input type="text" id="kat-sifre" placeholder="Samo određene šifre, odvojene zarezom (npr. 8373, 8375)" oninput="katOsvjeziPregled()" style="width:100%;padding:7px 10px;border:1px solid #ddd;border-radius:8px;font-size:12.5px;box-sizing:border-box;">
+    </div>
+
     <!-- 3. IZGLED -->
     <div style="margin-bottom:14px;">
       <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:5px;">3. Izgled kataloga</label>
@@ -4501,8 +4511,7 @@ function katEsc(s){ return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp
 
 async function otvoriPosaljiKatalog(opcije){
   // Objekat se preuzima iz onoga sto je vec izabrano u modulu — u maloprodaji je to
-  // trenutniObjekat, u roba-magacinu polje 'lager-objekat'. Bez toga bi katalog uzimao
-  // cijene iz pogresne PJ.
+  // trenutniObjekat, u roba-magacinu polje 'lager-objekat'.
   katObjektId = opcije?.objekt_id
     ?? (typeof trenutniObjekat!=='undefined' ? trenutniObjekat?.id : null)
     ?? (document.getElementById('lager-objekat')?.value || null)
@@ -4544,7 +4553,7 @@ async function otvoriPosaljiKatalog(opcije){
             </label>
             ${lista.map(g=>`
               <label style="display:flex;align-items:center;gap:8px;padding:3px 0 3px 18px;font-size:12.5px;cursor:pointer;">
-                <input type="checkbox" value="${katEsc(g.grupa)}" onchange="katOsvjeziPregled()">
+                <input type="checkbox" value="${katEsc(g.grupa)}" onchange="katUcitajDebljine();katOsvjeziPregled()">
                 <span style="flex:1;">${katEsc(g.grupa)}</span>
                 <span style="color:#8b96a5;font-size:11px;">${g.broj}</span>
               </label>`).join('')}
@@ -4621,11 +4630,13 @@ function katPrikaziInfoTipa(){
 // Kvadratic MASTER grupe cekira/odcekira sve grupe ispod nje.
 function katMasterToggle(el){
   el.closest('div').querySelectorAll('input[value]').forEach(i=>i.checked = el.checked);
+  katUcitajDebljine();
   katOsvjeziPregled();
 }
 
 function katGrupeSve(oznaceno){
   document.querySelectorAll('#kat-grupe input').forEach(i=>i.checked=oznaceno);
+  katUcitajDebljine();
   katOsvjeziPregled();
 }
 
@@ -4640,11 +4651,44 @@ function katPostaviPrikaz(p){
   });
 }
 
+/* ── DODATNI FILTERI ──
+   Kad se izaberu grupe, ucitaju se debljine koje u njima postoje. Ako se nista ne
+   izabere, ide sve — filter je samo suzavanje. */
+function katIzabraneGrupe(){
+  return [...document.querySelectorAll('#kat-grupe input[value]:checked')].map(i=>i.value);
+}
+function katIzabraneDebljine(){
+  return [...document.querySelectorAll('#kat-debljine input:checked')].map(i=>i.value);
+}
+function katUpisaneSifre(){
+  return (document.getElementById('kat-sifre').value||'')
+    .split(/[,;\s]+/).map(s=>s.trim()).filter(Boolean);
+}
+
+async function katUcitajDebljine(){
+  const grupe = katIzabraneGrupe();
+  const blokF = document.getElementById('kat-filteri-blok');
+  const blokD = document.getElementById('kat-debljine-blok');
+  blokF.style.display = grupe.length ? 'block' : 'none';
+  if(!grupe.length){ blokD.style.display='none'; return; }
+  try{
+    const r = await fetch(`${API}/api/katalog/debljine?grupe=${encodeURIComponent(grupe.join(','))}`);
+    const d = await r.json();
+    if(!Array.isArray(d) || !d.length){ blokD.style.display='none'; return; }
+    blokD.style.display='block';
+    document.getElementById('kat-debljine').innerHTML = d.map(x=>`
+      <label style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid #ddd;border-radius:14px;font-size:12px;cursor:pointer;background:#fff;">
+        <input type="checkbox" value="${x.debljina_cm}" onchange="katOsvjeziPregled()">
+        ${x.debljina_cm} cm <span style="color:#8b96a5;font-size:10.5px;">(${x.broj})</span>
+      </label>`).join('');
+  }catch(e){ blokD.style.display='none'; }
+}
+
 // Živi pregled — koliko artikala ulazi u katalog (da se ne pošalje prazan ili ogroman).
 function katOsvjeziPregled(){
   clearTimeout(katPregledTajmer);
   katPregledTajmer = setTimeout(async ()=>{
-    const grupe = [...document.querySelectorAll('#kat-grupe input:checked')].map(i=>i.value);
+    const grupe = katIzabraneGrupe();
     const el = document.getElementById('kat-pregled');
     if(!grupe.length){ el.textContent='Izaberi bar jednu grupu proizvoda.'; return; }
     const tipId = document.getElementById('kat-tip').value;
@@ -4652,7 +4696,9 @@ function katOsvjeziPregled(){
       const samoDost = document.getElementById('kat-samo-dostupno').checked;
       const r = await fetch(`${API}/api/katalog/pregled?grupe=${encodeURIComponent(grupe.join(','))}`
         + (katObjektId?`&objekt_id=${katObjektId}`:'') + (tipId?`&tip_kupca_id=${tipId}`:'')
-        + (samoDost?'&samo_dostupno=true':''));
+        + (samoDost?'&samo_dostupno=true':'')
+        + (katIzabraneDebljine().length?`&debljine=${katIzabraneDebljine().join(',')}`:'')
+        + (katUpisaneSifre().length?`&sifre=${encodeURIComponent(katUpisaneSifre().join(','))}`:''));
       const d = await r.json();
       const dostupnih = d.stavke.filter(s=>s.dostupno).length;
       el.innerHTML = `<b>${d.stavke.length}</b> artikala u katalogu · ${dostupnih} dostupno`;
@@ -4662,7 +4708,7 @@ function katOsvjeziPregled(){
 
 async function katNapravi(){
   const greska = document.getElementById('kat-greska');
-  const grupe = [...document.querySelectorAll('#kat-grupe input:checked')].map(i=>i.value);
+  const grupe = katIzabraneGrupe();
   if(!grupe.length){ greska.style.display='block'; greska.textContent='Izaberi bar jednu grupu proizvoda.'; return; }
   const saCijenama = document.getElementById('kat-cijene').checked;
   const tipId = document.getElementById('kat-tip').value;
@@ -4679,6 +4725,8 @@ async function katNapravi(){
         grupe, objekt_id: katObjektId, prikaz: katPrikaz,
         sa_cijenama: saCijenama,
         samo_dostupno: document.getElementById('kat-samo-dostupno').checked,
+        debljine: katIzabraneDebljine(),
+        sifre: katUpisaneSifre(),
         kupac_naziv: document.getElementById('kat-kupac').value.trim() || null,
       }),
     });

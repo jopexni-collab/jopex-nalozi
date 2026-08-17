@@ -92,6 +92,7 @@
   <div class="alatke">
     <button class="btn" id="btn-mreza" onclick="postaviPrikaz('mreza')">▦ Mrežni prikaz</button>
     <button class="btn" id="btn-lista" onclick="postaviPrikaz('lista')">☰ Linijski prikaz</button>
+    <button class="btn" id="btn-nazad" onclick="history.back()" style="display:none;">← Nazad</button>
     <button class="btn btn-pdf" onclick="window.print()">⬇ Sačuvaj kao PDF</button>
   </div>
 
@@ -190,6 +191,12 @@ function red(s){
     </div>
     ${s.cijena!=null?`<div class="cijena">${fm(s.cijena)}<div class="jm">/ ${esc(s.jed_mjera)}</div></div>`:''}
   </div>`;
+}
+
+// "Nazad" ima smisla samo ako je stranica otvorena IZ nečega (iz aplikacije, ili
+// pretragom) — ako je kupac otvorio link direktno, nema gdje da se vrati.
+if(history.length > 1 || document.referrer){
+  document.getElementById('btn-nazad').style.display = '';
 }
 
 ucitaj();

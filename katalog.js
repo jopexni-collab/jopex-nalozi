@@ -70,6 +70,22 @@ router.get('/primaoci', smijeSlati, async (req, res) => {
   }
 });
 
+// GET /api/katalog/debljine?grupe=a,b — koje debljine postoje u izabranim grupama
+router.get('/debljine', smijeSlati, async (req, res) => {
+  try {
+    const grupe = (req.query.grupe || '').split(',').map(s=>s.trim()).filter(Boolean);
+    if (!grupe.length) return res.json([]);
+    const r = await pool.query(
+      `SELECT r.debljina_cm, COUNT(*) AS broj FROM roba r
+       WHERE r.aktivan = true AND r.grupa = ANY($1) AND r.debljina_cm IS NOT NULL
+       GROUP BY r.debljina_cm ORDER BY r.debljina_cm`, [grupe]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/grupe', smijeSlati, async (req, res) => {
   try {
     const objektId = parseInt(req.query.objekt_id);
@@ -97,7 +113,7 @@ router.get('/grupe', smijeSlati, async (req, res) => {
 // POST /api/katalog — sastavi katalog i vrati javni token (link za slanje)
 router.post('/', smijeSlati, async (req, res) => {
   const u = req.session.user;
-  const { tip_kupca_id, grupe, objekt_id, prikaz, sa_cijenama, naslov, kupac_naziv, samo_dostupno } = req.body || {};
+  const { tip_kupca_id, grupe, objekt_id, prikaz, sa_cijenama, naslov, kupac_naziv, samo_dostupno, debljine, sifre } = req.body || {};
   if (!Array.isArray(grupe) || !grupe.length)
     return res.status(400).json({ error: 'Izaberite bar jednu grupu proizvoda.' });
   try {
@@ -109,11 +125,13 @@ router.post('/', smijeSlati, async (req, res) => {
     const token = crypto.randomBytes(16).toString('hex');
     const r = await pool.query(
       `INSERT INTO katalozi (javni_token, tip_kupca_id, tip_naziv, grupe, objekt_id,
-                             prikaz, sa_cijenama, naslov, kupac_naziv, kreirao_id, kreirao_ime, samo_dostupno)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id, javni_token`,
+                             prikaz, sa_cijenama, naslov, kupac_naziv, kreirao_id, kreirao_ime, samo_dostupno, debljine, sifre)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id, javni_token`,
       [token, tip_kupca_id || null, tipNaziv, grupe, objekt_id || null,
        prikaz === 'lista' ? 'lista' : 'mreza', sa_cijenama !== false,
-       naslov || null, kupac_naziv || null, u.id, u.ime_prezime, samo_dostupno === true]
+       naslov || null, kupac_naziv || null, u.id, u.ime_prezime, samo_dostupno === true,
+       Array.isArray(debljine)&&debljine.length ? debljine.map(Number) : null,
+       Array.isArray(sifre)&&sifre.length ? sifre : null]
     );
     res.status(201).json({ ok: true, token: r.rows[0].javni_token, id: r.rows[0].id });
   } catch (err) {
@@ -131,6 +149,8 @@ router.get('/pregled', smijeSlati, async (req, res) => {
       objekt_id: req.query.objekt_id ? parseInt(req.query.objekt_id) : null,
       tip_kupca_id: req.query.tip_kupca_id ? parseInt(req.query.tip_kupca_id) : null,
       samo_dostupno: req.query.samo_dostupno === 'true',
+      debljine: (req.query.debljine || '').split(',').filter(Boolean),
+      sifre: (req.query.sifre || '').split(',').filter(Boolean),
     });
     res.json(podaci);
   } catch (err) {
@@ -139,7 +159,7 @@ router.get('/pregled', smijeSlati, async (req, res) => {
 });
 
 // Zajednicko ucitavanje stavki — koriste ga i pregled i javni prikaz.
-async function ucitajStavke({ grupe, objekt_id, tip_kupca_id, samo_dostupno }) {
+async function ucitajStavke({ grupe, objekt_id, tip_kupca_id, samo_dostupno, debljine, sifre }) {
   let tip = null;
   if (tip_kupca_id) {
     const t = await pool.query('SELECT * FROM tipovi_kupaca WHERE id=$1', [tip_kupca_id]);
@@ -155,6 +175,19 @@ async function ucitajStavke({ grupe, objekt_id, tip_kupca_id, samo_dostupno }) {
   let objektUslov = '';
   if (objekt_id) { vals.push(objekt_id); objektUslov = `AND rp.objekt_id = $${vals.length}`; }
 
+  // Dodatni filteri — ne mora cijela grupa u katalog (npr. samo debljina 3 cm).
+  let dodatni = '';
+  const listaDebljina = (debljine || []).map(x => parseFloat(x)).filter(x => !isNaN(x));
+  if (listaDebljina.length) {
+    vals.push(listaDebljina);
+    dodatni += ` AND r.debljina_cm = ANY($${vals.length}::numeric[])`;
+  }
+  const listaSifri = (sifre || []).map(s => String(s).trim()).filter(Boolean);
+  if (listaSifri.length) {
+    vals.push(listaSifri);
+    dodatni += ` AND r.sifra = ANY($${vals.length}::text[])`;
+  }
+
   const r = await pool.query(
     `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
             rp.cijena AS osnovica, rp.stanje,
@@ -167,6 +200,7 @@ async function ucitajStavke({ grupe, objekt_id, tip_kupca_id, samo_dostupno }) {
      LEFT JOIN master_grupe mg ON mg.id = COALESCE(r.master_grupa_id, gm.master_grupa_id)
      WHERE r.aktivan = true AND r.grupa = ANY($1)
        ${samo_dostupno ? 'AND rp.stanje > 0' : ''}
+       ${dodatni}
      ORDER BY r.grupa, r.naziv`,
     vals
   );
