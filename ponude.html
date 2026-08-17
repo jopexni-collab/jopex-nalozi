@@ -8313,49 +8313,30 @@ function _pozBrojStrana(){
   var n=(pozicije||[]).length||1;
   return Math.max(1,Math.ceil(n/POZ_PO_STRANI));
 }
-function _pozNaStrani(){
+function _pozNaStrani(k){
   var t=(pozicije||[]);
-  var od=_pozStrana*POZ_PO_STRANI;
+  var od=((k==null)?_pozStrana:k)*POZ_PO_STRANI;
   return t.map(function(p,i){return {p:p,i:i};}).slice(od,od+POZ_PO_STRANI);
 }
-// Traka za listanje strana crteza
+// Sve strane se prikazuju JEDNA ISPOD DRUGE - nema listanja. Broj pozicija
+// po strani se moze podesiti, ali se sve strane crtaju odjednom.
 function buildPozNav(){
   var con=ge('poz-nav'); if(!con) return;
   var n=(pozicije||[]).length;
-  var br=_pozBrojStrana();
   if(!imaPozicije()||n<=POZ_PO_STRANI){ con.style.display='none'; con.innerHTML=''; return; }
-  if(_pozStrana>=br) _pozStrana=br-1;
   con.style.display='';
-  var d=function(txt,k,akt,ugasen){
-    return '<button type="button" '+(ugasen?'disabled':'onclick="pozIdiNaStranu('+k+')"')
-      +' style="font:inherit;font-size:11.5px;padding:5px 11px;border-radius:5px;'
-      +'cursor:'+(ugasen?'default':'pointer')+';font-weight:'+(akt?'700':'500')+';'
-      +'border:1px solid '+(akt?'#1a5fa8':'#dde2ea')+';'
-      +'background:'+(akt?'#1a5fa8':'#fff')+';color:'+(akt?'#fff':(ugasen?'#c8d2dd':'#6b7a8d'))+'">'
-      +txt+'</button>';
-  };
-  var h='<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;'
+  con.innerHTML='<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;'
     +'background:#f0f4fa;border-radius:6px;padding:7px 9px">'
     +'<span style="font-size:11px;color:#6b7a8d;font-weight:600">'
-    +n+' pozicija · strana '+(_pozStrana+1)+'/'+br+'</span>'
-    +d('‹ prethodna',_pozStrana-1,false,_pozStrana===0);
-  for(var k=0;k<br;k++){
-    var od=k*POZ_PO_STRANI+1, doo=Math.min(n,(k+1)*POZ_PO_STRANI);
-    h+=d(od+'–'+doo,k,k===_pozStrana,false);
-  }
-  h+=d('sljedeća ›',_pozStrana+1,false,_pozStrana>=br-1)
-    +'<span style="font-size:10px;color:#8a93a3;margin-left:auto">'
-    +'po strani: </span>'
+    +n+' pozicija na '+_pozBrojStrana()+' strana</span>'
+    +'<span style="font-size:10px;color:#8a93a3;margin-left:auto">po strani:</span>'
     +'<input type="number" min="1" max="20" value="'+POZ_PO_STRANI+'" style="width:48px;'
     +'font:inherit;font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;'
-    +'text-align:right" onchange="pozPoStrani(this.value)">'
-    +'</div>';
-  con.innerHTML=h;
+    +'text-align:right" onchange="pozPoStrani(this.value)"></div>';
 }
 function pozPoStrani(v){
   var n=parseInt(v,10)||6;
   POZ_PO_STRANI=Math.max(1,Math.min(20,n));
-  _pozStrana=0;
   buildPozNav(); refresh();
 }
 function pozIdiNaStranu(k){
@@ -8370,57 +8351,60 @@ function _pozRaspored(n){
           padX:56, padY:74, razmakX:64, razmakY:64, donjaRezerva:30};
 }
 // Visina platna koja stvarno stane sve pozicije
-function _pozPlatnoVisina(W){
-  var lista=_pozNaStrani();
-  var n=lista.length||1;
-  var g=_pozRaspored(n);
+// Mjerilo je isto za SVE strane, pa su klupice medjusobno uporedive
+function _pozMjerilo(W){
+  var g=_pozRaspored(1);
   var maxA=1,maxB=1;
-  // Mjerilo prema NAJVECOJ u cijeloj stavci, da strane budu medjusobno
-  // uporedive - ne da se svaka strana crta u svojoj skali.
   (pozicije||[]).forEach(function(p){ if((p.a||0)>maxA)maxA=p.a||0; if((p.b||0)>maxB)maxB=p.b||0; });
-  var celijaW=(W-g.padX*2-g.razmakX*(g.uRedu-1))/g.uRedu;
-  // Mjerilo prema sirini celije, ali red ne smije biti visi od 190 px -
-  // inace jedna siroka klupica pojede cijelo platno.
+  var celijaW=W-g.padX*2;
   var sc=Math.min(celijaW/Math.max(maxA,1)*0.82, 190/Math.max(maxB,1));
-  var visinaReda=maxB*sc;
-  var h=g.padY+g.redova*visinaReda+g.razmakY*(g.redova-1)+g.donjaRezerva;
-  return Math.round(Math.max(300,Math.min(2600,h)));
+  return {sc:sc, visinaReda:maxB*sc, g:g};
+}
+// Visina platna: SVE strane jedna ispod druge, svaka sa svojim zaglavljem
+function _pozPlatnoVisina(W){
+  var n=(pozicije||[]).length||1;
+  var m=_pozMjerilo(W);
+  var brStr=_pozBrojStrana();
+  var h=0;
+  for(var k=0;k<brStr;k++){
+    var uStrani=_pozNaStrani(k).length;
+    h+=m.g.padY+uStrani*m.visinaReda+m.g.razmakY*(uStrani-1)+m.g.donjaRezerva;
+  }
+  return Math.round(Math.max(300,Math.min(9000,h)));
 }
 // Crtez SVAKE pozicije zasebno, sa rednim brojem i kotama koje se mogu
 // mijenjati duplim klikom - isto kao kod kuhinje. Rasporedjuju se u mrezu.
 function drawKlPozicije(ctx,W,H){
   var svi=(pozicije||[]);
   if(!svi.length) return drawKlSematski(ctx,W,H);
-  // Crta se SAMO tekuca strana; zaglavlje se ponavlja na svakoj
-  var lista=_pozNaStrani();
+  // SVE strane jedna ispod druge, svaka sa ponovljenim zaglavljem
+  var m=_pozMjerilo(W);
+  var brStr=_pozBrojStrana();
+  var yOff=0;
+  for(var k=0;k<brStr;k++){
+    var lista=_pozNaStrani(k);
+    if(!lista.length) continue;
+    ctx.save(); ctx.translate(0,yOff);
+    _crtajStranuPozicija(ctx,W,lista,m,k,brStr,svi);
+    ctx.restore();
+    yOff+=m.g.padY+lista.length*m.visinaReda+m.g.razmakY*(lista.length-1)+m.g.donjaRezerva;
+  }
+  drawLegenda(ctx,W,H);
+}
+function _crtajStranuPozicija(ctx,W,lista,m,strIdx,brStr,svi){
+  // Crta JEDNU stranu; pozivalac je vec pomjerio platno na njen pocetak.
   var t=lista.map(function(x){return x.p;});
   var n=t.length;
-  if(!n){ _pozStrana=0; lista=_pozNaStrani(); t=lista.map(function(x){return x.p;}); n=t.length; }
-  // ISTI raspored koji koristi i platno - inace se crtezi preklapaju
-  var g=_pozRaspored(n);
-  var uRedu=g.uRedu, redova=g.redova;
-  var padX=g.padX, padY=g.padY, razmakX=g.razmakX, razmakY=g.razmakY;
-  var celijaW=(W-padX*2-razmakX*(uRedu-1))/uRedu;
-  var maxA=1, maxB=1;
-  svi.forEach(function(p){ if((p.a||0)>maxA)maxA=p.a||0; if((p.b||0)>maxB)maxB=p.b||0; });
-  // Mjerilo prema sirini celije; sve pozicije u ISTOJ skali, pa se odnos
-  // velicina odmah vidi. Visina reda proizlazi iz najvece klupice.
-  var sc=Math.min(celijaW/maxA*0.82, 190/Math.max(maxB,1));
-  var visinaReda=maxB*sc;
-  // Ako je platno nize nego sto treba (npr. ugradjena slika u ponudi),
-  // smanji mjerilo da sve ipak stane bez preklapanja.
-  var trebaH=padY+redova*visinaReda+razmakY*(redova-1)+g.donjaRezerva;
-  if(trebaH>H){
-    var k=(H-padY-razmakY*(redova-1)-g.donjaRezerva)/(redova*Math.max(visinaReda,1));
-    if(k>0.15){ sc*=k; visinaReda=maxB*sc; }
-  }
+  var g=m.g, sc=m.sc, visinaReda=m.visinaReda;
+  var uRedu=g.uRedu, padX=g.padX, padY=g.padY, razmakY=g.razmakY;
+  var celijaW=W-padX*2;
   var strane=_pozStrane();
   var jeKl=(tip!=='st');
 
   t.forEach(function(p,ii){
     var i=lista[ii].i;          // stvarni indeks pozicije u stavci
     var r=Math.floor(ii/uRedu), c=ii%uRedu;
-    var ox=padX+c*(celijaW+razmakX);
+    var ox=padX;   // jedna po redu
     var oy=padY+r*(visinaReda+razmakY);
     var A=(p.a||0)*sc, B=(p.b||0)*sc;
     ctx.save(); ctx.translate(ox,oy);
@@ -8550,25 +8534,32 @@ function drawKlPozicije(ctx,W,H){
     ctx.restore();
   });
 
-  // Zaglavlje
-  ctx.save(); ctx.setTransform(1,0,0,1,0,0);
+  // Zaglavlje strane - BEZ setTransform, jer bi ponistio pomjeraj i sve
+  // strane bi pisale zaglavlje na istom mjestu.
+  ctx.save();
   var ukK=svi.reduce(function(a,p){return a+Math.max(1,p.kom||1);},0);
   var ukM=svi.reduce(function(a,p){return a+(p.a||0)*(p.b||0)/1e6*Math.max(1,p.kom||1);},0);
-  var brStr=_pozBrojStrana();
   ctx.fillStyle='#333'; ctx.font='bold 14px Segoe UI,Arial';
   ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText((jeKl?nazivKlupiceMn():'Gazi\u0161ta stepenica')
     +' \u2014 '+svi.length+' pozicija'
-    +(brStr>1?('  \u00b7  strana '+(_pozStrana+1)+'/'+brStr
+    +(brStr>1?('  \u00b7  strana '+(strIdx+1)+'/'+brStr
        +' (poz. '+(lista[0].i+1)+'\u2013'+(lista[n-1].i+1)+')'):'')
     +(gs(jeKl?'kl-n':'st-n')?(' \u00b7 '+gs(jeKl?'kl-n':'st-n')):''),12,10);
   ctx.font='11.5px Segoe UI,Arial'; ctx.fillStyle='#6b7a8d';
   ctx.fillText(ukK+' kom \u00b7 '+ukM.toFixed(3)+' m\u00b2 \u00b7 '
     +getMatV()+(gs('mat-naziv')?(' \u2013 '+gs('mat-naziv')):'')+' \u00b7 '+getMatD()+' mm',12,29);
-  ctx.font='bold 10.5px Segoe UI,Arial'; ctx.fillStyle='#7a4fa0';
-  ctx.fillText('Dupli klik: mjera \u00b7 broj komada \u00b7 ivica (obrada) \u00b7 mm oznaka (djelimicna obrada)',12,47);
+  if(strIdx===0){
+    ctx.font='bold 10.5px Segoe UI,Arial'; ctx.fillStyle='#7a4fa0';
+    ctx.fillText('Dupli klik: mjera \u00b7 broj komada \u00b7 ivica (obrada) \u00b7 mm oznaka',12,47);
+  }
+  // Tanka linija razdvaja strane
+  if(strIdx>0){
+    ctx.strokeStyle='#dde2ea'; ctx.lineWidth=1; ctx.setLineDash([6,4]);
+    ctx.beginPath(); ctx.moveTo(12,-14); ctx.lineTo(W-12,-14); ctx.stroke();
+    ctx.setLineDash([]);
+  }
   ctx.restore();
-  drawLegenda(ctx,W,H);
 }
 function drawKlSematski(ctx,W,H){
   var PAD=74;
@@ -9430,28 +9421,15 @@ function genRadniNalog(returnHtml){try{
     // HTML tekst u desnom bloku, vidi legendaHtml ispod)
     _suppressCanvasLegend=true;
     _bezAmbijenta=true;   // CNC crtez - bez prozora i spaletni
-    // Kod tabele pozicija crtez moze imati VISE STRANA - u nalog idu sve,
-    // svaka sa svojim zaglavljem. Inace bi se stampala samo tekuca strana.
-    var _slike=[];
-    var _svePoz=(typeof imaPozicije==='function'&&imaPozicije()&&(pozicije||[]).length);
-    var _brStr=_svePoz?_pozBrojStrana():1;
-    var _staraStr=_pozStrana;
-    for(var _st=0;_st<_brStr;_st++){
-      if(_svePoz) _pozStrana=_st;
-      var _cs2=getCanvasSizeForItem();
-      pc.width=_cs2.w; pc.height=_cs2.h;
-      ctx2=pc.getContext('2d');
-      ctx2.fillStyle='#ffffff'; ctx2.fillRect(0,0,pc.width,pc.height);
-      if(tip==='k') drawK(ctx2,pc.width,pc.height);
-      else if(tip==='kl') drawKl(ctx2,pc.width,pc.height);
-      else if(tip==='sto') drawSto(ctx2,pc.width,pc.height);
-      else drawSt(ctx2,pc.width,pc.height);
-      _slike.push(pc.toDataURL('image/png'));
-    }
-    _pozStrana=_staraStr;
+    // Crtez vec sadrzi SVE strane jednu ispod druge (vidi drawKlPozicije),
+    // pa je dovoljna jedna slika.
+    if(tip==='k') drawK(ctx2,pc.width,pc.height);
+    else if(tip==='kl') drawKl(ctx2,pc.width,pc.height);
+    else if(tip==='sto') drawSto(ctx2,pc.width,pc.height);
+    else drawSt(ctx2,pc.width,pc.height);
     _suppressCanvasLegend=false;
     _bezAmbijenta=false;
-    var img=_slike[0];
+    var img=pc.toDataURL('image/png');
     document.body.removeChild(pc);
     var legendaHtml=buildLegendaHTML();
 
@@ -9514,12 +9492,7 @@ function genRadniNalog(returnHtml){try{
         '<span class="rn-mat">'+ms+'</span>'+
       '</div>'+
       '<div class="rn-body">'+
-        _slike.map(function(sl,si){
-          return '<div class="rn-crtez">'
-            +(_slike.length>1?('<div style="font-size:10px;color:#6b7a8d;padding:3px 8px;'
-              +'background:#f0f4fa">Crte\u017e '+(si+1)+'/'+_slike.length+'</div>'):'')
-            +'<img src="'+sl+'" style="width:100%;display:block"></div>';
-        }).join('')+
+        '<div class="rn-crtez"><img src="'+img+'" style="width:100%;display:block"></div>'+
         '<div class="rn-right">'+
           '<table class="rn-dims">'+
             '<thead><tr><th>Dim.</th><th>Opis</th><th>Vrijednost</th></tr></thead>'+
