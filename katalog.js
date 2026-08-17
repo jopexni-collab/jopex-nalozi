@@ -188,8 +188,13 @@ async function ucitajStavke({ grupe, objekt_id, tip_kupca_id, samo_dostupno, deb
     dodatni += ` AND r.sifra = ANY($${vals.length}::text[])`;
   }
 
+  // DISTINCT ON (r.id) — jedan red PO ARTIKLU. Bez ovoga, ako objekt_id nije zadat,
+  // spajanje sa roba_pj vraca po jedan red za SVAKU PJ u kojoj artikal postoji, pa se
+  // isti artikal u katalogu pojavljuje 2-3 puta. To je bio uzrok dupliranih stavki.
+  // Kad objekt_id NIJE zadat, uzima se cijena iz PJ sa najvecim stanjem (najrelevantnija).
   const r = await pool.query(
-    `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
+    `SELECT DISTINCT ON (r.id)
+            r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
             rp.cijena AS osnovica, rp.stanje,
             (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS slika,
             (SELECT url FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS slika_puna,
@@ -201,13 +206,19 @@ async function ucitajStavke({ grupe, objekt_id, tip_kupca_id, samo_dostupno, deb
      WHERE r.aktivan = true AND r.grupa = ANY($1)
        ${samo_dostupno ? 'AND rp.stanje > 0' : ''}
        ${dodatni}
-     ORDER BY r.grupa, r.naziv`,
+     ORDER BY r.id, rp.stanje DESC NULLS LAST`,
     vals
   );
 
   // Kupcu se NE prikazuje tacna kolicina — samo da li je dostupno. Zalihe su interna
   // informacija; kupcu je dovoljno da zna moze li kupiti.
-  const stavke = r.rows.map(s => {
+  // Sortiranje po grupi i nazivu — radi se OVDJE jer DISTINCT ON zahtijeva da SQL
+  // ORDER BY pocinje kolonom po kojoj se razlikuje (r.id).
+  const redovi = r.rows.sort((a,b) =>
+    String(a.grupa||'').localeCompare(String(b.grupa||''),'sr-Latn-BA') ||
+    String(a.naziv||'').localeCompare(String(b.naziv||''),'sr-Latn-BA'));
+
+  const stavke = redovi.map(s => {
     const c = izracunajCijenu(s.osnovica, tip, 1, popusti.rows, stopa);
     return {
       id: s.id, sifra: s.sifra, naziv: s.naziv, jed_mjera: s.jed_mjera,

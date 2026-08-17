@@ -92,7 +92,7 @@
   <div class="alatke">
     <button class="btn" id="btn-mreza" onclick="postaviPrikaz('mreza')">▦ Mrežni prikaz</button>
     <button class="btn" id="btn-lista" onclick="postaviPrikaz('lista')">☰ Linijski prikaz</button>
-    <button class="btn" id="btn-nazad" onclick="history.back()" style="display:none;">← Nazad</button>
+    <button class="btn" id="btn-nazad" onclick="katalogNazad()" style="display:none;">← Nazad</button>
     <button class="btn btn-pdf" onclick="window.print()">⬇ Sačuvaj kao PDF</button>
   </div>
 
@@ -193,9 +193,18 @@ function red(s){
   </div>`;
 }
 
-// "Nazad" ima smisla samo ako je stranica otvorena IZ nečega (iz aplikacije, ili
-// pretragom) — ako je kupac otvorio link direktno, nema gdje da se vrati.
-if(history.length > 1 || document.referrer){
+/* "Nazad" — katalog se iz aplikacije otvara u NOVOM TABU, a tamo history.back() nema
+   kuda (to je bio uzrok da dugme ne radi). Zato:
+     - ako je tab otvoren iz naše stranice (window.opener) → ZATVORI tab
+     - inače, ako postoji prethodna stranica → vrati se
+   Ako kupac otvori link direktno, dugme se ne prikazuje — nema gdje da ide. */
+function katalogNazad(){
+  if(window.opener && !window.opener.closed){ window.close(); return; }
+  if(history.length > 1){ history.back(); return; }
+  window.close();  // zadnja opcija
+}
+
+if((window.opener && !window.opener.closed) || history.length > 1 || document.referrer){
   document.getElementById('btn-nazad').style.display = '';
 }
 
