@@ -156,6 +156,44 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
     color:#000!important;
     -webkit-print-color-adjust:exact;
   }
+
+  /* ── PRELOMI STRANICA ────────────────────────────────────────
+     Crtezi mogu biti VRLO visoki (tabela pozicija crta sve strane
+     jednu ispod druge). Bez ogranicenja visine slika ne stane na
+     stranicu, pregleda? je gura na sljedecu i ostavi prazninu od
+     tri cetvrtine strane. Zato:
+       - slika se skalira da uvijek stane na jednu stranu
+       - naslov stavke se ne odvaja od onoga sto slijedi
+       - tabele se lome po redovima, ne kao cjelina                */
+  @page{ size:A4 portrait; margin:12mm; }
+
+  #pon-doc .p-img-wrap{
+    page-break-inside:avoid; break-inside:avoid;
+    margin:4pt 0!important;
+  }
+  #pon-doc .p-img-wrap img{
+    max-height:150mm!important;   /* stane na A4 uz zaglavlje i tabelu */
+    width:auto!important;
+    max-width:100%!important;
+    display:block;
+    margin:0 auto;
+  }
+  /* Naslov stavke ostaje uz svoj sadrzaj */
+  #pon-doc .p-item-hd{
+    page-break-after:avoid; break-after:avoid;
+    page-break-inside:avoid; break-inside:avoid;
+    margin-top:10pt!important;
+  }
+  /* Tabele se smiju lomiti, ali ne unutar reda */
+  #pon-doc table{ page-break-inside:auto; break-inside:auto; }
+  #pon-doc tr{ page-break-inside:avoid; break-inside:avoid; }
+  #pon-doc thead{ display:table-header-group; }
+  /* Zbirni blok sa iznosima drzi na okupu */
+  #pon-doc div[style*="background:#1a3f7a"]{
+    page-break-inside:avoid; break-inside:avoid;
+  }
+  /* Ukloni suvisne razmake koji stvaraju prazne stranice */
+  #pon-doc{ orphans:3; widows:3; }
 }
 
 /* ── MULTI-ITEM LIST ─────────────────────────────────── */
@@ -6460,6 +6498,18 @@ function _regClickLine(x1,y1,x2,y2,tol,sel,editDesc){
   _clickRegions.push({type:'line',x1:p1.x,y1:p1.y,x2:p2.x,y2:p2.y,tol:tol||7,sel:sel,edit:editDesc||null});
 }
 function _scrollToAndHighlight(sel){
+  // Klik na klupicu u crtezu OTVARA njen red u lijevom panelu, ne samo da
+  // doskrola - tako se ista pozicija moze mijenjati i na crtezu i u tabeli.
+  if(typeof sel==='string'){
+    var m=sel.match(/\.poz-red\[data-pi="(\d+)"\]/);
+    if(m){
+      var idx=parseInt(m[1],10);
+      if(POZ_OTVOREN!==idx){
+        POZ_OTVOREN=idx;
+        try{ buildPozicijeTabelu(); }catch(e){}
+      }
+    }
+  }
   var el=(typeof sel==='string')?document.querySelector(sel):sel;
   if(!el) return;
   el.scrollIntoView({behavior:'smooth',block:'center'});
@@ -7546,8 +7596,27 @@ function drawLegenda(ctx,W,H){
   var profs=Object.keys(PLbl);
   var symSz=13, rowH=13, padX=6, padY=4, txtSize=9;
   var _rezLeg=[]; try{ _rezLeg=getRezData(); }catch(e){ _rezLeg=[]; }
-  var lW=_rezLeg.length?168:138;
-  var lH=padY*2+10+profs.length*rowH+(_rezLeg.length?(13+_rezLeg.length*10):0);
+  // Kanali (vodeni i LED) - prikazuju se u legendi kad su negdje ukljuceni,
+  // da se zna sta znaci koja isprekidana linija na crtezu.
+  var _kanLeg=[];
+  try{
+    if(tip==='kl'){
+      var imaVod=(pozicije||[]).some(function(p){var k=_pozKanal(p);return k&&k!=='bez';});
+      var imaLed=(pozicije||[]).some(function(p){var k=_pozLed(p);return k&&k!=='bez';});
+      if(!imaVod&&(gs('kl-iv')||'bez')!=='bez') imaVod=true;
+      if(!imaLed&&(gs('kl-led')||'bez')!=='bez') imaLed=true;
+      if(imaVod) _kanLeg.push({boja:'#1d8a6e',crte:[5,3],txt:'Vodeni kanal (odozgo)'});
+      if(imaLed){
+        var _lm=_ledMjere();
+        _kanLeg.push({boja:'#b8860b',crte:[2,3],
+          txt:'LED kanal (odozdo) '+_lm.sirina+'\u00d7'+_lm.dubina});
+      }
+    }
+  }catch(e){ _kanLeg=[]; }
+  var lW=(_rezLeg.length||_kanLeg.length)?178:138;
+  var lH=padY*2+10+profs.length*rowH
+    +(_rezLeg.length?(13+_rezLeg.length*10):0)
+    +(_kanLeg.length?(13+_kanLeg.length*11):0);
   var lX=W-lW-4, lY=4;
 
   // Pozadina
@@ -7614,9 +7683,27 @@ function drawLegenda(ctx,W,H){
     ctx.textAlign='left';ctx.textBaseline='middle';
     ctx.fillText(PLbl[prof]||prof, lX+padX+symSz+5, cy);
   });
+  // Kanali - ispod obrade ivica, sa uzorkom linije kakav je i na crtezu
+  if(_kanLeg.length){
+    var ky0=lY+padY+11+profs.length*rowH+3;
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillStyle='#6b7a8d'; ctx.font='bold 8px Segoe UI,Arial';
+    ctx.fillText('KANALI',lX+padX,ky0+2);
+    _kanLeg.forEach(function(k,i){
+      var yy=ky0+13+i*11;
+      ctx.save();
+      ctx.strokeStyle=k.boja; ctx.lineWidth=1.8; ctx.setLineDash(k.crte);
+      ctx.beginPath(); ctx.moveTo(lX+padX,yy); ctx.lineTo(lX+padX+16,yy); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+      ctx.fillStyle='#000'; ctx.font='8px Segoe UI,Arial';
+      ctx.fillText(k.txt,lX+padX+21,yy);
+    });
+  }
   // Rezanje - odvojen popis ispod obrade ivica, sa stranom i uglom
   if(_rezLeg.length){
-    var ry0=lY+padY+11+profs.length*rowH+3;
+    var ry0=lY+padY+11+profs.length*rowH+3
+      +(_kanLeg.length?(13+_kanLeg.length*11):0);
     ctx.textAlign='left';ctx.textBaseline='top';
     ctx.fillStyle='#8e44ad';ctx.font='bold 8px Segoe UI,Arial';
     ctx.fillText('REZANJE',lX+padX,ry0);
@@ -8318,6 +8405,33 @@ function _pozNaStrani(k){
   var od=((k==null)?_pozStrana:k)*POZ_PO_STRANI;
   return t.map(function(p,i){return {p:p,i:i};}).slice(od,od+POZ_PO_STRANI);
 }
+// Pravi PO JEDNU SLIKU za svaku stranu pozicija. Za ekran je jedan visok
+// crtez u redu, ali za stampu i ponudu je losе - slika ne stane na A4 pa
+// pregledac ostavi pola prazne stranice. Zato se za dokumente razdvaja.
+function _slikeCrteza(){
+  var svePoz=(typeof imaPozicije==='function'&&imaPozicije()&&(pozicije||[]).length);
+  var brStr=svePoz?_pozBrojStrana():1;
+  var stara=_pozStrana, staroSve=_SAMO_JEDNA_STRANA;
+  var slike=[];
+  for(var k=0;k<brStr;k++){
+    if(svePoz){ _pozStrana=k; _SAMO_JEDNA_STRANA=true; }
+    var cs=getCanvasSizeForItem();
+    var pc=document.createElement('canvas');
+    pc.width=cs.w; pc.height=cs.h;
+    pc.style.cssText='position:absolute;left:-9999px;top:0';
+    document.body.appendChild(pc);
+    var c2=pc.getContext('2d');
+    c2.fillStyle='#ffffff'; c2.fillRect(0,0,pc.width,pc.height);
+    drawOn(c2,pc.width,pc.height);
+    slike.push(pc.toDataURL('image/png'));
+    document.body.removeChild(pc);
+  }
+  _pozStrana=stara; _SAMO_JEDNA_STRANA=staroSve;
+  return slike;
+}
+// Kad je true, crta se samo tekuca strana (za dokumente), inace sve odjednom
+var _SAMO_JEDNA_STRANA=false;
+
 // Sve strane se prikazuju JEDNA ISPOD DRUGE - nema listanja. Broj pozicija
 // po strani se moze podesiti, ali se sve strane crtaju odjednom.
 function buildPozNav(){
@@ -8366,7 +8480,9 @@ function _pozPlatnoVisina(W){
   var m=_pozMjerilo(W);
   var brStr=_pozBrojStrana();
   var h=0;
-  for(var k=0;k<brStr;k++){
+  var od=_SAMO_JEDNA_STRANA?_pozStrana:0;
+  var doo=_SAMO_JEDNA_STRANA?(_pozStrana+1):brStr;
+  for(var k=od;k<doo;k++){
     var uStrani=_pozNaStrani(k).length;
     h+=m.g.padY+uStrani*m.visinaReda+m.g.razmakY*(uStrani-1)+m.g.donjaRezerva;
   }
@@ -8381,7 +8497,9 @@ function drawKlPozicije(ctx,W,H){
   var m=_pozMjerilo(W);
   var brStr=_pozBrojStrana();
   var yOff=0;
-  for(var k=0;k<brStr;k++){
+  var od=_SAMO_JEDNA_STRANA?_pozStrana:0;
+  var doo=_SAMO_JEDNA_STRANA?(_pozStrana+1):brStr;
+  for(var k=od;k<doo;k++){
     var lista=_pozNaStrani(k);
     if(!lista.length) continue;
     ctx.save(); ctx.translate(0,yOff);
@@ -8409,6 +8527,9 @@ function _crtajStranuPozicija(ctx,W,lista,m,strIdx,brStr,svi){
     var A=(p.a||0)*sc, B=(p.b||0)*sc;
     ctx.save(); ctx.translate(ox,oy);
 
+    // Cijela ploca je klikabilna - otvara svoj red u lijevom panelu.
+    // Registruje se PRVA, pa manje zone (kote, ivice, uglovi) imaju prednost.
+    _regClickRect(0,0,A,B,'.poz-red[data-pi="'+i+'"]',null);
     // Ploca sa zaobljenim uglovima (radijus po uglu, kao kod kuhinje)
     var rpx=[0,1,2,3].map(function(u){ return _pozR(p,u)*sc; });
     _zaobljenPut(ctx,A,B,rpx);
@@ -9301,6 +9422,7 @@ function loadProject(){
         if(p.ponuda!==undefined) _ponudaInfo=p.ponuda||null;
         if(p.nalog!==undefined)  _nalogInfo=p.nalog||null;
         if(p.istorija!==undefined) _istorijaIzmjena=p.istorija||[];
+        if(p.autor!==undefined) _autorPonude=p.autor||null;
         // Postavi stavke
         items=p.items;
         // Lokacija zida je uklonjena - osiguraj da stari (ili tuđi) projekat
@@ -9421,16 +9543,12 @@ function genRadniNalog(returnHtml){try{
     // HTML tekst u desnom bloku, vidi legendaHtml ispod)
     _suppressCanvasLegend=true;
     _bezAmbijenta=true;   // CNC crtez - bez prozora i spaletni
-    // Crtez vec sadrzi SVE strane jednu ispod druge (vidi drawKlPozicije),
-    // pa je dovoljna jedna slika.
-    if(tip==='k') drawK(ctx2,pc.width,pc.height);
-    else if(tip==='kl') drawKl(ctx2,pc.width,pc.height);
-    else if(tip==='sto') drawSto(ctx2,pc.width,pc.height);
-    else drawSt(ctx2,pc.width,pc.height);
+    document.body.removeChild(pc);
+    // Po jedna slika za svaku stranu pozicija - da svaka stane na papir
+    var _slike=_slikeCrteza();
     _suppressCanvasLegend=false;
     _bezAmbijenta=false;
-    var img=pc.toDataURL('image/png');
-    document.body.removeChild(pc);
+    var img=_slike[0];
     var legendaHtml=buildLegendaHTML();
 
     // Dimenzije za tekstualnu tabelu
@@ -9492,7 +9610,12 @@ function genRadniNalog(returnHtml){try{
         '<span class="rn-mat">'+ms+'</span>'+
       '</div>'+
       '<div class="rn-body">'+
-        '<div class="rn-crtez"><img src="'+img+'" style="width:100%;display:block"></div>'+
+        _slike.map(function(sl,si){
+          return '<div class="rn-crtez">'
+            +(_slike.length>1?('<div style="font-size:10px;color:#6b7a8d;padding:2px 8px;'
+              +'background:#f0f4fa">Crte\u017e '+(si+1)+'/'+_slike.length+'</div>'):'')
+            +'<img src="'+sl+'" style="width:100%;display:block"></div>';
+        }).join('')+
         '<div class="rn-right">'+
           '<table class="rn-dims">'+
             '<thead><tr><th>Dim.</th><th>Opis</th><th>Vrijednost</th></tr></thead>'+
@@ -9629,18 +9752,18 @@ function genPon(currency){
     // Crtez za ovu stavku
     activeIdx=i; syncFromActive(); loadItemInputs();
     // Adaptivna velicina prema obliku/produzecima - vise prostora za crtez
-    var _csz=getCanvasSizeForItem();
-    var pc=document.createElement('canvas');
-    pc.width=_csz.w;
-    pc.height=_csz.h;
-    pc.style.cssText='position:absolute;left:-9999px;top:0';
-    document.body.appendChild(pc);
-    drawOn(pc.getContext('2d'),pc.width,pc.height);
-    var img=pc.toDataURL('image/png');
-    document.body.removeChild(pc);
+    // Jedna slika po strani pozicija - tako svaka stane na A4 i ne pravi
+    // prazne stranice pri stampi.
+    var _slike=_slikeCrteza();
     allSections+=
       '<div class="p-item-hd">Stavka '+(i+1)+': '+tipLbl+'</div>'+
-      '<div class="p-img-wrap"><img src="'+img+'" style="width:100%;max-width:760px;border:1px solid #e2e8f0;border-radius:4px;margin:8px 0"></div>'+
+      _slike.map(function(sl,si){
+        return '<div class="p-img-wrap">'
+          +(_slike.length>1?('<div style="font-size:10px;color:#6b7a8d;margin-bottom:2px">'
+            +'Crte\u017e '+(si+1)+'/'+_slike.length+'</div>'):'')
+          +'<img src="'+sl+'" style="width:100%;max-width:760px;border:1px solid #e2e8f0;'
+          +'border-radius:4px;margin:6px 0"></div>';
+      }).join('')+
       '<table style="width:100%;border-collapse:collapse;font-size:13px;margin:8px 0;">'+
       '<thead><tr>'+
       '<th style="padding:8px 10px;border-bottom:2px solid #1a3f7a;text-align:left;color:#1a3f7a;font-weight:700;">Opis</th>'+
@@ -10481,6 +10604,10 @@ var _ponudaInfo=null;
 // Trag svake izmjene: ko, kada, koji iznos. Cuva se UZ PONUDU (u JSON-u), pa
 // se ne gubi ni kad sljedeca izmjena pregazi napomenu u nalogu.
 var _istorijaIzmjena=[];
+// Ko je NAPRAVIO ponudu. Postavlja se pri prvom cuvanju i ostaje isti i kad
+// je kasnije otvori i mijenja neko drugi - inace bi se autorstvo prepisalo
+// na svakog ko je otvori sa oblaka.
+var _autorPonude=null;   // {id, ime}
 
 // AUTH — provjeri login
 async function _checkAuth(){
@@ -10674,6 +10801,9 @@ function _generisiNazivPonude(){
 async function _cloudSaveCore(){
   if(!_currentUser) throw new Error('Niste prijavljeni.');
   const naziv = _generisiNazivPonude();
+  if(!_autorPonude && _currentUser){
+    _autorPonude={id:_currentUser.id||null, ime:_currentUser.ime_prezime||''};
+  }
   const projekat = _getProjectData();
   // Sigurno citanje odgovora: ako server vrati HTML (404/500 stranicu) umjesto
   // JSON-a, r.json() bi bacio nejasan "Unexpected token <".
@@ -10813,6 +10943,7 @@ async function _ucitajPonudu(linkJson, naziv, ponudaId){
     if(!p.items) throw new Error('Nevažeći format ponude.');
     _nalogInfo = p.nalog || null;   // ako ponuda vec ima nalog, sljedece usvajanje je IZMJENA
     _istorijaIzmjena = p.istorija || [];
+    _autorPonude = p.autor || null;
     // Zapamti KOJI red smo ucitali - da ga sljedece cuvanje pregazi umjesto
     // da napravi jos jednu stavku u listi.
     _ponudaInfo = { id: (ponudaId!=null?ponudaId:((p.ponuda&&p.ponuda.id)||null)),
@@ -10862,6 +10993,11 @@ async function _ucitajPonudu(linkJson, naziv, ponudaId){
     var _por='✓ Ponuda "'+naziv+'" učitana: '+p.items.length+' stavki';
     // Odmah reci ako je ponuda vec usvojena - da se zna sta ce se desiti
     // pri sljedecem usvajanju, prije nego se pocne mijenjati.
+    if(_autorPonude&&_autorPonude.ime&&_currentUser
+       &&_autorPonude.ime!==_currentUser.ime_prezime){
+      _por+='\n\nℹ Ponudu je napravio/la <'+_autorPonude.ime+'>.'
+        +'\nAutorstvo ostaje na njemu/njoj i poslije tvojih izmjena.';
+    }
     if(_nalogInfo&&_nalogInfo.r_br){
       _por+='\n\n⚠ VEC USVOJENA kao radni nalog #'+_nalogInfo.r_br
         +(_nalogInfo.verzija?(' (v'+_nalogInfo.verzija+')'):'')+'.'
@@ -10901,7 +11037,7 @@ function novaPonuda(){
   if(!confirm('Početi NOVU ponudu?'+vez+'\n\nSve stavke se brisu, a veza sa gornjim se prekida\n(postojeci zapis na serveru OSTAJE netaknut).')) return;
   _saveUndo();
   items=[]; activeIdx=0;
-  _ponudaInfo=null; _nalogInfo=null; _istorijaIzmjena=[];
+  _ponudaInfo=null; _nalogInfo=null; _istorijaIzmjena=[]; _autorPonude=null;
   ['kl-ime','kl-tel','kl-adr','pon-popust'].forEach(function(id){ var e=ge(id); if(e) e.value=''; });
   var pd=ge('pon-doc');
   if(pd) pd.innerHTML='<div style="text-align:center;padding:60px 0;color:#6b7a8d">Popunite podatke i kliknite <strong>Generiši ponudu</strong></div>';
@@ -11292,6 +11428,7 @@ function _getProjectData(){
       lagerPJ: LAGER_PJ, matKoef: MAT_KOEF,
       ostalo: _snimiOstalo(),        // popust, kontakt referenta, kategorija
       ukupno: _ukupnoSvihStavki(),   // kontrolni iznos u trenutku cuvanja
+      autor: _autorPonude,  // ko je NAPRAVIO ponudu (ne mijenja se pri izmjeni)
       ponuda: _ponudaInfo, // red u tabeli ponuda (da se pregazi, ne duplira)
       nalog: _nalogInfo,   // veza ponuda -> radni nalog (za revizije)
       istorija: _istorijaIzmjena,   // trag svih usvajanja/izmjena
@@ -11380,12 +11517,19 @@ async function usvojiPonudu(){
   var pdvStopa=0.17;
   var ukFinal=Math.round((ukSaPopust*(1+pdvStopa))*100)/100;
 
+  // Autor se postavlja PRIJE gradjenja tijela - inace prvi nalog ostane bez
+  // njega, jer se _cloudSaveCore izvrsava tek kasnije.
+  if(!_autorPonude && _currentUser){
+    _autorPonude={id:_currentUser.id||null, ime:_currentUser.ime_prezime||''};
+  }
   var body={
     zadatak: tipovi.length?tipovi.join(' + '):'Kuhinjska ploča',
     narucilac: narucilac,
     materijal: matNazivi.join(', '),
-    ugovorio_id: ugovorioId||null,
-    ugovorio: refImeVal||null,
+    // Autor ostaje ORIGINALNI - ako ponudu otvori i izmijeni neko drugi,
+    // ugovorio se ne prepisuje na njega.
+    ugovorio_id: (_autorPonude&&_autorPonude.id)||ugovorioId||null,
+    ugovorio: (_autorPonude&&_autorPonude.ime)||refImeVal||null,
     ugovorena_suma: ukFinal,
     avans: 0,
     napomena: '',
