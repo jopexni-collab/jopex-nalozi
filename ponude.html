@@ -568,6 +568,10 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <input type="hidden" id="kl-b" value="250">
       <input type="hidden" id="kl-k" value="1">
       <input type="hidden" id="kl-iv" value="bez">
+      <input type="hidden" id="kl-led" value="bez">
+      <input type="hidden" id="kl-led-sir" value="10">
+      <input type="hidden" id="kl-led-dub" value="12">
+      <input type="hidden" id="kl-led-c" value="0">
       <div class="r2">
         <div class="fg"><label>Ugradnja/kom (KM)</label><input type="text" inputmode="decimal" id="kl-u" value="0" min="0" oninput="fixComma(this);refresh()"></div>
         <div class="fg"><label>Mjerenje (KM)</label><input type="text" inputmode="decimal" id="kl-m" value="0" min="0" oninput="fixComma(this);refresh()"></div>
@@ -1925,7 +1929,7 @@ function getItemInputIds(t){
               'sud-r-br-sel','sud-r-br-inp','sud-r-bl-sel','sud-r-bl-inp',
               'plo-r-tl-sel','plo-r-tl-inp','plo-r-tr-sel','plo-r-tr-inp',
               'plo-r-br-sel','plo-r-br-inp','plo-r-bl-sel','plo-r-bl-inp'],
-           kl:['kl-a','kl-b','kl-k','kl-ic','kl-u','kl-m','kl-n','kl-p','kl-iv','kl-vrsta','cb-kl-poz','kl-tabla-a','kl-tabla-b','kl-rez-ivice','kl-rez-sjeciva','mat-naziv','mat-c'],
+           kl:['kl-a','kl-b','kl-k','kl-ic','kl-u','kl-m','kl-n','kl-p','kl-iv','kl-led','kl-led-sir','kl-led-dub','kl-led-c','kl-vrsta','cb-kl-poz','kl-tabla-a','kl-tabla-b','kl-rez-ivice','kl-rez-sjeciva','mat-naziv','mat-c'],
            st:['st-a','st-b','st-d','st-br','st-ic','st-u','st-m','st-n','st-p','cb-cel','cb-st-poz',
                'cel-a','cel-b','cel-d','cel-c','mat-naziv','mat-c'],
            sto:['sto-a','sto-b','sto-r-sel','sto-r-inp','sto-rl','sto-rs','sto-br','sto-ugr','sto-mer','sto-n','mat-naziv','mat-c']};
@@ -3093,6 +3097,84 @@ function _kanalStrane(k){
   if(k==='duza_desna') return ['A-zad','C-des'];
   return [];
 }
+// ── LED KANAL (sa donje strane ploce) ────────────────────────────
+// Odvojen od vodenog kanala: druga strana ploce (odozdo), svoja sirina i
+// dubina, svoja cijena po metru. NE SMIJE se podudarati sa vodenim kanalom -
+// ako se izabere ista strana, sistem to javi i ne dopusti.
+function _pozLed(p){
+  if(p.led!=null) return p.led;
+  return gs('kl-led')||'bez';
+}
+function _ledMjere(){
+  return {
+    sirina:gi('kl-led-sir')||10,
+    dubina:gi('kl-led-dub')||12,
+    cijena:(function(){var e=ge('kl-led-c');
+      return e?(parseFloat((e.value||'0').replace(',','.'))||0):0;})()
+  };
+}
+// Strane na kojima LED kanal ne smije biti, jer je tamo vodeni kanal
+function _sudarLed(p,ledVal){
+  var vod=_kanalStrane(_pozKanal(p));
+  var led=_kanalStrane(ledVal);
+  return led.filter(function(x){ return vod.indexOf(x)>=0; });
+}
+function _ledPolje(id,val){
+  var e=ge(id); if(e) e.value=val;
+  syncToActive(); refresh();
+}
+function pozLed(i,val){
+  if(!pozicije[i]) return;
+  if(val!==''&&val!=='bez'){
+    var s=_sudarLed(pozicije[i],val);
+    if(s.length){
+      var sve=_pozStrane();
+      var im=s.map(function(id){
+        var sd=sve.filter(function(x){return x.id===id;})[0];
+        return sd?(sd.lbl+' ('+sd.kratko+')'):id;
+      }).join(', ');
+      alert('LED kanal se ne mo\u017ee poklapati sa vodenim kanalom.\n\n'
+        +'Sudar na strani: '+im+'\n\nIzaberi druge strane za LED.');
+      buildPozicijeTabelu();
+      return;
+    }
+  }
+  if(val==='') delete pozicije[i].led; else pozicije[i].led=val;
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
+function pozSveLed(val){
+  if(val==='') return;
+  if(val!=='bez'){
+    var sudari=[];
+    (pozicije||[]).forEach(function(p,i){
+      if(_sudarLed(p,val).length) sudari.push(i+1);
+    });
+    if(sudari.length){
+      alert('LED kanal se ne mo\u017ee poklapati sa vodenim kanalom.\n\n'
+        +'Sudar na pozicijama: '+sudari.join(', ')
+        +'\n\nPromijeni vodeni kanal ili izaberi druge strane za LED.');
+      buildPozicijeTabelu();
+      return;
+    }
+  }
+  var e=ge('kl-led'); if(e) e.value=val;
+  (pozicije||[]).forEach(function(p){ delete p.led; });
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
+// Ukupna duzina LED kanala (m) za sve pozicije, sa brojem komada
+function _ledDuzina(){
+  var uk=0;
+  (pozicije||[]).forEach(function(p){
+    var ids=_kanalStrane(_pozLed(p));
+    if(!ids.length) return;
+    var kom=Math.max(1,p.kom||1);
+    ids.forEach(function(id){
+      var d=(id==='A-zad'||id==='D-pred')?(p.a||0):(p.b||0);
+      uk+=d/1000*kom;
+    });
+  });
+  return Math.round(uk*1000)/1000;
+}
 function pozKanal(i,val){
   if(!pozicije[i]) return;
   if(val==='') delete pozicije[i].kan; else pozicije[i].kan=val;
@@ -3557,6 +3639,10 @@ function _pozSazetak(p){
   if(kan&&kan!=='bez'){
     dijelovi.push('<span style="color:#1d8a6e">\u2248 kanal '+_kanalOpis(kan)+'</span>');
   }
+  var led=(tip==='kl')?_pozLed(p):'bez';
+  if(led&&led!=='bez'){
+    dijelovi.push('<span style="color:#b8860b">\u2591 LED '+_kanalOpis(led)+'</span>');
+  }
   return {tekst:dijelovi.join(' ')||'<span style="color:#b9c4d2">bez obrade</span>',
           izuz:izuz+((p.kan!=null)?1:0)};
 }
@@ -3640,6 +3726,44 @@ function buildPozicijeTabelu(){
       }).join('')+'</select>'
       +(kanIsti?'':'<span style="font-size:9.5px;color:#e67e22" title="Neki redovi imaju svoj izbor">\u26a0</span>')
       +'</div>';
+    // LED kanal - sa DONJE strane ploce, svoje mjere i cijena
+    var ledDef=gs('kl-led')||'bez';
+    var ledIsti=!pozicije.some(function(p){return p.led!=null;});
+    var lm=_ledMjere();
+    h+='<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #c8d9ee">'
+      +'<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">'
+      +'<b style="font-size:11px;color:#b8860b;min-width:13px">\u2591</b>'
+      +'<span style="font-size:10px;color:#8a93a3;min-width:84px" '
+      +'title="Kanal sa DONJE strane ploce za LED rasvjetu">LED kanal (odozdo)</span>'
+      +'<select onchange="pozSveLed(this.value)" style="font-size:11px;padding:3px 5px;'
+      +'border:1px solid '+(ledIsti?'#dde2ea':'#e67e22')+';border-radius:4px;flex:1;min-width:118px;'
+      +'background:'+(ledIsti?'#fff':'#fff8f0')+'">'
+      +_kanalOpcije(pozicije[0]||{}).map(function(kk){
+        return '<option value="'+kk+'"'+(ledDef===kk?' selected':'')+'>'+KanalLbl[kk]+'<\/option>';
+      }).join('')+'</select>'
+      +(ledIsti?'':'<span style="font-size:9.5px;color:#e67e22">\u26a0</span>')
+      +'</div>';
+    if(ledDef!=='bez'){
+      h+='<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:4px;'
+        +'padding-left:18px">'
+        +'<label style="font-size:10px;color:#6b7a8d">\u0160irina</label>'
+        +'<input type="number" min="1" value="'+lm.sirina+'" style="width:52px;font:inherit;'
+        +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
+        +' oninput="fixComma(this);_ledPolje(\'kl-led-sir\',this.value)">'
+        +'<label style="font-size:10px;color:#6b7a8d">Dubina</label>'
+        +'<input type="number" min="1" value="'+lm.dubina+'" style="width:52px;font:inherit;'
+        +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
+        +' oninput="fixComma(this);_ledPolje(\'kl-led-dub\',this.value)">'
+        +'<span style="font-size:10px;color:#8a93a3">mm</span>'
+        +'<label style="font-size:10px;color:#6b7a8d;margin-left:4px">Cijena</label>'
+        +'<input type="number" min="0" step="0.01" value="'+lm.cijena+'" style="width:62px;font:inherit;'
+        +'font-size:11px;padding:3px 5px;border:1px solid #b8860b;border-radius:4px;text-align:right;'
+        +'font-weight:600" oninput="fixComma(this);_ledPolje(\'kl-led-c\',this.value)">'
+        +'<span style="font-size:10px;color:#8a93a3">KM/m</span>'
+        +'<span style="font-size:9.5px;color:#b8860b;margin-left:auto">'
+        +_ledDuzina().toFixed(2)+' m</span></div>';
+    }
+    h+='</div>';
   }
   // Zamjena A <-> D ako je uneseno obrnuto
   h+='<div style="margin-top:6px;padding-top:6px;border-top:1px dashed #c8d9ee;text-align:center">'
@@ -3825,6 +3949,16 @@ function buildPozicijeTabelu(){
         // Kod zidne klupice: gdje se komad nastavlja, tu bocna strana nema
         // kanal (nema vidnog zavrsetka) - pa se bira tip komada.
         if(t==='kl'){
+          var ledR=(p.led!=null);
+          h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'
+            +'<b style="font-size:11px;color:'+(ledR?'#7a4fa0':'#b8860b')+';min-width:13px">\u2591</b>'
+            +'<span style="font-size:10px;color:#8a93a3;min-width:84px">LED kanal</span>'
+            +'<select onchange="pozLed('+i+',this.value)" style="font-size:11px;padding:3px 5px;'
+            +'border:1px solid '+(ledR?'#7a4fa0':'#dde2ea')+';border-radius:4px;flex:1;min-width:118px">'
+            +'<option value="">\u2014 kao za sve \u2014</option>'
+            +_kanalOpcije(p).map(function(kk){
+              return '<option value="'+kk+'"'+(ledR&&p.led===kk?' selected':'')+'>'+KanalLbl[kk]+'<\/option>';
+            }).join('')+'</select></div>';
           h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'
             +'<b style="font-size:11px;color:#1a5fa8;min-width:13px">\u29c9</b>'
             +'<span style="font-size:10px;color:#8a93a3;min-width:84px">nastavak</span>'
@@ -5850,8 +5984,12 @@ function _racunajPozicije(){
   });
   var obradaUk=0;
   Object.keys(obrada).forEach(function(pr){ obradaUk+=obrada[pr]*cijenaProf(pr); });
+  // LED kanal - svoja duzina i svoja cijena po metru
+  var ledM=(tip==='kl')?_ledDuzina():0;
+  var ledUk=Math.round(ledM*_ledMjere().cijena*100)/100;
   return {m2:Math.round(m2*1e4)/1e4, kom:komUk, obrada:obrada,
           obradaUk:Math.round(obradaUk*100)/100, rez:Math.round(rezUk*100)/100,
+          ledM:ledM, ledUk:ledUk,
           cijenaProf:cijenaProf};
 }
 // Tabela pozicija kao PRILOG ispod stavke u ponudi
@@ -5903,6 +6041,12 @@ function _prilogPozicija(){
     var napP='';
     if(kanP&&kanP!=='bez') napP='<span style="color:#1d8a6e">\u2248 <b>vodeni kanal:</b> strane '
       +_kanalOpis(kanP)+'</span>';
+    var ledP=(tip==='kl')?_pozLed(p):'bez';
+    if(ledP&&ledP!=='bez'){
+      var lmP=_ledMjere();
+      napP+=(napP?'<br>':'')+'<span style="color:#b8860b">\u2591 <b>LED kanal (odozdo):</b> strane '
+        +_kanalOpis(ledP)+' \u00b7 '+lmP.sirina+'\u00d7'+lmP.dubina+' mm</span>';
+    }
     h+='<tr>'+red(zidniP?_zidoviRedniBroj(i):(i+1))+red((p.a||0)+'\u00d7'+(p.b||0)+' mm')
       +red(kom,'text-align:center')
       +red(((p.a||0)*(p.b||0)/1e6*kom).toFixed(3),'text-align:right')
@@ -6008,6 +6152,12 @@ function calcItemCost(){
         _editableUnitPrice(c,'/m','setIvPrice',['ivp-kl-',pr]),f(Math.round(duz*c*100)/100));
     });
     if(rez>0) rows+=trow('Rezanje (zbirno)','—','—',f(rez));
+    if(rp.ledUk>0){
+      var _lm=_ledMjere();
+      rows+=trow('LED kanal (odozdo) — '+_lm.sirina+'×'+_lm.dubina+' mm',
+        rp.ledM.toFixed(2)+' m', _lm.cijena.toFixed(2)+' /m', f(rp.ledUk));
+      uk+=rp.ledUk;
+    }
     rows+=trow('Ugradnja',rp.kom+' kom',_editableUnitPrice(gi('kl-u'),'','setItemFieldPrice',[activeIdx,'kl-u']),f(gi('kl-u')*rp.kom));
     rows+=trow('Mjerenje','1',_editableUnitPrice(gi('kl-m'),'','setItemFieldPrice',[activeIdx,'kl-m']),f(gi('kl-m')));
   } else if(tip==='kl'){
@@ -6131,7 +6281,7 @@ function refresh(){
     mat=Math.round(rr.m2*gi('mat-c')*100)/100;
     iv=rr.obradaUk;
     usl=gi('kl-u')*rr.kom+gi('kl-m');
-    uk=mat+iv+rr.rez+usl;
+    uk=mat+iv+rr.rez+(rr.ledUk||0)+usl;
     pov=rr.m2.toFixed(4)+' m² ('+pozicije.length+' poz, '+rr.kom+' kom)';
   } else if(tip==='kl'){
     var k=Math.max(1,gi('kl-k'));
@@ -7257,7 +7407,14 @@ function buildPozicijeRN(){
       +((tip==='kl'&&gs('kl-vrsta')==='zidna'&&_pozKomTip(p)!=='sam')
         ?('<b style="color:#7a4fa0">\u29c9 '+KomTipLbl[_pozKomTip(p)]+'</b><br>'):'')
       +((kanR2&&kanR2!=='bez')?('<b style="color:#1d8a6e">\u2248 VODENI KANAL: strane '
-        +_kanalOpis(kanR2)+'</b>'+(p.nap?'<br>':'')):'')
+        +_kanalOpis(kanR2)+'</b><br>'):'')
+      +(function(){
+        var lr=(tip==='kl')?_pozLed(p):'bez';
+        if(!lr||lr==='bez') return '';
+        var lmr=_ledMjere();
+        return '<b style="color:#b8860b">\u2591 LED KANAL (odozdo): strane '+_kanalOpis(lr)
+          +' \u00b7 '+lmr.sirina+'\u00d7'+lmr.dubina+' mm</b>'+(p.nap?'<br>':'');
+      })()
       +(p.nap||'')+'</td></tr>';
   });
   var uk=pozicije.reduce(function(a,p){return a+Math.max(1,p.kom||1);},0);
@@ -8084,6 +8241,34 @@ function drawKlSematski(ctx,W,H){
     ctx.textAlign='left'; ctx.textBaseline='bottom';
     ctx.textBaseline='top';
     ctx.fillText('\u2248 VODENI KANAL'+(kanRazlicito?' (vidi tabelu)':''),7,B-kd+4);
+    ctx.restore();
+  }
+  // LED kanal - sa DONJE strane ploce. Crta se tackastom linijom i uvucen
+  // DUBLJE od vodenog (34 vs 17), pa se dva kanala nikad ne poklope.
+  var ledBroj={}, ledUk=0;
+  (pozicije||[]).forEach(function(p){
+    var kk=(typeof _pozLed==='function')?_pozLed(p):'bez';
+    ledBroj[kk]=(ledBroj[kk]||0)+1; ledUk++;
+  });
+  var ledJed=null, ledNaj=0;
+  Object.keys(ledBroj).forEach(function(kk){
+    if(ledBroj[kk]>ledNaj){ ledNaj=ledBroj[kk]; ledJed=kk; }
+  });
+  if(ledJed&&ledJed!=='bez'){
+    var lm2=_ledMjere();
+    var ld=34;
+    ctx.save(); ctx.strokeStyle='#b8860b'; ctx.lineWidth=2.2; ctx.setLineDash([2,3]);
+    _kanalStrane(ledJed).forEach(function(id){
+      if(id==='D-pred') { ctx.beginPath(); ctx.moveTo(0,ld);     ctx.lineTo(A,ld);     ctx.stroke(); }
+      if(id==='A-zad')  { ctx.beginPath(); ctx.moveTo(0,B-ld);   ctx.lineTo(A,B-ld);   ctx.stroke(); }
+      if(id==='B-lev')  { ctx.beginPath(); ctx.moveTo(ld,B-ld);  ctx.lineTo(ld,ld);    ctx.stroke(); }
+      if(id==='C-des')  { ctx.beginPath(); ctx.moveTo(A-ld,B-ld);ctx.lineTo(A-ld,ld);  ctx.stroke(); }
+    });
+    ctx.setLineDash([]);
+    ctx.fillStyle='#b8860b'; ctx.font='bold 10px Segoe UI,Arial';
+    ctx.textAlign='right'; ctx.textBaseline='top';
+    ctx.fillText('\u2591 LED KANAL (odozdo) '+lm2.sirina+'\u00d7'+lm2.dubina+' mm'
+      +((ledNaj<ledUk)?' (vidi tabelu)':''), A-7, B-ld+4);
     ctx.restore();
   }
   // Oznake strana sa OPISOM - jasno koja je koja
