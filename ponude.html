@@ -7672,12 +7672,21 @@ function getCanvasSizeForItem(){
     return {w:wSto, h:hSto};
   }
   if(tip==='kl'){
+    var wKl=900;
+    // Sa tabelom pozicija visina zavisi od BROJA klupica i mreze, ne od
+    // jedne mjere - inace se kod vise redova crtezi preklapaju.
+    if(imaPozicije()&&(pozicije||[]).length){
+      return {w:wKl, h:_pozPlatnoVisina(wKl)};
+    }
     var klA=gi('kl-a')||1200, klB=gi('kl-b')||300;
     var ratioKl=klA>0?(klB/klA):0.25;
-    var wKl=900, hKl=Math.min(500,Math.max(280,Math.round(wKl*ratioKl*1.3)));
+    var hKl=Math.min(500,Math.max(280,Math.round(wKl*ratioKl*1.3)));
     return {w:wKl, h:hKl};
   }
   // st (stepenice)
+  if(imaPozicije()&&(pozicije||[]).length){
+    return {w:900, h:_pozPlatnoVisina(900)};
+  }
   var stA=gi('st-a')||1300, stB=gi('st-b')||300;
   var ratioSt=stA>0?(stB/stA):0.25;
   var wSt=900, hSt=Math.min(500,Math.max(280,Math.round(wSt*ratioSt*1.3)));
@@ -8288,29 +8297,65 @@ function _pozBdEditDesc(i,segId){
     get:function(){ var p=pozicije[i]; return p?_pozBd(p,segId):0; },
     set:function(v){ pozBocna(i,segId,v); buildPozicijeTabelu(); }};
 }
+// Raspored pozicija u mrezu. Isti racun koriste i getCanvasSizeForItem (da
+// odredi visinu platna) i drawKlPozicije (da crta), pa se nikad ne razidju.
+// Ranije je platno racunato iz JEDNE klupice, pa je kod vise redova bilo
+// prenisko i crtezi su se preklapali.
+function _pozRaspored(n){
+  n=Math.max(1,n||1);
+  // Klupice su duge i uske - jedna po redu daje najveci i najcitljiviji
+  // crtez. Tek kod velikog broja se ide na dvije, da platno ne bude beskrajno.
+  var uRedu=(n<=10)?1:2;
+  var redova=Math.ceil(n/uRedu);
+  return {uRedu:uRedu, redova:redova,
+          padX:56, padY:74, razmakX:64, razmakY:58, donjaRezerva:30};
+}
+// Visina platna koja stvarno stane sve pozicije
+function _pozPlatnoVisina(W){
+  var t=(pozicije||[]);
+  var n=t.length||1;
+  var g=_pozRaspored(n);
+  var maxA=1,maxB=1;
+  t.forEach(function(p){ if((p.a||0)>maxA)maxA=p.a||0; if((p.b||0)>maxB)maxB=p.b||0; });
+  var celijaW=(W-g.padX*2-g.razmakX*(g.uRedu-1))/g.uRedu;
+  // Mjerilo prema sirini celije, ali red ne smije biti visi od 190 px -
+  // inace jedna siroka klupica pojede cijelo platno.
+  var sc=Math.min(celijaW/Math.max(maxA,1)*0.82, 190/Math.max(maxB,1));
+  var visinaReda=maxB*sc;
+  var h=g.padY+g.redova*visinaReda+g.razmakY*(g.redova-1)+g.donjaRezerva;
+  return Math.round(Math.max(300,Math.min(2600,h)));
+}
 // Crtez SVAKE pozicije zasebno, sa rednim brojem i kotama koje se mogu
 // mijenjati duplim klikom - isto kao kod kuhinje. Rasporedjuju se u mrezu.
 function drawKlPozicije(ctx,W,H){
   var t=(pozicije||[]);
   var n=t.length;
   if(!n) return drawKlSematski(ctx,W,H);
-  // Mreza: do 3 u redu, pa novi red
-  var uRedu=Math.min(n,(n<=2)?n:(n<=6?2:3));
-  var redova=Math.ceil(n/uRedu);
-  var padX=64, padY=74, razmakX=42, razmakY=66;
+  // ISTI raspored koji koristi i platno - inace se crtezi preklapaju
+  var g=_pozRaspored(n);
+  var uRedu=g.uRedu, redova=g.redova;
+  var padX=g.padX, padY=g.padY, razmakX=g.razmakX, razmakY=g.razmakY;
   var celijaW=(W-padX*2-razmakX*(uRedu-1))/uRedu;
-  var celijaH=(H-padY-40-razmakY*(redova-1))/redova;
-  // Najveca pozicija odredjuje mjerilo, da se sve crta u ISTOJ skali
   var maxA=1, maxB=1;
   t.forEach(function(p){ if((p.a||0)>maxA)maxA=p.a||0; if((p.b||0)>maxB)maxB=p.b||0; });
-  var sc=Math.min(celijaW/maxA,celijaH/maxB)*0.78;
+  // Mjerilo prema sirini celije; sve pozicije u ISTOJ skali, pa se odnos
+  // velicina odmah vidi. Visina reda proizlazi iz najvece klupice.
+  var sc=Math.min(celijaW/maxA*0.82, 190/Math.max(maxB,1));
+  var visinaReda=maxB*sc;
+  // Ako je platno nize nego sto treba (npr. ugradjena slika u ponudi),
+  // smanji mjerilo da sve ipak stane bez preklapanja.
+  var trebaH=padY+redova*visinaReda+razmakY*(redova-1)+g.donjaRezerva;
+  if(trebaH>H){
+    var k=(H-padY-razmakY*(redova-1)-g.donjaRezerva)/(redova*Math.max(visinaReda,1));
+    if(k>0.15){ sc*=k; visinaReda=maxB*sc; }
+  }
   var strane=_pozStrane();
   var jeKl=(tip!=='st');
 
   t.forEach(function(p,i){
     var r=Math.floor(i/uRedu), c=i%uRedu;
     var ox=padX+c*(celijaW+razmakX);
-    var oy=padY+r*(celijaH+razmakY);
+    var oy=padY+r*(visinaReda+razmakY);
     var A=(p.a||0)*sc, B=(p.b||0)*sc;
     ctx.save(); ctx.translate(ox,oy);
 
@@ -8401,7 +8446,7 @@ function drawKlPozicije(ctx,W,H){
     }
     // KOTE - duplim klikom se mijenjaju
     kota(ctx,0,B+22,A,B+22,Math.round(p.a||0)+' mm',_pozEditDesc(i,'a'));
-    kota(ctx,A+22,0,A+22,B,Math.round(p.b||0)+' mm',_pozEditDesc(i,'b'));
+    kota(ctx,A+14,0,A+14,B,Math.round(p.b||0)+' mm',_pozEditDesc(i,'b'));
 
     // Redni broj i broj komada
     ctx.fillStyle='#7a4fa0'; ctx.font='bold 15px Segoe UI,Arial';
@@ -8410,10 +8455,14 @@ function drawKlPozicije(ctx,W,H){
       ? ((((p.zid!=null?p.zid:0))+1)+'.'+_zidoviRedniBroj(i))
       : String(i+1)+'.';
     ctx.fillText(oznaka,0,-9);
+    // Broj komada DESNO od ploce, kao kod stepenica - ne crta se N puta
     var kom=Math.max(1,p.kom||1);
-    ctx.font='bold 13px Segoe UI,Arial'; ctx.fillStyle='#1a5fa8';
-    ctx.fillText('\u00d7'+kom+' kom',30,-9);
-    _regClickRect(24,-24,74,20,null,_pozEditDesc(i,'kom'));
+    ctx.font='bold 20px Segoe UI,Arial'; ctx.fillStyle='#1a5fa8';
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText('\u00d7'+kom,A+30,B/2);
+    ctx.font='9.5px Segoe UI,Arial'; ctx.fillStyle='#8a93a3';
+    ctx.fillText('kom',A+30,B/2+16);
+    _regClickRect(A+26,B/2-16,54,38,null,_pozEditDesc(i,'kom'));
     if(p.nap){
       ctx.font='10px Segoe UI,Arial'; ctx.fillStyle='#8a93a3';
       ctx.textAlign='right';
