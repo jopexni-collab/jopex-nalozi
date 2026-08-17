@@ -736,7 +736,13 @@ async function ucitajBlagajnaBreakdown(tiho){
     function jeOsamljenDug(x){
       return (x.opis||'').startsWith('Dug po otpremnici') && !brutoNalozi.has(x.nalog_r_br);
     }
-    gRows=gRows.filter(x=>x.predao_blagajniku && !jeOsamljenDug(x));
+    // "Iskoristeno za isplatu" je POMOCNI zapis — sluzi SAMO da umanji nepredani dio
+    // komercijaliste (kes koji je on iz svoje kese dao za isplatu). U blagajnu NE ulazi:
+    // tamo isplata vec ima svoj par (Pokrice na lijevoj, Isplata na desnoj strani).
+    // Bez ovog izuzimanja isti novac bi se odbio DVA puta i blagajna bi pala u minus.
+    const jePomocniZapis = x => (x.opis||'').startsWith('Iskoristeno za isplatu')
+                             || (x.opis||'').startsWith('Iskorišteno za isplatu');
+    gRows=gRows.filter(x=>x.predao_blagajniku && !jeOsamljenDug(x) && !jePomocniZapis(x));
 
     // Grupiši SVE stavke (uplate i isplate/razduženja) po danu.
     const poDanu=new Map(); // 'YYYY-MM-DD' -> {uplate:[], isplate:[]}
@@ -1192,6 +1198,13 @@ function render(){
     const jeIsplata=parseFloat(r.iznos)<0;
     const jeVp=jeVpBankaRed(r);
     const jePlus=parseFloat(r.iznos)>=0;
+    /* POMOCNI zapis "Iskoristeno za isplatu" — nastaje automatski kad komercijalista plati
+       iz svoje nepredane kese. Njegova jedina svrha je da razduzi komercijalistu za taj
+       iznos. NE SMIJE se odobravati: odobravanje ga prebacuje u blagajnu, gdje isti novac
+       vec ima svoj par (Pokrice + Isplata) — pa bi se odbio dva puta i blagajna bi pala u
+       minus. Zato mu se dugme uopste ne prikazuje. */
+    const jePomocniIskoristeno = (r.opis||'').startsWith('Iskoristeno za isplatu')
+                              || (r.opis||'').startsWith('Iskorišteno za isplatu');
     // Za VP/banka redove (roba odvezena, ali NEMA gotovine koju komercijalista predaje
     // blagajniku — novac stiže kasnije, na banku ili gotovinom sa terena) — ista kolona
     // "Predano blagajniku" mijenja tekst: blagajnik samo POTVRĐUJE da zna da je stanje
@@ -1226,7 +1239,9 @@ function render(){
               :`<span class="nalog-link" style="cursor:default;">${esc(r.nalog_r_br)}</span>`
       ):''}</td>
       <td>${esc(r.opis||'')}</td>
-      <td>${r.predao_blagajniku
+      <td>${jePomocniIskoristeno
+        ? `<span style="color:#8b96a5;font-size:11px;">— automatski (razdužen komercijalista) —</span>`
+        : r.predao_blagajniku
         ?`<span class="predano">${jeVp?'🚚 ✓':'✓'} ${rijecPozitivno} ${r.datum_predaje?fd(r.datum_predaje)+' '+fvrijeme(r.datum_predaje):''}${r.preuzeo_ime?' — '+esc(skratiIme(r.preuzeo_ime)):''}</span>`
         : jeVp
           ? `<span class="nepredano-txt">${rijecNegativno}</span> <span style="font-size:10px;color:#8b96a5;">(potvrdi gore, u panelu "🚚 Otpremnice koje čekaju")</span>`

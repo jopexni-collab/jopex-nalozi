@@ -242,6 +242,21 @@ router.patch('/:id', async (req, res) => {
       if (k in req.body) { sets.push(`${k}=$${i++}`); vals.push(req.body[k]); }
     }
     if (!sets.length) return res.status(400).json({ error: 'Nema polja.' });
+
+    /* ZASTITA: pomocni zapis "Iskoristeno za isplatu" NE SMIJE se prebaciti u blagajnu.
+       On samo razduzuje komercijalistu; u blagajni isti novac vec ima svoj par (Pokrice +
+       Isplata). Ako bi se odobrio, odbio bi se dva puta i blagajna bi pala u minus.
+       Provjera je i na serveru, ne samo u prikazu — da se ne moze zaobici. */
+    if (req.body.predao_blagajniku === true) {
+      const p = await pool.query('SELECT opis FROM gotovina WHERE id=$1', [req.params.id]);
+      const opisZapisa = p.rows[0]?.opis || '';
+      if (/^Iskori(s|š)teno za isplatu/.test(opisZapisa)) {
+        return res.status(400).json({
+          error: 'Ovaj zapis se ne odobrava — automatski razdužuje komercijalistu. Isplata je već proknjižena u blagajni.'
+        });
+      }
+    }
+
     vals.push(req.params.id);
     const r = await pool.query(
       `UPDATE gotovina SET ${sets.join(',')} WHERE id=$${i} RETURNING *`, vals
