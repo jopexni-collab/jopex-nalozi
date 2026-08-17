@@ -2016,7 +2016,28 @@ async function stornirajUvoz(id) {
     document.getElementById('who').textContent = '👤 ' + (me.ime_prezime || '');
   } catch (e) { location.href = 'login.html'; return; }
 
-  DOZVOLE = await api('/dozvole/moje').catch(() => ({ vidi: false, unos: false }));
+  /* Ranije je ovdje stajao .catch() koji je SVAKU grešku pretvarao u "nemate dozvolu" —
+     pa se npr. nedostupan modul na serveru prikazivao kao problem sa pravima, što vodi
+     u pogrešnom smjeru. Sada se razdvaja: greška servera je greška, a odbijena dozvola
+     je dozvola. */
+  let greskaDozvola = null;
+  try {
+    DOZVOLE = await api('/dozvole/moje');
+  } catch (e) {
+    greskaDozvola = e;
+    DOZVOLE = { vidi: false, unos: false };
+  }
+
+  if (greskaDozvola) {
+    document.querySelector('.ce-row').style.display = 'none';
+    document.querySelectorAll('.view').forEach(v => v.remove());
+    document.getElementById('poruka').innerHTML =
+      '<div class="panel"><h3>Modul restlova trenutno nije dostupan.</h3>' +
+      '<p class="hint">Server nije odgovorio na zahtjev za dozvole. Ovo NIJE problem sa tvojim pravima — javi administratoru.</p>' +
+      '<p class="hint" style="opacity:.7;">Detalj: ' + String(greskaDozvola.message || greskaDozvola) + '</p></div>';
+    return;
+  }
+
   if (!DOZVOLE.vidi) {
     document.querySelector('.ce-row').style.display = 'none';
     document.querySelectorAll('.view').forEach(v => v.remove());
