@@ -2807,12 +2807,12 @@ function _pozStrane(){
             {id:'C-des',lbl:'C',opis:'desna bo\u010dna',kratko:'desna'},
             {id:'D-pred',lbl:'D',opis:'zadnja \u2014 uz zid',kratko:'uz zid'}];
   }
-  var zidna=(tip==='kl'&&_klPodtip()==='zidna');
+  // Prozor i spaletne se vise ne prikazuju, pa ni u opisima - strane se zovu
+  // jednostavno prednja / zadnja / lijeva / desna.
   return [{id:'A-zad',lbl:'A',opis:'prednja \u2014 vidljiva',kratko:'prednja'},
-          {id:'B-lev',lbl:'B',opis:zidna?'lijeva bo\u010dna':'lijeva \u2014 u \u0161paletnu',kratko:'lijeva'},
-          {id:'C-des',lbl:'C',opis:zidna?'desna bo\u010dna':'desna \u2014 u \u0161paletnu',kratko:'desna'},
-          {id:'D-pred',lbl:'D',opis:zidna?'zadnja':'zadnja \u2014 uz prozor',
-           kratko:zidna?'zadnja':'uz prozor'}];
+          {id:'B-lev',lbl:'B',opis:'lijeva bo\u010dna',kratko:'lijeva'},
+          {id:'C-des',lbl:'C',opis:'desna bo\u010dna',kratko:'desna'},
+          {id:'D-pred',lbl:'D',opis:'zadnja',kratko:'zadnja'}];
 }
 // ── ZIDNA KLUPICA: podjela ukupne duzine na optimalne komade ─────
 // Kod zidne klupice se cesto zada UKUPNA duzina (npr. 7,2 m uz zid), pa se
@@ -3032,7 +3032,8 @@ var KomTipLbl={sam:'samostalan',prvi:'prvi (lijevo vidljivo)',
 function _vidljiveStrane(p){
   var v={'A-zad':true,'D-pred':true,'B-lev':true,'C-des':true};
   if(tip!=='kl') return v;
-  if(_klPodtip()!=='zidna'){ v['D-pred']=false; return v; }
+  // Kanal moze ici uz OBJE duze strane - i prednju i zadnju. Ranije je zadnja
+  // bila iskljucena kod prozorske klupice; u praksi se i tamo radi kanal.
   var kt=_pozKomTip(p);
   if(kt==='prvi'){   v['C-des']=false; }
   if(kt==='zadnji'){ v['B-lev']=false; }
@@ -3045,10 +3046,9 @@ function _kanalOpcije(p){
   if(v['B-lev']) o.push('pred_lijeva');
   if(v['C-des']) o.push('pred_desna');
   if(v['B-lev']&&v['C-des']) o.push('pred_obje');
-  if(tip==='kl'&&_klPodtip()==='zidna'){
-    o.push('zadnja','pred_zadnja');
-    if(v['B-lev']&&v['C-des']) o.push('sve');
-  }
+  // Zadnja strana je sada dostupna kod OBA podtipa klupice
+  o.push('zadnja','pred_zadnja');
+  if(v['B-lev']&&v['C-des']) o.push('sve');
   return o;
 }
 // Opis kanala sa KONKRETNIM slovima strana - "dvije duze" ne govori CNC
@@ -3802,7 +3802,7 @@ function buildPozicijeTabelu(){
           }).join('')+'</select></div>';
         // Kod zidne klupice: gdje se komad nastavlja, tu bocna strana nema
         // kanal (nema vidnog zavrsetka) - pa se bira tip komada.
-        if(gs('kl-vrsta')==='zidna'){
+        if(t==='kl'){
           h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'
             +'<b style="font-size:11px;color:#1a5fa8;min-width:13px">\u29c9</b>'
             +'<span style="font-size:10px;color:#8a93a3;min-width:84px">nastavak</span>'
@@ -7979,29 +7979,11 @@ function drawKlSematski(ctx,W,H){
 
   // Uz zadnju stranu: PROZOR kod klupice, ZID kod stepenice - da se odmah
   // vidi orijentacija i ne pomijesa koja strana ide u nisu.
-  // PROZOR (ili zid) je GORE. Strana D (zadnja) je uz njega, a strana A
-  // (prednja, vidljiva) je DOLJE - okrenuta prema prostoriji.
+  // Ambijent (prozor, spaletne) je UKLONJEN - zbunjivao je i u ponudi.
+  // Zid se crta samo kod stepenica, gdje gaziste stvarno nalijeze na njega.
   var jeKlupica=(tip!=='st');
-  var jeZidna=(jeKlupica&&_klPodtip()==='zidna');
-  // Zidna klupica ide PREKO zida (kao polica) - nema nikakvog zida u crtezu.
-  // Ambijent se crta samo za ponudu; u nalogu i DXF-u je cist tehnicki crtez.
-  var crtajAmbijent=(!_bezAmbijenta&&jeKlupica&&!jeZidna);
-  ctx.save();
-  if(crtajAmbijent){
-    ctx.fillStyle='#eaf3fb';
-    ctx.fillRect(0,-30,A,22);
-    ctx.strokeStyle='#7ba7cc'; ctx.lineWidth=1.6; ctx.strokeRect(0,-30,A,22);
-    ctx.beginPath(); ctx.moveTo(A/2,-30); ctx.lineTo(A/2,-8); ctx.stroke();
-    ctx.strokeStyle='#b8d4e8'; ctx.lineWidth=1;
-    for(var pz=6;pz<A;pz+=26){
-      ctx.beginPath(); ctx.moveTo(pz,-10); ctx.lineTo(pz+13,-28); ctx.stroke();
-    }
-    ctx.fillStyle='#4a7fa5'; ctx.font='bold 11px Segoe UI,Arial';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('P R O Z O R',A/2,-19);
-  } else if(!_bezAmbijenta&&!jeKlupica){
-    // Zid se crta SAMO kod stepenica (gaziste nalijeze na zid).
-    // Zidna klupica ide preko zida, pa se zid NE prikazuje.
+  if(!_bezAmbijenta&&!jeKlupica){
+    ctx.save();
     ctx.fillStyle='#e8ecf1';
     ctx.fillRect(0,-26,A,18);
     ctx.strokeStyle='#8a93a3'; ctx.lineWidth=1; ctx.strokeRect(0,-26,A,18);
@@ -8011,8 +7993,8 @@ function drawKlSematski(ctx,W,H){
     ctx.fillStyle='#6b7a8d'; ctx.font='bold 11px Segoe UI,Arial';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText('Z I D',A/2,-17);
+    ctx.restore();
   }
-  ctx.restore();
 
   // Geometrija strana
   // A je DOLJE (prednja, vidljiva), D je GORE (zadnja, uz prozor/zid)
@@ -8080,22 +8062,6 @@ function drawKlSematski(ctx,W,H){
     ctx.textAlign='left'; ctx.textBaseline='bottom';
     ctx.textBaseline='top';
     ctx.fillText('\u2248 VODENI KANAL'+(kanRazlicito?' (vidi tabelu)':''),7,B-kd+4);
-    ctx.restore();
-  }
-  // Spaletne (bocni zidovi nise) kod klupice
-  if(crtajAmbijent){
-    ctx.save();
-    ctx.fillStyle='#e8ecf1'; ctx.strokeStyle='#8a93a3'; ctx.lineWidth=1;
-    [-20,A].forEach(function(sx){
-      ctx.fillRect(sx,-30,20,B*0.45+30);
-      ctx.strokeRect(sx,-30,20,B*0.45+30);
-    });
-    ctx.fillStyle='#8a93a3'; ctx.font='9px Segoe UI,Arial';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.save(); ctx.translate(-10,B*0.2); ctx.rotate(-Math.PI/2);
-    ctx.fillText('ŠPALETNA',0,0); ctx.restore();
-    ctx.save(); ctx.translate(A+10,B*0.2); ctx.rotate(-Math.PI/2);
-    ctx.fillText('ŠPALETNA',0,0); ctx.restore();
     ctx.restore();
   }
   // Oznake strana sa OPISOM - jasno koja je koja
