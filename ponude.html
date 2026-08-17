@@ -2678,7 +2678,21 @@ function setTip(t){
     var el=ge('tab-'+x); if(el) el.className='tip-tab'+(x===t?' on':'');
     var bl=ge('blok-'+x); if(bl) bl.className='blok'+(x===t?' on':'');
   });
+  // Prebacivanje taba mora prikazati i TABELU POZICIJA, ne samo dugmad
+  // podtipa. Bez ovoga klik na "Klupica" pokaze prazan panel dok se ne
+  // doda stavka - a dio za unos raznih dimenzija izgleda kao da je nestao.
   try{ buildKlPodtip(); }catch(e){}
+  try{
+    if(t==='kl'){
+      var w=ge('kl-poz-wrap');
+      if(w) w.style.display='';
+      if(!pozicije||!pozicije.length){
+        pozicije=[{a:gi('kl-a')||1500,b:gi('kl-b')||250,kom:1,nap:'',ob:{},bd:{}}];
+        if(_klPodtip()==='zidna'){ pozicije[0].zid=0; pozicije[0].kt='sam'; }
+      }
+      buildPozicijeTabelu();
+    }
+  }catch(e){}
   try{ crtajDigitalno(); }catch(e){}
 }
 
@@ -3376,7 +3390,10 @@ function _zapisiPodtip(pt){
 }
 function buildKlPodtip(){
   var con=ge('kl-podtip-izbor'); if(!con) return;
-  if(tip!=='kl'){ con.innerHTML=''; return; }
+  // Prema TABU, ne prema tipu aktivne stavke - inace dugmad nestanu kad je
+  // otvoren tab klupice a aktivna stavka je kuhinja.
+  var _t=(typeof uiTip!=='undefined')?uiTip:tip;
+  if(_t!=='kl'){ con.innerHTML=''; return; }
   var tren=_klPodtip();
   var hd=ge('kl-sec-hd'); if(hd) hd.textContent=nazivKlupice();
   con.innerHTML='<div style="font-size:9px;letter-spacing:.5px;color:#6b7a8d;font-weight:700;'
@@ -3544,9 +3561,14 @@ function _pozSazetak(p){
           izuz:izuz+((p.kan!=null)?1:0)};
 }
 function buildPozicijeTabelu(){
-  var t=(tip==='st')?'st':'kl';
+  // Gradi se prema TABU koji je otvoren (uiTip), ne prema tipu aktivne stavke.
+  // Inace klik na tab "Klupica" dok je aktivna stavka kuhinja daje prazan
+  // panel, pa izgleda kao da je unos raznih dimenzija nestao.
+  var _t=(typeof uiTip!=='undefined')?uiTip:tip;
+  var t=(_t==='st')?'st':'kl';
   var con=ge(t+'-poz-wrap'); if(!con) return;
-  if(!imaPozicije()){ con.innerHTML=''; return; }
+  var _ima=(_t==='kl')||(_t==='st'&&gc('cb-st-poz'));
+  if(!_ima){ con.innerHTML=''; return; }
   pozicije=pozicije||[];
   if(!pozicije.length) pozicije=[{a:1500,b:250,kom:1,nap:'',ob:{},bd:{}}];
   var strane=_pozStrane();
