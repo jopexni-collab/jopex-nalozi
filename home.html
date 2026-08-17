@@ -42,7 +42,6 @@ main{max-width:700px;margin:32px auto;padding:0 16px;}
   </div>
   <div style="display:flex;align-items:center;gap:10px;">
     <span id="who" style="font-size:12px;opacity:.85;"></span>
-    <a href="#" class="logout-btn" id="ocisti-kes" title="Oslobađa memoriju koju je aplikacija zauzela slikama">🧹 Očisti keš</a>
     <a href="#" class="logout-btn" id="logout">Izlaz</a>
   </div>
 </header>
@@ -180,39 +179,6 @@ async function checkAuth(){
 
   }catch{location.href='login.html';}
 }
-
-/* CISCENJE KESA
-   Aplikacija drzi slike u kesu pregledaca da se ne skidaju iznova. Na telefonu to moze
-   narasti. Ovo brise sto stranica MOZE obrisati (Cache API i lokalne kopije) i ponovo
-   ucitava bez kesa. NAPOMENA: HTTP kes samog pregledaca stranica ne moze brisati — za
-   njega je potrebno Chrome -> Podesavanja -> Obrisi podatke pregledanja. */
-document.getElementById('ocisti-kes').onclick=async e=>{
-  e.preventDefault();
-  if(!confirm('Očistiti keš aplikacije?\n\nOstajete prijavljeni, samo se brišu privremene kopije slika i stranica.')) return;
-  const el=e.target;
-  el.textContent='Čišćenje...';
-  try{
-    // Cache API — ako je nesto tamo pohranjeno
-    if(window.caches){
-      const imena=await caches.keys();
-      await Promise.all(imena.map(n=>caches.delete(n)));
-    }
-    // Service Worker (ako ga ikad bude) — otkaci ga da ne drzi stare kopije
-    if(navigator.serviceWorker?.getRegistrations){
-      const reg=await navigator.serviceWorker.getRegistrations();
-      await Promise.all(reg.map(r=>r.unregister()));
-    }
-    // Ocisti zapamcene sirine kolona i sl. (NE dira prijavu — ona je u kolacicu)
-    try{
-      Object.keys(localStorage).filter(k=>k.startsWith('jopex_')).forEach(k=>localStorage.removeItem(k));
-    }catch(_){}
-    alert('✓ Keš očišćen. Stranica se ponovo učitava.');
-    location.reload();
-  }catch(err){
-    el.textContent='🧹 Očisti keš';
-    alert('Nije uspjelo u potpunosti. Za temeljno čišćenje: Chrome → Podešavanja → Privatnost → Obriši podatke pregledanja → "Keširane slike i datoteke".');
-  }
-};
 
 document.getElementById('logout').onclick=async e=>{
   e.preventDefault();
