@@ -621,6 +621,17 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <label>Ime i prezime primaoca</label>
       <input type="text" id="isp-primalac-ime" placeholder="Unesite ime...">
     </div>
+    <div class="ov-kupac-fld">
+      <label>Odakle novac</label>
+      <select id="isp-izvor-novca" style="width:100%;">
+        <option value="nepredana" selected>Iz gotovine koju držim kod sebe (nepredano)</option>
+        <option value="blagajna">Iz gotovine koja je već predana blagajni</option>
+      </select>
+      <div style="font-size:10.5px;color:#8b96a5;margin-top:4px;line-height:1.35;">
+        Prvo — kes je kod tebe, pa se tvoj nepredani dio umanjuje, a blagajna ostaje ista.<br>
+        Drugo — novac izlazi iz blagajne (koristi blagajnik).
+      </div>
+    </div>
   </div>
   <div class="ov-footer">
     <button class="btn-otkazi" onclick="otkaziIsplatu()">Otkaži</button>
@@ -1707,6 +1718,7 @@ async function potvrdiIsplatu(){
         napomena: isplataZaPotvrdu.napomena,
         primalac_ime: ime,
         kupac_id: isplataZaPotvrdu.kupac_id,
+        iz_nepredane: document.getElementById('isp-izvor-novca').value === 'nepredana',
       }),
     });
     const data=await r.json();

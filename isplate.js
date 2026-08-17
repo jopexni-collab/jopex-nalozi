@@ -113,6 +113,37 @@ router.post('/', async (req, res) => {
     const isplata = r.rows[0];
 
     const opis = `Isplata — ${RAZLOG_LABEL[razlog]} — ${primalac_ime.trim()}${napomenaTrim ? ' (' + napomenaTrim + ')' : ''}`;
+
+    /* ODAKLE NOVAC — dva stvarna slucaja:
+       a) iz NEPREDANE gotovine koju komercijalista drzi kod sebe (podrazumijevano u
+          maloprodaji — on ima kesu u ruci i iz nje plati)
+       b) iz gotovine koja je VEC predana blagajni
+       Kod (a) blagajna ne smije ostati u minusu, jer taj novac kroz nju nikad nije prosao.
+       Zato se knjizi kao PLUS (pokrice ulazi) i MINUS (isplata izlazi) — neto nula — a
+       nepredani dio komercijaliste se smanjuje. Ranije je postojao samo MINUS, pa je
+       blagajna izgledala kao da je u deficitu. */
+    const izNepredane = req.body.iz_nepredane !== false;
+
+    if (izNepredane) {
+      // 1) Pokrice — novac iz komercijalistine kese formalno ULAZI u blagajnu
+      await client.query(
+        `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br, predao_blagajniku)
+         VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5, true)`,
+        [izn, user.ime_prezime,
+         `Pokriće isplate — iz nepredane gotovine (${user.ime_prezime})`,
+         objektNaziv, `ISP-${isplata.id}`]
+      );
+      // 2) Smanjenje NEPREDANOG dijela kod komercijaliste (taj kes vise nije kod njega)
+      await client.query(
+        `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br, predao_blagajniku)
+         VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5, false)`,
+        [-izn, user.ime_prezime,
+         `Iskorišteno za isplatu ISP-${isplata.id} — ${primalac_ime.trim()}`,
+         objektNaziv, `ISP-${isplata.id}`]
+      );
+    }
+
+    // 3) Sama isplata — novac IZLAZI iz blagajne
     const g = await client.query(
       `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br, javni_token)
        VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5, $6) RETURNING id`,
@@ -183,11 +214,32 @@ router.post('/:id/storniraj', async (req, res) => {
     const isp = r.rows[0];
     if (isp.stornirano) return res.status(400).json({ error: 'Ova isplata je već stornirana.' });
 
+    // STORNO — mora poništiti SVE zapise koje je isplata napravila, ne samo sam izlaz.
+    // Ako je bila iz nepredane gotovine, postoje i "Pokriće" (+, predano) i "Iskorišteno"
+    // (−, nepredano) — pa i njih treba obrnuti, inače bi obračun ostao iskrivljen.
     await pool.query(
       `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br)
        VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5)`,
       [isp.iznos, user.ime_prezime, `STORNO isplate — ${isp.napomena || isp.razlog}`, isp.objekt_naziv, `ISP-${isp.id}`]
     );
+
+    const imaPokrice = await pool.query(
+      `SELECT 1 FROM gotovina WHERE nalog_r_br=$1 AND opis LIKE 'Pokriće isplate%' LIMIT 1`,
+      [`ISP-${isp.id}`]
+    );
+    if (imaPokrice.rows.length) {
+      // Obrni pokriće (bilo +, sad −) i vrati kes komercijalisti (bilo −, sad +)
+      await pool.query(
+        `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br, predao_blagajniku)
+         VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5, true)`,
+        [-isp.iznos, user.ime_prezime, `STORNO pokrića isplate ISP-${isp.id}`, isp.objekt_naziv, `ISP-${isp.id}`]
+      );
+      await pool.query(
+        `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br, predao_blagajniku)
+         VALUES (CURRENT_DATE, $1, $2, 'Maloprodaja', $3, $4, $5, false)`,
+        [isp.iznos, user.ime_prezime, `STORNO — kes vraćen u nepredano (ISP-${isp.id})`, isp.objekt_naziv, `ISP-${isp.id}`]
+      );
+    }
     if (isp.razlog === 'povrat_komitentu' && isp.kupac_id) {
       await pool.query(
         `INSERT INTO kupac_transakcije
