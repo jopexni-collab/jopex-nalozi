@@ -249,54 +249,6 @@ router.patch('/:id', async (req, res) => {
     );
     const zapis = r.rows[0];
 
-    /* ═══ ODOBRENJE ISPLATE IZ MALOPRODAJE ═══════════════════════════════════════════
-       Kad komercijalista naplati otpremnice, kes je KOD NJEGA (nepredano). Ako iz tog
-       kesa plati nesto, u trenutku ODOBRENJA taj iznos treba da:
-         • prodje kroz blagajnu na LIJEVU i DESNU stranu (ulaz + izlaz) → blagajna NEPROMIJENJENA
-         • umanji komercijalistin nepredani dio za taj iznos
-       Zato se pri odobrenju dodaju dva prateca zapisa. Rade se OVDJE (pri odobrenju), ne
-       pri kreiranju isplate — jer do odobrenja isplata jos nije proknjizena. */
-    const jeIsplataMaloprodaje = zapis
-      && String(zapis.nalog_r_br || '').startsWith('ISP-')
-      && /^Isplata/.test(zapis.opis || '')
-      && parseFloat(zapis.iznos) < 0;
-
-    if (jeIsplataMaloprodaje && req.body.predao_blagajniku === true) {
-      const iznosIsplate = Math.abs(parseFloat(zapis.iznos));
-      const vecUradjeno = await pool.query(
-        `SELECT 1 FROM gotovina WHERE nalog_r_br=$1 AND opis LIKE 'Ulaz iz nepredane gotovine%' LIMIT 1`,
-        [zapis.nalog_r_br]
-      );
-      if (!vecUradjeno.rows.length) {
-        // LIJEVA strana blagajne — kes komercijaliste ulazi
-        await pool.query(
-          `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br, predao_blagajniku, datum_predaje, preuzeo_ime)
-           VALUES ($1,$2,$3,'Maloprodaja',$4,$5,$6,true,now(),$7)`,
-          [zapis.datum, iznosIsplate, zapis.primio,
-           `Ulaz iz nepredane gotovine — pokriva ${zapis.nalog_r_br}`,
-           zapis.objekt_naziv, zapis.nalog_r_br,
-           req.session?.user?.ime_prezime || null]
-        );
-        // Umanjenje NEPREDANOG dijela komercijaliste (taj kes vise nije kod njega)
-        await pool.query(
-          `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br, predao_blagajniku)
-           VALUES ($1,$2,$3,'Maloprodaja',$4,$5,$6,false)`,
-          [zapis.datum, -iznosIsplate, zapis.primio,
-           `Razduzenje ${zapis.primio} — dao kes za ${zapis.nalog_r_br}`,
-           zapis.objekt_naziv, zapis.nalog_r_br]
-        );
-      }
-    }
-
-    // Ako se odobrenje PONISTAVA — sklanjaju se i prateci zapisi
-    if (jeIsplataMaloprodaje && req.body.predao_blagajniku === false) {
-      await pool.query(
-        `DELETE FROM gotovina WHERE nalog_r_br=$1
-           AND (opis LIKE 'Ulaz iz nepredane gotovine%' OR opis LIKE 'Razduzenje %dao kes%')`,
-        [zapis.nalog_r_br]
-      );
-    }
-
     res.json(zapis);
   } catch (err) {
     res.status(500).json({ error: err.message });

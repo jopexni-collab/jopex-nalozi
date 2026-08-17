@@ -152,6 +152,10 @@ function prikaziGresku(poruka){
 async function sacuvajPdf(){
   const btn = document.getElementById('btn-pdf');
   const slike = [...document.querySelectorAll('#sadrzaj img')];
+  // Na EKRANU se koriste thumbnaili (20x manje podataka). Tek za PDF se prebacuje na
+  // pune slike — jer tada kvalitet stvarno treba. Bez ovoga bi svako otvaranje kataloga
+  // skidalo desetine megabajta, sto je na mobilnim podacima bolno.
+  slike.forEach(i => { const p = i.dataset.puna; if (p && i.src !== p) i.src = p; });
   const nedovrsene = slike.filter(i => !i.complete || !i.naturalWidth);
 
   if(nedovrsene.length){
@@ -196,13 +200,13 @@ function render(){
 
 function slikaHtml(s, klasa){
   return s.slika
-    ? `<img class="${klasa}" src="${esc(s.slika_puna||s.slika)}" loading="lazy" alt="${esc(s.naziv)}">`
+    ? `<img class="${klasa}" src="${esc(s.slika||s.slika_puna)}" data-puna="${esc(s.slika_puna||'')}" loading="lazy" alt="${esc(s.naziv)}">`
     : `<div class="nema-slike">🪨</div>`;
 }
 
 function kartica(s){
   return `<div class="stavka">
-    ${s.slika?`<img class="poz" src="${esc(s.slika_puna||s.slika)}" loading="lazy" alt="${esc(s.naziv)}">`:''}
+    ${s.slika?`<img class="poz" src="${esc(s.slika||s.slika_puna)}" data-puna="${esc(s.slika_puna||'')}" loading="lazy" alt="${esc(s.naziv)}">`:''}
     <div class="sjena"></div>
     <div class="znacka">${esc(s.grupa||'—')}</div>
     <div class="dno">

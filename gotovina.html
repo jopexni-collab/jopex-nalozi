@@ -115,6 +115,10 @@ td.num{text-align:right;font-weight:700;}
       <div>
         <div style="font-size:11px;color:#6b7a8d;">Trenutno u blagajni<span id="blagajna-pj-naziv" style="font-weight:400;"></span></div>
         <div id="blagajna-stanje" style="font-size:24px;font-weight:800;color:var(--dark);">—</div>
+        <!-- Kad je blagajna u minusu, to cesto NIJE greska — komercijalista je platio iz
+             kesa koji drzi kod sebe, a jos ga nije predao. Ovaj red pokazuje koliko je
+             nepredano, pa se odmah vidi da je minus pokriven. -->
+        <div id="blagajna-nepredano" style="font-size:11.5px;margin-top:2px;display:none;"></div>
       </div>
       <button class="btn-add" onclick="otvoriRazduzenje('banka')">🏦 Razduži u Banku</button>
       <button class="btn-add" onclick="otvoriRazduzenje('sef')" style="background:var(--orange);">🔒 Ostavi u Sef</button>
@@ -883,6 +887,31 @@ async function udioUBlagajniPoZapisu(pj){
   return mapa;
 }
 
+/* Koliko kesa komercijalisti drze kod sebe (naplatili, jos nisu predali).
+   Kad je blagajna u MINUSU to je najcesce zato sto je isplata isla iz tog nepredanog kesa —
+   pa se ovdje odmah vidi da minus JESTE pokriven, samo nije predat. Ranije se za to
+   pravio par pomocnih zapisa u bazi, sto je zbunjivalo i duplo prikazivalo iznose;
+   ovo daje istu informaciju bez ijednog novog zapisa. */
+async function prikaziNepredano(d){
+  const el=document.getElementById('blagajna-nepredano');
+  if(!el) return;
+  const pj=mojiPJovi.find(p=>String(p.id)===String(blagajnaObjektId));
+  if(!pj){ el.style.display='none'; return; }
+  try{
+    // Postojeca ruta /suma vec vraca nepredano po PJ — ne treba nova.
+    const r=await fetch(`${API}/api/gotovina/suma`);
+    const d2=await r.json();
+    const zaPJ=(d2.nepredano_po_pj||[]).filter(x=>x.objekt_naziv===pj.naziv);
+    const nepredano=zaPJ.reduce((s,x)=>s+parseFloat(x.iznos||0),0);
+    if(Math.abs(nepredano)<0.01){ el.style.display='none'; return; }
+    el.style.display='block';
+    const uMinusu=parseFloat(d.trenutno_u_blagajni)<0;
+    el.innerHTML=`<span style="color:${uMinusu?'#e0a800':'#8b96a5'};font-weight:${uMinusu?'700':'400'};">`
+      +`⏳ Nepredano kod komercijalista: ${fmValuta(nepredano, d.valuta)}`
+      +(uMinusu?` — minus je pokriven ovim kešom`:'')+`</span>`;
+  }catch(e){ el.style.display='none'; }
+}
+
 async function ucitajBlagajnaStanje(tiho){
   if(!blagajnaObjektId) return;
   try{
@@ -891,6 +920,7 @@ async function ucitajBlagajnaStanje(tiho){
     if(!r.ok) throw new Error(d.error||'Greška.');
     document.getElementById('blagajna-pj-naziv').textContent=' — '+d.objekt_naziv;
     document.getElementById('blagajna-stanje').innerHTML=fmValuta(d.trenutno_u_blagajni, d.valuta, d.trenutno_km_ekvivalent);
+    prikaziNepredano(d);
   }catch(e){
     document.getElementById('blagajna-stanje').textContent='Greška';
   }
