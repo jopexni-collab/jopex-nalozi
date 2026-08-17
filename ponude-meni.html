@@ -36,6 +36,11 @@ main{max-width:640px;margin:30px auto;padding:0 16px;}
     <div class="card-title">Ponude robe</div>
     <div class="card-desc">Ponuda gotove robe sa lagera — bira se prodajni objekat, artikal, količina i cijena.</div>
   </a>
+  <a href="katalog.html" class="card hidden" id="card-katalog">
+    <div class="card-icon">📖</div>
+    <div class="card-title">Katalog</div>
+    <div class="card-desc">Pošalji kupcu katalog sa slikama i njegovim cijenama — preko Vibera, WhatsAppa ili mejla.</div>
+  </a>
   <a href="pregled-ponuda.html" class="card hidden" id="card-pregled">
     <div class="card-icon">📋</div>
     <div class="card-title">Pregled svih ponuda</div>
@@ -50,6 +55,11 @@ fetch(API+'/api/auth/me').then(r=>{
 }).then(u=>{
   if(!u) return;
   const admin=u.rola==='admin';
+  // Katalog je namjerno dostupan SIROKO — svako u firmi moze doci u situaciju da nesto
+  // proda, a katalog ne otkriva zalihe ni ukupnu vrijednost lagera.
+  if(admin||u.moze_ugovarati||u.moze_prodavati||u.komercijalista_teren||u.moze_roba_magacin){
+    document.getElementById('card-katalog').classList.remove('hidden');
+  }
   if(admin||u.moze_ugovarati){
     document.getElementById('card-proizvodnja').classList.remove('hidden');
     document.getElementById('card-robe').classList.remove('hidden');
