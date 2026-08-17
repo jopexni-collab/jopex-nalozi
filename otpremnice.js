@@ -904,6 +904,27 @@ router.post('/potvrdi', async (req, res) => {
           [kupac_id, -iznosIzAvansa, `Iskorišten avans za ${broj}`, otpId, broj, objektId, objektNaziv,
            user.id, user.ime_prezime]
         );
+
+        /* PROMET KROZ BLAGAJNU kad se otpremnica placa AVANSOM.
+           Kes je stigao ranije (kad je avans uplacen — tad je i usao u blagajnu). Danas se
+           roba predaje, pa PRIHOD od prodaje nastaje danas. Zato par zapisa:
+             LIJEVO  +iznos  prihod od prodaje po otpremnici
+             DESNO   -iznos  iskoristen avans (kes primljen ranije)
+           Neto na blagajnu je NULA — stanje se ne mijenja i nema duplog brojanja, ali se
+           dnevni PROMET vidi. Bez ovoga prodaja placena avansom nije nigdje figurirala u
+           danu kad je stvarno obavljena. */
+        await client.query(
+          `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br, predao_blagajniku, datum_predaje, preuzeo_ime)
+           VALUES (CURRENT_DATE,$1,$2,'Maloprodaja',$3,$4,$5,true,now(),$2)`,
+          [iznosIzAvansa, user.ime_prezime,
+           `Prodaja po otpremnici ${broj} — plaćeno avansom`, objektNaziv, broj]
+        );
+        await client.query(
+          `INSERT INTO gotovina (datum, iznos, primio, izvor, opis, objekt_naziv, nalog_r_br, predao_blagajniku, datum_predaje, preuzeo_ime)
+           VALUES (CURRENT_DATE,$1,$2,'Maloprodaja',$3,$4,$5,true,now(),$2)`,
+          [-iznosIzAvansa, user.ime_prezime,
+           `Iskorišten avans za ${broj} — keš primljen ranije`, objektNaziv, broj]
+        );
       }
       if (preostaliDug > 0) {
         await client.query(
