@@ -805,6 +805,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
                touch-action:none;display:block"></svg>
       <div id="sk-veliki-alati" style="margin-top:8px"></div>
     </div>
+    <div id="poz-nav" style="display:none;margin-bottom:8px"></div>
     <div class="card">
       <canvas id="cv" width="800" height="460"></canvas>
       <div id="inline-editor" onclick="event.stopPropagation()"></div>
@@ -2020,6 +2021,7 @@ function syncFromActive(){
   pozicije=a.pozicije?JSON.parse(JSON.stringify(a.pozicije)):[];
   pozBdDef=a.pozBdDef?JSON.parse(JSON.stringify(a.pozBdDef)):{};
   pozRDef=a.pozRDef?JSON.parse(JSON.stringify(a.pozRDef)):{};
+  _pozStrana=0;
   vOrient=a.vOrient; wallSides=a.wallSides; wallCfgIdx=a.wallCfgIdx;
   extState=a.extState;
 }
@@ -3905,7 +3907,7 @@ function buildPozicijeTabelu(){
     var kom=Math.max(1,p.kom||1);
     var saz=_pozSazetak(p);
     var otv=(POZ_OTVOREN===i);
-    h+='<div class="poz-red'+(otv?' otvoren':'')+(saz.izuz?' ima-izuz':'')+'">'
+    h+='<div class="poz-red'+(otv?' otvoren':'')+(saz.izuz?' ima-izuz':'')+'" data-pi="'+i+'">'
       +'<div class="poz-hd">'
       +'<b'+(jeZidnaKlupica()?' style="color:#7a4fa0" title="Zid '
         +(((p.zid!=null?p.zid:0))+1)+'"':'')+'>'
@@ -6380,6 +6382,7 @@ function refresh(){
   if(ge('b-usl')) ge('b-usl').textContent=_allUsl.toFixed(2)+' KM';
   if(ge('b-rez')) ge('b-rez').textContent=_allRez.toFixed(2)+' KM';
   try{ prikaziLagerInfo(); }catch(e){}
+  try{ buildPozNav(); }catch(e){}
   drawCanvas(); // uvijek osvjezi crtez
   // Veliki prozor slobodnog oblika mora pratiti SVAKU promjenu (dodat otvor,
   // izmijenjena dimenzija, cijena...) - inace bi ostao na starom stanju dok
@@ -8301,22 +8304,80 @@ function _pozBdEditDesc(i,segId){
 // odredi visinu platna) i drawKlPozicije (da crta), pa se nikad ne razidju.
 // Ranije je platno racunato iz JEDNE klupice, pa je kod vise redova bilo
 // prenisko i crtezi su se preklapali.
+// Koliko pozicija stane na JEDNU stranu crteza. Preko toga se ide na
+// sljedecu stranu sa ponovljenim zaglavljem - inace je 24 klupice na jednom
+// ekranu necitljivo i klik-zone se preklapaju.
+var POZ_PO_STRANI=6;
+var _pozStrana=0;   // trenutna strana (0-bazirano)
+function _pozBrojStrana(){
+  var n=(pozicije||[]).length||1;
+  return Math.max(1,Math.ceil(n/POZ_PO_STRANI));
+}
+function _pozNaStrani(){
+  var t=(pozicije||[]);
+  var od=_pozStrana*POZ_PO_STRANI;
+  return t.map(function(p,i){return {p:p,i:i};}).slice(od,od+POZ_PO_STRANI);
+}
+// Traka za listanje strana crteza
+function buildPozNav(){
+  var con=ge('poz-nav'); if(!con) return;
+  var n=(pozicije||[]).length;
+  var br=_pozBrojStrana();
+  if(!imaPozicije()||n<=POZ_PO_STRANI){ con.style.display='none'; con.innerHTML=''; return; }
+  if(_pozStrana>=br) _pozStrana=br-1;
+  con.style.display='';
+  var d=function(txt,k,akt,ugasen){
+    return '<button type="button" '+(ugasen?'disabled':'onclick="pozIdiNaStranu('+k+')"')
+      +' style="font:inherit;font-size:11.5px;padding:5px 11px;border-radius:5px;'
+      +'cursor:'+(ugasen?'default':'pointer')+';font-weight:'+(akt?'700':'500')+';'
+      +'border:1px solid '+(akt?'#1a5fa8':'#dde2ea')+';'
+      +'background:'+(akt?'#1a5fa8':'#fff')+';color:'+(akt?'#fff':(ugasen?'#c8d2dd':'#6b7a8d'))+'">'
+      +txt+'</button>';
+  };
+  var h='<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;'
+    +'background:#f0f4fa;border-radius:6px;padding:7px 9px">'
+    +'<span style="font-size:11px;color:#6b7a8d;font-weight:600">'
+    +n+' pozicija · strana '+(_pozStrana+1)+'/'+br+'</span>'
+    +d('‹ prethodna',_pozStrana-1,false,_pozStrana===0);
+  for(var k=0;k<br;k++){
+    var od=k*POZ_PO_STRANI+1, doo=Math.min(n,(k+1)*POZ_PO_STRANI);
+    h+=d(od+'–'+doo,k,k===_pozStrana,false);
+  }
+  h+=d('sljedeća ›',_pozStrana+1,false,_pozStrana>=br-1)
+    +'<span style="font-size:10px;color:#8a93a3;margin-left:auto">'
+    +'po strani: </span>'
+    +'<input type="number" min="1" max="20" value="'+POZ_PO_STRANI+'" style="width:48px;'
+    +'font:inherit;font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;'
+    +'text-align:right" onchange="pozPoStrani(this.value)">'
+    +'</div>';
+  con.innerHTML=h;
+}
+function pozPoStrani(v){
+  var n=parseInt(v,10)||6;
+  POZ_PO_STRANI=Math.max(1,Math.min(20,n));
+  _pozStrana=0;
+  buildPozNav(); refresh();
+}
+function pozIdiNaStranu(k){
+  var br=_pozBrojStrana();
+  _pozStrana=Math.max(0,Math.min(k,br-1));
+  buildPozNav(); refresh();
+}
 function _pozRaspored(n){
   n=Math.max(1,n||1);
-  // Klupice su duge i uske - jedna po redu daje najveci i najcitljiviji
-  // crtez. Tek kod velikog broja se ide na dvije, da platno ne bude beskrajno.
-  var uRedu=(n<=10)?1:2;
-  var redova=Math.ceil(n/uRedu);
-  return {uRedu:uRedu, redova:redova,
-          padX:56, padY:74, razmakX:64, razmakY:58, donjaRezerva:30};
+  // Jedna po redu - klupice su duge i uske, pa je tako crtez najveci.
+  return {uRedu:1, redova:n,
+          padX:56, padY:74, razmakX:64, razmakY:64, donjaRezerva:30};
 }
 // Visina platna koja stvarno stane sve pozicije
 function _pozPlatnoVisina(W){
-  var t=(pozicije||[]);
-  var n=t.length||1;
+  var lista=_pozNaStrani();
+  var n=lista.length||1;
   var g=_pozRaspored(n);
   var maxA=1,maxB=1;
-  t.forEach(function(p){ if((p.a||0)>maxA)maxA=p.a||0; if((p.b||0)>maxB)maxB=p.b||0; });
+  // Mjerilo prema NAJVECOJ u cijeloj stavci, da strane budu medjusobno
+  // uporedive - ne da se svaka strana crta u svojoj skali.
+  (pozicije||[]).forEach(function(p){ if((p.a||0)>maxA)maxA=p.a||0; if((p.b||0)>maxB)maxB=p.b||0; });
   var celijaW=(W-g.padX*2-g.razmakX*(g.uRedu-1))/g.uRedu;
   // Mjerilo prema sirini celije, ali red ne smije biti visi od 190 px -
   // inace jedna siroka klupica pojede cijelo platno.
@@ -8328,16 +8389,20 @@ function _pozPlatnoVisina(W){
 // Crtez SVAKE pozicije zasebno, sa rednim brojem i kotama koje se mogu
 // mijenjati duplim klikom - isto kao kod kuhinje. Rasporedjuju se u mrezu.
 function drawKlPozicije(ctx,W,H){
-  var t=(pozicije||[]);
+  var svi=(pozicije||[]);
+  if(!svi.length) return drawKlSematski(ctx,W,H);
+  // Crta se SAMO tekuca strana; zaglavlje se ponavlja na svakoj
+  var lista=_pozNaStrani();
+  var t=lista.map(function(x){return x.p;});
   var n=t.length;
-  if(!n) return drawKlSematski(ctx,W,H);
+  if(!n){ _pozStrana=0; lista=_pozNaStrani(); t=lista.map(function(x){return x.p;}); n=t.length; }
   // ISTI raspored koji koristi i platno - inace se crtezi preklapaju
   var g=_pozRaspored(n);
   var uRedu=g.uRedu, redova=g.redova;
   var padX=g.padX, padY=g.padY, razmakX=g.razmakX, razmakY=g.razmakY;
   var celijaW=(W-padX*2-razmakX*(uRedu-1))/uRedu;
   var maxA=1, maxB=1;
-  t.forEach(function(p){ if((p.a||0)>maxA)maxA=p.a||0; if((p.b||0)>maxB)maxB=p.b||0; });
+  svi.forEach(function(p){ if((p.a||0)>maxA)maxA=p.a||0; if((p.b||0)>maxB)maxB=p.b||0; });
   // Mjerilo prema sirini celije; sve pozicije u ISTOJ skali, pa se odnos
   // velicina odmah vidi. Visina reda proizlazi iz najvece klupice.
   var sc=Math.min(celijaW/maxA*0.82, 190/Math.max(maxB,1));
@@ -8352,8 +8417,9 @@ function drawKlPozicije(ctx,W,H){
   var strane=_pozStrane();
   var jeKl=(tip!=='st');
 
-  t.forEach(function(p,i){
-    var r=Math.floor(i/uRedu), c=i%uRedu;
+  t.forEach(function(p,ii){
+    var i=lista[ii].i;          // stvarni indeks pozicije u stavci
+    var r=Math.floor(ii/uRedu), c=ii%uRedu;
     var ox=padX+c*(celijaW+razmakX);
     var oy=padY+r*(visinaReda+razmakY);
     var A=(p.a||0)*sc, B=(p.b||0)*sc;
@@ -8369,7 +8435,7 @@ function drawKlPozicije(ctx,W,H){
     var uglPoz=[[0,0],[A,0],[A,B],[0,B]];
     uglPoz.forEach(function(up,u){
       var rmm=_pozR(p,u);
-      _regClickRect(up[0]-11,up[1]-11,22,22,null,_pozREditDesc(i,u));
+      _regClickRect(up[0]-9,up[1]-9,18,18,'.poz-red[data-pi="'+i+'"]',_pozREditDesc(i,u));
       if(rmm>0){
         var sx2=up[0]+(u===0||u===3?12:-12), sy2=up[1]+(u<2?12:-12);
         ctx.save();
@@ -8400,9 +8466,19 @@ function drawKlPozicije(ctx,W,H){
       }
       // Klik na IVICU mijenja obradu; klik na oznaku sa mm mijenja
       // djelimicnu duzinu. Zona je siroka 12 px oko linije.
-      var lx=Math.min(g[0],g[2])-6, ly=Math.min(g[1],g[3])-6;
-      var lw=Math.abs(g[2]-g[0])+12, lh=Math.abs(g[3]-g[1])+12;
-      _regClickRect(lx,ly,lw,lh,null,_pozIvEditDesc(i,sd.id));
+      // Zona ivice se SKRACUJE za 16 px na oba kraja, da ne ulazi u zone
+      // uglova (radijusi). Inace klik na ugao pogadja ivicu.
+      var uvuci=16;
+      var vodo=Math.abs(g[2]-g[0])>=Math.abs(g[3]-g[1]);
+      var lx,ly,lw,lh;
+      if(vodo){
+        lx=Math.min(g[0],g[2])+uvuci; lw=Math.max(10,Math.abs(g[2]-g[0])-uvuci*2);
+        ly=Math.min(g[1],g[3])-7;     lh=14;
+      } else {
+        lx=Math.min(g[0],g[2])-7;     lw=14;
+        ly=Math.min(g[1],g[3])+uvuci; lh=Math.max(10,Math.abs(g[3]-g[1])-uvuci*2);
+      }
+      _regClickRect(lx,ly,lw,lh,'.poz-red[data-pi="'+i+'"]',_pozIvEditDesc(i,sd.id));
       // Slovo strane + simbol obrade, uvuceno ka centru
       var mxs=(g[0]+g[2])/2, mys=(g[1]+g[3])/2;
       var dxs=A/2-mxs, dys=B/2-mys, dls=Math.hypot(dxs,dys)||1;
@@ -8445,8 +8521,10 @@ function drawKlPozicije(ctx,W,H){
       ctx.setLineDash([]); ctx.restore();
     }
     // KOTE - duplim klikom se mijenjaju
-    kota(ctx,0,B+22,A,B+22,Math.round(p.a||0)+' mm',_pozEditDesc(i,'a'));
-    kota(ctx,A+14,0,A+14,B,Math.round(p.b||0)+' mm',_pozEditDesc(i,'b'));
+    // Kota duzine nize, da ne pokrije zonu donje ivice (obrada strane A)
+    kota(ctx,0,B+34,A,B+34,Math.round(p.a||0)+' mm',_pozEditDesc(i,'a'));
+    // Kota sirine ide LIJEVO - desno je broj komada, pa se ne sudaraju
+    kota(ctx,-20,0,-20,B,Math.round(p.b||0)+' mm',_pozEditDesc(i,'b'));
 
     // Redni broj i broj komada
     ctx.fillStyle='#7a4fa0'; ctx.font='bold 15px Segoe UI,Arial';
@@ -8462,7 +8540,7 @@ function drawKlPozicije(ctx,W,H){
     ctx.fillText('\u00d7'+kom,A+30,B/2);
     ctx.font='9.5px Segoe UI,Arial'; ctx.fillStyle='#8a93a3';
     ctx.fillText('kom',A+30,B/2+16);
-    _regClickRect(A+26,B/2-16,54,38,null,_pozEditDesc(i,'kom'));
+    _regClickRect(A+26,B/2-16,54,38,'.poz-red[data-pi="'+i+'"]',_pozEditDesc(i,'kom'));
     if(p.nap){
       ctx.font='10px Segoe UI,Arial'; ctx.fillStyle='#8a93a3';
       ctx.textAlign='right';
@@ -8474,12 +8552,16 @@ function drawKlPozicije(ctx,W,H){
 
   // Zaglavlje
   ctx.save(); ctx.setTransform(1,0,0,1,0,0);
-  var ukK=t.reduce(function(a,p){return a+Math.max(1,p.kom||1);},0);
-  var ukM=t.reduce(function(a,p){return a+(p.a||0)*(p.b||0)/1e6*Math.max(1,p.kom||1);},0);
+  var ukK=svi.reduce(function(a,p){return a+Math.max(1,p.kom||1);},0);
+  var ukM=svi.reduce(function(a,p){return a+(p.a||0)*(p.b||0)/1e6*Math.max(1,p.kom||1);},0);
+  var brStr=_pozBrojStrana();
   ctx.fillStyle='#333'; ctx.font='bold 14px Segoe UI,Arial';
   ctx.textAlign='left'; ctx.textBaseline='top';
   ctx.fillText((jeKl?nazivKlupiceMn():'Gazi\u0161ta stepenica')
-    +' \u2014 '+n+' pozicija'+(gs(jeKl?'kl-n':'st-n')?(' \u00b7 '+gs(jeKl?'kl-n':'st-n')):''),12,10);
+    +' \u2014 '+svi.length+' pozicija'
+    +(brStr>1?('  \u00b7  strana '+(_pozStrana+1)+'/'+brStr
+       +' (poz. '+(lista[0].i+1)+'\u2013'+(lista[n-1].i+1)+')'):'')
+    +(gs(jeKl?'kl-n':'st-n')?(' \u00b7 '+gs(jeKl?'kl-n':'st-n')):''),12,10);
   ctx.font='11.5px Segoe UI,Arial'; ctx.fillStyle='#6b7a8d';
   ctx.fillText(ukK+' kom \u00b7 '+ukM.toFixed(3)+' m\u00b2 \u00b7 '
     +getMatV()+(gs('mat-naziv')?(' \u2013 '+gs('mat-naziv')):'')+' \u00b7 '+getMatD()+' mm',12,29);
@@ -9348,13 +9430,28 @@ function genRadniNalog(returnHtml){try{
     // HTML tekst u desnom bloku, vidi legendaHtml ispod)
     _suppressCanvasLegend=true;
     _bezAmbijenta=true;   // CNC crtez - bez prozora i spaletni
-    if(tip==='k') drawK(ctx2,pc.width,pc.height);
-    else if(tip==='kl') drawKl(ctx2,pc.width,pc.height);
-    else if(tip==='sto') drawSto(ctx2,pc.width,pc.height);
-    else drawSt(ctx2,pc.width,pc.height);
+    // Kod tabele pozicija crtez moze imati VISE STRANA - u nalog idu sve,
+    // svaka sa svojim zaglavljem. Inace bi se stampala samo tekuca strana.
+    var _slike=[];
+    var _svePoz=(typeof imaPozicije==='function'&&imaPozicije()&&(pozicije||[]).length);
+    var _brStr=_svePoz?_pozBrojStrana():1;
+    var _staraStr=_pozStrana;
+    for(var _st=0;_st<_brStr;_st++){
+      if(_svePoz) _pozStrana=_st;
+      var _cs2=getCanvasSizeForItem();
+      pc.width=_cs2.w; pc.height=_cs2.h;
+      ctx2=pc.getContext('2d');
+      ctx2.fillStyle='#ffffff'; ctx2.fillRect(0,0,pc.width,pc.height);
+      if(tip==='k') drawK(ctx2,pc.width,pc.height);
+      else if(tip==='kl') drawKl(ctx2,pc.width,pc.height);
+      else if(tip==='sto') drawSto(ctx2,pc.width,pc.height);
+      else drawSt(ctx2,pc.width,pc.height);
+      _slike.push(pc.toDataURL('image/png'));
+    }
+    _pozStrana=_staraStr;
     _suppressCanvasLegend=false;
     _bezAmbijenta=false;
-    var img=pc.toDataURL('image/png');
+    var img=_slike[0];
     document.body.removeChild(pc);
     var legendaHtml=buildLegendaHTML();
 
@@ -9417,7 +9514,12 @@ function genRadniNalog(returnHtml){try{
         '<span class="rn-mat">'+ms+'</span>'+
       '</div>'+
       '<div class="rn-body">'+
-        '<div class="rn-crtez"><img src="'+img+'" style="width:100%;display:block"></div>'+
+        _slike.map(function(sl,si){
+          return '<div class="rn-crtez">'
+            +(_slike.length>1?('<div style="font-size:10px;color:#6b7a8d;padding:3px 8px;'
+              +'background:#f0f4fa">Crte\u017e '+(si+1)+'/'+_slike.length+'</div>'):'')
+            +'<img src="'+sl+'" style="width:100%;display:block"></div>';
+        }).join('')+
         '<div class="rn-right">'+
           '<table class="rn-dims">'+
             '<thead><tr><th>Dim.</th><th>Opis</th><th>Vrijednost</th></tr></thead>'+
