@@ -3381,7 +3381,7 @@ function renderLagerRedovi(){
       <td style="padding:3px 6px;text-align:right;font-weight:700;background:${s.stanje<0?'#fce8e6':lagerBojaStanja(s.stanje)};color:${s.stanje<0?'#c0392b':'inherit'};text-decoration:underline;cursor:pointer;" onclick="otvoriRobnuKarticu(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')" title="${s.stanje<0?'⚠ Stanje je u MINUSU':''}">${s.stanje<0?'⚠ ':''}${s.stanje}</td>
       <td style="padding:3px 6px;text-align:right;">
         ${lagerFmMoney(s.cijena)}
-        ${currentUser?.rola==='admin'?`<button onclick="otvoriNivelaciju(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.cijena})" title="Promijeni cijenu (nivelacija)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
+        ${(currentUser?.rola==='admin'||currentUser?.moze_cijene)?`<button onclick="otvoriNivelaciju(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.cijena})" title="Promijeni cijenu (nivelacija)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
       </td>
       <td style="padding:3px 6px;text-align:right;font-weight:700;">${lagerFmMoney(s.ukupno)}</td>
       <td style="padding:3px 6px;text-align:center;">

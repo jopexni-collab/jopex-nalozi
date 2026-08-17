@@ -124,6 +124,7 @@ input:checked+.slider:before{transform:translateX(13px);}
           <th style="text-align:center">Maloprodaja</th>
           <th style="text-align:center">Prodaja PJ</th>
           <th style="text-align:center">Roba/Magacin</th>
+          <th style="text-align:center" title="Smije mijenjati cijene artikala (nivelacija). Uvoz robe i presek sa cijenama ostaju samo adminu.">Cijene</th>
           <th style="text-align:center">Restlovi</th>
           <th style="text-align:center">Restlovi unos</th>
           <th style="text-align:center">Teren</th>
@@ -359,6 +360,7 @@ function render(){
         </button>
       </td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_roba_magacin?'checked':''} onchange="togglePravo(${k.id},'moze_roba_magacin',this.checked)"><span class="slider"></span></label></td>
+      <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_cijene?'checked':''} onchange="togglePravo(${k.id},'moze_cijene',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_restlovi?'checked':''} onchange="togglePravo(${k.id},'moze_restlovi',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.moze_restlovi_unos?'checked':''} onchange="togglePravo(${k.id},'moze_restlovi_unos',this.checked)"><span class="slider"></span></label></td>
       <td class="toggle-cell"><label class="toggle"><input type="checkbox" ${k.komercijalista_teren?'checked':''} onchange="togglePravo(${k.id},'komercijalista_teren',this.checked)"><span class="slider"></span></label></td>

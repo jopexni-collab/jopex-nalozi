@@ -15,6 +15,13 @@ function zahtijevaProdaju(req, res, next) {
   return res.status(403).json({ error: 'Nemate dozvolu za maloprodaju.' });
 }
 
+// Mijenjanje cijena — admin ILI zaseban moze_cijene. Namjerno NIJE vezano za
+// moze_roba_magacin, da pristup magacinu sam po sebi ne daje i pravo na cijene.
+function smijeMijenjatiCijene(req) {
+  const u = req.session?.user;
+  return u?.rola === 'admin' || u?.moze_cijene === true;
+}
+
 function zahtijevaRobaMagacin(req, res, next) {
   const u = req.session?.user;
   if (u?.rola === 'admin' || u?.moze_roba_magacin) return next();
@@ -869,8 +876,8 @@ router.get('/:id/kartica', zahtijevaProdaju, async (req, res) => {
 // POST /api/roba/:id/nivelacija - SAMO admin. Ručna izmjena cijene artikla za taj PJ,
 // bilježi se u roba_kretanja (istorija — vidi se u kartici) sa razlogom.
 router.post('/:id/nivelacija', async (req, res) => {
-  if (req.session?.user?.rola !== 'admin')
-    return res.status(403).json({ error: 'Samo admin može mijenjati cijenu (nivelacija).' });
+  if (!smijeMijenjatiCijene(req))
+    return res.status(403).json({ error: 'Nemate dozvolu za mijenjanje cijena.' });
   try {
     const objektId = trebaObjekat(req.body.objekt_id);
     if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat.' });
@@ -945,8 +952,13 @@ router.patch('/bulk-jedinica', async (req, res) => {
 // PATCH /api/roba/:id - izmjena. naziv/jed_mjera/aktivan su ZAJEDNIČKI za sve PJ (mijenjaju `roba`),
 // cijena/stanje su PO PJ (mijenjaju `roba_pj`, zahtijeva objekt_id). Samo admin.
 router.patch('/:id', async (req, res) => {
-  if (req.session?.user?.rola !== 'admin')
-    return res.status(403).json({ error: 'Samo admin može mijenjati šifrarnik.' });
+  // Sifrarnik (naziv, JM, aktivan) mijenja SAMO admin. Cijenu smije i onaj sa moze_cijene —
+  // pa se propusta ako se salje ISKLJUCIVO cijena/stanje za odredjeni objekat.
+  const samoCijenaIliStanje = Object.keys(req.body || {})
+    .every(k => ['cijena','stanje','objekt_id'].includes(k));
+  const smijeCijene = smijeMijenjatiCijene(req);
+  if (req.session?.user?.rola !== 'admin' && !(samoCijenaIliStanje && smijeCijene))
+    return res.status(403).json({ error: 'Nemate dozvolu za ovu izmjenu.' });
   try {
     const { naziv, jed_mjera, aktivan, cijena, stanje, objekt_id } = req.body;
     const ZAJEDNICKA = { naziv, jed_mjera, aktivan };
