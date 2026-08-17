@@ -77,6 +77,11 @@
     .mreza{grid-template-columns:repeat(3,1fr);}
     .mreza .stavka,.lista .stavka{box-shadow:none;}
     @page{margin:10mm;}
+    /* Pregledači po podrazumijevanom izostavljaju pozadine i slike pri štampi — ovim se
+       to isključuje, pa slike UVIJEK izlaze u PDF. */
+    *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
+    .mreza .stavka{ break-inside:avoid; page-break-inside:avoid; }
+    .mreza .poz, .lista .slika{ display:block !important; }
   }
 </style>
 </head>
@@ -93,7 +98,7 @@
     <button class="btn" id="btn-mreza" onclick="postaviPrikaz('mreza')">▦ Mrežni prikaz</button>
     <button class="btn" id="btn-lista" onclick="postaviPrikaz('lista')">☰ Linijski prikaz</button>
     <button class="btn" id="btn-nazad" onclick="katalogNazad()" style="display:none;">← Nazad</button>
-    <button class="btn btn-pdf" onclick="window.print()">⬇ Sačuvaj kao PDF</button>
+    <button class="btn btn-pdf" id="btn-pdf" onclick="sacuvajPdf()">⬇ Sačuvaj kao PDF</button>
   </div>
 
   <div id="sadrzaj"><div class="ucitavanje">Učitavanje kataloga...</div></div>
@@ -139,6 +144,33 @@ async function ucitaj(){
 function prikaziGresku(poruka){
   document.getElementById('sadrzaj').innerHTML = `<div class="greska">✗ ${esc(poruka)}</div>`;
   document.querySelector('.alatke').style.display = 'none';
+}
+
+/* Slike se učitavaju LIJENO (samo vidljive) — što je dobro za brzinu, ali znači da
+   neučitane slike NE IZLAZE u PDF. Zato se prije štampe sve prisilno učitaju i čeka se
+   da stignu. Ovo je bio uzrok da PDF izađe bez slika. */
+async function sacuvajPdf(){
+  const btn = document.getElementById('btn-pdf');
+  const slike = [...document.querySelectorAll('#sadrzaj img')];
+  const nedovrsene = slike.filter(i => !i.complete || !i.naturalWidth);
+
+  if(nedovrsene.length){
+    btn.disabled = true;
+    btn.textContent = `Učitavanje slika (0/${nedovrsene.length})...`;
+    let gotovo = 0;
+    // Skidanje lijenog učitavanja — tjera pregledač da odmah povuče sve slike.
+    slike.forEach(i => i.loading = 'eager');
+    await Promise.all(nedovrsene.map(img => new Promise(res => {
+      const zavrsi = () => { btn.textContent = `Učitavanje slika (${++gotovo}/${nedovrsene.length})...`; res(); };
+      img.addEventListener('load', zavrsi, {once:true});
+      img.addEventListener('error', zavrsi, {once:true});   // i neuspjele se ne čekaju vječno
+      if(img.complete) zavrsi();
+    })));
+    btn.disabled = false;
+    btn.textContent = '⬇ Sačuvaj kao PDF';
+  }
+  // Kratka pauza da pregledač završi iscrtavanje prije nego otvori dijalog za štampu.
+  setTimeout(() => window.print(), 120);
 }
 
 function postaviPrikaz(p){ prikaz = p; render(); }
