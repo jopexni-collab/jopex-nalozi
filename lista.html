@@ -900,6 +900,8 @@ async function undoPromjenu(rBr, logId, polje){
 // Zatvara tooltip na sledeći klik bilo gde (isti obrazac kao kom-kontekst-meni).
 let zadnjiKlikX=0, zadnjiKlikY=0;
 document.addEventListener('contextmenu', e=>{ zadnjiKlikX=e.clientX+12; zadnjiKlikY=e.clientY+12; });
+// Rotacija telefona / pojava tastature mijenja visinu ekrana — prozorčić mora ostati vidljiv.
+window.addEventListener('resize', ()=>popPozicioniraj());
 document.addEventListener('click', ()=>{ document.getElementById('status-log-tooltip').style.display='none'; });
 
 // ─── INLINE EDIT POPUP ────────────────────────────────────────────────────
@@ -1090,12 +1092,48 @@ function openPop(td,row,editCfg){
   } else {
     fEl.innerHTML=`<input type="text" id="pop-inp" value="${esc(val||'')}">`;
   }
-  const rect=td.getBoundingClientRect();
   pop.style.display='block';
-  pop.style.left=Math.min(rect.left,window.innerWidth-220)+'px';
-  pop.style.top=(rect.bottom+4)+'px';
+  popPozicioniraj(td);
   const focusEl=document.getElementById('pop-inp');
   if(focusEl) focusEl.focus();
+}
+
+/* Pozicioniranje prozorčića tako da UVIJEK ostane u vidljivom dijelu ekrana.
+   Ranije se uvijek stavljao ISPOD ćelije — pa je kod redova na dnu tabele (npr. visok
+   prozorčić naplate/avansa) ispadao izvan ekrana i nije se mogao ni doskrolovati.
+   Poziva se i PONOVO, kad naknadno učitan sadržaj promijeni visinu. */
+let popCiljnaCelija=null;
+function popPozicioniraj(td){
+  const pop=document.getElementById('inline-pop');
+  if(!pop || pop.style.display==='none') return;
+  if(td) popCiljnaCelija=td;
+  const cilj=popCiljnaCelija;
+  if(!cilj) return;
+
+  // Reset od prethodnog otvaranja — inače bi ograničenje visine ostalo zaključano.
+  pop.style.maxHeight=''; pop.style.overflowY='';
+
+  const rect=cilj.getBoundingClientRect();
+  const margina=8;
+  const vis=pop.offsetHeight || 200;
+  const sir=pop.offsetWidth || 220;
+  const ispod=window.innerHeight-rect.bottom-margina;
+  const iznad=rect.top-margina;
+
+  let top;
+  if(vis<=ispod){
+    top=rect.bottom+4;                 // staje ispod ćelije — najprirodnije
+  }else if(vis<=iznad){
+    top=rect.top-vis-4;                // ne staje ispod, ali staje iznad
+  }else{
+    // Ne staje ni gore ni dole (visok prozorčić / mali ekran) — zauzmi vidljivi dio
+    // i dopusti skrol UNUTAR prozorčića.
+    top=margina;
+    pop.style.maxHeight=(window.innerHeight-2*margina)+'px';
+    pop.style.overflowY='auto';
+  }
+  pop.style.top=Math.max(margina, Math.min(top, Math.max(margina, window.innerHeight-vis-margina)))+'px';
+  pop.style.left=Math.max(margina, Math.min(rect.left, window.innerWidth-sir-margina))+'px';
 }
 
 function formatKratakDatum(iso){
@@ -1211,6 +1249,7 @@ async function ucitajPretplatuZaNalog(rBr){
       sekcija.style.display='block';
       info.innerHTML=`<span style="color:#8b96a5;">${esc(d.poruka)}</span>`;
       akcija.style.display='none';
+      popPozicioniraj();  // visina se promijenila
       return;
     }
     if(d.saldo>0.005){
@@ -1219,10 +1258,12 @@ async function ucitajPretplatuZaNalog(rBr){
       akcija.style.display='block';
       document.getElementById('pretplata-iznos').value=d.saldo.toFixed(2);
       document.getElementById('pretplata-iznos').max=d.saldo;
+      popPozicioniraj();  // visina se promijenila
     }else if(d.saldo<-0.005){
       sekcija.style.display='block';
       info.innerHTML=`<span style="color:var(--red,#c0392b);">${esc(d.kupac_naziv)} <b>duguje ${fm(Math.abs(d.saldo))} KM</b> — nema pretplate.</span>`;
       akcija.style.display='none';
+      popPozicioniraj();  // visina se promijenila
     }else{
       sekcija.style.display='none'; // nema ni pretplate ni duga — ne zauzimaj prostor
     }
