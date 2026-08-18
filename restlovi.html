@@ -54,6 +54,25 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);}
 .kartica .v{font-size:18px;font-weight:800;color:var(--dark);}
 .kartica .n{font-size:10.5px;color:#8b96a5;margin-top:2px;}
 
+/* ── EXCEL-STIL TABELA ─────────────────────────────────────── */
+.xl-wrap{overflow:auto;max-height:70vh;border:1px solid var(--border);border-radius:8px;background:#fff;}
+.xl{width:100%;border-collapse:collapse;font-size:11px;}
+.xl thead th{background:#1f3864;color:#fff;padding:4px 6px;font-size:10.5px;font-weight:700;
+  white-space:nowrap;position:sticky;top:0;z-index:30;text-align:left;}
+.xl thead th .naslov{cursor:pointer;user-select:none;}
+.xl thead th .fbtn{cursor:pointer;margin-left:4px;padding:1px 4px;border-radius:3px;
+  background:rgba(255,255,255,.15);font-size:9px;}
+.xl thead th .fbtn.on{background:#4a90d9;}
+.xl tbody td{padding:4px 6px;border-bottom:1px solid #eef0f3;white-space:nowrap;}
+.xl tbody tr:nth-child(even){background:#fafbfc;}
+.xl tbody tr:hover{background:#eef4fc;}
+.xl tbody tr.oznacen{background:#dbeafe !important;}
+.xl td.num{text-align:right;font-variant-numeric:tabular-nums;}
+.xl-panel{position:fixed;z-index:520;background:#fff;border:1px solid var(--border);border-radius:8px;
+  box-shadow:0 4px 16px rgba(0,0,0,.2);width:230px;max-height:340px;display:none;flex-direction:column;}
+.xl-akcije{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;
+  padding:8px 10px;background:#eef4fc;border-radius:8px;font-size:12px;}
+
 /* ── TABELE ───────────────────────────────────────────────── */
 .tbl-wrap{overflow-x:auto;margin-top:10px;}
 table{width:100%;border-collapse:collapse;font-size:12px;}
@@ -139,11 +158,11 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
     <div class="red">
       <label class="polje">Širina (mm)<input type="number" id="t_sirina" style="width:110px"></label>
       <label class="polje">Visina (mm)<input type="number" id="t_visina" style="width:110px"></label>
-      <label class="polje">Grupa<select id="t_grupa" onchange="filtrirajArtikle()" style="width:150px">
+      <label class="polje">Grupa<select id="t_grupa" onchange="osvjeziFiltere('grupa')" style="width:150px">
         <option value="">— sve grupe —</option></select></label>
-      <label class="polje">Debljina (cm)<select id="t_debljina" onchange="filtrirajArtikle()" style="width:120px">
+      <label class="polje">Debljina (cm)<select id="t_debljina" onchange="osvjeziFiltere('debljina')" style="width:120px">
         <option value="">— sve —</option></select></label>
-      <label class="polje">Artikal (šifra iz lagera)<select id="t_roba" style="width:280px">
+      <label class="polje">Artikal (šifra iz lagera)<select id="t_roba" onchange="osvjeziFiltere('artikal')" style="width:300px">
         <option value="">— bilo koji artikal —</option></select></label>
       <label class="polje">Ili naziv<input type="text" id="t_materijal" placeholder="npr. Carrara" style="width:150px"></label>
       <label class="polje">PJ<select id="t_objekt" style="width:170px"><option value="">— sve PJ —</option></select></label>
@@ -157,6 +176,7 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
       </select></label>
       <button class="btn" onclick="trazi()">Traži</button>
     </div>
+    <div id="t_info" class="hint" style="margin-top:8px"></div>
     <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;cursor:pointer;margin-top:10px">
       <input type="checkbox" id="t_nacrtaj" onchange="prebaciEditorTrazi()">
       <b>Komad nije pravougaonik</b> — nacrtaj ga isto kao kod novog restla
@@ -1432,36 +1452,93 @@ function artikalIzabran() {
    Grupe, debljine i artikli dolaze iz tabele roba, iste one koju koristi magacin —
    pa se restlovi filtriraju istim pojmovima kao i lager. Nude se samo artikli koji
    stvarno imaju restlova, uz broj komada i kvadraturu. */
-let ARTIKLI = [];
+let ARTIKLI = [], PAROVI = [], SVE_GRUPE = [], SVE_DEBLJINE = [];
 
 async function ucitajFiltere() {
   try {
     const d = await api('/filteri');
     ARTIKLI = d.artikli || [];
-    const g = document.getElementById('t_grupa');
-    g.innerHTML = '<option value="">— sve grupe —</option>' +
-      (d.grupe || []).map(x => '<option>' + x + '</option>').join('');
-    const deb = document.getElementById('t_debljina');
-    deb.innerHTML = '<option value="">— sve —</option>' +
-      (d.debljine || []).map(x => '<option value="' + x + '">' + fmt(x) + ' cm</option>').join('');
-    filtrirajArtikle();
+    PAROVI = d.parovi || [];
+    SVE_GRUPE = d.grupe || [];
+    SVE_DEBLJINE = d.debljine || [];
+    osvjeziFiltere();
   } catch (e) { /* bez filtera se i dalje može tražiti po nazivu */ }
 }
 
-// Spisak artikala se sužava po izabranoj grupi i debljini — da se ne prelistava
-// cijeli lager kad se traži jedna vrsta kamena.
-function filtrirajArtikle() {
-  const g = document.getElementById('t_grupa').value;
-  const d = Number(document.getElementById('t_debljina').value) || null;
-  const sel = document.getElementById('t_roba');
-  const bio = sel.value;
-  const lista = ARTIKLI.filter(a =>
-    (!g || a.grupa === g) && (!d || Number(a.debljina_cm) === d));
-  sel.innerHTML = '<option value="">— bilo koji artikal —</option>' +
-    lista.map(a => '<option value="' + a.id + '">' + (a.sifra ? a.sifra + ' — ' : '') + a.naziv +
-      ' (' + a.restlova + ' kom, ' + fmt(a.m2) + ' m²)</option>').join('');
-  if (bio && [...sel.options].some(o => o.value === bio)) sel.value = bio;
+/* ── MEĐUSOBNO SUŽAVANJE ──
+   Filteri se sužavaju u OBA smjera, iz stvarnih podataka a ne iz upisanih pravila:
+   izabereš Tasto → ostaju samo debljine koje Tasto ima (1,2 i 2 cm) i samo njegovi
+   artikli; izabereš 3 cm → ostaju samo grupe koje se u toj debljini uopšte pojavljuju.
+   Izbor koji nakon sužavanja više nema smisla se sam poništava. */
+function osvjeziFiltere(izvor) {
+  const gEl = document.getElementById('t_grupa');
+  const dEl = document.getElementById('t_debljina');
+  const aEl = document.getElementById('t_roba');
+  if (!gEl || !dEl || !aEl) return;
+
+  let g = gEl.value, d = Number(dEl.value) || null, a = aEl.value;
+
+  // Izabrani artikal je najuži izbor — grupa i debljina se povuku za njim
+  if (izvor === 'artikal' && a) {
+    const art = ARTIKLI.find(x => String(x.id) === String(a));
+    if (art) {
+      g = art.grupa || '';
+      d = art.debljina_cm != null ? Number(art.debljina_cm) : null;
+    }
+  }
+
+  // Ako izabrani par ne postoji, poništava se onaj koji NIJE upravo mijenjan
+  const parPostoji = (grupa, deb) => PAROVI.some(p =>
+    (!grupa || p.grupa === grupa) && (!deb || p.debljina === deb));
+  if (g && d && !parPostoji(g, d)) {
+    if (izvor === 'grupa') d = null; else g = '';
+  }
+
+  const grupeZa = deb => [...new Set(PAROVI.filter(p => !deb || p.debljina === deb)
+    .map(p => p.grupa).filter(Boolean))].sort();
+  const debljineZa = grupa => [...new Set(PAROVI.filter(p => !grupa || p.grupa === grupa)
+    .map(p => p.debljina).filter(Boolean))].sort((x, y) => x - y);
+
+  const grupe = grupeZa(d), debljine = debljineZa(g);
+
+  gEl.innerHTML = '<option value="">— sve grupe (' + SVE_GRUPE.length + ') —</option>' +
+    grupe.map(x => '<option>' + x + '</option>').join('');
+  dEl.innerHTML = '<option value="">— sve debljine —</option>' +
+    debljine.map(x => '<option value="' + x + '">' + fmt(x) + ' cm</option>').join('');
+  // Vrijednost se postavlja IZRIČITO poslije crtanja opcija — oslanjanje na
+  // atribut selected ne vrijedi kad se opcije ponovo iscrtavaju.
+  gEl.value = grupe.includes(g) ? g : '';
+  dEl.value = (d && debljine.includes(d)) ? String(d) : '';
+
+  const lista = ARTIKLI.filter(x =>
+    (!g || x.grupa === g) && (!d || Number(x.debljina_cm) === d));
+  aEl.innerHTML = '<option value="">— bilo koji artikal (' + lista.length + ') —</option>' +
+    lista.map(x => '<option value="' + x.id + '">' +
+      (x.sifra ? x.sifra + ' — ' : '') + x.naziv +
+      (x.debljina_cm ? ' · ' + fmt(x.debljina_cm) + ' cm' : '') +
+      ' (' + x.restlova + ' kom, ' + fmt(x.m2) + ' m²)</option>').join('');
+  aEl.value = lista.some(x => String(x.id) === String(a)) ? a : '';
+
+  const info = document.getElementById('t_info');
+  if (info) {
+    const suzeno = (g || d) ;
+    info.innerHTML = suzeno
+      ? 'Prikazano ' + lista.length + ' od ' + ARTIKLI.length + ' artikala' +
+        (g ? ', grupa <b>' + g + '</b>' : '') + (d ? ', debljina <b>' + fmt(d) + ' cm</b>' : '') +
+        ' · <a href="#" onclick="ocistiFiltere();return false">poništi filtere</a>'
+      : ARTIKLI.length + ' artikala ima dostupnih restlova.';
+  }
 }
+
+function ocistiFiltere() {
+  document.getElementById('t_grupa').value = '';
+  document.getElementById('t_debljina').value = '';
+  document.getElementById('t_roba').value = '';
+  osvjeziFiltere();
+}
+
+// zadržano radi starijih poziva
+function filtrirajArtikle() { osvjeziFiltere(); }
 
 /* ═══════════════ PREKLAPANJE: restl + komad u njemu ═══════════════
    Backend vraća tačan položaj i ugao pod kojim komad ulazi, pa se ovdje samo crta:
@@ -1575,6 +1652,156 @@ async function trazi() {
 }
 
 /* ═══════════════ lista ═══════════════ */
+/* ═══════════════ LISTA RESTLOVA — EXCEL STIL ═══════════════
+   Isti obrazac kao lager lista u magacinu: sticky tamnoplavo zaglavlje, sortiranje
+   klikom, filter po koloni sa kvadratićima, kaskadno sužavanje i označavanje redova
+   za grupne radnje. */
+
+const XL_KOLONE = [
+  { k: 'oznaka',      lbl: 'Oznaka',    align: 'left'  },
+  { k: 'artikal',     lbl: 'Artikal',   align: 'left'  },
+  { k: 'grupa',       lbl: 'Grupa',     align: 'left'  },
+  { k: 'debljina',    lbl: 'Deb. cm',   align: 'right' },
+  { k: 'mjere',       lbl: 'Mjere',     align: 'left'  },
+  { k: 'povrsina',    lbl: 'm²',        align: 'right' },
+  { k: 'cijena_m2',   lbl: 'KM/m²',     align: 'right' },
+  { k: 'vrijednost',  lbl: 'Vrijednost',align: 'right' },
+  { k: 'objekt',      lbl: 'PJ',        align: 'left'  },
+  { k: 'lokacija',    lbl: 'Lokacija',  align: 'left'  },
+  { k: 'status',      lbl: 'Status',    align: 'left'  },
+  { k: 'nastao',      lbl: 'Nastao',    align: 'left'  },
+];
+
+let XL_PODACI = [], XL_SORT = { k: 'oznaka', smjer: -1 };
+let XL_FILTERI = {}, XL_OZNACENI = new Set();
+let XL_PANEL_KOLONA = null, XL_PANEL_PRETRAGA = '', XL_DRAFT = new Set();
+
+function xlVrijednost(r, k) {
+  switch (k) {
+    case 'oznaka':     return r.oznaka || '';
+    case 'artikal':    return r.artikal_naziv || r.materijal || '';
+    case 'grupa':      return r.prikaz_grupa || r.grupa || '';
+    case 'debljina':   return r.prikaz_debljina != null ? Number(r.prikaz_debljina) : (r.debljina_cm != null ? Number(r.debljina_cm) : '');
+    case 'mjere':      return Math.round(r.dim_a || 0) + '×' + Math.round(r.dim_b || 0);
+    case 'povrsina':   return Number(r.povrsina) || 0;
+    case 'cijena_m2':  return Number(r.cijena_m2) || 0;
+    case 'vrijednost': return Number(r.vrijednost) || 0;
+    case 'objekt':     return r.objekt_naziv || '';
+    case 'lokacija':   return r.lokacija || '';
+    case 'status':     return r.status || '';
+    case 'nastao':     return r.roditelj_oznaka ? 'od ' + r.roditelj_oznaka : 'cijela tabla';
+    default:           return '';
+  }
+}
+
+// Redovi koji prežive sve filtere OSIM jedne kolone — tako se opcije u toj koloni
+// sužavaju prema onome što je već filtrirano drugdje, kao u Excelu.
+function xlRedoviBez(izuzmi) {
+  return XL_PODACI.filter(r =>
+    XL_KOLONE.every(c => {
+      if (c.k === izuzmi) return true;
+      // Skup drži ISKLJUČENE vrijednosti (isto kao lager lista u magacinu):
+      // otčekiran kvadratić znači "sakrij ovo".
+      const iskljucene = XL_FILTERI[c.k];
+      if (!iskljucene || !iskljucene.size) return true;
+      const v = xlVrijednost(r, c.k);
+      return !iskljucene.has(v) && !(iskljucene.has('') && (v == null || v === ''));
+    }));
+}
+function xlVidljivi() { return xlRedoviBez(null); }
+
+function xlSort(k) {
+  XL_SORT = XL_SORT.k === k ? { k, smjer: -XL_SORT.smjer } : { k, smjer: 1 };
+  crtajListu();
+}
+
+function xlOtvoriFilter(k, dugme) {
+  XL_PANEL_KOLONA = k; XL_PANEL_PRETRAGA = '';
+  XL_DRAFT = new Set(XL_FILTERI[k] || []);
+  const panel = document.getElementById('xl-panel');
+  const r = dugme.getBoundingClientRect();
+  panel.style.top = (r.bottom + 4) + 'px';
+  panel.style.left = Math.min(r.left, window.innerWidth - 240) + 'px';
+  panel.style.display = 'flex';
+  // Struktura se pravi SAMO pri otvaranju — inače bi polje za pretragu gubilo fokus
+  // pri svakom otkucanom slovu.
+  panel.innerHTML =
+    '<div style="padding:8px;border-bottom:1px solid #eee">' +
+    '<input type="text" id="xl-pretraga" placeholder="Pretraga…" style="width:100%;padding:5px 7px;font-size:11.5px;box-sizing:border-box"></div>' +
+    '<div id="xl-lista" style="overflow-y:auto;flex:1;padding:6px 8px"></div>' +
+    '<div style="display:flex;gap:6px;padding:8px;border-top:1px solid #eee">' +
+    '<button class="btn sec mali" style="flex:1" onclick="xlZatvoriFilter()">Otkaži</button>' +
+    '<button class="btn sec mali" style="flex:1" onclick="xlObrisiFilter()">Obriši</button>' +
+    '<button class="btn mali" style="flex:1" onclick="xlPrimijeniFilter()">✓ OK</button></div>';
+  const inp = document.getElementById('xl-pretraga');
+  let t = null;
+  inp.addEventListener('input', e => {
+    XL_PANEL_PRETRAGA = e.target.value;
+    clearTimeout(t); t = setTimeout(xlCrtajListuFiltera, 250);
+  });
+  inp.focus();
+  xlCrtajListuFiltera();
+}
+
+function xlCrtajListuFiltera() {
+  const k = XL_PANEL_KOLONA;
+  const izvor = xlRedoviBez(k).map(r => xlVrijednost(r, k));
+  const neprazne = [...new Set(izvor.filter(v => v !== '' && v != null))]
+    .sort((a, b) => typeof a === 'number' && typeof b === 'number'
+      ? a - b : String(a).localeCompare(String(b), 'sr-Latn-BA'));
+  const sve = izvor.some(v => v === '' || v == null) ? [...neprazne, ''] : neprazne;
+  const p = XL_PANEL_PRETRAGA.toLowerCase();
+  const prikaz = sve.filter(v => String(v).toLowerCase().includes(p));
+  const sveOznaceno = prikaz.every(v => !XL_DRAFT.has(v));
+  document.getElementById('xl-lista').innerHTML =
+    '<label style="display:flex;gap:6px;padding:3px 0;font-weight:700;cursor:pointer;border-bottom:1px solid #eee;margin-bottom:3px">' +
+    '<input type="checkbox"' + (sveOznaceno ? ' checked' : '') + ' onchange="xlOznaciSve(this.checked)"> (Izaberi sve)</label>' +
+    prikaz.map(v =>
+      '<label style="display:flex;gap:6px;padding:2px 0;font-size:11.5px;cursor:pointer">' +
+      '<input type="checkbox"' + (XL_DRAFT.has(v) ? '' : ' checked') +
+      ' onchange="xlPrebaci(' + JSON.stringify(String(v)) + ',this.checked)">' +
+      (v === '' ? '<i>(prazno)</i>' : (typeof v === 'number' ? fmt(v) : v)) + '</label>').join('');
+}
+
+function xlPrebaci(v, ukljucen) {
+  const stvarna = [...new Set(xlRedoviBez(XL_PANEL_KOLONA).map(r => xlVrijednost(r, XL_PANEL_KOLONA)))]
+    .find(x => String(x) === v);
+  const kljuc = stvarna !== undefined ? stvarna : v;
+  if (ukljucen) XL_DRAFT.delete(kljuc); else XL_DRAFT.add(kljuc);
+}
+function xlOznaciSve(ukljuci) {
+  const k = XL_PANEL_KOLONA;
+  const sve = [...new Set(xlRedoviBez(k).map(r => xlVrijednost(r, k)))];
+  const p = XL_PANEL_PRETRAGA.toLowerCase();
+  sve.filter(v => String(v).toLowerCase().includes(p))
+     .forEach(v => { if (ukljuci) XL_DRAFT.delete(v); else XL_DRAFT.add(v); });
+  xlCrtajListuFiltera();
+}
+function xlPrimijeniFilter() {
+  XL_FILTERI[XL_PANEL_KOLONA] = new Set(XL_DRAFT);
+  xlZatvoriFilter(); crtajListu();
+}
+function xlObrisiFilter() {
+  delete XL_FILTERI[XL_PANEL_KOLONA];
+  xlZatvoriFilter(); crtajListu();
+}
+function xlZatvoriFilter() {
+  const p = document.getElementById('xl-panel');
+  if (p) p.style.display = 'none';
+  XL_PANEL_KOLONA = null;
+}
+function xlObrisiSveFiltere() { XL_FILTERI = {}; crtajListu(); }
+
+function xlPrebaciOznaku(id, ukljucen) {
+  if (ukljucen) XL_OZNACENI.add(id); else XL_OZNACENI.delete(id);
+  crtajListu();
+}
+function xlOznaciSveRedove(ukljuci) {
+  if (ukljuci) xlVidljivi().forEach(r => XL_OZNACENI.add(r.id));
+  else XL_OZNACENI.clear();
+  crtajListu();
+}
+
 async function ucitajListu() {
   const p = new URLSearchParams();
   if (document.getElementById('f_q').value) p.set('q', document.getElementById('f_q').value);
@@ -1583,32 +1810,127 @@ async function ucitajListu() {
   const cilj = document.getElementById('tabela_lista');
   cilj.innerHTML = '<div class="empty-msg">Učitavam…</div>';
   try {
-    const red = await api('?' + p.toString());
-    if (!red.length) return cilj.innerHTML = '<div class="empty-msg">Nema restlova po ovom filteru.</div>';
-    cilj.innerHTML =
-      '<div class="tbl-wrap"><table><thead><tr><th>Oznaka</th><th>Materijal</th><th>Grupa</th><th>Deb. cm</th><th>Oblik / mjere</th>' +
-      '<th>Površina</th><th>KM/m²</th><th>Vrijednost</th><th>PJ</th><th>Status</th><th>Nastao</th><th></th></tr></thead><tbody>' +
-      red.map(r =>
-        '<tr><td><b>' + r.oznaka + '</b>' + (r.foto_url ? ' <a href="' + r.foto_url + '" target="_blank">📷</a>' : '') + '</td>' +
-        '<td>' + (r.materijal || '') + '</td><td>' + (r.grupa || '') + '</td>' +
-        '<td>' + (r.debljina_cm || '') + '</td>' +
-        '<td>' + (r.oblik === 'L' ? 'L ' : r.oblik === 'poligon' ? '⬟ ' : '') + r.dim_a + '×' + r.dim_b +
-        (r.oblik === 'L' ? ' (' + r.dim_c + '×' + r.dim_d + ')' : '') + '</td>' +
-        '<td>' + m2(r.povrsina) + '</td><td>' + fmt(r.cijena_m2) + '</td>' +
-        '<td>' + fmt(r.vrijednost) + '</td><td>' + (r.objekt_naziv || '') + '</td>' +
-        '<td><span class="znak z-' + r.status + '">' + r.status + '</span></td>' +
-        '<td class="hint">' + (r.roditelj_oznaka ? 'od ' + r.roditelj_oznaka : 'cijela tabla') +
-        (r.nastao_iz_naloga ? '<br>nalog ' + r.nastao_iz_naloga : '') + '</td>' +
-        '<td style="white-space:nowrap">' +
-        '<button class="btn sec mali" onclick="rodovnik(' + r.id + ')">Rodovnik</button> ' +
-        '<a class="btn sec mali" style="text-decoration:none;display:inline-block" href="/api/restlovi/' + r.id + '/dxf">DXF</a> ' +
-        (DOZVOLE.unos && r.status !== 'potrosen'
-          ? '<button class="btn sec mali" onclick="otvoriPrenos(' + r.id + ')">Prenos</button> ' +
-            '<button class="btn mali" onclick="otvoriKoristi(' + r.id + ')">Uzmi</button>' : '') +
-        '</td></tr>'
-      ).join('') + '</tbody></table></div>';
+    XL_PODACI = await api('?' + p.toString());
+    XL_OZNACENI.clear();
+    crtajListu();
   } catch (e) { cilj.innerHTML = '<div class="msg err">' + e.message + '</div>'; }
 }
+
+function crtajListu() {
+  const cilj = document.getElementById('tabela_lista');
+  if (!XL_PODACI.length) return cilj.innerHTML = '<div class="empty-msg">Nema restlova po ovom filteru.</div>';
+
+  let redovi = xlVidljivi();
+  const s = XL_SORT;
+  redovi = redovi.slice().sort((a, b) => {
+    const x = xlVrijednost(a, s.k), y = xlVrijednost(b, s.k);
+    if (typeof x === 'number' && typeof y === 'number') return (x - y) * s.smjer;
+    return String(x).localeCompare(String(y), 'sr-Latn-BA') * s.smjer;
+  });
+
+  const strelica = k => XL_SORT.k === k ? (XL_SORT.smjer > 0 ? ' ▲' : ' ▼') : '';
+  const brFiltera = Object.values(XL_FILTERI).filter(f => f && f.size).length;
+  const sumM2 = redovi.reduce((z, r) => z + (Number(r.povrsina) || 0), 0);
+  const sumVr = redovi.reduce((z, r) => z + (Number(r.vrijednost) || 0), 0);
+
+  let html = '<div class="xl-akcije">' +
+    '<b>' + redovi.length + '</b> od ' + XL_PODACI.length + ' redova · <b>' + fmt(sumM2) + ' m²</b> · <b>' + fmt(sumVr) + ' KM</b>' +
+    (brFiltera ? ' · <a href="#" onclick="xlObrisiSveFiltere();return false">poništi ' + brFiltera + ' filter(a)</a>' : '') +
+    (XL_OZNACENI.size ? '<span style="margin-left:auto;display:flex;gap:6px;align-items:center">' +
+      '<b>' + XL_OZNACENI.size + ' označeno</b>' +
+      '<button class="btn sec mali" onclick="xlIzvezi()">Izvezi u CSV</button>' +
+      (DOZVOLE.unos ? '<button class="btn sec mali" onclick="xlGrupniPrenos()">Prenesi u drugi PJ</button>' : '') +
+      '</span>' : '') +
+    '</div>';
+
+  html += '<div class="xl-wrap"><table class="xl"><thead><tr>' +
+    '<th style="width:28px;text-align:center"><input type="checkbox" ' +
+      (XL_OZNACENI.size && XL_OZNACENI.size === redovi.length ? 'checked' : '') +
+      ' onchange="xlOznaciSveRedove(this.checked)"></th>' +
+    '<th style="width:44px">Slika</th>' +
+    XL_KOLONE.map(c => {
+      const aktivan = XL_FILTERI[c.k] && XL_FILTERI[c.k].size;
+      return '<th style="text-align:' + c.align + '"><div style="display:flex;align-items:center;gap:2px;' +
+        'justify-content:' + (c.align === 'right' ? 'flex-end' : 'flex-start') + '">' +
+        '<span class="naslov" onclick="xlSort(\'' + c.k + '\')">' + c.lbl + strelica(c.k) + '</span>' +
+        '<span class="fbtn' + (aktivan ? ' on' : '') + '" onclick="event.stopPropagation();xlOtvoriFilter(\'' + c.k + '\',this)">▼</span>' +
+        '</div></th>';
+    }).join('') +
+    '<th style="width:150px"></th></tr></thead><tbody>';
+
+  html += redovi.map(r =>
+    '<tr class="' + (XL_OZNACENI.has(r.id) ? 'oznacen' : '') + '">' +
+    '<td style="text-align:center"><input type="checkbox"' + (XL_OZNACENI.has(r.id) ? ' checked' : '') +
+      ' onchange="xlPrebaciOznaku(' + r.id + ',this.checked)"></td>' +
+    '<td>' + (r.slika ? '<img src="' + r.slika + '" style="width:30px;height:30px;object-fit:cover;border-radius:4px">' : '') + '</td>' +
+    '<td><b>' + r.oznaka + '</b>' + (r.foto_url ? ' <a href="' + r.foto_url + '" target="_blank">📷</a>' : '') +
+      (r.treba_provjeriti ? ' <span title="L-oblik iz uvoza — provjeri stranu" style="color:#e67e22">⚠</span>' : '') + '</td>' +
+    '<td>' + xlVrijednost(r, 'artikal') + (r.artikal_sifra ? ' <span class="hint">' + r.artikal_sifra + '</span>' : '') + '</td>' +
+    '<td>' + xlVrijednost(r, 'grupa') + '</td>' +
+    '<td class="num">' + (xlVrijednost(r, 'debljina') || '') + '</td>' +
+    '<td>' + (r.oblik === 'L' ? 'L ' : r.oblik === 'poligon' ? '⬟ ' : '') + xlVrijednost(r, 'mjere') + '</td>' +
+    '<td class="num">' + fmt(r.povrsina) + '</td>' +
+    '<td class="num">' + fmt(r.cijena_m2) + '</td>' +
+    '<td class="num">' + fmt(r.vrijednost) + '</td>' +
+    '<td>' + (r.objekt_naziv || '') + '</td>' +
+    '<td>' + (r.lokacija || '') + '</td>' +
+    '<td><span class="chip chip-' + r.status + '">' + r.status + '</span></td>' +
+    '<td class="hint">' + xlVrijednost(r, 'nastao') + (r.nastao_iz_naloga ? ' · nalog ' + r.nastao_iz_naloga : '') + '</td>' +
+    '<td style="white-space:nowrap">' +
+      '<button class="btn sec mali" onclick="rodovnik(' + r.id + ')">Rodovnik</button> ' +
+      '<a class="btn sec mali" style="text-decoration:none;display:inline-block" href="/api/restlovi/' + r.id + '/dxf">DXF</a> ' +
+      (DOZVOLE.unos && r.status !== 'potrosen'
+        ? '<button class="btn sec mali" onclick="otvoriPrenos(' + r.id + ')">Prenos</button> ' +
+          '<button class="btn mali" onclick="otvoriKoristi(' + r.id + ')">Uzmi</button>' : '') +
+    '</td></tr>').join('');
+
+  html += '</tbody></table></div><div id="xl-panel" class="xl-panel"></div>';
+  cilj.innerHTML = html;
+}
+
+function xlIzvezi() {
+  const redovi = xlVidljivi().filter(r => XL_OZNACENI.has(r.id));
+  const zaglavlje = XL_KOLONE.map(c => c.lbl);
+  const linije = [zaglavlje.join(';')].concat(redovi.map(r =>
+    XL_KOLONE.map(c => {
+      const v = xlVrijednost(r, c.k);
+      return typeof v === 'number' ? String(v).replace('.', ',') : String(v);
+    }).join(';')));
+  const blob = new Blob(['\ufeff' + linije.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'restlovi.csv';
+  a.click();
+}
+
+async function xlGrupniPrenos() {
+  const ids = [...XL_OZNACENI];
+  if (!ids.length) return;
+  modal('<h3>Prenos ' + ids.length + ' restlova u drugi PJ</h3>' +
+    '<label class="polje">Odredišni PJ<select id="gp_objekt" style="width:240px">' +
+    OBJEKTI.map(o => '<option value="' + o.id + '">' + o.naziv + '</option>').join('') + '</select></label>' +
+    '<div class="modal-btns"><button class="btn" onclick="posaljiGrupniPrenos()">Prenesi</button>' +
+    '<button class="btn sec" onclick="zatvoriModal()">Odustani</button></div>');
+}
+
+async function posaljiGrupniPrenos() {
+  const cilj = document.getElementById('gp_objekt').value;
+  const ids = [...XL_OZNACENI];
+  let ok = 0, greske = 0;
+  for (const id of ids) {
+    try { await api('/' + id + '/prenos', { method: 'POST', body: JSON.stringify({ u_objekt_id: cilj }) }); ok++; }
+    catch (e) { greske++; }
+  }
+  zatvoriModal();
+  poruka('Preneseno ' + ok + ' restlova' + (greske ? ', ' + greske + ' nije uspjelo' : '') + '.',
+         greske ? 'greska' : 'uspjeh');
+  ucitajListu(); ucitajSume();
+}
+
+document.addEventListener('click', e => {
+  const p = document.getElementById('xl-panel');
+  if (p && p.style.display === 'flex' && !p.contains(e.target)) xlZatvoriFilter();
+});
 
 /* ═══════════════ modali ═══════════════ */
 function zatvoriModal() { document.getElementById('modal_host').innerHTML = ''; }
