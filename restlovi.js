@@ -507,6 +507,10 @@ router.get('/', smijeVidjeti, async (req, res) => {
               ro.sifra AS artikal_sifra, ro.naziv AS artikal_naziv,
               COALESCE(r.grupa, ro.grupa) AS prikaz_grupa,
               COALESCE(r.debljina_cm, ro.debljina_cm) AS prikaz_debljina,
+              (SELECT mg.naziv FROM master_grupe mg
+                 WHERE mg.id = COALESCE(ro.master_grupa_id,
+                       (SELECT gm.master_grupa_id FROM grupa_master gm WHERE gm.grupa = COALESCE(r.grupa, ro.grupa)))
+                ) AS master_grupa,
               (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id = ro.id AND glavna = true LIMIT 1) AS slika
          FROM restlovi r
          LEFT JOIN prodajni_objekti po ON po.id = r.objekt_id
@@ -533,32 +537,43 @@ router.get('/filteri', smijeVidjeti, async (req, res) => {
       pool.query(
         `SELECT DISTINCT COALESCE(r.grupa, ro.grupa) AS grupa,
                 COALESCE(r.debljina_cm, ro.debljina_cm) AS debljina_cm,
-                COALESCE(NULLIF(r.materijal, ''), ro.naziv) AS materijal
+                COALESCE(NULLIF(r.materijal, ''), ro.naziv) AS materijal,
+                (SELECT mg.naziv FROM master_grupe mg
+                  WHERE mg.id = COALESCE(ro.master_grupa_id,
+                        (SELECT gm.master_grupa_id FROM grupa_master gm WHERE gm.grupa = COALESCE(r.grupa, ro.grupa)))
+                ) AS master_grupa
            FROM restlovi r LEFT JOIN roba ro ON ro.id = r.roba_id
           WHERE r.status = 'dostupan'`),
       pool.query(
         `SELECT ro.id, ro.sifra, ro.naziv,
                 COALESCE(r.grupa, ro.grupa) AS grupa,
+                (SELECT mg.naziv FROM master_grupe mg
+                  WHERE mg.id = COALESCE(ro.master_grupa_id,
+                        (SELECT gm.master_grupa_id FROM grupa_master gm WHERE gm.grupa = COALESCE(r.grupa, ro.grupa)))
+                ) AS master_grupa,
                 COALESCE(r.debljina_cm, ro.debljina_cm) AS debljina_cm,
                 COUNT(r.id)::int AS restlova,
                 COALESCE(SUM(r.povrsina), 0) AS m2,
                 (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id = ro.id AND glavna = true LIMIT 1) AS slika
            FROM roba ro JOIN restlovi r ON r.roba_id = ro.id AND r.status = 'dostupan'
-          GROUP BY ro.id, ro.sifra, ro.naziv, COALESCE(r.grupa, ro.grupa),
+          GROUP BY ro.id, ro.sifra, ro.naziv, ro.master_grupa_id, COALESCE(r.grupa, ro.grupa),
                    COALESCE(r.debljina_cm, ro.debljina_cm)
           ORDER BY ro.naziv`),
     ]);
     // Parovi grupa+debljina koji STVARNO postoje — na osnovu njih se filteri
     // međusobno sužavaju, umjesto da se nude kombinacije kojih nema.
     const parovi = artikli.rows.map(a => ({
+      master: a.master_grupa || null,
       grupa: a.grupa || null,
       debljina: a.debljina_cm != null ? Number(a.debljina_cm) : null,
     })).concat(grupe.rows.map(x => ({
+      master: x.master_grupa || null,
       grupa: x.grupa || null,
       debljina: x.debljina_cm != null ? Number(x.debljina_cm) : null,
     })));
 
     res.json({
+      master_grupe: [...new Set(parovi.map(x => x.master).filter(Boolean))].sort(),
       grupe: [...new Set(parovi.map(x => x.grupa).filter(Boolean))].sort(),
       debljine: [...new Set(parovi.map(x => x.debljina).filter(x => x))].sort((a, b) => a - b),
       // Nazivi materijala sa restlova koji još nemaju artikal — da se i oni mogu
@@ -664,6 +679,14 @@ router.post('/trazi', smijeVidjeti, async (req, res) => {
     // često nemaju svoje, ali imaju vezu na artikal koji ih ima.
     if (debljina_cm) { uslovi.push(`COALESCE(r.debljina_cm, ro.debljina_cm) = $${i++}`); vals.push(debljina_cm); }
     if (grupa)       { uslovi.push(`COALESCE(r.grupa, ro.grupa) = $${i++}`); vals.push(grupa); }
+    // Master grupa je nadređena grupi. Izuzetak upisan na artiklu (roba.master_grupa_id)
+    // ima prednost nad pravilom koje važi za cijelu grupu.
+    if (req.body.master_grupa) {
+      uslovi.push(`(SELECT mg.naziv FROM master_grupe mg
+                     WHERE mg.id = COALESCE(ro.master_grupa_id,
+                           (SELECT gm.master_grupa_id FROM grupa_master gm WHERE gm.grupa = COALESCE(r.grupa, ro.grupa)))) = $${i++}`);
+      vals.push(req.body.master_grupa);
+    }
 
     // Predfilter u bazi (grubo, po najvećoj mjeri) da ne vučemo cijelu tabelu,
     // pa precizna provjera oblika u JS-u.
@@ -681,6 +704,10 @@ router.post('/trazi', smijeVidjeti, async (req, res) => {
               COALESCE(r.grupa, ro.grupa) AS prikaz_grupa,
               COALESCE(r.debljina_cm, ro.debljina_cm) AS prikaz_debljina,
               ro.jed_mjera,
+              (SELECT mg.naziv FROM master_grupe mg
+                 WHERE mg.id = COALESCE(ro.master_grupa_id,
+                       (SELECT gm.master_grupa_id FROM grupa_master gm WHERE gm.grupa = COALESCE(r.grupa, ro.grupa)))
+                ) AS master_grupa,
               (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id = ro.id AND glavna = true LIMIT 1) AS slika
          FROM restlovi r
          LEFT JOIN prodajni_objekti po ON po.id = r.objekt_id
