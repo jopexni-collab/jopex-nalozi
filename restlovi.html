@@ -1410,6 +1410,51 @@ function artikalIzabran() {
 }
 
 /* ═══════════════ slika sa telefona ═══════════════ */
+/* ═══════════════ PREKLAPANJE: restl + komad u njemu ═══════════════
+   Backend vraća tačan položaj i ugao pod kojim komad ulazi, pa se ovdje samo crta:
+   restl u pozadini, komad preko njega, i ostatak koji propada. */
+function crtezUklapanja(restl, polozaj, w, hh) {
+  w = w || 150; hh = hh || 110;
+  const t = restl.poligon
+    ? (typeof restl.poligon === 'string' ? JSON.parse(restl.poligon) : restl.poligon)
+    : [[0,0],[restl.dim_a,0],[restl.dim_a,restl.dim_b],[0,restl.dim_b]];
+  if (!t || t.length < 3) return '';
+
+  const xs = t.map(p => p[0]), ys = t.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const sw = (maxX - minX) || 1, sh = (maxY - minY) || 1;
+  const k = Math.min((w - 8) / sw, (hh - 8) / sh);
+  const px = p => (w - sw * k) / 2 + (p[0] - minX) * k;
+  const py = p => (hh - sh * k) / 2 + (maxY - p[1]) * k;
+  const put = ps => ps.map((p, i) => (i ? 'L' : 'M') + px(p).toFixed(1) + ' ' + py(p).toFixed(1)).join(' ') + ' Z';
+
+  let s = '<svg width="' + w + '" height="' + hh + '" style="vertical-align:middle;border:1px solid var(--border);border-radius:6px;background:#fff">';
+  s += '<path d="' + put(t) + '" fill="#eef2f6" stroke="#8b96a5" stroke-width="1.2"/>';
+  if (polozaj && polozaj.tjemena && polozaj.tjemena.length >= 3) {
+    s += '<path d="' + put(polozaj.tjemena) + '" fill="#1a5fa8" fill-opacity=".38" stroke="#1a5fa8" stroke-width="1.5"/>';
+  }
+  s += '</svg>';
+  return s;
+}
+
+// Koliko restla komad zauzima. Ostatak nije nužno otpad — od njega često nastane
+// novi restl — pa se zove "iskorišćeno", ne "prinos".
+function procenatIskoriscenja(restl, povrsinaKomada) {
+  const p = Number(restl.povrsina) || 0;
+  if (!p || !povrsinaKomada) return null;
+  return Math.min(100, Math.round((povrsinaKomada / p) * 1000) / 10);
+}
+
+function trakaIskoriscenja(pct) {
+  if (pct === null) return '';
+  const boja = pct >= 75 ? '#1f8a4c' : pct >= 45 ? '#e67e22' : '#c0392b';
+  return '<div style="min-width:96px">' +
+    '<div style="font-weight:800;font-size:13px;color:' + boja + '">' + fmt(pct) + ' %</div>' +
+    '<div style="height:6px;background:#eef0f3;border-radius:3px;overflow:hidden;margin-top:3px">' +
+    '<div style="height:100%;width:' + pct + '%;background:' + boja + '"></div></div></div>';
+}
+
 /* ═══════════════ traženje komada ═══════════════ */
 async function trazi() {
   const crta = document.getElementById('t_nacrtaj').checked;
@@ -1435,10 +1480,13 @@ async function trazi() {
       cilj.innerHTML =
         '<div class="uspjeh" style="margin-top:14px">Pronađeno ' + d.kandidati.length +
         ' restl(ova) u koje komad ' + sirina + '×' + visina + ' mm staje. Prvi u listi ostavlja najmanje otpada.</div>' +
-        '<div class="tbl-wrap"><table><thead><tr><th>Oznaka</th><th>Materijal</th><th>Oblik / mjere</th><th>Površina</th>' +
-        '<th>Otpad ako se uzme</th><th>Položaj</th><th>PJ</th><th></th></tr></thead><tbody>' +
+        '<div class="tbl-wrap"><table><thead><tr><th>Uklapanje</th><th>Iskorišćeno</th><th>Oznaka</th>' +
+        '<th>Materijal</th><th>Oblik / mjere</th><th>Površina</th><th>Ostatak</th><th>Položaj</th>' +
+        '<th>PJ</th><th></th></tr></thead><tbody>' +
         d.kandidati.map(r =>
-          '<tr><td><b>' + r.oznaka + '</b></td><td>' + (r.materijal || '') + '</td>' +
+          '<tr><td>' + crtezUklapanja(r, r.polozaj, 130, 96) + '</td>' +
+          '<td>' + trakaIskoriscenja(procenatIskoriscenja(r, d.komad ? d.komad.povrsina : 0)) + '</td>' +
+          '<td><b>' + r.oznaka + '</b></td><td>' + (r.materijal || '') + '</td>' +
           '<td>' + (r.oblik === 'L' ? 'L ' : r.oblik === 'poligon' ? '⬟ ' : '') + r.dim_a + '×' + r.dim_b +
           (r.oblik === 'L' ? ' (izrez ' + r.dim_c + '×' + r.dim_d + ')' : '') + '</td>' +
           '<td class="hint">' + (r.polozaj ? 'na ' + Math.round(r.polozaj.x) + ',' + Math.round(r.polozaj.y) +

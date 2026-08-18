@@ -123,7 +123,10 @@ function komadStaje(t, w, h, rezerva) {
 
     for (const x of xs) for (const y of ys) {
       if (pravougaonikUnutra(t, x, y, sw, sh)) {
-        return { x, y, w: sw, h: sh, rotiran: sw !== W };
+        // Tjemena idu uz rezultat da se uklapanje može nacrtati bez ponovnog računa
+        return { x, y, w: sw, h: sh, rotiran: sw !== W,
+                 okret: sw !== W ? 90 : 0,
+                 tjemena: [[x, y], [x + sw, y], [x + sw, y + sh], [x, y + sh]] };
       }
     }
   }
