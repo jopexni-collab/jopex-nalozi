@@ -164,7 +164,8 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
         <option value="">— sve —</option></select></label>
       <label class="polje">Artikal (šifra iz lagera)<select id="t_roba" onchange="osvjeziFiltere('artikal')" style="width:300px">
         <option value="">— bilo koji artikal —</option></select></label>
-      <label class="polje">Ili naziv<input type="text" id="t_materijal" placeholder="npr. Carrara" style="width:150px"></label>
+      <label class="polje">Ili naziv<input type="text" id="t_materijal" list="t_materijali" placeholder="npr. Carrara" style="width:170px">
+        <datalist id="t_materijali"></datalist></label>
       <label class="polje">PJ<select id="t_objekt" style="width:170px"><option value="">— sve PJ —</option></select></label>
       <label class="polje">Rez/rezerva (mm)<input type="number" id="t_rez" value="5" style="width:110px"></label>
       <label class="polje">Ako ništa ne staje<select id="t_odstupanje" style="width:180px">
@@ -437,7 +438,10 @@ document.querySelectorAll('.glavni-tab-btn').forEach(t => t.onclick = () => {
   if (t.dataset.tab === 'lista') ucitajListu();
   if (t.dataset.tab === 'uvoz') { predloziPJ(); ucitajSerije(); }
   if (t.dataset.tab === 'novi') premjestiEditor('novi');
-  if (t.dataset.tab === 'trazi' && document.getElementById('t_nacrtaj').checked) premjestiEditor('trazi');
+  if (t.dataset.tab === 'trazi') {
+    if (!ARTIKLI.length) ucitajFiltere();
+    if (document.getElementById('t_nacrtaj').checked) premjestiEditor('trazi');
+  }
 });
 
 /* ═══════════════ crtež oblika ═══════════════ */
@@ -1457,14 +1461,31 @@ function artikalIzabran() {
 let ARTIKLI = [], PAROVI = [], SVE_GRUPE = [], SVE_DEBLJINE = [];
 
 async function ucitajFiltere() {
+  const info = document.getElementById('t_info');
+  if (info) info.textContent = 'Učitavam grupe i artikle…';
   try {
     const d = await api('/filteri');
     ARTIKLI = d.artikli || [];
     PAROVI = d.parovi || [];
     SVE_GRUPE = d.grupe || [];
     SVE_DEBLJINE = d.debljine || [];
+    // Nazivi materijala kao prijedlozi u polju — korisno dok restlovi još nisu
+    // vezani za artikle, jer se tada traži baš po nazivu.
+    const dl = document.getElementById('t_materijali');
+    if (dl) dl.innerHTML = (d.materijali || []).map(m => '<option value="' + m + '">').join('');
     osvjeziFiltere();
-  } catch (e) { /* bez filtera se i dalje može tražiti po nazivu */ }
+    if (!ARTIKLI.length && info) {
+      info.innerHTML = SVE_GRUPE.length
+        ? '<b>' + SVE_GRUPE.length + ' grupa</b> dostupno. Nijedan restl još nije vezan za artikal iz lagera — ' +
+          'zato je spisak artikala prazan. Traži po grupi ili nazivu materijala.'
+        : '<b>Nema dostupnih restlova.</b> Uvezi ih ili unesi kroz „Novi restl".';
+    }
+  } catch (e) {
+    // Greška se više ne guta — bez ovoga meniji ostaju prazni bez ijednog objašnjenja.
+    if (info) info.innerHTML = '<b style="color:#c0392b">Grupe i artikli nisu učitani: ' +
+      e.message + '</b> — pretraga po nazivu i dalje radi.';
+    console.error('ucitajFiltere:', e);
+  }
 }
 
 /* ── MEĐUSOBNO SUŽAVANJE ──
@@ -2451,7 +2472,7 @@ async function potvrdiUvoz() {
     if (d.odbijenih) console.log('Odbijeni redovi:', d.odbijeni);
     UVOZ_STAVKE = null;
     document.getElementById('u_rezultat').innerHTML = '';
-    ucitajSerije(); ucitajSume();
+    ucitajSerije(); ucitajSume(); ucitajFiltere();
   } catch (e) { poruka(e.message, 'greska'); }
 }
 
@@ -2598,15 +2619,23 @@ async function stornirajUvoz(id) {
     document.getElementById('f_objekt').innerHTML += opcije;
   } catch (e) { poruka('PJ lista nije učitana: ' + e.message, 'greska'); }
 
-  document.getElementById('n_lager').addEventListener('input', najaviLager);
-  document.getElementById('n_objekt').addEventListener('change', ucitajLager);
-  document.getElementById('n_cijena').addEventListener('input', osvjeziCrtez);
-  ucitajLager();
-  premjestiEditor('novi');
-  osvjeziCrtez();
-  ucitajSume();
+  // Filteri idu PRVI — tab "Traži komad" je početni ekran, pa grupe i artikli moraju
+  // biti u meniju prije nego što korisnik bilo šta uradi. Ranije su stajali posljednji,
+  // iza poziva koji mogu pući, pa se lako dešavalo da uopšte ne stignu na red.
+  await ucitajFiltere();
   ucitajPostavke();
-  ucitajFiltere();
+  ucitajSume();
+
+  try {
+    document.getElementById('n_lager').addEventListener('input', najaviLager);
+    document.getElementById('n_objekt').addEventListener('change', ucitajLager);
+    document.getElementById('n_cijena').addEventListener('input', osvjeziCrtez);
+    ucitajLager();
+    premjestiEditor('novi');
+    osvjeziCrtez();
+  } catch (e) {
+    console.error('Editor oblika nije pokrenut:', e);
+  }
 })();
 </script>
 </body>

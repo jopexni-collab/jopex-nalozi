@@ -526,24 +526,47 @@ router.get('/', smijeVidjeti, async (req, res) => {
 router.get('/filteri', smijeVidjeti, async (req, res) => {
   try {
     const [grupe, artikli] = await Promise.all([
+      // SVI dostupni restlovi, ne samo oni bez veze — grupa i debljina se uzimaju
+      // sa restla ili sa artikla, šta god postoji. Ranije je ovaj upit hvatao samo
+      // restlove bez veze KOJI IMAJU grupu, pa su meniji ostajali prazni sve dok se
+      // ne uradi usaglašavanje.
       pool.query(
         `SELECT DISTINCT COALESCE(r.grupa, ro.grupa) AS grupa,
-                COALESCE(r.debljina_cm, ro.debljina_cm) AS debljina_cm
+                COALESCE(r.debljina_cm, ro.debljina_cm) AS debljina_cm,
+                COALESCE(NULLIF(r.materijal, ''), ro.naziv) AS materijal
            FROM restlovi r LEFT JOIN roba ro ON ro.id = r.roba_id
           WHERE r.status = 'dostupan'`),
       pool.query(
-        `SELECT ro.id, ro.sifra, ro.naziv, ro.grupa, ro.debljina_cm,
+        `SELECT ro.id, ro.sifra, ro.naziv,
+                COALESCE(r.grupa, ro.grupa) AS grupa,
+                COALESCE(r.debljina_cm, ro.debljina_cm) AS debljina_cm,
                 COUNT(r.id)::int AS restlova,
                 COALESCE(SUM(r.povrsina), 0) AS m2,
                 (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id = ro.id AND glavna = true LIMIT 1) AS slika
            FROM roba ro JOIN restlovi r ON r.roba_id = ro.id AND r.status = 'dostupan'
-          GROUP BY ro.id, ro.sifra, ro.naziv, ro.grupa, ro.debljina_cm
+          GROUP BY ro.id, ro.sifra, ro.naziv, COALESCE(r.grupa, ro.grupa),
+                   COALESCE(r.debljina_cm, ro.debljina_cm)
           ORDER BY ro.naziv`),
     ]);
+    // Parovi grupa+debljina koji STVARNO postoje — na osnovu njih se filteri
+    // međusobno sužavaju, umjesto da se nude kombinacije kojih nema.
+    const parovi = artikli.rows.map(a => ({
+      grupa: a.grupa || null,
+      debljina: a.debljina_cm != null ? Number(a.debljina_cm) : null,
+    })).concat(grupe.rows.map(x => ({
+      grupa: x.grupa || null,
+      debljina: x.debljina_cm != null ? Number(x.debljina_cm) : null,
+    })));
+
     res.json({
-      grupe: [...new Set(grupe.rows.map(x => x.grupa).filter(Boolean))].sort(),
-      debljine: [...new Set(grupe.rows.map(x => Number(x.debljina_cm)).filter(x => x))].sort((a, b) => a - b),
+      grupe: [...new Set(parovi.map(x => x.grupa).filter(Boolean))].sort(),
+      debljine: [...new Set(parovi.map(x => x.debljina).filter(x => x))].sort((a, b) => a - b),
+      // Nazivi materijala sa restlova koji još nemaju artikal — da se i oni mogu
+      // izabrati iz menija umjesto da se kucaju napamet.
+      materijali: [...new Set(grupe.rows.map(x => x.materijal).filter(Boolean))].sort(),
+      parovi,
       artikli: artikli.rows,
+      ukupno_dostupnih: grupe.rows.length,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
