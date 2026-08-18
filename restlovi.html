@@ -1583,6 +1583,32 @@ function filtrirajArtikle() { osvjeziFiltere(); }
 /* ═══════════════ PREKLAPANJE: restl + komad u njemu ═══════════════
    Backend vraća tačan položaj i ugao pod kojim komad ulazi, pa se ovdje samo crta:
    restl u pozadini, komad preko njega, i ostatak koji propada. */
+// Vektorski obris restla — iz poligona ako ga ima, inače pravougaonik iz mjera.
+// Uz sliku materijala pokazuje i OBLIK komada, što je ono što se traži pogledom.
+function obrisRestla(r, w, hh) {
+  w = w || 46; hh = hh || 40;
+  let t = null;
+  if (r.poligon) {
+    try { t = typeof r.poligon === 'string' ? JSON.parse(r.poligon) : r.poligon; } catch (e) { t = null; }
+  }
+  if (!t || t.length < 3) {
+    const A = Number(r.dim_a) || 0, B = Number(r.dim_b) || 0;
+    if (!A || !B) return '';
+    t = [[0,0],[A,0],[A,B],[0,B]];
+  }
+  const xs = t.map(p => p[0]), ys = t.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const sw = (maxX - minX) || 1, sh = (maxY - minY) || 1;
+  const k = Math.min((w - 6) / sw, (hh - 6) / sh);
+  const px = p => (w - sw * k) / 2 + (p[0] - minX) * k;
+  const py = p => (hh - sh * k) / 2 + (maxY - p[1]) * k;
+  const put = t.map((p, i) => (i ? 'L' : 'M') + px(p).toFixed(1) + ' ' + py(p).toFixed(1)).join(' ') + ' Z';
+  return '<svg width="' + w + '" height="' + hh + '" ' +
+    'title="' + Math.round(sw) + '×' + Math.round(sh) + ' mm" style="vertical-align:middle">' +
+    '<path d="' + put + '" fill="#dbeafe" stroke="#1a5fa8" stroke-width="1.2"/></svg>';
+}
+
 function crtezUklapanja(restl, polozaj, w, hh) {
   w = w || 150; hh = hh || 110;
   const t = restl.poligon
