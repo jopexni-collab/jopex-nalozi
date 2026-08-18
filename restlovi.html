@@ -946,11 +946,6 @@ function tackaUMm(e) {
           PRESLIKA.minY + (PRESLIKA.hh - PRESLIKA.dolje - y) / PRESLIKA.k];
 }
 
-function samoPoligon() {
-  const i = document.getElementById('n_oblik');
-  return i && i.value === 'poligon';
-}
-
 let DUGI_DODIR = null, ZADNJI_DODIR = { v: -1, kada: 0 };
 
 function pocniVucenje(e) {
@@ -1634,6 +1629,9 @@ async function stornirajKoristenje(korId) {
 
 /* ═══════════════ novi restl ═══════════════ */
 async function sacuvajNovi() {
+  // Kod nacrtanog oblika granični okvir postaje dim_a i dim_b — tako predfilter u
+  // pretrazi i prikaz u listi rade isto kao kod pravougaonika.
+  const okv = samoPoligon() && TJEMENA.length >= 3 ? okvirT() : null;
   const telo = {
     objekt_id: document.getElementById('n_objekt').value,
     materijal: document.getElementById('n_materijal').value,
@@ -1641,8 +1639,8 @@ async function sacuvajNovi() {
     grupa: document.getElementById('n_grupa').value || null,
     cijena_m2: document.getElementById('n_cijena').value || 0,
     oblik: samoPoligon() ? 'poligon' : vrstaOblika(),
-    dim_a: document.getElementById('n_a').value,
-    dim_b: document.getElementById('n_b').value,
+    dim_a: okv ? Math.round(okv.maxX - okv.minX) : document.getElementById('n_a').value,
+    dim_b: okv ? Math.round(okv.maxY - okv.minY) : document.getElementById('n_b').value,
     dim_c: document.getElementById('n_c').value || 0,
     dim_d: document.getElementById('n_d').value || 0,
     poligon: samoPoligon() ? citajTjemena() : null,
@@ -1656,10 +1654,13 @@ async function sacuvajNovi() {
   };
   if (!telo.objekt_id || !telo.materijal)
     return poruka('PJ i materijal su obavezni.', 'greska');
-  if (telo.oblik !== 'poligon' && (!telo.dim_a || !telo.dim_b))
+  // Kod nacrtanih oblika mjere A i B se IZVODE iz crteža — ne traže se od korisnika.
+  if (samoPoligon()) {
+    if (!Array.isArray(telo.poligon) || telo.poligon.length < 3)
+      return poruka('Nacrtaj oblik komada ili izaberi predložak prije čuvanja.', 'greska');
+  } else if (!telo.dim_a || !telo.dim_b) {
     return poruka('Mjere A i B su obavezne.', 'greska');
-  if (telo.oblik === 'poligon' && (!telo.poligon || telo.poligon.length < 3))
-    return poruka('Nacrtaj ili unesi oblik prije čuvanja.', 'greska');
+  }
   try {
     const d = await api('', { method: 'POST', body: JSON.stringify(telo) });
     poruka('Restl ' + d.oznaka + ' je sačuvan.' + porukaLagera(d.lager),
@@ -2016,28 +2017,7 @@ async function stornirajUvoz(id) {
     document.getElementById('who').textContent = '👤 ' + (me.ime_prezime || '');
   } catch (e) { location.href = 'login.html'; return; }
 
-  /* Ranije je ovdje stajao .catch() koji je SVAKU grešku pretvarao u "nemate dozvolu" —
-     pa se npr. nedostupan modul na serveru prikazivao kao problem sa pravima, što vodi
-     u pogrešnom smjeru. Sada se razdvaja: greška servera je greška, a odbijena dozvola
-     je dozvola. */
-  let greskaDozvola = null;
-  try {
-    DOZVOLE = await api('/dozvole/moje');
-  } catch (e) {
-    greskaDozvola = e;
-    DOZVOLE = { vidi: false, unos: false };
-  }
-
-  if (greskaDozvola) {
-    document.querySelector('.ce-row').style.display = 'none';
-    document.querySelectorAll('.view').forEach(v => v.remove());
-    document.getElementById('poruka').innerHTML =
-      '<div class="panel"><h3>Modul restlova trenutno nije dostupan.</h3>' +
-      '<p class="hint">Server nije odgovorio na zahtjev za dozvole. Ovo NIJE problem sa tvojim pravima — javi administratoru.</p>' +
-      '<p class="hint" style="opacity:.7;">Detalj: ' + String(greskaDozvola.message || greskaDozvola) + '</p></div>';
-    return;
-  }
-
+  DOZVOLE = await api('/dozvole/moje').catch(() => ({ vidi: false, unos: false }));
   if (!DOZVOLE.vidi) {
     document.querySelector('.ce-row').style.display = 'none';
     document.querySelectorAll('.view').forEach(v => v.remove());

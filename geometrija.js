@@ -175,6 +175,193 @@ function zatvoriOblik(tjemena) {
   return t;
 }
 
+/* ── SMJER OBILASKA ── suprotno od kazaljke, da normale gledaju napolje ── */
+function uSmjeruSuprotnoKazaljci(t) {
+  let s = 0;
+  for (let i = 0; i < t.length; i++) {
+    const a = t[i], b = t[(i + 1) % t.length];
+    s += (b[0] - a[0]) * (b[1] + a[1]);
+  }
+  return s > 0 ? t.slice().reverse() : t.slice();
+}
+
+/* ── PROŠIRENJE OBLIKA ZA REZ ──
+   Svaka stranica se pomjeri napolje za 'r', pa se susjedne pomjerene prave presijeku.
+   Za male vrijednosti (rez od par milimetara na komadu od metar) ovo je tačno.
+   Time se debljina reza uzima u obzir i kod nepravilnih oblika, ne samo pravougaonih. */
+function prosiriPoligon(tjemena, r) {
+  if (!r) return tjemena;
+  const t = uSmjeruSuprotnoKazaljci(tjemena);
+  const n = t.length;
+  const prave = t.map((p, i) => {
+    const q = t[(i + 1) % n];
+    const dx = q[0] - p[0], dy = q[1] - p[1];
+    const L = Math.hypot(dx, dy) || 1;
+    const nx = dy / L, ny = -dx / L;            // normala prema spolja
+    return { t: [p[0] + nx * r, p[1] + ny * r], s: [dx / L, dy / L] };
+  });
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const A = prave[(i - 1 + n) % n], B = prave[i];
+    const nazivnik = A.s[0] * B.s[1] - A.s[1] * B.s[0];
+    if (Math.abs(nazivnik) < 1e-9) { out.push(B.t); continue; }   // paralelne
+    const k = ((B.t[0] - A.t[0]) * B.s[1] - (B.t[1] - A.t[1]) * B.s[0]) / nazivnik;
+    out.push([A.t[0] + A.s[0] * k, A.t[1] + A.s[1] * k]);
+  }
+  return out;
+}
+
+/* ── DA LI KOMAD (bilo kog oblika) STAJE U RESTL ──
+   Uslov: sva tjemena komada su unutar restla ili na ivici, i nijedna stranica komada
+   ne presijeca stranicu restla. Proba se u četiri okreta i po mreži položaja.
+   Kao i kod pravougaonika, greška ide na SIGURNU stranu — može propustiti tijesno
+   rješenje, ali nikad neće reći da staje nešto što ne staje. */
+function okreni(t, stepeni) {
+  const a = stepeni * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+  return t.map(p => [p[0] * c - p[1] * s, p[0] * s + p[1] * c]);
+}
+
+function komadUnutra(restl, komad) {
+  for (const p of komad) if (!tackaUnutraIliNa(restl, p[0], p[1])) return false;
+  for (let i = 0; i < komad.length; i++) {
+    const a = komad[i], b = komad[(i + 1) % komad.length];
+    for (let j = 0; j < restl.length; j++) {
+      if (duziSijeku(a, b, restl[j], restl[(j + 1) % restl.length])) return false;
+    }
+    // središte stranice mora biti unutra — hvata slučaj uskog vrata
+    if (!tackaUnutraIliNa(restl, (a[0]+b[0])/2, (a[1]+b[1])/2)) return false;
+  }
+  return true;
+}
+
+/* ── UGLOVI KOJE VRIJEDI PROBATI ──
+   Nema ograničenja na 90° — mašina siječe pod bilo kojim uglom. Ali probati svaki
+   stepen redom bilo bi sporo i besmisleno, pa se biraju uglovi koji NEŠTO ZNAČE:
+   oni pri kojima neka stranica komada legne paralelno sa nekom stranicom restla.
+   Optimalno rješenje kod pakovanja poligona skoro uvijek ima tu osobinu. Uz njih
+   idu i četiri prava okreta, plus gruba mreža kao mreža za hvatanje ostatka. */
+function kandidatUglovi(restl, komad, gustina) {
+  const pravac = t => t.map((p, i) => {
+    const q = t[(i + 1) % t.length];
+    let u = Math.atan2(q[1] - p[1], q[0] - p[0]) * 180 / Math.PI;
+    return ((u % 180) + 180) % 180;              // pravac, ne smjer
+  });
+  const ur = pravac(restl), uk = pravac(komad);
+  const skup = new Set([0, 90, 180, 270]);
+  for (const a of ur) for (const b of uk) {
+    const razlika = ((a - b) % 360 + 360) % 360;
+    skup.add(Math.round(razlika * 10) / 10);
+    skup.add(Math.round(((razlika + 180) % 360) * 10) / 10);
+  }
+  // Dijagonale: komad koji ne staje ni po jednoj stranici često staje po dijagonali
+  // restla. Zato se dodaju i uglovi koji poravnavaju najdužu osu komada sa svakom
+  // dijagonalom restla — bez toga bi dugačak komad ispao neuklopiv iako staje.
+  const najduzaOsa = t => {
+    let naj = 0, ugao = 0;
+    for (let i = 0; i < t.length; i++)
+      for (let j = i + 1; j < t.length; j++) {
+        const d = Math.hypot(t[j][0] - t[i][0], t[j][1] - t[i][1]);
+        if (d > naj) { naj = d; ugao = Math.atan2(t[j][1] - t[i][1], t[j][0] - t[i][0]) * 180 / Math.PI; }
+      }
+    return ((ugao % 180) + 180) % 180;
+  };
+  const osaK = najduzaOsa(komad);
+  for (let i = 0; i < restl.length; i++)
+    for (let j = i + 1; j < restl.length; j++) {
+      const u = Math.atan2(restl[j][1] - restl[i][1], restl[j][0] - restl[i][0]) * 180 / Math.PI;
+      const d = ((u % 180) + 180) % 180 - osaK;
+      skup.add(Math.round((((d % 360) + 360) % 360) * 10) / 10);
+      skup.add(Math.round(((((d + 180) % 360) + 360) % 360) * 10) / 10);
+    }
+
+  const korak = gustina || 10;                    // gruba mreža kao dopuna
+  for (let u = 0; u < 360; u += korak) skup.add(u);
+  return [...skup].sort((a, b) => {
+    const bliskost = x => Math.min(x % 90, 90 - (x % 90));   // pravi uglovi prvi
+    return bliskost(a) - bliskost(b);
+  });
+}
+
+/* ── DA LI KOMAD STAJE U RESTL, POD BILO KOJIM UGLOM ──
+   Vraća položaj i ugao pod kojim komad ulazi. Uglovi se probaju redom od onih
+   najbližih pravom, jer je takvo postavljanje u radionici najpraktičnije —
+   prvo pronađeno rješenje je time i najpogodnije, ne samo bilo koje. */
+function poligonStaje(restlT, komadT, rezerva, opcije) {
+  const restl = restlT;
+  const osnovni = prosiriPoligon(komadT, Number(rezerva) || 0);
+  const or = okvir(restl);
+  const o = opcije || {};
+  const uglovi = o.samoPraviUglovi ? [0, 90, 180, 270]
+                                   : kandidatUglovi(restl, osnovni, o.korakUgla);
+  const podjela = o.podjela || 20;
+
+  for (const stepeni of uglovi) {
+    const k = okreni(osnovni, stepeni);
+    const ok2 = okvir(k);
+
+    // Površina je nepromjenljiva pri okretanju, pa je ovo jedini brzi odbačaj koji
+    // vrijedi. Poređenje okvira NE valja kod ukošenog komada: njegov osni okvir je
+    // mnogo veći od njega samog, pa bi ispao odbačen iako po dijagonali staje.
+    if (povrsinaPoligona(k) > povrsinaPoligona(restl) + 0.001) continue;
+
+    const bazni = k.map(p => [p[0] - ok2.minX, p[1] - ok2.minY]);
+
+    // Komad se pomjera po CIJELOM restlu, umanjenom za sopstveni okvir samo ako
+    // taj okvir uopšte staje. Kod ukošenog komada raspon ide preko granica okvira.
+    const rasponX = or.maxX - ok2.sirina, rasponY = or.maxY - ok2.visina;
+    const odX = Math.min(or.minX, rasponX), doX = Math.max(or.minX, rasponX);
+    const odY = Math.min(or.minY, rasponY), doY = Math.max(or.minY, rasponY);
+    const korakX = Math.max(1, (doX - odX) / podjela);
+    const korakY = Math.max(1, (doY - odY) / podjela);
+
+    const xs = new Set([odX, doX]), ys = new Set([odY, doY]);
+    for (let x = odX; x <= doX; x += korakX) xs.add(x);
+    for (let y = odY; y <= doY; y += korakY) ys.add(y);
+    for (const [px, py] of restl) {
+      if (px >= odX && px <= doX) xs.add(px);
+      if (py >= odY && py <= doY) ys.add(py);
+    }
+
+    // Mreža pogađa uobičajene slučajeve, ali kod ukošenog komada rješenje je često
+    // uska pukotina koju mreža preskoči. Zato se prvo probaju CILJANI položaji: svako
+    // tjeme komada dovedeno tačno na svako tjeme restla. Optimalno pakovanje skoro
+    // uvijek ima bar jedan takav dodir.
+    const ciljani = [];
+    for (const rt of restl) for (const kt of bazni) {
+      ciljani.push([rt[0] - kt[0], rt[1] - kt[1]]);
+    }
+    for (const [x, y] of ciljani) {
+      const pomjeren = bazni.map(p => [p[0] + x, p[1] + y]);
+      if (komadUnutra(restl, pomjeren)) {
+        return { x, y, okret: Math.round(stepeni * 10) / 10, tjemena: pomjeren };
+      }
+    }
+
+    for (const x of xs) for (const y of ys) {
+      const pomjeren = bazni.map(p => [p[0] + x, p[1] + y]);
+      if (komadUnutra(restl, pomjeren)) {
+        return { x, y, okret: Math.round(stepeni * 10) / 10, tjemena: pomjeren };
+      }
+    }
+  }
+
+  return null;
+}
+
+/* ── KOLIKO FALI DA KOMAD STANE ──
+   Restl se u koracima "naduva" i gleda se pri kojem bi komad ušao. Rezultat je
+   koliko milimetara nedostaje — ploča bi morala biti tolika veća, ili komad toliko
+   manji. Vraća null ako ne staje ni uz najveće dozvoljeno odstupanje. */
+function kolikoFali(restlT, komadT, rezerva, koraci) {
+  const stepenice = koraci && koraci.length ? koraci : [5, 10, 20, 30, 50, 100];
+  for (const mm of stepenice) {
+    const veci = prosiriPoligon(restlT, mm);
+    const poz = poligonStaje(veci, komadT, rezerva);
+    if (poz) return { fali: mm, polozaj: poz };
+  }
+  return null;
+}
+
 /* ── provjera ispravnosti unesenog oblika ── */
 function provjeriTjemena(t) {
   if (!Array.isArray(t) || t.length < 3) return 'Oblik mora imati najmanje 3 tjemena.';
@@ -195,6 +382,8 @@ function provjeriTjemena(t) {
 }
 
 module.exports = {
-  tjemenaOdMjera, tjemenaOdStrana, stvarnaDuzina, zatvoriOblik, povrsinaPoligona, okvir, tackaUnutra, tackaUnutraIliNa,
+  tjemenaOdMjera, tjemenaOdStrana, stvarnaDuzina, zatvoriOblik, povrsinaPoligona,
+  okvir, tackaUnutra, tackaUnutraIliNa, prosiriPoligon, poligonStaje, okreni, komadUnutra,
+  kolikoFali, kandidatUglovi,
   pravougaonikUnutra, komadStaje, provjeriTjemena,
 };

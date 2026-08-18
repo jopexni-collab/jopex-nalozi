@@ -31,15 +31,14 @@ function povrsinaM2(oblik, a, b, c, d, poligon) {
   return geo.povrsinaPoligona(t) / 1000000;
 }
 
-// Da li komad w×h staje u restl? Radi za SVE oblike — pravougaonik, L, trapez,
-// kosi rez — jer se svaki svede na listu tjemena.
-function staje(r, w, h, rez) {
-  return !!geo.komadStaje(tjemenaRestla(r), w, h, rez);
-}
-
-// Gdje tačno staje (za prikaz majstoru) — vraća položaj i da li je rotiran.
-function gdjeStaje(r, w, h, rez) {
-  return geo.komadStaje(tjemenaRestla(r), w, h, rez);
+// Gdje komad staje u restl. Ako je zadat POLIGON komada, radi se uklapanje oblika u
+// oblik (L u L, nepravilan u trapez…). Ako nije, ide brža provjera pravougaonika.
+function gdjeStaje(r, w, h, rez, komadPoligon) {
+  const restl = tjemenaRestla(r);
+  if (Array.isArray(komadPoligon) && komadPoligon.length >= 3) {
+    return geo.poligonStaje(restl, komadPoligon, rez);
+  }
+  return geo.komadStaje(restl, w, h, rez);
 }
 
 // Koliko m2 "propada" ako se komad izreže iz ovog restla — manje je bolje (best-fit).
@@ -522,8 +521,18 @@ router.get('/', smijeVidjeti, async (req, res) => {
 // Vraća kandidate (best-fit prvo). Ako ih nema — prijedlog: cijela tabla sa lagera.
 router.post('/trazi', smijeVidjeti, async (req, res) => {
   try {
-    const { sirina, visina, materijal, objekt_id, rez, debljina_cm, grupa } = req.body;
-    if (!sirina || !visina) return res.status(400).json({ error: 'Širina i visina su obavezne.' });
+    const { sirina, visina, materijal, objekt_id, rez, debljina_cm, grupa, poligon } = req.body;
+    const jePoligon = Array.isArray(poligon) && poligon.length >= 3;
+
+    // Kad je komad nacrtan, širina i visina se izvode iz njegovog okvira
+    let sir = Number(sirina) || 0, vis = Number(visina) || 0;
+    if (jePoligon) {
+      const greska = geo.provjeriTjemena(poligon);
+      if (greska) return res.status(400).json({ error: 'Oblik komada: ' + greska });
+      const o = geo.okvir(poligon);
+      sir = o.sirina; vis = o.visina;
+    }
+    if (!sir || !vis) return res.status(400).json({ error: 'Unesi mjere komada ili ga nacrtaj.' });
 
     const uslovi = [`r.status = 'dostupan'`];
     const vals = [];
@@ -535,10 +544,13 @@ router.post('/trazi', smijeVidjeti, async (req, res) => {
 
     // Predfilter u bazi (grubo, po najvećoj mjeri) da ne vučemo cijelu tabelu,
     // pa precizna provjera oblika u JS-u.
-    const min = Math.min(Number(sirina), Number(visina));
-    const max = Math.max(Number(sirina), Number(visina));
-    uslovi.push(`GREATEST(r.dim_a, r.dim_b) >= $${i++}`); vals.push(max);
-    uslovi.push(`LEAST(r.dim_a, r.dim_b) >= $${i++}`);    vals.push(min);
+    // Predfilter je namjerno labaviji za 'popust' milimetara, da kroz njega prođu i
+    // restlovi kojima malo fali — inače bi ispali prije nego što ih uopšte izmjerimo.
+    const popust = Math.max(0, Number(req.body.odstupanje) || 100);
+    const min = Math.min(sir, vis);
+    const max = Math.max(sir, vis);
+    uslovi.push(`GREATEST(r.dim_a, r.dim_b) >= $${i++}`); vals.push(Math.max(0, max - popust));
+    uslovi.push(`LEAST(r.dim_a, r.dim_b) >= $${i++}`);    vals.push(Math.max(0, min - popust));
 
     const q = await pool.query(
       `SELECT r.*, po.naziv AS objekt_naziv
@@ -549,14 +561,52 @@ router.post('/trazi', smijeVidjeti, async (req, res) => {
       vals
     );
 
-    const kandidati = q.rows
-      .map(r => ({ r, poz: gdjeStaje(r, sirina, visina, rez) }))
+    // Površina komada: kod nacrtanog oblika stvarna, kod pravougaonika iz mjera
+    const povrsinaKomada = jePoligon
+      ? geo.povrsinaPoligona(poligon) / 1e6
+      : (sir * vis) / 1e6;
+
+    // Provjera pod svim uglovima je skupa (do ~40 ms po restlu u najgorem slučaju),
+    // pa se prvo sortira po površini — najizgledniji idu prvi — i mjeri se najviše 60.
+    const zaMjerenje = jePoligon
+      ? q.rows.map(r => ({ r, d: Math.abs(Number(r.povrsina) - (geo.povrsinaPoligona(poligon) / 1e6)) }))
+              .sort((a, b) => a.d - b.d).slice(0, 60).map(x => x.r)
+      : q.rows;
+
+    const kandidati = zaMjerenje
+      .map(r => ({ r, poz: gdjeStaje(r, sir, vis, rez, jePoligon ? poligon : null) }))
       .filter(x => x.poz)
-      .map(({ r, poz }) => ({ ...r, otpad_m2: otpadM2(r, sirina, visina), polozaj: poz }))
+      .map(({ r, poz }) => ({
+        ...r,
+        otpad_m2: Math.max(0, Number(r.povrsina) - povrsinaKomada),
+        polozaj: poz,
+      }))
       .sort((a, b) => a.otpad_m2 - b.otpad_m2)
       .slice(0, 20);
 
-    if (kandidati.length) return res.json({ ima: true, kandidati });
+    const opisKomada = { sirina: sir, visina: vis, povrsina: povrsinaKomada };
+    if (kandidati.length) return res.json({ ima: true, kandidati, komad: opisKomada });
+
+    /* ── NIŠTA NE STAJE: tražimo najbliže ──
+       Restl se u koracima naduva i gleda se pri kojem bi komad ušao. Tako dobijamo
+       koliko tačno milimetara fali — često je to par milimetara i majstor sam odluči
+       hoće li smanjiti rezervu ili skratiti komad. */
+    const dozvoljeno = Math.max(0, Number(req.body.odstupanje) || 100);
+    const koraci = [5, 10, 20, 30, 50, 100].filter(k => k <= dozvoljeno);
+    const komadZaMjeru = jePoligon ? poligon : [[0,0],[sir,0],[sir,vis],[0,vis]];
+
+    const priblizni = q.rows
+      // najprije oni koji su po površini najbliži — da ne mjerimo sve redom
+      .map(r => ({ r, razlika: Math.abs(Number(r.povrsina) - povrsinaKomada) }))
+      .sort((a, b) => a.razlika - b.razlika)
+      .slice(0, 40)
+      .map(({ r }) => {
+        const f = geo.kolikoFali(tjemenaRestla(r), komadZaMjeru, rez, koraci);
+        return f ? { ...r, fali_mm: f.fali, polozaj: f.polozaj, otpad_m2: Math.max(0, Number(r.povrsina) - povrsinaKomada) } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.fali_mm - b.fali_mm || a.otpad_m2 - b.otpad_m2)
+      .slice(0, 10);
 
     // Nema restla — nudimo cijelu tablu sa lager liste
     const tableUslovi = [`rp.stanje > 0`];
@@ -576,7 +626,7 @@ router.post('/trazi', smijeVidjeti, async (req, res) => {
         ORDER BY ro.naziv LIMIT 30`,
       tv
     );
-    res.json({ ima: false, kandidati: [], table: table.rows });
+    res.json({ ima: false, kandidati: [], priblizni, table: table.rows, komad: opisKomada });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
