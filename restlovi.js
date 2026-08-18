@@ -503,10 +503,15 @@ router.get('/', smijeVidjeti, async (req, res) => {
     const r = await pool.query(
       `SELECT r.*, po.naziv AS objekt_naziv, po.valuta,
               (r.povrsina * r.cijena_m2) AS vrijednost,
-              rod.oznaka AS roditelj_oznaka
+              rod.oznaka AS roditelj_oznaka,
+              ro.sifra AS artikal_sifra, ro.naziv AS artikal_naziv,
+              COALESCE(r.grupa, ro.grupa) AS prikaz_grupa,
+              COALESCE(r.debljina_cm, ro.debljina_cm) AS prikaz_debljina,
+              (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id = ro.id AND glavna = true LIMIT 1) AS slika
          FROM restlovi r
          LEFT JOIN prodajni_objekti po ON po.id = r.objekt_id
          LEFT JOIN restlovi rod ON rod.id = r.roditelj_id
+         LEFT JOIN roba ro ON ro.id = r.roba_id
         ${uslovi.length ? 'WHERE ' + uslovi.join(' AND ') : ''}
         ORDER BY r.kreirano DESC
         LIMIT 500`,
@@ -514,6 +519,93 @@ router.get('/', smijeVidjeti, async (req, res) => {
     );
     res.json(r.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/restlovi/filteri — grupe, debljine i artikli koji STVARNO imaju restlove.
+// Izvor je lager lista (roba), da se koriste iste grupe kao u magacinu.
+router.get('/filteri', smijeVidjeti, async (req, res) => {
+  try {
+    const [grupe, artikli] = await Promise.all([
+      pool.query(
+        `SELECT DISTINCT COALESCE(r.grupa, ro.grupa) AS grupa,
+                COALESCE(r.debljina_cm, ro.debljina_cm) AS debljina_cm
+           FROM restlovi r LEFT JOIN roba ro ON ro.id = r.roba_id
+          WHERE r.status = 'dostupan'`),
+      pool.query(
+        `SELECT ro.id, ro.sifra, ro.naziv, ro.grupa, ro.debljina_cm,
+                COUNT(r.id)::int AS restlova,
+                COALESCE(SUM(r.povrsina), 0) AS m2,
+                (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id = ro.id AND glavna = true LIMIT 1) AS slika
+           FROM roba ro JOIN restlovi r ON r.roba_id = ro.id AND r.status = 'dostupan'
+          GROUP BY ro.id, ro.sifra, ro.naziv, ro.grupa, ro.debljina_cm
+          ORDER BY ro.naziv`),
+    ]);
+    res.json({
+      grupe: [...new Set(grupe.rows.map(x => x.grupa).filter(Boolean))].sort(),
+      debljine: [...new Set(grupe.rows.map(x => Number(x.debljina_cm)).filter(x => x))].sort((a, b) => a - b),
+      artikli: artikli.rows,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/restlovi/usaglasi — poređenje restlova sa lager listom.
+// Ništa ne mijenja, samo pokazuje gdje veza fali ili se podaci razilaze.
+router.get('/usaglasi/pregled', smijeVidjeti, async (req, res) => {
+  try {
+    const [bezVeze, razlike, poArtiklu] = await Promise.all([
+      pool.query(
+        `SELECT id, oznaka, materijal, grupa, debljina_cm, povrsina, izvorni_rbr
+           FROM restlovi WHERE roba_id IS NULL AND status <> 'potrosen'
+          ORDER BY oznaka LIMIT 200`),
+      pool.query(
+        `SELECT r.id, r.oznaka, r.grupa AS restl_grupa, ro.grupa AS artikal_grupa,
+                r.debljina_cm AS restl_debljina, ro.debljina_cm AS artikal_debljina,
+                ro.sifra, ro.naziv AS artikal_naziv
+           FROM restlovi r JOIN roba ro ON ro.id = r.roba_id
+          WHERE r.status <> 'potrosen'
+            AND ((r.grupa IS DISTINCT FROM ro.grupa AND r.grupa IS NOT NULL)
+              OR (r.debljina_cm IS DISTINCT FROM ro.debljina_cm AND r.debljina_cm IS NOT NULL))
+          ORDER BY r.oznaka LIMIT 200`),
+      pool.query(
+        `SELECT ro.sifra, ro.naziv, ro.grupa, ro.debljina_cm,
+                COUNT(r.id)::int AS restlova, COALESCE(SUM(r.povrsina),0) AS restl_m2,
+                COALESCE(MAX(rp.stanje), 0) AS lager_stanje
+           FROM roba ro
+           JOIN restlovi r ON r.roba_id = ro.id AND r.status = 'dostupan'
+           LEFT JOIN roba_pj rp ON rp.roba_id = ro.id AND rp.objekt_id = r.objekt_id
+          GROUP BY ro.sifra, ro.naziv, ro.grupa, ro.debljina_cm
+          ORDER BY restl_m2 DESC`),
+    ]);
+    res.json({ bez_veze: bezVeze.rows, razlike: razlike.rows, po_artiklu: poArtiklu.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/restlovi/usaglasi/preuzmi — restlovi preuzimaju grupu i debljinu od
+// svog artikla. Radi SAMO tamo gdje restl nema svoju vrijednost, osim ako se
+// izričito traži prepisivanje. Lager se ne dira.
+router.post('/usaglasi/preuzmi', smijeUnositi, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const prepisi = req.body.prepisi === true;
+    await client.query('BEGIN');
+    const r = await client.query(
+      prepisi
+        ? `UPDATE restlovi r SET grupa = ro.grupa, debljina_cm = ro.debljina_cm
+             FROM roba ro WHERE ro.id = r.roba_id AND r.status <> 'potrosen'
+              AND (r.grupa IS DISTINCT FROM ro.grupa OR r.debljina_cm IS DISTINCT FROM ro.debljina_cm)
+            RETURNING r.id`
+        : `UPDATE restlovi r SET grupa = COALESCE(r.grupa, ro.grupa),
+                                 debljina_cm = COALESCE(r.debljina_cm, ro.debljina_cm)
+             FROM roba ro WHERE ro.id = r.roba_id AND r.status <> 'potrosen'
+              AND (r.grupa IS NULL OR r.debljina_cm IS NULL)
+            RETURNING r.id`);
+    await client.query('COMMIT');
+    res.json({ ok: true, azurirano: r.rowCount,
+               napomena: 'Lager nije mijenjan — preuzeti su samo opisni podaci artikla.' });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
 });
 
 // POST /api/restlovi/trazi — GLAVNA RUTA: "da li imam restl za ovaj komad?"
@@ -537,10 +629,18 @@ router.post('/trazi', smijeVidjeti, async (req, res) => {
     const uslovi = [`r.status = 'dostupan'`];
     const vals = [];
     let i = 1;
-    if (materijal) { uslovi.push(`r.materijal ILIKE $${i++}`); vals.push(`%${materijal}%`); }
+    // Šifra artikla je ključ — kad je zadata, ostali filteri nisu potrebni jer
+    // artikal već nosi grupu, debljinu i naziv.
+    if (req.body.roba_id) { uslovi.push(`r.roba_id = $${i++}`); vals.push(req.body.roba_id); }
+    else if (req.body.sifra) { uslovi.push(`ro.sifra = $${i++}`); vals.push(String(req.body.sifra).trim()); }
+    else {
+      if (materijal) { uslovi.push(`(r.materijal ILIKE $${i} OR ro.naziv ILIKE $${i})`); vals.push(`%${materijal}%`); i++; }
+    }
     if (objekt_id) { uslovi.push(`r.objekt_id = $${i++}`); vals.push(objekt_id); }
-    if (debljina_cm) { uslovi.push(`r.debljina_cm = $${i++}`); vals.push(debljina_cm); }
-    if (grupa)       { uslovi.push(`r.grupa = $${i++}`); vals.push(grupa); }
+    // Grupa i debljina se gledaju i na restlu i na artiklu — stari uvezeni restlovi
+    // često nemaju svoje, ali imaju vezu na artikal koji ih ima.
+    if (debljina_cm) { uslovi.push(`COALESCE(r.debljina_cm, ro.debljina_cm) = $${i++}`); vals.push(debljina_cm); }
+    if (grupa)       { uslovi.push(`COALESCE(r.grupa, ro.grupa) = $${i++}`); vals.push(grupa); }
 
     // Predfilter u bazi (grubo, po najvećoj mjeri) da ne vučemo cijelu tabelu,
     // pa precizna provjera oblika u JS-u.
@@ -553,9 +653,15 @@ router.post('/trazi', smijeVidjeti, async (req, res) => {
     uslovi.push(`LEAST(r.dim_a, r.dim_b) >= $${i++}`);    vals.push(Math.max(0, min - popust));
 
     const q = await pool.query(
-      `SELECT r.*, po.naziv AS objekt_naziv
+      `SELECT r.*, po.naziv AS objekt_naziv,
+              ro.sifra AS artikal_sifra, ro.naziv AS artikal_naziv,
+              COALESCE(r.grupa, ro.grupa) AS prikaz_grupa,
+              COALESCE(r.debljina_cm, ro.debljina_cm) AS prikaz_debljina,
+              ro.jed_mjera,
+              (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id = ro.id AND glavna = true LIMIT 1) AS slika
          FROM restlovi r
          LEFT JOIN prodajni_objekti po ON po.id = r.objekt_id
+         LEFT JOIN roba ro ON ro.id = r.roba_id
         WHERE ${uslovi.join(' AND ')}
         LIMIT 300`,
       vals

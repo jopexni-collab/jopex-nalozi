@@ -139,9 +139,13 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
     <div class="red">
       <label class="polje">Širina (mm)<input type="number" id="t_sirina" style="width:110px"></label>
       <label class="polje">Visina (mm)<input type="number" id="t_visina" style="width:110px"></label>
-      <label class="polje">Materijal<input type="text" id="t_materijal" placeholder="npr. Carrara" style="width:180px"></label>
-      <label class="polje">Debljina (cm)<input type="number" step="0.1" id="t_debljina" style="width:100px"></label>
-      <label class="polje">Grupa<input type="text" id="t_grupa" style="width:130px"></label>
+      <label class="polje">Grupa<select id="t_grupa" onchange="filtrirajArtikle()" style="width:150px">
+        <option value="">— sve grupe —</option></select></label>
+      <label class="polje">Debljina (cm)<select id="t_debljina" onchange="filtrirajArtikle()" style="width:120px">
+        <option value="">— sve —</option></select></label>
+      <label class="polje">Artikal (šifra iz lagera)<select id="t_roba" style="width:280px">
+        <option value="">— bilo koji artikal —</option></select></label>
+      <label class="polje">Ili naziv<input type="text" id="t_materijal" placeholder="npr. Carrara" style="width:150px"></label>
       <label class="polje">PJ<select id="t_objekt" style="width:170px"><option value="">— sve PJ —</option></select></label>
       <label class="polje">Rez/rezerva (mm)<input type="number" id="t_rez" value="5" style="width:110px"></label>
       <label class="polje">Ako ništa ne staje<select id="t_odstupanje" style="width:180px">
@@ -238,6 +242,20 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
     </div>
     <div id="u_prijedlog" class="hint" style="margin-top:6px"></div>
     <div id="u_rezultat" style="margin-top:14px"></div>
+  </div>
+
+  <div class="panel">
+    <h3>Usaglašavanje sa lager listom</h3>
+    <div class="hint" style="margin-bottom:10px">
+      Restl se vezuje za artikal preko <b>šifre</b>, i od njega preuzima grupu, debljinu i sliku.
+      Ovdje se vidi gdje veza fali ili se podaci razilaze. <b>Lager se ne mijenja.</b>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn" onclick="ucitajUsaglasavanje()">Provjeri</button>
+      <button class="btn sec" onclick="preuzmiOdArtikla(false)">Dopuni ono što fali</button>
+      <button class="btn sec" onclick="preuzmiOdArtikla(true)">Prepiši sve od artikla</button>
+    </div>
+    <div id="u_usaglasi" style="margin-top:12px"></div>
   </div></div>
 
 <div id="editor_omot" style="display:none">
@@ -1410,6 +1428,41 @@ function artikalIzabran() {
 }
 
 /* ═══════════════ slika sa telefona ═══════════════ */
+/* ═══════════════ FILTERI IZ LAGER LISTE ═══════════════
+   Grupe, debljine i artikli dolaze iz tabele roba, iste one koju koristi magacin —
+   pa se restlovi filtriraju istim pojmovima kao i lager. Nude se samo artikli koji
+   stvarno imaju restlova, uz broj komada i kvadraturu. */
+let ARTIKLI = [];
+
+async function ucitajFiltere() {
+  try {
+    const d = await api('/filteri');
+    ARTIKLI = d.artikli || [];
+    const g = document.getElementById('t_grupa');
+    g.innerHTML = '<option value="">— sve grupe —</option>' +
+      (d.grupe || []).map(x => '<option>' + x + '</option>').join('');
+    const deb = document.getElementById('t_debljina');
+    deb.innerHTML = '<option value="">— sve —</option>' +
+      (d.debljine || []).map(x => '<option value="' + x + '">' + fmt(x) + ' cm</option>').join('');
+    filtrirajArtikle();
+  } catch (e) { /* bez filtera se i dalje može tražiti po nazivu */ }
+}
+
+// Spisak artikala se sužava po izabranoj grupi i debljini — da se ne prelistava
+// cijeli lager kad se traži jedna vrsta kamena.
+function filtrirajArtikle() {
+  const g = document.getElementById('t_grupa').value;
+  const d = Number(document.getElementById('t_debljina').value) || null;
+  const sel = document.getElementById('t_roba');
+  const bio = sel.value;
+  const lista = ARTIKLI.filter(a =>
+    (!g || a.grupa === g) && (!d || Number(a.debljina_cm) === d));
+  sel.innerHTML = '<option value="">— bilo koji artikal —</option>' +
+    lista.map(a => '<option value="' + a.id + '">' + (a.sifra ? a.sifra + ' — ' : '') + a.naziv +
+      ' (' + a.restlova + ' kom, ' + fmt(a.m2) + ' m²)</option>').join('');
+  if (bio && [...sel.options].some(o => o.value === bio)) sel.value = bio;
+}
+
 /* ═══════════════ PREKLAPANJE: restl + komad u njemu ═══════════════
    Backend vraća tačan položaj i ugao pod kojim komad ulazi, pa se ovdje samo crta:
    restl u pozadini, komad preko njega, i ostatak koji propada. */
@@ -1466,6 +1519,7 @@ async function trazi() {
     sirina, visina,
     poligon: crta ? TJEMENA : null,
     materijal: document.getElementById('t_materijal').value || null,
+    roba_id: document.getElementById('t_roba').value || null,
     debljina_cm: document.getElementById('t_debljina').value || null,
     grupa: document.getElementById('t_grupa').value || null,
     objekt_id: document.getElementById('t_objekt').value || null,
@@ -1486,7 +1540,13 @@ async function trazi() {
         d.kandidati.map(r =>
           '<tr><td>' + crtezUklapanja(r, r.polozaj, 130, 96) + '</td>' +
           '<td>' + trakaIskoriscenja(procenatIskoriscenja(r, d.komad ? d.komad.povrsina : 0)) + '</td>' +
-          '<td><b>' + r.oznaka + '</b></td><td>' + (r.materijal || '') + '</td>' +
+          '<td><b>' + r.oznaka + '</b>' +
+            (r.artikal_sifra ? '<div class="hint" style="margin:0">šifra ' + r.artikal_sifra + '</div>' : '') + '</td>' +
+          '<td>' + (r.slika ? '<img src="' + r.slika + '" style="width:34px;height:34px;object-fit:cover;' +
+            'border-radius:5px;vertical-align:middle;margin-right:6px">' : '') +
+            (r.artikal_naziv || r.materijal || '') +
+            (r.prikaz_grupa ? '<div class="hint" style="margin:0">' + r.prikaz_grupa +
+              (r.prikaz_debljina ? ' · ' + fmt(r.prikaz_debljina) + ' cm' : '') + '</div>' : '') + '</td>' +
           '<td>' + (r.oblik === 'L' ? 'L ' : r.oblik === 'poligon' ? '⬟ ' : '') + r.dim_a + '×' + r.dim_b +
           (r.oblik === 'L' ? ' (izrez ' + r.dim_c + '×' + r.dim_d + ')' : '') + '</td>' +
           '<td class="hint">' + (r.polozaj ? 'na ' + Math.round(r.polozaj.x) + ',' + Math.round(r.polozaj.y) +
@@ -2047,6 +2107,74 @@ async function ucitajSerije() {
   } catch (e) { /* nema serija */ }
 }
 
+async function ucitajUsaglasavanje() {
+  const cilj = document.getElementById('u_usaglasi');
+  cilj.innerHTML = '<div class="empty-msg">Provjeravam…</div>';
+  try {
+    const d = await api('/usaglasi/pregled');
+    let html =
+      '<div class="kartice">' +
+      '<div class="kartica"><div class="v">' + d.bez_veze.length + '</div><div class="n">bez veze na artikal</div></div>' +
+      '<div class="kartica"><div class="v">' + d.razlike.length + '</div><div class="n">gdje se podaci razilaze</div></div>' +
+      '<div class="kartica"><div class="v">' + d.po_artiklu.length + '</div><div class="n">artikala sa restlovima</div></div>' +
+      '</div>';
+
+    if (d.bez_veze.length) {
+      html += '<div class="msg err">' + d.bez_veze.length + ' restlova nije vezano ni za jedan artikal — ' +
+        'ne mogu preuzeti grupu ni sliku, i ne diraju lager. Poveži ih preko šifre.</div>' +
+        '<div class="tbl-wrap"><table><thead><tr><th>Oznaka</th><th>Materijal</th><th>Grupa</th>' +
+        '<th>Deb. cm</th><th>m²</th><th>iz tabele r.br</th></tr></thead><tbody>' +
+        d.bez_veze.slice(0, 50).map(r => '<tr><td><b>' + r.oznaka + '</b></td>' +
+          '<td>' + (r.materijal || '') + '</td><td>' + (r.grupa || '') + '</td>' +
+          '<td>' + (r.debljina_cm || '') + '</td><td>' + fmt(r.povrsina) + '</td>' +
+          '<td class="hint">' + (r.izvorni_rbr || '') + '</td></tr>').join('') +
+        '</tbody></table></div>';
+    }
+
+    if (d.razlike.length) {
+      html += '<div class="msg" style="background:#fff3e0;color:#8a5200;margin-top:10px">' +
+        d.razlike.length + ' restlova ima drugačiju grupu ili debljinu od svog artikla. ' +
+        'Dugmetom „Prepiši sve od artikla" se poravnavaju.</div>' +
+        '<div class="tbl-wrap"><table><thead><tr><th>Oznaka</th><th>Šifra</th><th>Artikal</th>' +
+        '<th>Grupa: restl → artikal</th><th>Debljina: restl → artikal</th></tr></thead><tbody>' +
+        d.razlike.slice(0, 50).map(r => '<tr><td><b>' + r.oznaka + '</b></td><td>' + (r.sifra || '') + '</td>' +
+          '<td>' + (r.artikal_naziv || '') + '</td>' +
+          '<td>' + (r.restl_grupa || '—') + ' → <b>' + (r.artikal_grupa || '—') + '</b></td>' +
+          '<td>' + (r.restl_debljina || '—') + ' → <b>' + (r.artikal_debljina || '—') + '</b></td>' +
+          '</tr>').join('') + '</tbody></table></div>';
+    }
+
+    if (!d.bez_veze.length && !d.razlike.length) {
+      html += '<div class="msg ok">Sve je usaglašeno — svaki restl je vezan za artikal i podaci se poklapaju.</div>';
+    }
+
+    html += '<h3 style="margin-top:16px">Restlovi po artiklu</h3>' +
+      '<div class="hint" style="margin-bottom:6px">Kolona „lager" je stanje cijelog artikla u tom PJ — ' +
+      'ono sadrži i cijele table i restlove, pa ova dva broja nisu zbrajiva.</div>' +
+      '<div class="tbl-wrap"><table><thead><tr><th>Šifra</th><th>Artikal</th><th>Grupa</th>' +
+      '<th>Deb. cm</th><th>Restlova</th><th>m² u restlovima</th><th>Lager artikla</th></tr></thead><tbody>' +
+      d.po_artiklu.map(a => '<tr><td>' + (a.sifra || '') + '</td><td>' + a.naziv + '</td>' +
+        '<td>' + (a.grupa || '') + '</td><td>' + (a.debljina_cm || '') + '</td>' +
+        '<td>' + a.restlova + '</td><td>' + fmt(a.restl_m2) + '</td>' +
+        '<td class="hint">' + fmt(a.lager_stanje) + '</td></tr>').join('') +
+      '</tbody></table></div>';
+
+    cilj.innerHTML = html;
+  } catch (e) { cilj.innerHTML = '<div class="msg err">' + e.message + '</div>'; }
+}
+
+async function preuzmiOdArtikla(prepisi) {
+  const pitanje = prepisi
+    ? 'Prepisati grupu i debljinu SA ARTIKLA na sve restlove, i tamo gdje restl već ima svoju vrijednost?'
+    : 'Dopuniti grupu i debljinu samo tamo gdje restl nema svoju vrijednost?';
+  if (!confirm(pitanje)) return;
+  try {
+    const d = await api('/usaglasi/preuzmi', { method: 'POST', body: JSON.stringify({ prepisi }) });
+    poruka('Ažurirano ' + d.azurirano + ' restlova. ' + d.napomena);
+    ucitajUsaglasavanje(); ucitajFiltere();
+  } catch (e) { poruka(e.message, 'greska'); }
+}
+
 async function stornirajUvoz(id) {
   if (!confirm('Stornirati cijeli uvoz? Brišu se samo komadi koji još nisu korišćeni.')) return;
   try {
@@ -2098,6 +2226,7 @@ async function stornirajUvoz(id) {
   osvjeziCrtez();
   ucitajSume();
   ucitajPostavke();
+  ucitajFiltere();
 })();
 </script>
 </body>
