@@ -2101,7 +2101,7 @@ document.addEventListener('paste', e=>{
 // (duža strana), JPEG kvalitet 75% — obično svede na par stotina KB.
 // Smanjuje sliku na zadatu max dimenziju. Zove se DVA puta po slici: 700px (puna, za
 // pregled) i 150px (thumbnail za tabelu — ~7x manje podataka).
-function smanjiSliku(file, MAX=700, kvalitet=0.75){
+function smanjiSliku(file, MAX=1200, kvalitet=0.82){
   return new Promise((resolve, reject)=>{
     const img=new Image();
     const url=URL.createObjectURL(file);
