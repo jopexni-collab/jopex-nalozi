@@ -81,7 +81,15 @@
        to isključuje, pa slike UVIJEK izlaze u PDF. */
     *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
     .mreza .stavka{ break-inside:avoid; page-break-inside:avoid; }
-    .mreza .poz, .lista .slika{ display:block !important; }
+    .mreza .poz, .lista .slika{
+      display:block !important;
+      /* Glatko skaliranje pri stampi — bez ovoga neki pregledaci koriste brzi (nazubljeni)
+         algoritam, sto se najvise vidi kad je slika tek nesto manja od potrebne. */
+      image-rendering:auto;
+    }
+    /* 3 kolone: kartica ~63mm -> na 300dpi treba ~748px. Postojece slike su 700px (skoro
+       tacno), nove su 1200px (sa rezervom). Vise kolona = manja kartica = ostrija slika,
+       pa se namjerno NE smanjuje broj kolona. */
   }
 </style>
 </head>
@@ -152,29 +160,45 @@ function prikaziGresku(poruka){
 async function sacuvajPdf(){
   const btn = document.getElementById('btn-pdf');
   const slike = [...document.querySelectorAll('#sadrzaj img')];
-  // Na EKRANU se koriste thumbnaili (20x manje podataka). Tek za PDF se prebacuje na
-  // pune slike — jer tada kvalitet stvarno treba. Bez ovoga bi svako otvaranje kataloga
-  // skidalo desetine megabajta, sto je na mobilnim podacima bolno.
-  slike.forEach(i => { const p = i.dataset.puna; if (p && i.src !== p) i.src = p; });
-  const nedovrsene = slike.filter(i => !i.complete || !i.naturalWidth);
 
-  if(nedovrsene.length){
+  /* Na EKRANU se prikazuju thumbnaili (20x manje podataka). Za PDF trebaju PUNE slike —
+     inace se thumbnail od 150px razvlaci na ~60mm i izlazi nazubljen.
+
+     Zasto ovako, a ne prostom zamjenom src-a: slike imaju loading="lazy", pa one van
+     ekrana NE POCNU da se ucitavaju samo zato sto im se promijeni src. Naknadno
+     postavljanje loading="eager" je nepouzdano. Zato se pune slike prvo skinu preko
+     new Image() (sto lijeno ucitavanje potpuno zaobilazi), pa se tek onda zamijeni src —
+     tada je slika vec u kesu i zamjena je trenutna. */
+  const zaZamjenu = slike
+    .map(img => ({ img, puna: img.dataset.puna }))
+    .filter(x => x.puna && x.img.src !== x.puna);
+
+  if(zaZamjenu.length){
     btn.disabled = true;
-    btn.textContent = `Učitavanje slika (0/${nedovrsene.length})...`;
     let gotovo = 0;
-    // Skidanje lijenog učitavanja — tjera pregledač da odmah povuče sve slike.
-    slike.forEach(i => i.loading = 'eager');
-    await Promise.all(nedovrsene.map(img => new Promise(res => {
-      const zavrsi = () => { btn.textContent = `Učitavanje slika (${++gotovo}/${nedovrsene.length})...`; res(); };
-      img.addEventListener('load', zavrsi, {once:true});
-      img.addEventListener('error', zavrsi, {once:true});   // i neuspjele se ne čekaju vječno
-      if(img.complete) zavrsi();
+    const osvjezi = () => { btn.textContent = `Priprema slika (${gotovo}/${zaZamjenu.length})...`; };
+    osvjezi();
+
+    await Promise.all(zaZamjenu.map(({puna}) => new Promise(res => {
+      const pre = new Image();
+      const zavrsi = () => { gotovo++; osvjezi(); res(); };
+      pre.onload = zavrsi;
+      pre.onerror = zavrsi;      // neuspjele se ne cekaju vjecno
+      pre.src = puna;
     })));
+
+    // Slike su u kesu — zamjena je sada trenutna, bez cekanja na mrezu.
+    zaZamjenu.forEach(({img, puna}) => { img.loading = 'eager'; img.src = puna; });
+
     btn.disabled = false;
     btn.textContent = '⬇ Sačuvaj kao PDF';
   }
-  // Kratka pauza da pregledač završi iscrtavanje prije nego otvori dijalog za štampu.
-  setTimeout(() => window.print(), 120);
+
+  /* Pauza da pregledac stigne da iscrta zamijenjene slike prije nego otvori dijalog za
+     stampu. Ranije je bilo 120ms — premalo kad ima puno slika, pa je stampa hvatala
+     stari (thumbnail) prikaz. */
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  setTimeout(() => window.print(), 400);
 }
 
 function postaviPrikaz(p){ prikaz = p; render(); }
