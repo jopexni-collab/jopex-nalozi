@@ -7,10 +7,14 @@ const XLSX = require('xlsx');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 // Prenos robe između PJ je administrativna operacija — samo admin.
+// Prenos robe smije admin I svako ko ima pristup modulu Roba i magacini — jer je to
+// dio svakodnevnog rada sa lagerom, ne administrativna radnja. Prenos ne mijenja ukupno
+// stanje firme (roba samo prelazi iz jednog objekta u drugi) i svaki se bilježi u
+// prenosi_robe sa datumom i imenom korisnika, pa je uvijek jasno ko je sta radio.
 router.use((req, res, next) => {
-  if (req.session?.user?.rola !== 'admin')
-    return res.status(403).json({ error: 'Samo admin može prebacivati robu između prodajnih objekata.' });
-  next();
+  const u = req.session?.user;
+  if (u?.rola === 'admin' || u?.moze_roba_magacin) return next();
+  return res.status(403).json({ error: 'Nemate dozvolu za prebacivanje robe između objekata.' });
 });
 
 // GET /api/prenosi?limit=50 - istorija prenosa (za pregled/audit)
