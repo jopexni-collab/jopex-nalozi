@@ -544,21 +544,30 @@ router.get('/filteri', smijeVidjeti, async (req, res) => {
                 ) AS master_grupa
            FROM restlovi r LEFT JOIN roba ro ON ro.id = r.roba_id
           WHERE r.status = 'dostupan'`),
+      // Master grupa se računa u UNUTRAŠNJEM upitu, gdje r.grupa još postoji kao
+      // običan red. Da je podupit ostao u vanjskom SELECT-u, PostgreSQL bi ga odbio
+      // jer r.grupa tamo nije u GROUP BY nego samo unutar COALESCE.
       pool.query(
-        `SELECT ro.id, ro.sifra, ro.naziv,
-                COALESCE(r.grupa, ro.grupa) AS grupa,
-                (SELECT mg.naziv FROM master_grupe mg
-                  WHERE mg.id = COALESCE(ro.master_grupa_id,
-                        (SELECT gm.master_grupa_id FROM grupa_master gm WHERE gm.grupa = COALESCE(r.grupa, ro.grupa)))
-                ) AS master_grupa,
-                COALESCE(r.debljina_cm, ro.debljina_cm) AS debljina_cm,
-                COUNT(r.id)::int AS restlova,
-                COALESCE(SUM(r.povrsina), 0) AS m2,
-                (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id = ro.id AND glavna = true LIMIT 1) AS slika
-           FROM roba ro JOIN restlovi r ON r.roba_id = ro.id AND r.status = 'dostupan'
-          GROUP BY ro.id, ro.sifra, ro.naziv, ro.master_grupa_id, COALESCE(r.grupa, ro.grupa),
-                   COALESCE(r.debljina_cm, ro.debljina_cm)
-          ORDER BY ro.naziv`),
+        `SELECT id, sifra, naziv, grupa, master_grupa, debljina_cm,
+                COUNT(*)::int AS restlova,
+                COALESCE(SUM(povrsina), 0) AS m2,
+                MAX(slika) AS slika
+           FROM (
+             SELECT ro.id, ro.sifra, ro.naziv,
+                    COALESCE(r.grupa, ro.grupa) AS grupa,
+                    COALESCE(r.debljina_cm, ro.debljina_cm) AS debljina_cm,
+                    r.povrsina,
+                    (SELECT mg.naziv FROM master_grupe mg
+                      WHERE mg.id = COALESCE(ro.master_grupa_id,
+                            (SELECT gm.master_grupa_id FROM grupa_master gm
+                              WHERE gm.grupa = COALESCE(r.grupa, ro.grupa)))) AS master_grupa,
+                    (SELECT COALESCE(thumb_url, url) FROM roba_slike
+                      WHERE roba_id = ro.id AND glavna = true LIMIT 1) AS slika
+               FROM roba ro
+               JOIN restlovi r ON r.roba_id = ro.id AND r.status = 'dostupan'
+           ) x
+          GROUP BY id, sifra, naziv, grupa, master_grupa, debljina_cm
+          ORDER BY naziv`),
     ]);
     // Parovi grupa+debljina koji STVARNO postoje — na osnovu njih se filteri
     // međusobno sužavaju, umjesto da se nude kombinacije kojih nema.
