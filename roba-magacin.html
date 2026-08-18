@@ -1521,6 +1521,37 @@ function renderPrenosListu(){
   btn.textContent=`✓ Izvrši prenos (${prenosStavke.length} ${prenosStavke.length===1?'stavka':'stavke'})`;
 }
 
+
+/* Prozorcic za odluku o cijeni pri prenosu. Vraca:
+     false -> zadrzi cijenu odredista (podrazumijevano, prenos ne dira cjenovnik)
+     true  -> preuzmi cijenu iz izvora
+     null  -> otkazi prenos */
+let prenosCijenaRazrjesi = null;
+function prenosPitajZaCijene(razlike){
+  const cont = document.getElementById('prenos-cijene-lista');
+  cont.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#f2f4f7;">
+        <th style="padding:5px 8px;text-align:left;">Artikal</th>
+        <th style="padding:5px 8px;text-align:right;">U izvoru</th>
+        <th style="padding:5px 8px;text-align:right;">Na odredištu</th>
+      </tr></thead>
+      <tbody>${razlike.map(x=>`
+        <tr style="border-bottom:1px solid #f0f2f5;">
+          <td style="padding:5px 8px;"><span style="color:#999;">${esc(x.sifra)}</span> ${esc(x.naziv)}</td>
+          <td style="padding:5px 8px;text-align:right;font-weight:700;color:var(--orange,#b8860b);">${lagerFmMoney(x.cijena_izvor)}</td>
+          <td style="padding:5px 8px;text-align:right;font-weight:700;color:var(--blue,#1a5fa8);">${lagerFmMoney(x.cijena_odrediste)}</td>
+        </tr>`).join('')}</tbody>
+    </table>`;
+  document.getElementById('modal-prenos-cijene').style.display='flex';
+  return new Promise(res => { prenosCijenaRazrjesi = res; });
+}
+
+function prenosOdlukaCijene(odluka){
+  document.getElementById('modal-prenos-cijene').style.display='none';
+  if(prenosCijenaRazrjesi){ prenosCijenaRazrjesi(odluka); prenosCijenaRazrjesi = null; }
+}
+
 async function izvrsiPrenosListu(){
   const msg=document.getElementById('prenos-msg');
   const izObjekta=document.getElementById('prenos-iz').value;
@@ -1529,12 +1560,35 @@ async function izvrsiPrenosListu(){
   if(izObjekta===uObjekat){msg.style.color='red';msg.textContent='Izvorni i odredišni objekat moraju biti različiti.';return;}
   if(!prenosStavke.length) return;
 
+  /* PROVJERA CIJENA prije prenosa — ako artikal u odredisnom objektu ima DRUGACIJU cijenu
+     nego u izvornom, korisnik mora svjesno odluciti sta se desava. Podrazumijevano se
+     cijena odredista ZADRZAVA (prenos je kretanje robe, ne promjena cjenovnika), ali se
+     moze preuzeti iz izvora. Bez ovoga bi se cijene tiho razisle. */
+  let cijenaIzIzvora = false;
+  msg.style.color='#6b7a8d'; msg.textContent='Provjeravam cijene...';
+  try{
+    const pc = await fetch(`${API}/api/prenosi/provjeri-cijene`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        iz_objekta_id:izObjekta, u_objekat_id:uObjekat,
+        stavke:prenosStavke.map(s=>({roba_id:s.roba_id})),
+      }),
+    });
+    const d = await pc.json();
+    if(d.razlike && d.razlike.length){
+      const odluka = await prenosPitajZaCijene(d.razlike);
+      if(odluka === null){ msg.textContent='Prenos otkazan.'; return; }
+      cijenaIzIzvora = odluka;
+    }
+  }catch(e){ /* ako provjera ne prodje, nastavlja se sa podrazumijevanim ponasanjem */ }
+
   msg.style.color='#6b7a8d'; msg.textContent='Izvršavam prenos...';
   try{
     const r=await fetch(`${API}/api/prenosi/bulk`,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         iz_objekta_id:izObjekta, u_objekat_id:uObjekat,
+        cijena_iz_izvora: cijenaIzIzvora,
         stavke:prenosStavke.map(s=>({roba_id:s.roba_id, kolicina:s.kolicina})),
       }),
     });
@@ -4385,5 +4439,20 @@ fetch(`${API}/api/auth/me`).then(r=>{
 </script>
 
 
+<div id="modal-prenos-cijene" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:900;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:20px;max-width:560px;width:93vw;max-height:88vh;overflow-y:auto;">
+    <h3 style="margin:0 0 4px;font-size:16px;">⚠️ Razlika u cijenama</h3>
+    <div style="font-size:12.5px;color:#6b7a8d;margin-bottom:12px;line-height:1.5;">
+      Ovi artikli u odredišnom objektu imaju <b>drugačiju cijenu</b> nego u izvornom.
+      Odluči šta se dešava sa cijenom na odredištu.
+    </div>
+    <div id="prenos-cijene-lista" style="max-height:300px;overflow-y:auto;border:1px solid #ddd;border-radius:8px;margin-bottom:14px;"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button onclick="prenosOdlukaCijene(null)" style="flex:1;min-width:110px;padding:10px;border:1px solid #ddd;background:#fff;border-radius:8px;cursor:pointer;font-size:12.5px;">Otkaži prenos</button>
+      <button onclick="prenosOdlukaCijene(false)" style="flex:2;min-width:150px;padding:10px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:8px;font-weight:700;cursor:pointer;font-size:12.5px;">Zadrži cijenu odredišta</button>
+      <button onclick="prenosOdlukaCijene(true)" style="flex:2;min-width:150px;padding:10px;border:none;background:var(--orange,#b8860b);color:#fff;border-radius:8px;font-weight:700;cursor:pointer;font-size:12.5px;">Preuzmi cijenu iz izvora</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

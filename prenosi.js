@@ -28,7 +28,7 @@ router.get('/', async (req, res) => {
 // unutar postojeće (spoljne) transakcije. Koristi je i ručni unos (POST /) i XLSX uvoz.
 // Cijena OSTAJE PO ODREDIŠNOM PJ (ne mijenja se automatski) — ako artikal još nema
 // cijenu/red u odredišnom PJ, preuzima se cijena iz izvornog PJ kao početna vrijednost.
-async function prebaciStavku(client, { roba, izObjekta, uObjekat, kolicina, korisnik }) {
+async function prebaciStavku(client, { roba, izObjekta, uObjekat, kolicina, korisnik, cijena_iz_izvora }) {
   const kol = parseFloat(kolicina);
   if (!kol || kol <= 0) throw Object.assign(new Error('Neispravna količina.'), { status: 400 });
 
@@ -49,13 +49,36 @@ async function prebaciStavku(client, { roba, izObjekta, uObjekat, kolicina, kori
     [kol, roba.id, izObjekta.id]
   );
 
+  /* CIJENA NA ODREDISTU
+     Ako artikal VEC postoji u odredisnom objektu, on tamo ima svoju cijenu. Podrazumijevano
+     se ta cijena ZADRZAVA (prenos je kretanje robe, ne promjena cjenovnika). Ako korisnik
+     izricito trazi (cijena_iz_izvora), preuzima se cijena iz izvornog objekta.
+     Kad artikla u odredistu jos NEMA, cijena se uvijek uzima iz izvora — nema alternative. */
   const cijenaIzvor = izvorRes.rows[0].cijena;
-  await client.query(
-    `INSERT INTO roba_pj (roba_id, objekt_id, cijena, stanje)
-     VALUES ($1,$2,$3,$4)
-     ON CONFLICT (roba_id, objekt_id) DO UPDATE SET stanje = roba_pj.stanje + $4, azurirano = now()`,
-    [roba.id, uObjekat.id, cijenaIzvor, kol]
+  const postojiUOdredistu = await client.query(
+    'SELECT cijena FROM roba_pj WHERE roba_id=$1 AND objekt_id=$2', [roba.id, uObjekat.id]
   );
+  const imaOdrediste = postojiUOdredistu.rows.length > 0;
+  const cijenaOdrediste = imaOdrediste ? postojiUOdredistu.rows[0].cijena : null;
+
+  if (!imaOdrediste) {
+    await client.query(
+      `INSERT INTO roba_pj (roba_id, objekt_id, cijena, stanje) VALUES ($1,$2,$3,$4)`,
+      [roba.id, uObjekat.id, cijenaIzvor, kol]
+    );
+  } else if (cijena_iz_izvora) {
+    await client.query(
+      `UPDATE roba_pj SET stanje = stanje + $1, cijena = $2, azurirano = now()
+       WHERE roba_id=$3 AND objekt_id=$4`,
+      [kol, cijenaIzvor, roba.id, uObjekat.id]
+    );
+  } else {
+    await client.query(
+      `UPDATE roba_pj SET stanje = stanje + $1, azurirano = now()
+       WHERE roba_id=$2 AND objekt_id=$3`,
+      [kol, roba.id, uObjekat.id]
+    );
+  }
 
   const log = await client.query(
     `INSERT INTO prenosi_robe
@@ -72,9 +95,43 @@ async function prebaciStavku(client, { roba, izObjekta, uObjekat, kolicina, kori
 // body: { iz_objekta_id, u_objekat_id, stavke: [{ roba_id, kolicina }, ...] }
 // Sve u JEDNOJ transakciji — ako bilo koja stavka ne prođe (npr. nedovoljno stanje),
 // ništa se ne upisuje (all-or-nothing), da se ne desi da pola liste prođe a pola ne.
+
+/* POST /api/prenosi/provjeri-cijene — PRIJE prenosa vraca spisak artikala kod kojih se
+   cijena u izvoru i odredistu razlikuju. Frontend na osnovu toga pita korisnika sta zeli.
+   Ne mijenja NISTA u bazi — samo cita. */
+router.post('/provjeri-cijene', async (req, res) => {
+  const { iz_objekta_id, u_objekat_id, stavke } = req.body || {};
+  if (!iz_objekta_id || !u_objekat_id || !Array.isArray(stavke) || !stavke.length)
+    return res.json({ razlike: [] });
+  try {
+    const ids = stavke.map(s => parseInt(s.roba_id)).filter(Boolean);
+    if (!ids.length) return res.json({ razlike: [] });
+    const r = await pool.query(
+      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera,
+              iz.cijena AS cijena_izvor,
+              od.cijena AS cijena_odrediste
+       FROM roba r
+       JOIN roba_pj iz ON iz.roba_id = r.id AND iz.objekt_id = $2
+       JOIN roba_pj od ON od.roba_id = r.id AND od.objekt_id = $3
+       WHERE r.id = ANY($1::int[])
+         AND ABS(COALESCE(iz.cijena,0) - COALESCE(od.cijena,0)) > 0.005`,
+      [ids, iz_objekta_id, u_objekat_id]
+    );
+    res.json({
+      razlike: r.rows.map(x => ({
+        roba_id: x.id, sifra: x.sifra, naziv: x.naziv, jed_mjera: x.jed_mjera,
+        cijena_izvor: +parseFloat(x.cijena_izvor).toFixed(2),
+        cijena_odrediste: +parseFloat(x.cijena_odrediste).toFixed(2),
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/bulk', async (req, res) => {
   const user = req.session.user;
-  const { iz_objekta_id, u_objekat_id, stavke } = req.body;
+  const { iz_objekta_id, u_objekat_id, stavke, cijena_iz_izvora } = req.body;
 
   if (!iz_objekta_id || !u_objekat_id)
     return res.status(400).json({ error: 'Nedostaju izvorni i odredišni objekat.' });
@@ -101,6 +158,7 @@ router.post('/bulk', async (req, res) => {
         throw Object.assign(new Error(`Artikal (id ${s.roba_id}) nije pronađen.`), { status: 404 });
       const zapis = await prebaciStavku(client, {
         roba: robaRes.rows[0], izObjekta, uObjekat, kolicina: s.kolicina, korisnik: user,
+        cijena_iz_izvora: cijena_iz_izvora === true,
       });
       zapisi.push(zapis);
     }
@@ -254,7 +312,8 @@ router.post('/import', upload.single('file'), async (req, res) => {
         if (!robaRes.rows.length) {
           throw Object.assign(new Error(`Šifra "${sifra}" ne postoji u šifrarniku.`), { status: 400 });
         }
-        await prebaciStavku(client, { roba: robaRes.rows[0], izObjekta, uObjekat, kolicina, korisnik: user });
+        await prebaciStavku(client, { roba: robaRes.rows[0], izObjekta, uObjekat, kolicina,
+          korisnik: user, cijena_iz_izvora: req.body?.cijena_iz_izvora === 'true' || req.body?.cijena_iz_izvora === true });
         await client.query('COMMIT');
         uspjesno++;
       } catch (err) {
