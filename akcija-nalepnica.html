@@ -32,19 +32,36 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,san
 .zaglavlje{font-size:13pt;font-weight:800;color:var(--siva);letter-spacing:3px;text-transform:uppercase;}
 
 .rijec-akcija{
-  font-size:64pt;font-weight:900;color:var(--crvena);line-height:.95;letter-spacing:-2px;
-  margin:6mm 0 2mm;
+  font-size:48pt;font-weight:900;color:var(--crvena);line-height:.95;letter-spacing:-2px;
+  margin:4mm 0 1mm;
 }
-.naziv{font-size:26pt;font-weight:700;line-height:1.15;margin-bottom:2mm;max-width:75%;}
+.naziv{font-size:21pt;font-weight:700;line-height:1.15;margin-bottom:2mm;max-width:75%;}
 .sifra{font-size:13pt;color:var(--siva);font-weight:600;}
 
-.cijene{margin-top:auto;padding-top:8mm;}
-.stara{font-size:30pt;color:var(--siva);font-weight:600;text-decoration:line-through;
-       text-decoration-thickness:3px;}
-.nova-oznaka{font-size:14pt;font-weight:800;color:var(--crvena);letter-spacing:2px;
-             text-transform:uppercase;margin-top:3mm;}
-.nova{font-size:96pt;font-weight:900;color:var(--crvena);line-height:.95;letter-spacing:-4px;}
-.nova .jm{font-size:26pt;font-weight:700;letter-spacing:0;}
+/* CIJENA je sredisnji element nalepnice — zauzima najveci dio strane.
+   Cijeli dio je ogroman, a pare (decimale) su sitne i podignute u gornji desni ugao,
+   kao stepen — tako oko odmah uhvati bitan broj sa velike udaljenosti. */
+.cijene{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+        text-align:center;padding:4mm 0;}
+.stara{font-size:34pt;color:var(--siva);font-weight:600;text-decoration:line-through;
+       text-decoration-thickness:4px;line-height:1;}
+.nova-oznaka{font-size:15pt;font-weight:800;color:var(--crvena);letter-spacing:3px;
+             text-transform:uppercase;margin:4mm 0 1mm;}
+
+.nova{display:flex;align-items:flex-start;justify-content:center;
+      color:var(--crvena);line-height:.82;}
+  /* Velicina se prilagodjava broju cifara — inace bi 184 ili 1250 izaslo van A4.
+     Izmjereno: na 300pt jedna cifra je ~58mm, a raspoloziva sirina je ~178mm. */
+  .nova .cijeli{font-weight:900;letter-spacing:-12px;}
+  .nova.c1 .cijeli, .nova.c2 .cijeli{font-size:300pt;}
+  .nova.c3 .cijeli{font-size:210pt;letter-spacing:-8px;}
+  .nova.c4 .cijeli{font-size:158pt;letter-spacing:-6px;}
+  .nova.c3 .pare{font-size:56pt;} .nova.c3 .valuta{font-size:32pt;}
+  .nova.c4 .pare{font-size:42pt;} .nova.c4 .valuta{font-size:26pt;}
+.nova .desno{display:flex;flex-direction:column;align-items:flex-start;margin-left:4mm;padding-top:6mm;}
+.nova .pare{font-size:78pt;font-weight:900;line-height:.9;letter-spacing:-2px;}
+.nova .valuta{font-size:40pt;font-weight:800;letter-spacing:1px;margin-top:1mm;}
+.po-jm{font-size:22pt;color:var(--siva);font-weight:700;margin-top:2mm;}
 
 .usteda{
   display:inline-block;margin-top:4mm;background:var(--crvena);color:#fff;
@@ -80,6 +97,14 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,san
 const API = location.origin;
 
 function esc(s){ return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+/* Cijena se dijeli na CIJELI dio (ogroman) i PARE (sitne, u gornjem desnom uglu).
+   Pare se uvijek pisu na dvije cifre. */
+function cijeliDio(n){ return String(Math.floor(parseFloat(n)||0)); }
+function pareDio(n){
+  const v = parseFloat(n)||0;
+  return String(Math.round((v - Math.floor(v)) * 100)).padStart(2,'0');
+}
+
 function fm(n){ return (parseFloat(n)||0).toLocaleString('bs-BA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
 function nazad(){
@@ -117,7 +142,14 @@ async function ucitaj(){
         <div class="cijene">
           <div class="stara">${fm(a.redovna_cijena)} KM</div>
           <div class="nova-oznaka">Nova cijena</div>
-          <div class="nova">${fm(a.akcijska_cijena)}<span class="jm"> KM / ${esc(a.jed_mjera||'')}</span></div>
+          <div class="nova c${Math.min(4, cijeliDio(a.akcijska_cijena).length)}">
+            <span class="cijeli">${cijeliDio(a.akcijska_cijena)}</span>
+            <span class="desno">
+              <span class="pare">${pareDio(a.akcijska_cijena)}</span>
+              <span class="valuta">KM</span>
+            </span>
+          </div>
+          <div class="po-jm">za 1 ${esc(a.jed_mjera||'')}</div>
           ${a.popust_posto > 0 ? `<div class="usteda">− ${a.popust_posto}%</div>` : ''}
         </div>
 
