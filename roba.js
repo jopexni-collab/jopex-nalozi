@@ -661,6 +661,63 @@ router.post('/slika-grupa', zahtijevaProdaju, upload.fields([{name:'slika',maxCo
    Uporedni prikaz lagera dva objekta — svaki artikal u jednom redu, sa stanjem u OBA.
    Vraca i artikle kojih ima samo u jednom (stanje u drugom = 0), jer je bas to najcesce
    ono sto se trazi: "sta ima tamo, a nema ovdje". */
+/* GET /api/roba/uporedi-vise?pj=1,2,3,4&grupa=&q=
+   Uporedni prikaz lagera preko VISE objekata odjednom — jedan red po artiklu, jedna
+   kolona po objektu. Odgovara na pitanje "gdje uopste ima ovog artikla", sto se sa
+   poredjenjem dva po dva ne moze vidjeti. */
+router.get('/uporedi-vise', zahtijevaRobaMagacin, async (req, res) => {
+  const pjIds = String(req.query.pj || '').split(',').map(x => parseInt(x)).filter(Boolean);
+  if (pjIds.length < 2) return res.status(400).json({ error: 'Izaberite bar dva objekta.' });
+  if (pjIds.length > 8) return res.status(400).json({ error: 'Najviše 8 objekata odjednom.' });
+
+  const vals = [pjIds];
+  let uslovi = '';
+  if (req.query.grupa) { vals.push(req.query.grupa); uslovi += ` AND r.grupa = $${vals.length}`; }
+  if (req.query.q) {
+    vals.push(`%${String(req.query.q).trim()}%`);
+    uslovi += ` AND (r.sifra ILIKE $${vals.length} OR r.naziv ILIKE $${vals.length} OR r.grupa ILIKE $${vals.length})`;
+  }
+  const samoSaStanjem = req.query.sve !== 'true';
+
+  try {
+    const objekti = await pool.query(
+      'SELECT id, naziv FROM prodajni_objekti WHERE id = ANY($1::int[]) ORDER BY naziv', [pjIds]
+    );
+    // Jedan upit vraca SVE parove (artikal, objekat) — grupisanje u redove radi se u JS-u.
+    // Tako broj kolona ne mora biti poznat unaprijed u samom SQL-u.
+    const r = await pool.query(
+      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
+              rp.objekt_id, rp.stanje, rp.cijena
+       FROM roba r
+       JOIN roba_pj rp ON rp.roba_id = r.id AND rp.objekt_id = ANY($1::int[])
+       WHERE r.aktivan = true ${uslovi}
+       ORDER BY r.grupa, r.naziv`,
+      vals
+    );
+
+    const mapa = new Map();
+    for (const x of r.rows) {
+      if (!mapa.has(x.id)) {
+        mapa.set(x.id, {
+          id: x.id, sifra: x.sifra, naziv: x.naziv, jed_mjera: x.jed_mjera,
+          grupa: x.grupa, debljina_cm: x.debljina_cm, po_pj: {},
+        });
+      }
+      mapa.get(x.id).po_pj[x.objekt_id] = {
+        stanje: +parseFloat(x.stanje || 0).toFixed(3),
+        cijena: x.cijena != null ? +parseFloat(x.cijena).toFixed(2) : null,
+      };
+    }
+    let stavke = [...mapa.values()];
+    if (samoSaStanjem) {
+      stavke = stavke.filter(s => Object.values(s.po_pj).some(v => v.stanje > 0));
+    }
+    res.json({ objekti: objekti.rows, stavke });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/uporedi', zahtijevaRobaMagacin, async (req, res) => {
   const pjA = parseInt(req.query.pj_a);
   const pjB = parseInt(req.query.pj_b);
