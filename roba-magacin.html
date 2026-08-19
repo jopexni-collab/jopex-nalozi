@@ -3691,6 +3691,14 @@ function otvoriAkciju(id, naziv, sifra, cijena){
   document.getElementById('ak-napomena').value = '';
   document.getElementById('ak-primijeni').checked = false;
   document.getElementById('ak-popust').textContent = '';
+  /* Kvadratic za spustanje STVARNE cijene vidi samo ko ima pravo "Cijene".
+     Ostalima se jasno kaze da je ovo samo nalepnica — da ne odstampaju cijenu koju
+     kasa nece naplatiti. */
+  const smijeCijene = currentUser?.rola==='admin' || currentUser?.moze_cijene;
+  document.getElementById('ak-primijeni-red').style.display = smijeCijene ? 'flex' : 'none';
+  const upozorenje = document.getElementById('ak-napomena-cijena');
+  upozorenje.style.display = smijeCijene ? 'none' : 'block';
+  if(!smijeCijene) document.getElementById('ak-ostaje').textContent = lagerFmMoney(akTrenutni.cijena);
   document.getElementById('ak-greska').style.display = 'none';
   document.getElementById('modal-akcija').style.display = 'flex';
   setTimeout(()=>document.getElementById('ak-cijena').focus(), 50);
@@ -4847,10 +4855,14 @@ fetch(`${API}/api/auth/me`).then(r=>{
     <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px;">Napomena na nalepnici</label>
     <input type="text" id="ak-napomena" placeholder="npr. samo za izložbeni model" maxlength="80" style="width:100%;padding:8px 11px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:13px;margin-bottom:12px;">
 
-    <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;padding:9px 11px;background:#f7f8fa;border-radius:8px;margin-bottom:14px;">
+    <label id="ak-primijeni-red" style="display:none;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;padding:9px 11px;background:#f7f8fa;border-radius:8px;margin-bottom:10px;">
       <input type="checkbox" id="ak-primijeni">
       <span>Odmah spusti cijenu i na lageru <span style="color:#8b96a5;font-size:11.5px;">(inače je akcija samo za nalepnicu)</span></span>
     </label>
+    <div id="ak-napomena-cijena" style="display:none;font-size:11.5px;color:#8b6914;background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:8px 11px;margin-bottom:12px;line-height:1.45;">
+      ⚠️ Ovo pravi <b>samo nalepnicu</b> — cijena na kasi ostaje <b id="ak-ostaje">—</b>.
+      Da bi se naplaćivala akcijska cijena, neko sa pravom „Cijene" mora je spustiti.
+    </div>
 
     <div id="ak-greska" style="display:none;color:var(--red,#c0392b);font-size:12.5px;margin-bottom:10px;"></div>
     <button onclick="sacuvajAkciju()" style="width:100%;padding:11px;border:none;background:var(--red,#c0392b);color:#fff;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;">🏷️ Pokreni akciju</button>

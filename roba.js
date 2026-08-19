@@ -698,8 +698,15 @@ router.get('/akcije', zahtijevaRobaMagacin, async (req, res) => {
 
 // POST /api/roba/akcije — pokreni akciju za artikal
 router.post('/akcije', async (req, res) => {
-  if (!smijeMijenjatiCijene(req))
-    return res.status(403).json({ error: 'Nemate dozvolu za akcijske cijene.' });
+  /* Akciju (NALEPNICU) smije pokrenuti svako ko radi u prodaji — to je marketinska
+     radnja, ne izmjena cjenovnika. Sama cijena na lageru se NE mijenja.
+     Spustanje stvarne cijene (primijeni_na_lager) trazi pravo "Cijene" — provjerava se
+     nize, posebno. */
+  const u0 = req.session?.user;
+  const smijeAkciju = u0?.rola === 'admin' || u0?.moze_cijene
+                   || u0?.moze_prodavati || u0?.moze_roba_magacin;
+  if (!smijeAkciju)
+    return res.status(403).json({ error: 'Nemate dozvolu za pokretanje akcije.' });
   const { roba_id, objekt_id, akcijska_cijena, vazi_do, napomena, primijeni_na_lager } = req.body || {};
   const nova = parseFloat(akcijska_cijena);
   if (!roba_id || !nova || nova <= 0)
@@ -738,6 +745,11 @@ router.post('/akcije', async (req, res) => {
     );
 
     // Opciono: odmah spustiti i stvarnu cijenu na lageru (kroz nivelaciju, sa audit tragom)
+    // Spustanje STVARNE cijene je izmjena cjenovnika — trazi pravo "Cijene".
+    // Ako ga korisnik nema, akcija se svejedno kreira (nalepnica), samo bez izmjene cijene.
+    if (primijeni_na_lager === true && !smijeMijenjatiCijene(req))
+      throw Object.assign(new Error('Nemate dozvolu da mijenjate cijenu na lageru. Akcija se može pokrenuti samo kao nalepnica.'), { status: 403 });
+
     if (primijeni_na_lager === true && objekt_id) {
       await client.query(
         'UPDATE roba_pj SET cijena=$1, azurirano=now() WHERE roba_id=$2 AND objekt_id=$3',
@@ -762,7 +774,8 @@ router.post('/akcije', async (req, res) => {
 
 // PATCH /api/roba/akcije/:id/zavrsi — zavrsi akciju
 router.patch('/akcije/:id/zavrsi', async (req, res) => {
-  if (!smijeMijenjatiCijene(req))
+  const u = req.session?.user;
+  if (!(u?.rola === 'admin' || u?.moze_cijene || u?.moze_prodavati || u?.moze_roba_magacin))
     return res.status(403).json({ error: 'Nemate dozvolu.' });
   try {
     const r = await pool.query(
