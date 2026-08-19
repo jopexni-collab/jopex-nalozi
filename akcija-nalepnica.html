@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Akcijska nalepnica — JoPeX</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+:root{--crvena:#c0392b;--tamna:#1a2733;--siva:#6b7a8d;--border:#d0d7de;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+     background:#eceff3;padding:14px;}
+
+.alatke{max-width:210mm;margin:0 auto 12px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;}
+.btn{padding:8px 15px;border:1px solid var(--border);background:#fff;border-radius:7px;
+     cursor:pointer;font-size:12.5px;font-weight:600;}
+.btn-glavni{background:var(--crvena);color:#fff;border-color:var(--crvena);}
+
+/* Jedna nalepnica = jedna A4 strana */
+.nalepnica{
+  width:210mm;height:297mm;margin:0 auto 14px;background:#fff;
+  position:relative;padding:18mm 16mm;display:flex;flex-direction:column;
+  box-shadow:0 2px 12px rgba(0,0,0,.12);page-break-after:always;overflow:hidden;
+}
+
+/* QR u GORNJEM UGLU — isti sadrzaj kao nalepnice u magacinu (samo sifra), da isti
+   skener u prodaji radi bez ikakve izmjene. */
+.qr-ugao{position:absolute;top:12mm;right:12mm;text-align:center;}
+.qr-ugao .kod{border:1px solid #e3e6ea;padding:3px;background:#fff;}
+.qr-ugao .sifra-mala{font-size:10pt;font-weight:800;margin-top:3px;letter-spacing:.5px;}
+
+.zaglavlje{font-size:13pt;font-weight:800;color:var(--siva);letter-spacing:3px;text-transform:uppercase;}
+
+.rijec-akcija{
+  font-size:64pt;font-weight:900;color:var(--crvena);line-height:.95;letter-spacing:-2px;
+  margin:6mm 0 2mm;
+}
+.naziv{font-size:26pt;font-weight:700;line-height:1.15;margin-bottom:2mm;max-width:75%;}
+.sifra{font-size:13pt;color:var(--siva);font-weight:600;}
+
+.cijene{margin-top:auto;padding-top:8mm;}
+.stara{font-size:30pt;color:var(--siva);font-weight:600;text-decoration:line-through;
+       text-decoration-thickness:3px;}
+.nova-oznaka{font-size:14pt;font-weight:800;color:var(--crvena);letter-spacing:2px;
+             text-transform:uppercase;margin-top:3mm;}
+.nova{font-size:96pt;font-weight:900;color:var(--crvena);line-height:.95;letter-spacing:-4px;}
+.nova .jm{font-size:26pt;font-weight:700;letter-spacing:0;}
+
+.usteda{
+  display:inline-block;margin-top:4mm;background:var(--crvena);color:#fff;
+  font-size:20pt;font-weight:900;padding:3mm 8mm;border-radius:8mm;
+}
+
+.podnozje{margin-top:8mm;padding-top:4mm;border-top:2px solid var(--border);
+          display:flex;justify-content:space-between;align-items:flex-end;font-size:10pt;color:var(--siva);}
+.podnozje img{height:11mm;}
+
+.poruka{max-width:600px;margin:40px auto;text-align:center;color:var(--siva);font-size:14px;}
+
+@media print{
+  body{background:#fff;padding:0;}
+  .alatke{display:none !important;}
+  .nalepnica{box-shadow:none;margin:0;width:100%;height:100vh;}
+  @page{size:A4 portrait;margin:0;}
+  *{-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important;}
+}
+</style>
+</head>
+<body>
+
+<div class="alatke">
+  <button class="btn" id="btn-nazad" onclick="nazad()" style="display:none;">← Nazad</button>
+  <button class="btn btn-glavni" onclick="window.print()">🖨️ Štampaj</button>
+</div>
+
+<div id="sadrzaj"></div>
+<div class="poruka" id="poruka">Učitavanje...</div>
+
+<script>
+const API = location.origin;
+
+function esc(s){ return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fm(n){ return (parseFloat(n)||0).toLocaleString('bs-BA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+function nazad(){
+  if(window.opener && !window.opener.closed){ window.close(); return; }
+  if(history.length > 1){ history.back(); return; }
+  window.close();
+}
+
+async function ucitaj(){
+  const par = new URLSearchParams(location.search);
+  const trazeni = (par.get('id') || '').split(',').map(x=>parseInt(x)).filter(Boolean);
+
+  try{
+    const r = await fetch(`${API}/api/roba/akcije`);
+    const sve = await r.json();
+    if(!r.ok){ document.getElementById('poruka').textContent = '✗ ' + (sve.error||'Greška.'); return; }
+
+    // Ako su zadati ID-jevi, stampaju se samo oni; inace SVE aktivne akcije.
+    const akcije = trazeni.length ? sve.filter(a=>trazeni.includes(a.id)) : sve;
+    if(!akcije.length){ document.getElementById('poruka').textContent = 'Nema aktivnih akcija za štampu.'; return; }
+
+    document.getElementById('sadrzaj').innerHTML = akcije.map((a,i)=>`
+      <div class="nalepnica">
+        <div class="qr-ugao">
+          <div class="kod" id="qr-${i}"></div>
+          <div class="sifra-mala">${esc(a.sifra)}</div>
+        </div>
+
+        <div class="zaglavlje">JoPeX${a.objekt_naziv ? ' · ' + esc(a.objekt_naziv) : ''}</div>
+        <div class="rijec-akcija">AKCIJA</div>
+
+        <div class="naziv">${esc(a.naziv)}</div>
+        <div class="sifra">Šifra: ${esc(a.sifra)}${a.debljina_cm ? ' · ' + a.debljina_cm + ' cm' : ''}${a.grupa ? ' · ' + esc(a.grupa) : ''}</div>
+
+        <div class="cijene">
+          <div class="stara">${fm(a.redovna_cijena)} KM</div>
+          <div class="nova-oznaka">Nova cijena</div>
+          <div class="nova">${fm(a.akcijska_cijena)}<span class="jm"> KM / ${esc(a.jed_mjera||'')}</span></div>
+          ${a.popust_posto > 0 ? `<div class="usteda">− ${a.popust_posto}%</div>` : ''}
+        </div>
+
+        <div class="podnozje">
+          <div>
+            ${a.vazi_do ? 'Akcija važi do <b>' + new Date(a.vazi_do).toLocaleDateString('bs-BA') + '</b>' : 'Akcija važi do isteka zaliha'}
+            ${a.napomena ? '<br>' + esc(a.napomena) : ''}
+          </div>
+          <img src="logo-plavi.png" alt="JoPeX">
+        </div>
+      </div>`).join('');
+
+    /* QR nosi TACNO sifru artikla — isto kao nalepnice u magacinu, pa isti skener radi
+       bez ikakve izmjene. Crta se tek kad je HTML u stranici. */
+    akcije.forEach((a,i)=>{
+      const el = document.getElementById(`qr-${i}`);
+      if(el && window.QRCode) new QRCode(el, { text:String(a.sifra), width:110, height:110, correctLevel:QRCode.CorrectLevel.M });
+    });
+
+    document.getElementById('poruka').style.display = 'none';
+    if((window.opener && !window.opener.closed) || history.length > 1){
+      document.getElementById('btn-nazad').style.display = '';
+    }
+  }catch(e){
+    document.getElementById('poruka').textContent = '✗ Greška pri učitavanju.';
+  }
+}
+
+ucitaj();
+</script>
+</body>
+</html>

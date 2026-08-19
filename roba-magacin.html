@@ -303,6 +303,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <button type="button" class="glavni-tab-btn" data-tab="presek" onclick="prebaciGlavniTabRM('presek')">⚖️ Presek / Usaglašavanje</button>
   <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
   <button type="button" class="glavni-tab-btn" data-tab="uporedi" onclick="prebaciGlavniTabRM('uporedi')">⚖️ Uporedi PJ</button>
+  <button type="button" class="glavni-tab-btn" data-tab="akcije" onclick="prebaciGlavniTabRM('akcije')">🏷️ Akcije</button>
   <button type="button" class="glavni-tab-btn" data-tab="kretanje" onclick="prebaciGlavniTabRM('kretanje')">📈 Kretanje robe</button>
   <button type="button" class="glavni-tab-btn" data-tab="uvoz" onclick="prebaciGlavniTabRM('uvoz')">📥 Uvoz robe</button>
   <button type="button" class="glavni-tab-btn" data-tab="uvoz-slike" onclick="prebaciGlavniTabRM('uvoz-slike')">📷 Uvoz slika</button>
@@ -877,6 +878,17 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
 
     <div id="import-msg"></div>
+  </div>
+</div>
+
+<div id="tab-akcije" style="display:none;">
+  <div class="import-box">
+    <h3>🏷️ Akcije (sniženja)</h3>
+    <div class="uzorak-hint">
+      Akciju pokrećeš iz <b>Lager</b> liste — dugme 🏷️ pored cijene. Redovna cijena ostaje sačuvana,
+      pa se na nalepnici prikazuje precrtana. Ovdje je spisak aktivnih i štampa nalepnica.
+    </div>
+    <div id="ak-spisak"></div>
   </div>
 </div>
 
@@ -3476,7 +3488,8 @@ function renderLagerRedovi(){
       <td style="padding:3px 6px;text-align:right;font-weight:700;background:${s.stanje<0?'#fce8e6':lagerBojaStanja(s.stanje)};color:${s.stanje<0?'#c0392b':'inherit'};text-decoration:underline;cursor:pointer;" onclick="otvoriRobnuKarticu(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')" title="${s.stanje<0?'⚠ Stanje je u MINUSU':''}">${s.stanje<0?'⚠ ':''}${s.stanje}</td>
       <td style="padding:3px 6px;text-align:right;">
         ${lagerFmMoney(s.cijena)}
-        ${(currentUser?.rola==='admin'||currentUser?.moze_cijene)?`<button onclick="otvoriNivelaciju(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.cijena})" title="Promijeni cijenu (nivelacija)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
+        ${(currentUser?.rola==='admin'||currentUser?.moze_cijene)?`<button onclick="otvoriNivelaciju(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.cijena})" title="Promijeni cijenu (nivelacija)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>
+        <button onclick="otvoriAkciju(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}','${esc(s.sifra)}',${s.cijena})" title="Stavi na akciju (sniženje)" style="background:none;border:none;cursor:pointer;color:var(--red,#c0392b);font-size:11px;margin-left:1px;">🏷️</button>`:''}
       </td>
       <td style="padding:3px 6px;text-align:right;font-weight:700;">${lagerFmMoney(s.ukupno)}</td>
       <td style="padding:3px 6px;text-align:center;">
@@ -3650,6 +3663,8 @@ function prebaciGlavniTabRM(tab){
   if(tab==='master-grupe') mgUcitaj();
   document.getElementById('tab-uporedi').style.display = tab==='uporedi' ? 'block' : 'none';
   if(tab==='uporedi') upInit();
+  document.getElementById('tab-akcije').style.display = tab==='akcije' ? 'block' : 'none';
+  if(tab==='akcije') akUcitajSpisak();
   if(tab==='izvoz-log') izvozLogUcitaj();
   if(tab==='kretanje' && !kretanjeObjektiUcitani) kretanjeUcitajObjekte();
   if(tab==='uvoz-istorija') uvozIstorijaUcitaj();
@@ -3659,6 +3674,129 @@ function prebaciGlavniTabRM(tab){
 /* ═══ ISTORIJA UVOZA — pregled i storniranje cijelih XLSX uvoza ═══ */
 let uvozIstPopunjenSelect=false;
 
+
+
+/* ═══ AKCIJE (snizenja) ═══════════════════════════════════════════════════════════
+   Akcija se cuva odvojeno od cijene na lageru — redovna cijena ostaje, pa se na nalepnici
+   moze prikazati precrtana. Opciono se cijena moze i stvarno spustiti na lageru. */
+let akTrenutni = null;
+
+function otvoriAkciju(id, naziv, sifra, cijena){
+  akTrenutni = { id, naziv, sifra, cijena: parseFloat(cijena) || 0 };
+  document.getElementById('ak-artikal').textContent = naziv;
+  document.getElementById('ak-redovna').innerHTML =
+    `Šifra ${esc(sifra)} · redovna cijena <b>${lagerFmMoney(akTrenutni.cijena)}</b>`;
+  document.getElementById('ak-cijena').value = '';
+  document.getElementById('ak-do').value = '';
+  document.getElementById('ak-napomena').value = '';
+  document.getElementById('ak-primijeni').checked = false;
+  document.getElementById('ak-popust').textContent = '';
+  document.getElementById('ak-greska').style.display = 'none';
+  document.getElementById('modal-akcija').style.display = 'flex';
+  setTimeout(()=>document.getElementById('ak-cijena').focus(), 50);
+}
+
+// Ziva racunica popusta — odmah se vidi koliko je snizenje
+function akRacunajPopust(){
+  const el = document.getElementById('ak-popust');
+  const nova = parseFloat(document.getElementById('ak-cijena').value);
+  if(!nova || !akTrenutni || nova <= 0){ el.textContent=''; return; }
+  if(nova >= akTrenutni.cijena){
+    el.style.color = 'var(--red,#c0392b)';
+    el.textContent = `⚠ Mora biti manja od redovne (${lagerFmMoney(akTrenutni.cijena)})`;
+    return;
+  }
+  const posto = Math.round((1 - nova/akTrenutni.cijena) * 100);
+  const ustedа = akTrenutni.cijena - nova;
+  el.style.color = 'var(--green,#1f8a4c)';
+  el.textContent = `↓ ${posto}% niže — ušteda ${lagerFmMoney(ustedа)}`;
+}
+
+async function sacuvajAkciju(){
+  const greska = document.getElementById('ak-greska');
+  const nova = parseFloat(document.getElementById('ak-cijena').value);
+  if(!nova || nova <= 0){ greska.style.display='block'; greska.textContent='Unesi akcijsku cijenu.'; return; }
+  if(nova >= akTrenutni.cijena){
+    greska.style.display='block';
+    greska.textContent=`Akcijska cijena mora biti manja od redovne (${lagerFmMoney(akTrenutni.cijena)}).`;
+    return;
+  }
+  greska.style.display='none';
+  try{
+    const r = await fetch(`${API}/api/roba/akcije`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        roba_id: akTrenutni.id,
+        objekt_id: document.getElementById('lager-objekat')?.value || null,
+        akcijska_cijena: nova,
+        vazi_do: document.getElementById('ak-do').value || null,
+        napomena: document.getElementById('ak-napomena').value.trim() || null,
+        primijeni_na_lager: document.getElementById('ak-primijeni').checked,
+      }),
+    });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    document.getElementById('modal-akcija').style.display='none';
+    // Odmah otvori nalepnicu za stampu — to je i bio cilj
+    window.open(`akcija-nalepnica.html?id=${d.akcija.id}`, '_blank');
+    if(typeof ucitajLager==='function') ucitajLager();
+  }catch(e){
+    greska.style.display='block'; greska.textContent='✗ '+e.message;
+  }
+}
+
+/* ── Spisak aktivnih akcija ── */
+async function akUcitajSpisak(){
+  const cont = document.getElementById('ak-spisak');
+  if(!cont) return;
+  cont.innerHTML='<div style="padding:12px;color:#8b96a5;font-size:12.5px;">Učitavanje...</div>';
+  try{
+    const r = await fetch(`${API}/api/roba/akcije`);
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    if(!d.length){ cont.innerHTML='<div style="padding:12px;color:#8b96a5;font-size:12.5px;">Trenutno nema aktivnih akcija.</div>'; return; }
+    cont.innerHTML = `
+      <div style="text-align:right;margin-bottom:8px;">
+        <a href="akcija-nalepnica.html" target="_blank" rel="noopener" class="ce-tip-btn" style="text-decoration:none;">🖨️ Štampaj SVE nalepnice</a>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead><tr style="background:#1f3864;color:#fff;">
+          <th style="padding:6px 8px;text-align:left;">Artikal</th>
+          <th style="padding:6px 8px;text-align:right;">Redovna</th>
+          <th style="padding:6px 8px;text-align:right;">Akcijska</th>
+          <th style="padding:6px 8px;text-align:center;">Popust</th>
+          <th style="padding:6px 8px;text-align:left;">Važi do</th>
+          <th style="padding:6px 8px;"></th>
+        </tr></thead>
+        <tbody>${d.map((a,i)=>`
+          <tr style="background:${i%2?'#f7f8fa':'#fff'};border-bottom:1px solid #eef0f3;">
+            <td style="padding:5px 8px;">
+              <div style="font-weight:600;">${esc(a.naziv)}</div>
+              <div style="font-size:10px;color:#8b96a5;">${esc(a.sifra)}${a.objekt_naziv?' · '+esc(a.objekt_naziv):''}</div>
+            </td>
+            <td style="padding:5px 8px;text-align:right;color:#8b96a5;text-decoration:line-through;">${lagerFmMoney(a.redovna_cijena)}</td>
+            <td style="padding:5px 8px;text-align:right;font-weight:800;color:var(--red,#c0392b);">${lagerFmMoney(a.akcijska_cijena)}</td>
+            <td style="padding:5px 8px;text-align:center;"><span style="background:var(--red,#c0392b);color:#fff;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:800;">−${a.popust_posto}%</span></td>
+            <td style="padding:5px 8px;font-size:11.5px;">${a.vazi_do ? new Date(a.vazi_do).toLocaleDateString('bs-BA') : 'do zaliha'}</td>
+            <td style="padding:5px 8px;text-align:right;white-space:nowrap;">
+              <a href="akcija-nalepnica.html?id=${a.id}" target="_blank" rel="noopener" title="Štampaj nalepnicu" style="text-decoration:none;font-size:15px;">🖨️</a>
+              <button onclick="akZavrsi(${a.id})" title="Završi akciju" style="background:none;border:none;cursor:pointer;font-size:14px;margin-left:4px;">✕</button>
+            </td>
+          </tr>`).join('')}</tbody>
+      </table>`;
+  }catch(e){
+    cont.innerHTML = `<div style="padding:12px;color:var(--red);font-size:12.5px;">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+async function akZavrsi(id){
+  if(!confirm('Završiti ovu akciju?\n\nCijena na lageru se NE mijenja automatski — ako si je ranije spustio, vrati je ručno.')) return;
+  try{
+    const r = await fetch(`${API}/api/roba/akcije/${id}/zavrsi`,{method:'PATCH'});
+    if(!r.ok){ const d=await r.json(); throw new Error(d.error||'Greška.'); }
+    akUcitajSpisak();
+  }catch(e){ alert('✗ '+e.message); }
+}
 
 /* ═══ UPOREDNI PREGLED VISE OBJEKATA ═══════════════════════════════════════════
    Jedan red = jedan artikal, jedna kolona = jedan objekat. Jedan objekat je oznacen kao
@@ -4688,6 +4826,34 @@ fetch(`${API}/api/auth/me`).then(r=>{
       <button onclick="prenosOdlukaCijene(false)" style="flex:2;min-width:150px;padding:10px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:8px;font-weight:700;cursor:pointer;font-size:12.5px;">Zadrži cijenu odredišta</button>
       <button onclick="prenosOdlukaCijene(true)" style="flex:2;min-width:150px;padding:10px;border:none;background:var(--orange,#b8860b);color:#fff;border-radius:8px;font-weight:700;cursor:pointer;font-size:12.5px;">Preuzmi cijenu iz izvora</button>
     </div>
+  </div>
+</div>
+<div id="modal-akcija" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:900;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:20px;max-width:420px;width:93vw;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <h3 style="margin:0;font-size:16px;">🏷️ Stavi na akciju</h3>
+      <button onclick="document.getElementById('modal-akcija').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+    </div>
+    <div id="ak-artikal" style="font-size:13.5px;font-weight:700;margin-bottom:2px;"></div>
+    <div id="ak-redovna" style="font-size:12.5px;color:#8b96a5;margin-bottom:14px;"></div>
+
+    <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px;">Akcijska cijena (KM) *</label>
+    <input type="number" id="ak-cijena" step="0.01" min="0.01" oninput="akRacunajPopust()" style="width:100%;padding:10px 12px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:17px;font-weight:800;color:var(--red,#c0392b);margin-bottom:4px;">
+    <div id="ak-popust" style="font-size:12.5px;font-weight:700;margin-bottom:12px;min-height:17px;"></div>
+
+    <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px;">Važi do <span style="font-weight:400;color:#8b96a5;">(prazno = do isteka zaliha)</span></label>
+    <input type="date" lang="hr-HR" id="ak-do" style="width:100%;padding:8px 11px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:13px;margin-bottom:12px;">
+
+    <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px;">Napomena na nalepnici</label>
+    <input type="text" id="ak-napomena" placeholder="npr. samo za izložbeni model" maxlength="80" style="width:100%;padding:8px 11px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:13px;margin-bottom:12px;">
+
+    <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;padding:9px 11px;background:#f7f8fa;border-radius:8px;margin-bottom:14px;">
+      <input type="checkbox" id="ak-primijeni">
+      <span>Odmah spusti cijenu i na lageru <span style="color:#8b96a5;font-size:11.5px;">(inače je akcija samo za nalepnicu)</span></span>
+    </label>
+
+    <div id="ak-greska" style="display:none;color:var(--red,#c0392b);font-size:12.5px;margin-bottom:10px;"></div>
+    <button onclick="sacuvajAkciju()" style="width:100%;padding:11px;border:none;background:var(--red,#c0392b);color:#fff;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;">🏷️ Pokreni akciju</button>
   </div>
 </div>
 </body>

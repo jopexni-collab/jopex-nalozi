@@ -665,6 +665,116 @@ router.post('/slika-grupa', zahtijevaProdaju, upload.fields([{name:'slika',maxCo
    Uporedni prikaz lagera preko VISE objekata odjednom — jedan red po artiklu, jedna
    kolona po objektu. Odgovara na pitanje "gdje uopste ima ovog artikla", sto se sa
    poredjenjem dva po dva ne moze vidjeti. */
+/* ═══ AKCIJE (snizenja) ═══════════════════════════════════════════════════════════
+   Akcija se cuva odvojeno od roba_pj.cijena — redovna cijena ostaje netaknuta, pa se na
+   nalepnici moze prikazati precrtana. Zavrsetak akcije ne trazi rucno vracanje cjenovnika. */
+
+// GET /api/roba/akcije — aktivne akcije (za spisak i stampu nalepnica)
+router.get('/akcije', zahtijevaRobaMagacin, async (req, res) => {
+  try {
+    const samoAktivne = req.query.sve !== 'true';
+    const r = await pool.query(
+      `SELECT a.*, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
+              po.naziv AS objekt_naziv,
+              (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS slika
+       FROM akcije a
+       JOIN roba r ON r.id = a.roba_id
+       LEFT JOIN prodajni_objekti po ON po.id = a.objekt_id
+       ${samoAktivne ? `WHERE a.aktivna = true
+                          AND a.vazi_od <= CURRENT_DATE
+                          AND (a.vazi_do IS NULL OR a.vazi_do >= CURRENT_DATE)` : ''}
+       ORDER BY a.kreirano DESC`
+    );
+    res.json(r.rows.map(x => ({
+      ...x,
+      redovna_cijena: +parseFloat(x.redovna_cijena).toFixed(2),
+      akcijska_cijena: +parseFloat(x.akcijska_cijena).toFixed(2),
+      popust_posto: Math.round((1 - x.akcijska_cijena / x.redovna_cijena) * 100),
+    })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/roba/akcije — pokreni akciju za artikal
+router.post('/akcije', async (req, res) => {
+  if (!smijeMijenjatiCijene(req))
+    return res.status(403).json({ error: 'Nemate dozvolu za akcijske cijene.' });
+  const { roba_id, objekt_id, akcijska_cijena, vazi_do, napomena, primijeni_na_lager } = req.body || {};
+  const nova = parseFloat(akcijska_cijena);
+  if (!roba_id || !nova || nova <= 0)
+    return res.status(400).json({ error: 'Nedostaje artikal ili akcijska cijena.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Redovna cijena se uzima iz izabranog objekta; ako objekat nije zadat, uzima se
+    // najcesca (bilo koja) cijena tog artikla — samo kao polazna vrijednost za prikaz.
+    const cr = await client.query(
+      objekt_id
+        ? 'SELECT cijena FROM roba_pj WHERE roba_id=$1 AND objekt_id=$2'
+        : 'SELECT cijena FROM roba_pj WHERE roba_id=$1 ORDER BY stanje DESC NULLS LAST LIMIT 1',
+      objekt_id ? [roba_id, objekt_id] : [roba_id]
+    );
+    if (!cr.rows.length) throw Object.assign(new Error('Artikal nema cijenu u tom objektu.'), { status: 400 });
+    const redovna = +parseFloat(cr.rows[0].cijena).toFixed(2);
+    if (nova >= redovna)
+      throw Object.assign(new Error(`Akcijska cijena (${nova}) mora biti MANJA od redovne (${redovna}).`), { status: 400 });
+
+    // Ranija aktivna akcija za isti artikal/objekat se zatvara — vazi samo jedna.
+    await client.query(
+      `UPDATE akcije SET aktivna = false
+       WHERE roba_id = $1 AND aktivna = true
+         AND (objekt_id IS NOT DISTINCT FROM $2)`,
+      [roba_id, objekt_id || null]
+    );
+
+    const u = req.session.user;
+    const r = await client.query(
+      `INSERT INTO akcije (roba_id, objekt_id, redovna_cijena, akcijska_cijena, vazi_do,
+                           napomena, kreirao_id, kreirao_ime)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [roba_id, objekt_id || null, redovna, nova, vazi_do || null, napomena || null, u.id, u.ime_prezime]
+    );
+
+    // Opciono: odmah spustiti i stvarnu cijenu na lageru (kroz nivelaciju, sa audit tragom)
+    if (primijeni_na_lager === true && objekt_id) {
+      await client.query(
+        'UPDATE roba_pj SET cijena=$1, azurirano=now() WHERE roba_id=$2 AND objekt_id=$3',
+        [nova, roba_id, objekt_id]
+      );
+      await client.query(
+        `INSERT INTO roba_promjene (roba_id, objekt_id, razlika, cijena_stara, cijena_nova, opis, korisnik_id, korisnik_ime)
+         VALUES ($1,$2,0,$3,$4,$5,$6,$7)`,
+        [roba_id, objekt_id, redovna, nova, `Akcija — snizenje sa ${redovna} na ${nova}`, u.id, u.ime_prezime]
+      ).catch(() => {});
+    }
+
+    await client.query('COMMIT');
+    res.status(201).json({ ok: true, akcija: r.rows[0] });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(err.status || 500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// PATCH /api/roba/akcije/:id/zavrsi — zavrsi akciju
+router.patch('/akcije/:id/zavrsi', async (req, res) => {
+  if (!smijeMijenjatiCijene(req))
+    return res.status(403).json({ error: 'Nemate dozvolu.' });
+  try {
+    const r = await pool.query(
+      'UPDATE akcije SET aktivna = false WHERE id = $1 RETURNING *', [req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Akcija nije pronađena.' });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/uporedi-vise', zahtijevaRobaMagacin, async (req, res) => {
   const pjIds = String(req.query.pj || '').split(',').map(x => parseInt(x)).filter(Boolean);
   if (pjIds.length < 2) return res.status(400).json({ error: 'Izaberite bar dva objekta.' });
