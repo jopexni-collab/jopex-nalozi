@@ -302,6 +302,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <button type="button" class="glavni-tab-btn" data-tab="kalkulacija" onclick="prebaciGlavniTabRM('kalkulacija')">📦 Kalkulacija</button>
   <button type="button" class="glavni-tab-btn" data-tab="presek" onclick="prebaciGlavniTabRM('presek')">⚖️ Presek / Usaglašavanje</button>
   <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
+  <button type="button" class="glavni-tab-btn" data-tab="uporedi" onclick="prebaciGlavniTabRM('uporedi')">⚖️ Uporedi PJ</button>
   <button type="button" class="glavni-tab-btn" data-tab="kretanje" onclick="prebaciGlavniTabRM('kretanje')">📈 Kretanje robe</button>
   <button type="button" class="glavni-tab-btn" data-tab="uvoz" onclick="prebaciGlavniTabRM('uvoz')">📥 Uvoz robe</button>
   <button type="button" class="glavni-tab-btn" data-tab="uvoz-slike" onclick="prebaciGlavniTabRM('uvoz-slike')">📷 Uvoz slika</button>
@@ -876,6 +877,44 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
 
     <div id="import-msg"></div>
+  </div>
+</div>
+
+<div id="tab-uporedi" style="display:none;">
+  <div class="import-box">
+    <h3>⚖️ Uporedni pregled dva objekta</h3>
+    <div class="uzorak-hint">
+      Vidi šta ima u jednom, a nema u drugom objektu — i prebaci jednim klikom.
+      Strelica <b>◀</b> šalje robu ulijevo, <b>▶</b> udesno.
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:12px;">
+      <div style="flex:1;min-width:160px;">
+        <label style="font-size:11.5px;font-weight:700;color:#555;display:block;margin-bottom:4px;">Lijevi objekat</label>
+        <select id="up-pj-a" onchange="upUcitaj()" style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:13px;"></select>
+      </div>
+      <div style="flex:1;min-width:160px;">
+        <label style="font-size:11.5px;font-weight:700;color:#555;display:block;margin-bottom:4px;">Desni objekat</label>
+        <select id="up-pj-b" onchange="upUcitaj()" style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:13px;"></select>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      <select id="up-grupa" onchange="upUcitaj()" style="min-width:150px;padding:6px 9px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12.5px;">
+        <option value="">— sve grupe —</option>
+      </select>
+      <input type="text" id="up-pretraga" placeholder="🔍 Šifra, naziv ili grupa..." oninput="upOdgodiUcitaj()" style="flex:1;min-width:170px;padding:6px 9px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12.5px;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap;">
+        <input type="checkbox" id="up-sve" onchange="upUcitaj()"> I one bez stanja
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap;">
+        Količina: <input type="number" id="up-kolicina" value="1" step="0.001" min="0.001" style="width:72px;padding:5px 7px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12.5px;">
+      </label>
+    </div>
+
+    <div id="up-sazetak" style="font-size:12px;color:#8b96a5;margin-bottom:8px;"></div>
+    <div id="up-tabela" style="max-height:calc(100vh - 330px);overflow:auto;border:1px solid var(--border,#ddd);border-radius:8px;"></div>
+    <div id="up-msg" style="font-size:12.5px;margin-top:8px;"></div>
   </div>
 </div>
 
@@ -1595,7 +1634,10 @@ async function izvrsiPrenosListu(){
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška pri prenosu.');
     msg.style.color='var(--green)';
-    msg.textContent=`✓ Prebačeno ${data.prebaceno} stavki.`;
+    msg.innerHTML = `✓ Prebačeno ${data.prebaceno} stavki.`
+      + (data.prenosnica_broj
+          ? ` · <a href="prenosnica-dokument.html?broj=${encodeURIComponent(data.prenosnica_broj)}" target="_blank" rel="noopener" style="color:var(--blue,#1a5fa8);font-weight:700;">🖨️ Otvori prenosnicu ${esc(data.prenosnica_broj)}</a>`
+          : '');
     prenosStavke=[];
     renderPrenosListu();
   }catch(e){
@@ -3607,6 +3649,8 @@ function prebaciGlavniTabRM(tab){
   document.getElementById('tab-izvoz-log').style.display = tab==='izvoz-log' ? 'block' : 'none';
   document.getElementById('tab-master-grupe').style.display = tab==='master-grupe' ? 'block' : 'none';
   if(tab==='master-grupe') mgUcitaj();
+  document.getElementById('tab-uporedi').style.display = tab==='uporedi' ? 'block' : 'none';
+  if(tab==='uporedi') upInit();
   if(tab==='izvoz-log') izvozLogUcitaj();
   if(tab==='kretanje' && !kretanjeObjektiUcitani) kretanjeUcitajObjekte();
   if(tab==='uvoz-istorija') uvozIstorijaUcitaj();
@@ -3615,6 +3659,172 @@ function prebaciGlavniTabRM(tab){
 
 /* ═══ ISTORIJA UVOZA — pregled i storniranje cijelih XLSX uvoza ═══ */
 let uvozIstPopunjenSelect=false;
+
+
+/* ═══ UPOREDNI PREGLED DVA OBJEKTA ═══════════════════════════════════════════════
+   Jedan red = jedan artikal, sa stanjem u OBA objekta i strelicama za prebacivanje.
+   Prebacivanje koristi POSTOJECU /api/prenosi rutu — ista pravila, isti audit trag,
+   ista provjera cijena. Namjerno se ne pravi zasebna logika koja bi se mogla razici. */
+let upObjekti = [], upPodaci = [], upTajmer = null;
+
+async function upInit(){
+  if(upObjekti.length){ upUcitaj(); return; }
+  try{
+    const r = await fetch(`${API}/api/prodajni-objekti`);
+    upObjekti = await r.json();
+    const opcije = o => upObjekti.map(x=>`<option value="${x.id}">${esc(x.naziv)}</option>`).join('');
+    document.getElementById('up-pj-a').innerHTML = '<option value="">— izaberi —</option>' + opcije();
+    document.getElementById('up-pj-b').innerHTML = '<option value="">— izaberi —</option>' + opcije();
+    // Grupe za filter
+    const g = await fetch(`${API}/api/roba/liste-grupa`).then(x=>x.json()).catch(()=>[]);
+    if(Array.isArray(g) && g.length){
+      document.getElementById('up-grupa').innerHTML = '<option value="">— sve grupe —</option>'
+        + g.map(x=>`<option value="${esc(x.grupa||x)}">${esc(x.grupa||x)}</option>`).join('');
+    }
+  }catch(e){}
+}
+
+function upOdgodiUcitaj(){
+  clearTimeout(upTajmer);
+  upTajmer = setTimeout(upUcitaj, 300);
+}
+
+async function upUcitaj(){
+  const a = document.getElementById('up-pj-a').value;
+  const b = document.getElementById('up-pj-b').value;
+  const tab = document.getElementById('up-tabela');
+  const saz = document.getElementById('up-sazetak');
+  document.getElementById('up-msg').textContent = '';
+
+  if(!a || !b){ tab.innerHTML='<div style="padding:14px;color:#8b96a5;font-size:12.5px;">Izaberi oba objekta.</div>'; saz.textContent=''; return; }
+  if(a === b){ tab.innerHTML='<div style="padding:14px;color:var(--red);font-size:12.5px;">Objekti moraju biti različiti.</div>'; saz.textContent=''; return; }
+
+  tab.innerHTML='<div style="padding:14px;color:#8b96a5;font-size:12.5px;">Učitavanje...</div>';
+  const par = new URLSearchParams({pj_a:a, pj_b:b});
+  const grupa = document.getElementById('up-grupa').value;
+  const q = document.getElementById('up-pretraga').value.trim();
+  if(grupa) par.set('grupa', grupa);
+  if(q) par.set('q', q);
+  if(document.getElementById('up-sve').checked) par.set('sve','true');
+
+  try{
+    const r = await fetch(`${API}/api/roba/uporedi?${par}`);
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    upPodaci = d;
+    upRender();
+  }catch(e){
+    tab.innerHTML = `<div style="padding:14px;color:var(--red);font-size:12.5px;">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+function upRender(){
+  const nazivA = document.getElementById('up-pj-a').selectedOptions[0]?.text || 'A';
+  const nazivB = document.getElementById('up-pj-b').selectedOptions[0]?.text || 'B';
+  const tab = document.getElementById('up-tabela');
+
+  if(!upPodaci.length){
+    tab.innerHTML='<div style="padding:14px;color:#8b96a5;font-size:12.5px;">Nema artikala za ove uslove.</div>';
+    document.getElementById('up-sazetak').textContent='';
+    return;
+  }
+  // Sazetak — koliko ima samo lijevo, samo desno, u oba
+  const samoA = upPodaci.filter(x=>x.stanje_a>0 && x.stanje_b<=0).length;
+  const samoB = upPodaci.filter(x=>x.stanje_b>0 && x.stanje_a<=0).length;
+  const oba   = upPodaci.filter(x=>x.stanje_a>0 && x.stanje_b>0).length;
+  document.getElementById('up-sazetak').innerHTML =
+    `<b>${upPodaci.length}</b> artikala · samo u <b>${esc(nazivA)}</b>: ${samoA} · samo u <b>${esc(nazivB)}</b>: ${samoB} · u oba: ${oba}`;
+
+  tab.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#1f3864;color:#fff;position:sticky;top:0;z-index:5;">
+        <th style="padding:6px 8px;text-align:right;white-space:nowrap;">${esc(nazivA)}</th>
+        <th style="padding:6px 4px;width:76px;"></th>
+        <th style="padding:6px 8px;text-align:left;">Artikal</th>
+        <th style="padding:6px 4px;width:76px;"></th>
+        <th style="padding:6px 8px;text-align:left;white-space:nowrap;">${esc(nazivB)}</th>
+      </tr></thead>
+      <tbody>${upPodaci.map((x,i)=>{
+        const imaA = x.stanje_a > 0, imaB = x.stanje_b > 0;
+        const bojaA = imaA ? 'font-weight:700;' : 'color:#c3c9d1;';
+        const bojaB = imaB ? 'font-weight:700;' : 'color:#c3c9d1;';
+        return `<tr style="background:${i%2?'#f7f8fa':'#fff'};border-bottom:1px solid #eef0f3;">
+          <td style="padding:5px 8px;text-align:right;${bojaA}">${x.stanje_a || '—'}<div style="font-size:9.5px;color:#8b96a5;font-weight:400;">${x.cijena_a!=null?lagerFmMoney(x.cijena_a):''}</div></td>
+          <td style="padding:4px;text-align:center;">
+            <button onclick="upPrebaci(${i},'b_u_a')" ${imaB?'':'disabled'} title="Prebaci u ${esc(nazivA)}"
+              style="border:1px solid ${imaB?'var(--blue,#1a5fa8)':'#e3e6ea'};background:${imaB?'#eef4fc':'#f7f8fa'};color:${imaB?'var(--blue,#1a5fa8)':'#c3c9d1'};border-radius:5px;padding:3px 9px;cursor:${imaB?'pointer':'default'};font-size:13px;font-weight:700;">◀</button>
+          </td>
+          <td style="padding:5px 8px;">
+            <div style="font-weight:600;">${esc(x.naziv)}</div>
+            <div style="font-size:10px;color:#8b96a5;">${esc(x.sifra)}${x.grupa?' · '+esc(x.grupa):''}${x.debljina_cm?' · '+x.debljina_cm+' cm':''} · ${esc(x.jed_mjera||'')}</div>
+          </td>
+          <td style="padding:4px;text-align:center;">
+            <button onclick="upPrebaci(${i},'a_u_b')" ${imaA?'':'disabled'} title="Prebaci u ${esc(nazivB)}"
+              style="border:1px solid ${imaA?'var(--blue,#1a5fa8)':'#e3e6ea'};background:${imaA?'#eef4fc':'#f7f8fa'};color:${imaA?'var(--blue,#1a5fa8)':'#c3c9d1'};border-radius:5px;padding:3px 9px;cursor:${imaA?'pointer':'default'};font-size:13px;font-weight:700;">▶</button>
+          </td>
+          <td style="padding:5px 8px;${bojaB}">${x.stanje_b || '—'}<div style="font-size:9.5px;color:#8b96a5;font-weight:400;">${x.cijena_b!=null?lagerFmMoney(x.cijena_b):''}</div></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+async function upPrebaci(i, smjer){
+  const x = upPodaci[i];
+  if(!x) return;
+  const kol = parseFloat(document.getElementById('up-kolicina').value);
+  if(!kol || kol <= 0){ alert('Unesi ispravnu količinu.'); return; }
+
+  const a = document.getElementById('up-pj-a').value;
+  const b = document.getElementById('up-pj-b').value;
+  const izId = smjer==='a_u_b' ? a : b;
+  const uId  = smjer==='a_u_b' ? b : a;
+  const raspolozivo = smjer==='a_u_b' ? x.stanje_a : x.stanje_b;
+  if(kol > raspolozivo){
+    alert(`Nema dovoljno — raspoloživo je ${raspolozivo} ${x.jed_mjera||''}.`);
+    return;
+  }
+
+  const msg = document.getElementById('up-msg');
+  msg.style.color='#8b96a5'; msg.textContent='Prebacivanje...';
+  try{
+    // Ista provjera cijena kao i kod prenosnice — da se cjenovnik ne razidje tiho.
+    let cijenaIzIzvora = false;
+    const pc = await fetch(`${API}/api/prenosi/provjeri-cijene`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({iz_objekta_id:izId, u_objekat_id:uId, stavke:[{roba_id:x.id}]}),
+    });
+    const dc = await pc.json();
+    if(dc.razlike && dc.razlike.length){
+      const odluka = await prenosPitajZaCijene(dc.razlike);
+      if(odluka === null){ msg.textContent='Otkazano.'; return; }
+      cijenaIzIzvora = odluka;
+    }
+
+    const r = await fetch(`${API}/api/prenosi/bulk`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        iz_objekta_id:izId, u_objekat_id:uId, cijena_iz_izvora:cijenaIzIzvora,
+        stavke:[{roba_id:x.id, kolicina:kol}],
+      }),
+    });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+
+    // Osvjezi samo taj red — bez ponovnog ucitavanja cijele liste
+    if(smjer==='a_u_b'){ x.stanje_a=+(x.stanje_a-kol).toFixed(3); x.stanje_b=+(x.stanje_b+kol).toFixed(3); }
+    else               { x.stanje_b=+(x.stanje_b-kol).toFixed(3); x.stanje_a=+(x.stanje_a+kol).toFixed(3); }
+    upRender();
+    msg.style.color='var(--green,#1f8a4c)';
+    // Svaki prenos dobija svoj broj prenosnice — link vodi na dokument za stampu.
+    msg.innerHTML = `✓ Prebačeno ${kol} ${esc(x.jed_mjera||'')} — ${esc(x.naziv)}`
+      + (d.prenosnica_broj
+          ? ` · <a href="prenosnica-dokument.html?broj=${encodeURIComponent(d.prenosnica_broj)}" target="_blank" rel="noopener" style="color:var(--blue,#1a5fa8);font-weight:700;">🖨️ ${esc(d.prenosnica_broj)}</a>`
+          : '');
+  }catch(e){
+    msg.style.color='var(--red,#c0392b)';
+    msg.textContent='✗ '+e.message;
+  }
+}
 
 /* ═══ MASTER GRUPE ═══════════════════════════════════════════════════════════════
    Nivo iznad postojecih grupa. Raspored se pamti po GRUPI (ne po artiklu) — zato novi

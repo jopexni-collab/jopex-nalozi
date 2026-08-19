@@ -657,6 +657,55 @@ router.post('/slika-grupa', zahtijevaProdaju, upload.fields([{name:'slika',maxCo
    se ne gubi. Pojedinacni artikal se moze izuzeti preko roba.master_grupa_id. */
 
 // GET /api/roba/master-grupe — spisak master grupa + koliko grupa/artikala pokrivaju
+/* GET /api/roba/uporedi?pj_a=1&pj_b=2&grupa=&q=
+   Uporedni prikaz lagera dva objekta — svaki artikal u jednom redu, sa stanjem u OBA.
+   Vraca i artikle kojih ima samo u jednom (stanje u drugom = 0), jer je bas to najcesce
+   ono sto se trazi: "sta ima tamo, a nema ovdje". */
+router.get('/uporedi', zahtijevaRobaMagacin, async (req, res) => {
+  const pjA = parseInt(req.query.pj_a);
+  const pjB = parseInt(req.query.pj_b);
+  if (!pjA || !pjB) return res.status(400).json({ error: 'Izaberite oba objekta.' });
+  if (pjA === pjB) return res.status(400).json({ error: 'Objekti moraju biti različiti.' });
+
+  const vals = [pjA, pjB];
+  let uslovi = '';
+  if (req.query.grupa) { vals.push(req.query.grupa); uslovi += ` AND r.grupa = $${vals.length}`; }
+  if (req.query.q) {
+    vals.push(`%${String(req.query.q).trim()}%`);
+    uslovi += ` AND (r.sifra ILIKE $${vals.length} OR r.naziv ILIKE $${vals.length} OR r.grupa ILIKE $${vals.length})`;
+  }
+  // Podrazumijevano se skrivaju artikli kojih NEMA ni u jednom objektu — inace bi spisak
+  // bio pun redova sa 0/0 koji ne govore nista.
+  const samoSaStanjem = req.query.sve !== 'true';
+
+  try {
+    const r = await pool.query(
+      `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
+              COALESCE(a.stanje,0) AS stanje_a, a.cijena AS cijena_a,
+              COALESCE(b.stanje,0) AS stanje_b, b.cijena AS cijena_b
+       FROM roba r
+       LEFT JOIN roba_pj a ON a.roba_id = r.id AND a.objekt_id = $1
+       LEFT JOIN roba_pj b ON b.roba_id = r.id AND b.objekt_id = $2
+       WHERE r.aktivan = true
+         AND (a.roba_id IS NOT NULL OR b.roba_id IS NOT NULL)
+         ${samoSaStanjem ? 'AND (COALESCE(a.stanje,0) > 0 OR COALESCE(b.stanje,0) > 0)' : ''}
+         ${uslovi}
+       ORDER BY r.grupa, r.naziv`,
+      vals
+    );
+    res.json(r.rows.map(x => ({
+      id: x.id, sifra: x.sifra, naziv: x.naziv, jed_mjera: x.jed_mjera,
+      grupa: x.grupa, debljina_cm: x.debljina_cm,
+      stanje_a: +parseFloat(x.stanje_a).toFixed(3),
+      stanje_b: +parseFloat(x.stanje_b).toFixed(3),
+      cijena_a: x.cijena_a != null ? +parseFloat(x.cijena_a).toFixed(2) : null,
+      cijena_b: x.cijena_b != null ? +parseFloat(x.cijena_b).toFixed(2) : null,
+    })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/master-grupe', zahtijevaProdaju, async (req, res) => {
   try {
     const r = await pool.query(

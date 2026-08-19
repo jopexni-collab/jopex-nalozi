@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('./db');
+const crypto = require('crypto');
 const multer = require('multer');
 const XLSX = require('xlsx');
 
@@ -15,6 +16,34 @@ router.use((req, res, next) => {
   const u = req.session?.user;
   if (u?.rola === 'admin' || u?.moze_roba_magacin) return next();
   return res.status(403).json({ error: 'Nemate dozvolu za prebacivanje robe između objekata.' });
+});
+
+/* GET /api/prenosi/dokument/:broj — sve stavke jedne prenosnice, za stampu.
+   Grupisano po broju, pa se vise artikala prebacenih odjednom prikazuje kao JEDAN
+   dokument (isto kao otpremnica). */
+router.get('/dokument/:broj', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT * FROM prenosi_robe WHERE prenosnica_broj = $1 ORDER BY id`, [req.params.broj]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Prenosnica nije pronađena.' });
+    const prvi = r.rows[0];
+    res.json({
+      broj: prvi.prenosnica_broj,
+      datum: prvi.kreiran,
+      iz_objekta: prvi.iz_objekta_naziv,
+      u_objekat: prvi.u_objekat_naziv,
+      kreirao: prvi.korisnik_ime,
+      napomena: prvi.napomena,
+      javni_token: prvi.javni_token,
+      stavke: r.rows.map(x => ({
+        sifra: x.sifra, naziv: x.naziv,
+        kolicina: +parseFloat(x.kolicina).toFixed(3), jed_mjera: x.jed_mjera,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // GET /api/prenosi?limit=50 - istorija prenosa (za pregled/audit)
@@ -32,7 +61,20 @@ router.get('/', async (req, res) => {
 // unutar postojeće (spoljne) transakcije. Koristi je i ručni unos (POST /) i XLSX uvoz.
 // Cijena OSTAJE PO ODREDIŠNOM PJ (ne mijenja se automatski) — ako artikal još nema
 // cijenu/red u odredišnom PJ, preuzima se cijena iz izvornog PJ kao početna vrijednost.
-async function prebaciStavku(client, { roba, izObjekta, uObjekat, kolicina, korisnik, cijena_iz_izvora }) {
+/* Broj prenosnice — PRE-2026-000001. Uzima se UNUTAR transakcije sa zakljucavanjem reda,
+   pa dva istovremena prenosa ne mogu dobiti isti broj. */
+async function sljedeciBrojPrenosnice(client) {
+  const god = new Date().getFullYear();
+  await client.query(
+    `INSERT INTO prenosnica_brojac (godina, zadnji) VALUES ($1,0) ON CONFLICT (godina) DO NOTHING`, [god]
+  );
+  const r = await client.query(
+    `UPDATE prenosnica_brojac SET zadnji = zadnji + 1 WHERE godina = $1 RETURNING zadnji`, [god]
+  );
+  return `PRE-${god}-${String(r.rows[0].zadnji).padStart(6, '0')}`;
+}
+
+async function prebaciStavku(client, { roba, izObjekta, uObjekat, kolicina, korisnik, cijena_iz_izvora, prenosnica_broj, javni_token, napomena }) {
   const kol = parseFloat(kolicina);
   if (!kol || kol <= 0) throw Object.assign(new Error('Neispravna količina.'), { status: 400 });
 
@@ -87,10 +129,11 @@ async function prebaciStavku(client, { roba, izObjekta, uObjekat, kolicina, kori
   const log = await client.query(
     `INSERT INTO prenosi_robe
        (roba_id, sifra, naziv, iz_objekta_id, iz_objekta_naziv, u_objekat_id, u_objekat_naziv,
-        kolicina, jed_mjera, korisnik_id, korisnik_ime)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+        kolicina, jed_mjera, korisnik_id, korisnik_ime, prenosnica_broj, javni_token, napomena)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
     [roba.id, roba.sifra, roba.naziv, izObjekta.id, izObjekta.naziv, uObjekat.id, uObjekat.naziv,
-     kol, roba.jed_mjera, korisnik.id, korisnik.ime_prezime]
+     kol, roba.jed_mjera, korisnik.id, korisnik.ime_prezime,
+     prenosnica_broj || null, javni_token || null, napomena || null]
   );
   return log.rows[0];
 }
@@ -147,6 +190,9 @@ router.post('/bulk', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Sve stavke jednog prebacivanja dobijaju ISTI broj — to je jedna prenosnica.
+    const brojPrenosnice = await sljedeciBrojPrenosnice(client);
+    const tokenPrenosnice = crypto.randomBytes(16).toString('hex');
 
     const objekti = await client.query(
       'SELECT * FROM prodajni_objekti WHERE id = ANY($1::int[])', [[iz_objekta_id, u_objekat_id]]
@@ -163,12 +209,15 @@ router.post('/bulk', async (req, res) => {
       const zapis = await prebaciStavku(client, {
         roba: robaRes.rows[0], izObjekta, uObjekat, kolicina: s.kolicina, korisnik: user,
         cijena_iz_izvora: cijena_iz_izvora === true,
+        prenosnica_broj: brojPrenosnice, javni_token: tokenPrenosnice,
+        napomena: req.body.napomena || null,
       });
       zapisi.push(zapis);
     }
 
     await client.query('COMMIT');
-    res.status(201).json({ ok: true, prebaceno: zapisi.length, stavke: zapisi });
+    res.status(201).json({ ok: true, prebaceno: zapisi.length, stavke: zapisi,
+      prenosnica_broj: brojPrenosnice, javni_token: tokenPrenosnice });
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(err.status || 500).json({ error: err.message });

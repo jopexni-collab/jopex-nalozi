@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prenosnica — JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f0f2f5;--border:#d0d7de;--sivo:#6b7a8d;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+     background:var(--bg);color:#1a2733;padding:16px;}
+.papir{max-width:800px;margin:0 auto;background:#fff;padding:26px 30px;border-radius:10px;
+       box-shadow:0 2px 10px rgba(0,0,0,.08);}
+
+.zaglavlje{display:flex;justify-content:space-between;align-items:flex-start;
+           border-bottom:2px solid var(--blue);padding-bottom:14px;margin-bottom:18px;gap:16px;}
+.logo img{height:38px;display:block;}
+.firma{font-size:11px;color:var(--sivo);line-height:1.5;margin-top:6px;}
+.naslov{text-align:right;}
+.naslov h1{margin:0;font-size:20px;color:var(--blue);letter-spacing:.5px;}
+.naslov .broj{font-size:15px;font-weight:800;margin-top:3px;}
+.naslov .datum{font-size:11.5px;color:var(--sivo);margin-top:2px;}
+
+/* Odakle → kuda: najvažnija informacija na prenosnici, pa je istaknuta */
+.pravac{display:flex;align-items:stretch;gap:12px;margin-bottom:18px;}
+.pravac .strana{flex:1;background:#f7f9fc;border:1px solid var(--border);border-radius:8px;padding:11px 14px;}
+.pravac .oznaka{font-size:10px;color:var(--sivo);text-transform:uppercase;letter-spacing:.5px;font-weight:700;}
+.pravac .naziv{font-size:14.5px;font-weight:800;margin-top:3px;}
+.pravac .strelica{display:flex;align-items:center;font-size:22px;color:var(--blue);font-weight:800;}
+
+table{width:100%;border-collapse:collapse;font-size:12.5px;}
+thead th{background:var(--blue);color:#fff;padding:7px 9px;text-align:left;font-size:11.5px;}
+thead th.d{text-align:right;}
+tbody td{padding:7px 9px;border-bottom:1px solid #eef0f3;}
+tbody td.d{text-align:right;}
+tbody tr:nth-child(even){background:#fafbfc;}
+tfoot td{padding:9px;font-weight:800;border-top:2px solid var(--blue);font-size:13px;}
+
+.napomena{margin-top:14px;padding:10px 13px;background:#fffbe6;border:1px solid #ffe58f;
+          border-radius:7px;font-size:12px;line-height:1.5;}
+
+/* Potpisi — prenosnica prati robu, pa je predaju i preuzimanje potrebno potpisati */
+.potpisi{display:flex;gap:30px;margin-top:38px;}
+.potpisi div{flex:1;text-align:center;font-size:11.5px;color:var(--sivo);}
+.potpisi .crta{border-top:1px solid #333;margin-bottom:5px;height:34px;}
+
+.podnozje{margin-top:22px;padding-top:12px;border-top:1px solid var(--border);
+          font-size:10.5px;color:var(--sivo);text-align:center;line-height:1.5;}
+
+.alatke{max-width:800px;margin:0 auto 14px;display:flex;gap:8px;justify-content:flex-end;}
+.btn{padding:8px 15px;border:1px solid var(--border);background:#fff;border-radius:7px;
+     cursor:pointer;font-size:12.5px;font-weight:600;}
+.btn-pdf{background:var(--blue);color:#fff;border-color:var(--blue);}
+.poruka{max-width:800px;margin:40px auto;text-align:center;color:var(--sivo);font-size:14px;}
+
+@media print{
+  body{background:#fff;padding:0;}
+  .alatke{display:none !important;}
+  .papir{box-shadow:none;border-radius:0;max-width:100%;padding:0;}
+  @page{size:A4;margin:14mm;}
+  tbody tr{break-inside:avoid;}
+}
+</style>
+</head>
+<body>
+
+<div class="alatke">
+  <button class="btn" id="btn-nazad" onclick="nazad()" style="display:none;">← Nazad</button>
+  <button class="btn btn-pdf" onclick="window.print()">⬇ Štampaj / PDF</button>
+</div>
+
+<div class="papir" id="papir" style="display:none;">
+  <div class="zaglavlje">
+    <div>
+      <div class="logo"><img src="logo-plavi.png" alt="JoPeX"></div>
+      <div class="firma">JoPeX — kamen i obrada<br>jpx.doc@gmail.com · 065 512 868</div>
+    </div>
+    <div class="naslov">
+      <h1>PRENOSNICA</h1>
+      <div class="broj" id="d-broj">—</div>
+      <div class="datum" id="d-datum"></div>
+    </div>
+  </div>
+
+  <div class="pravac">
+    <div class="strana">
+      <div class="oznaka">Iz objekta</div>
+      <div class="naziv" id="d-iz">—</div>
+    </div>
+    <div class="strelica">➜</div>
+    <div class="strana">
+      <div class="oznaka">U objekat</div>
+      <div class="naziv" id="d-u">—</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:34px;">#</th>
+        <th style="width:90px;">Šifra</th>
+        <th>Naziv artikla</th>
+        <th class="d" style="width:110px;">Količina</th>
+        <th style="width:52px;">JM</th>
+      </tr>
+    </thead>
+    <tbody id="d-stavke"></tbody>
+    <tfoot>
+      <tr><td colspan="3">UKUPNO stavki</td><td class="d" id="d-ukupno">0</td><td></td></tr>
+    </tfoot>
+  </table>
+
+  <div class="napomena" id="d-napomena" style="display:none;"></div>
+
+  <div class="potpisi">
+    <div><div class="crta"></div>Robu predao</div>
+    <div><div class="crta"></div>Robu preuzeo</div>
+  </div>
+
+  <div class="podnozje">
+    Prenosnica je interni dokument o kretanju robe između objekata — nije račun i ne služi za naplatu.<br>
+    Pripremio: <span id="d-kreirao">—</span>
+  </div>
+</div>
+
+<div class="poruka" id="poruka">Učitavanje...</div>
+
+<script>
+const API = location.origin;
+
+function esc(s){ return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fd(d){
+  const x = new Date(d);
+  return `${String(x.getDate()).padStart(2,'0')}.${String(x.getMonth()+1).padStart(2,'0')}.${x.getFullYear()}. ${String(x.getHours()).padStart(2,'0')}:${String(x.getMinutes()).padStart(2,'0')}`;
+}
+function fk(n){ return (parseFloat(n)||0).toLocaleString('bs-BA',{minimumFractionDigits:0,maximumFractionDigits:3}); }
+
+/* "Nazad" — dokument se iz aplikacije otvara u NOVOM TABU, gdje history.back() nema kuda.
+   Zato se tad tab zatvara, sto korisnika vraca na aplikaciju. */
+function nazad(){
+  if(window.opener && !window.opener.closed){ window.close(); return; }
+  if(history.length > 1){ history.back(); return; }
+  window.close();
+}
+
+async function ucitaj(){
+  const broj = new URLSearchParams(location.search).get('broj');
+  if(!broj){ document.getElementById('poruka').textContent = 'Nedostaje broj prenosnice u adresi.'; return; }
+  try{
+    const r = await fetch(`${API}/api/prenosi/dokument/${encodeURIComponent(broj)}`);
+    const d = await r.json();
+    if(!r.ok){ document.getElementById('poruka').textContent = '✗ ' + (d.error || 'Nije pronađeno.'); return; }
+
+    document.getElementById('d-broj').textContent   = d.broj || broj;
+    document.getElementById('d-datum').textContent  = d.datum ? fd(d.datum) : '';
+    document.getElementById('d-iz').textContent     = d.iz_objekta || '—';
+    document.getElementById('d-u').textContent      = d.u_objekat || '—';
+    document.getElementById('d-kreirao').textContent= d.kreirao || '—';
+
+    document.getElementById('d-stavke').innerHTML = (d.stavke||[]).map((s,i)=>`
+      <tr>
+        <td>${i+1}</td>
+        <td>${esc(s.sifra)}</td>
+        <td>${esc(s.naziv)}</td>
+        <td class="d"><b>${fk(s.kolicina)}</b></td>
+        <td>${esc(s.jed_mjera||'')}</td>
+      </tr>`).join('');
+    document.getElementById('d-ukupno').textContent = (d.stavke||[]).length;
+
+    if(d.napomena){
+      const n = document.getElementById('d-napomena');
+      n.style.display = 'block';
+      n.innerHTML = '<b>Napomena:</b> ' + esc(d.napomena);
+    }
+
+    document.getElementById('poruka').style.display = 'none';
+    document.getElementById('papir').style.display = 'block';
+    if((window.opener && !window.opener.closed) || history.length > 1){
+      document.getElementById('btn-nazad').style.display = '';
+    }
+  }catch(e){
+    document.getElementById('poruka').textContent = '✗ Greška pri učitavanju.';
+  }
+}
+
+ucitaj();
+</script>
+</body>
+</html>
