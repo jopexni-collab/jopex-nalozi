@@ -133,6 +133,32 @@ router.get('/komentari', async (req, res) => {
 });
 
 // GET /api/proizvodnja/:r_br - jedan nalog
+/* GET /api/proizvodnja/blagajnici — imena osoba koje su STVARNO blagajnici.
+   Ranije je ta lista bila zakucana u kodu (lista.html), pa se nije mijenjala kad se
+   doda ili ukloni blagajnik — a od poklapanja imena zavisi da li se naplata odmah
+   knjizi kao predana u blagajnu. */
+router.get('/blagajnici', async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  try {
+    const r = await pool.query(
+      `SELECT DISTINCT z.id, z.ime_prezime
+       FROM blagajnici_pj b
+       JOIN zaposleni z ON z.id = b.zaposleni_id
+       WHERE z.aktivan = true
+       ORDER BY z.ime_prezime`
+    );
+    // Vraca se i PRVO IME — bas ono sto se upisuje u polje "primio" i po cemu se
+    // poredi da li je naplatu primio sam blagajnik.
+    res.json(r.rows.map(x => ({
+      id: x.id,
+      ime_prezime: x.ime_prezime,
+      prvo_ime: String(x.ime_prezime || '').trim().split(/\s+/)[0],
+    })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:r_br', async (req, res) => {
   const user = req.session?.user;
   const cols = BASE_COLS + ',' + ADMIN_COLS;
@@ -383,6 +409,16 @@ function izvuciPrimio(val) {
 // Aleksandrovac — bez obzira kroz koji ekran/mehanizam su unijete (Nova naplata forma,
 // ili direktno kucanje "got Ime" u lista.html) — po izričitom zahtjevu.
 const PROIZVODNJA_PJ = 'PJ Aleksandrovac';
+/* Poredjenje imena za automatsko knjizenje u blagajnu — tolerantno na razmake i
+   velika/mala slova, prihvata i puno ime i samo prvo. Ranije se trazilo TACNO prvo ime,
+   pa je "Nenad " ili "Nenad Bozic" tiho padalo na "nije predano". */
+function ocistiIme(s){ return String(s || '').trim().toLowerCase().replace(/\s+/g, ' '); }
+function jeIstoIme(uneseno, punoImeKorisnika){
+  const u = ocistiIme(uneseno);
+  const p = ocistiIme(punoImeKorisnika);
+  return !!u && (u === p || u === p.split(' ')[0]);
+}
+
 async function jeBlagajnik(userId) {
   const r = await pool.query('SELECT 1 FROM blagajnici_pj WHERE zaposleni_id=$1 LIMIT 1', [userId]);
   return r.rows.length > 0;
@@ -522,8 +558,7 @@ router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
       // registrovan blagajnik (ne bilo ko — admin/Ponude koji slučajno ima isto ime se NE
       // računa) I (b) upisala SVOJE vlastito ime (nema smisla da neko "preda sam sebi").
       // Ako bilo koji od ova dva uslova ne važi — ostaje "Nije predano" dok se ručno ne potvrdi.
-      const mojeIme = (user.ime_prezime || '').trim().split(/\s+/)[0].toLowerCase();
-      const jeVlastitoIme = imeUneseno.toLowerCase() === mojeIme;
+      const jeVlastitoIme = jeIstoIme(imeUneseno, user.ime_prezime);
       const jeIOnBlagajnik = await jeBlagajnik(user.id);
       const smijeAutoPredano = jeVlastitoIme && jeIOnBlagajnik;
       const opisGotovine = `Avans (rata) - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''}`;
@@ -627,8 +662,7 @@ router.post('/:r_br/naplati-ostatak', async (req, res) => {
 
     if (gotovinaNum > 0) {
       const imeUneseno = ime_gotovina.trim();
-      const mojeIme = (user.ime_prezime || '').trim().split(/\s+/)[0].toLowerCase();
-      const jeVlastitoIme = imeUneseno.toLowerCase() === mojeIme;
+      const jeVlastitoIme = jeIstoIme(imeUneseno, user.ime_prezime);
       const jeIOnBlagajnik = await jeBlagajnik(user.id);
       const smijeAutoPredano = jeVlastitoIme && jeIOnBlagajnik;
       const opisGotovine = `Naplata ostatka - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''}`;
@@ -793,9 +827,9 @@ router.patch('/:r_br', async (req, res) => {
       // KLJUČNO: "Predano" ide automatski SAMO ako je ulogovana osoba (a) STVARNO
       // registrovan blagajnik I (b) upisala SVOJE vlastito ime u "got X". Ako bilo koji
       // od ova dva uslova ne važi — ostaje "Nije predano" dok se ručno ne potvrdi.
-      const mojeIme = (user?.ime_prezime || '').trim().split(/\s+/)[0].toLowerCase();
+
       const jeIOnBlagajnik = await jeBlagajnik(user?.id);
-      const smijeAutoPredano = (val) => jeIOnBlagajnik && izvuciPrimio(val).toLowerCase() === mojeIme;
+      const smijeAutoPredano = (val) => jeIOnBlagajnik && jeIstoIme(izvuciPrimio(val), user?.ime_prezime);
 
       // AVANS -> ako se avans_opis promijenio, prvo ukloni STARI gotovinski zapis (ako
       // postoji) — bez obzira da li se sad prebacuje NA gotovinu, SA gotovine na banku,
