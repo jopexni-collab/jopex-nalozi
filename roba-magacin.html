@@ -3492,13 +3492,16 @@ function renderLagerRedovi(){
         <button onclick="otvoriAkciju(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}','${esc(s.sifra)}',${s.cijena})" title="Stavi na akciju (sniženje)" style="background:none;border:none;cursor:pointer;color:var(--red,#c0392b);font-size:11px;margin-left:1px;">🏷️</button>`:''}
       </td>
       <td style="padding:3px 6px;text-align:right;font-weight:700;">${lagerFmMoney(s.ukupno)}</td>
-      <td style="padding:3px 6px;text-align:center;">
-        <div onclick="otvoriKaruselSlika(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')" style="position:relative;display:inline-block;cursor:pointer;">
+      <td style="padding:2px 5px;text-align:center;white-space:nowrap;">
+        <div onclick="otvoriKaruselSlika(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')" style="display:inline-flex;align-items:center;cursor:pointer;">
+          ${/* U magacinu se umjesto sličice prikazuje IKONICA — red je time upola niži i
+                tabela stane mnogo kompaktnije. Klik i dalje otvara karusel sa slikama.
+                (Maloprodaja zadržava sličice — tamo je vizuelni prepoznavanje bitnije.) */''}
           ${s.glavna_slika
-            ?`<img src="${esc(s.glavna_slika)}" loading="lazy" style="width:36px;height:36px;object-fit:cover;border-radius:5px;border:1px solid #ddd;">`
-            :`<div style="width:36px;height:36px;border:1px dashed #ccc;border-radius:5px;background:#fafafa;display:flex;align-items:center;justify-content:center;font-size:14px;color:#aaa;">＋</div>`}
-          ${parseInt(s.broj_slika)>1?`<span style="position:absolute;bottom:-4px;right:-4px;background:var(--blue,#1a5fa8);color:#fff;font-size:8.5px;font-weight:700;padding:1px 3px;border-radius:6px;line-height:1;">${s.broj_slika}</span>`:''}
-          ${s.model_3d_url?`<span title="Ima 3D model" style="position:absolute;top:-4px;left:-4px;background:#6b4fa0;color:#fff;font-size:8px;padding:1px 3px;border-radius:6px;line-height:1;">3D</span>`:''}
+            ? `<span title="Pogledaj slike (${s.broj_slika})" style="font-size:15px;line-height:1;color:var(--blue,#1a5fa8);">👁</span>`
+            : `<span title="Dodaj sliku" style="font-size:14px;line-height:1;color:#c3c9d1;">＋</span>`}
+          ${parseInt(s.broj_slika)>1?`<span style="font-size:9px;color:#8b96a5;font-weight:700;margin-left:1px;">${s.broj_slika}</span>`:''}
+          ${s.model_3d_url?`<span title="Ima 3D model" style="background:#6b4fa0;color:#fff;font-size:7.5px;padding:1px 3px;border-radius:5px;line-height:1;margin-left:2px;vertical-align:middle;">3D</span>`:''}
         </div>
       </td>
     </tr>
