@@ -472,6 +472,11 @@ router.post('/:r_br/naplata-blagajna', async (req, res) => {
 // ovaj nalog", samo u različitim fazama). Ne prepisuje prethodne rate — svaka ostaje svoj
 // red u opisu I svoj zaseban zapis u blagajni, sa tačnim tragom ko je šta primio.
 router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
+  /* SVE u JEDNOJ transakciji. Ranije su UPDATE naloga, upis u blagajnu i upis u istoriju
+     isli kao tri odvojena upita — pa je pad bilo kojeg ostavljao nalog sa uvecanim avansom
+     BEZ odgovarajuceg zapisa u blagajni (novac "nestane" iz evidencije, a nalog pokazuje
+     da je naplacen). Sada ili prodje sve, ili nista. */
+  const client = await pool.connect();
   const user = req.session?.user;
   if (!user) return res.status(401).json({ error: 'Morate biti prijavljeni.' });
   const { iznos, nacin, ime_gotovina, licno_preuzeo } = req.body; // nacin: bank kod ILI 'gotovina'
@@ -482,7 +487,8 @@ router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
     return res.status(400).json({ error: 'Ime je obavezno za gotovinu.' });
 
   try {
-    const nRes = await pool.query(
+    await client.query('BEGIN');
+    const nRes = await client.query(
       'SELECT r_br, narucilac, ugovorio_id, avans, avans_opis, ugovorena_suma FROM proizvodnja_jopex WHERE r_br=$1',
       [req.params.r_br]
     );
@@ -505,7 +511,7 @@ router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
     const noviZaNaplatu = parseFloat(nalog.ugovorena_suma || 0) - noviAvans;
     const autoNaplaceno = noviZaNaplatu <= 0.005;
 
-    await pool.query(
+    await client.query(
       'UPDATE proizvodnja_jopex SET avans=$1, avans_opis=$2, naplaceno=$3 WHERE r_br=$4',
       [noviAvans, noviOpis, autoNaplaceno, nalog.r_br]
     );
@@ -522,14 +528,14 @@ router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
       const smijeAutoPredano = jeVlastitoIme && jeIOnBlagajnik;
       const opisGotovine = `Avans (rata) - nalog #${nalog.r_br}${nalog.narucilac ? ' (' + nalog.narucilac + ')' : ''}`;
       if (smijeAutoPredano) {
-        await pool.query(
+        await client.query(
           `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
                                   predao_blagajniku, datum_predaje, preuzeo_ime)
            VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, $5, true, now(), $2)`,
           [iznosNum, imeUneseno, String(nalog.r_br), opisGotovine, PROIZVODNJA_PJ]
         );
       } else {
-        await pool.query(
+        await client.query(
           `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv)
            VALUES (CURRENT_DATE, $1, $2, 'Proizvodnja', $3, $4, $5)`,
           [iznosNum, imeUneseno, String(nalog.r_br), opisGotovine, PROIZVODNJA_PJ]
@@ -538,17 +544,21 @@ router.post('/:r_br/dodaj-ratu-avansa', async (req, res) => {
     } else {
       // nacin je bank kod (rfb/uni/mf/nlb/uni1) — strukturisan zapis, direktno u tu banku
       // (već je konkretno izabrana ovde).
-      await pool.query(
+      await client.query(
         `INSERT INTO banka_uplate (iznos, banka, izvor, nalog_r_br, kupac_naziv, objekt_naziv, komercijalista_ime, upisao_id, upisao_ime, napomena)
          VALUES ($1,$2,'Proizvodnja',$3,$4,$5,$6,$7,$8,$9)`,
         [iznosNum, nacin, String(nalog.r_br), nalog.narucilac || null, PROIZVODNJA_PJ, nalog.ugovorio || null,
          user.id, user.ime_prezime, `Avans (rata) - nalog #${nalog.r_br}`]
       );
     }
+    await client.query('COMMIT');
 
     res.json({ ok: true, avans: noviAvans, avans_opis: noviOpis, za_naplatu: +noviZaNaplatu.toFixed(2), naplaceno: autoNaplaceno });
   } catch (err) {
+    await client.query('ROLLBACK').catch(()=>{});
     res.status(500).json({ error: 'Greška: ' + err.message });
+  } finally {
+    client.release();
   }
 });
 
