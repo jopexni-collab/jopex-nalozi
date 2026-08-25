@@ -646,7 +646,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <button class="ce-tip-btn" style="color:var(--red);" id="btn-obrisi-lager" onclick="otvoriBrisanjeLagera()">🗑️ Obriši lager</button>
       <button class="ce-tip-btn" onclick="otvoriQrNalepnice()">🏷️ QR nalepnice (za štampu)</button>
     </div>
-    <div id="lager-lista-tabela-wrap" style="overflow:auto;margin-top:10px;max-height:calc(100vh - 220px);border:1px solid var(--border,#ddd);border-radius:8px;"></div>
+    <div id="lager-lista-tabela-wrap" style="overflow:auto;margin-top:10px;max-height:calc(100vh - 190px);border:1px solid var(--border,#ddd);border-radius:8px;"></div>
     <div id="lager-total" style="display:none" class="dnevni-total"></div>
   </div>
 
@@ -3234,11 +3234,11 @@ function renderLagerZaglavlje(){
   };
 
   wrap.innerHTML=`
-    <table style="width:100%;border-collapse:collapse;font-size:11px;">
+    <table style="width:100%;border-collapse:collapse;font-size:10.5px;line-height:1.25;">
       <thead>
         <tr style="background:#1f3864;color:#fff;">
           ${LAGER_KOLONE.map(c=>`
-            <th style="padding:4px 6px;text-align:${c.align};white-space:nowrap;font-size:10.5px;position:sticky;top:0;background:#1f3864;z-index:30;">
+            <th style="padding:3px 5px;text-align:${c.align};white-space:nowrap;font-size:10px;position:sticky;top:0;background:#1f3864;z-index:30;">
               <div style="display:flex;align-items:center;justify-content:${c.align==='right'?'flex-end':c.align==='center'?'center':'flex-start'};gap:2px;">
                 <span style="cursor:pointer;" onclick="lagerKlikNaslov('${c.k}')">${c.lbl}${strelica(c.k)}</span>${filterDugme(c.k)}
               </div>
@@ -3483,25 +3483,25 @@ function renderLagerRedovi(){
 
   tbody.innerHTML=prikaz.map((s,i)=>`
     <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
-      <td style="padding:3px 6px;">${esc(s.sifra)}</td>
-      <td style="padding:3px 6px;">${esc(s.naziv)}</td>
-      <td style="padding:3px 6px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
-      <td style="padding:3px 6px;text-align:center;color:#6b7a8d;">
+      <td style="padding:1px 5px;font-weight:700;">${esc(s.sifra)}</td>
+      <td style="padding:1px 5px;font-weight:700;">${esc(s.naziv)}</td>
+      <td style="padding:1px 5px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
+      <td style="padding:1px 5px;text-align:center;color:#6b7a8d;">
         ${s.debljina_cm??'—'}
         ${currentUser?.rola==='admin'?`<button onclick="otvoriIzmjenuDebljine(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.debljina_cm??'null'})" title="Promijeni debljinu" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
       </td>
-      <td style="padding:3px 6px;text-align:center;">
+      <td style="padding:1px 5px;text-align:center;">
         ${esc(s.jed_mjera)}
         ${currentUser?.rola==='admin'?`<button onclick="otvoriIzmjenuJedinice(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}','${esc(s.jed_mjera)}')" title="Promijeni jedinicu mjere" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
       </td>
-      <td style="padding:3px 6px;text-align:right;font-weight:700;background:${s.stanje<0?'#fce8e6':lagerBojaStanja(s.stanje)};color:${s.stanje<0?'#c0392b':'inherit'};text-decoration:underline;cursor:pointer;" onclick="otvoriRobnuKarticu(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')" title="${s.stanje<0?'⚠ Stanje je u MINUSU':''}">${s.stanje<0?'⚠ ':''}${s.stanje}</td>
-      <td style="padding:3px 6px;text-align:right;">
+      <td style="padding:1px 5px;text-align:right;font-weight:700;background:${s.stanje<0?'#fce8e6':lagerBojaStanja(s.stanje)};color:${s.stanje<0?'#c0392b':'inherit'};text-decoration:underline;cursor:pointer;" onclick="otvoriRobnuKarticu(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')" title="${s.stanje<0?'⚠ Stanje je u MINUSU':''}">${s.stanje<0?'⚠ ':''}${s.stanje}</td>
+      <td style="padding:1px 5px;text-align:right;font-weight:700;">
         ${lagerFmMoney(s.cijena)}
         ${(currentUser?.rola==='admin'||currentUser?.moze_cijene)?`<button onclick="otvoriNivelaciju(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.cijena})" title="Promijeni cijenu (nivelacija)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>
         <button onclick="otvoriAkciju(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}','${esc(s.sifra)}',${s.cijena})" title="Stavi na akciju (sniženje)" style="background:none;border:none;cursor:pointer;color:var(--red,#c0392b);font-size:11px;margin-left:1px;">🏷️</button>`:''}
       </td>
-      <td style="padding:3px 6px;text-align:right;font-weight:700;">${lagerFmMoney(s.ukupno)}</td>
-      <td style="padding:2px 5px;text-align:center;white-space:nowrap;">
+      <td style="padding:1px 5px;text-align:right;font-weight:700;">${lagerFmMoney(s.ukupno)}</td>
+      <td style="padding:1px 4px;text-align:center;white-space:nowrap;">
         <div onclick="otvoriKaruselSlika(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')" style="display:inline-flex;align-items:center;cursor:pointer;">
           ${/* U magacinu se umjesto sličice prikazuje IKONICA — red je time upola niži i
                 tabela stane mnogo kompaktnije. Klik i dalje otvara karusel sa slikama.
