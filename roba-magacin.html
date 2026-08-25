@@ -279,6 +279,29 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 .glavni-tab-btn{padding:9px 18px;border-radius:8px;border:1px solid var(--border,#dde3ea);background:#eef0f3;font-weight:700;font-size:12.5px;cursor:pointer;color:#6b7a8d;}
 .glavni-tab-btn.active{background:var(--blue);color:#fff;border-color:var(--blue);}
 
+
+/* ═══ EXCEL-STIL ISTICANJE (unakrsnica) ═══════════════════════════════════════════
+   Klik na celiju blago osvijetli CIJELI red i CIJELU kolonu — u sirokoj tabeli se lako
+   izgubi kojem redu podatak pripada. Koristi se box-shadow umjesto background-a, da se
+   ne pregazi postojeca boja celije (naizmjenicni redovi, crveno za minus i sl.). */
+#up-tabela tr.lager-red-aktivan > td,
+#lager-lista-tabela-wrap tr.lager-red-aktivan > td{
+  box-shadow: inset 0 0 0 9999px rgba(26,95,168,.07);
+}
+#up-tabela td.lager-kol-aktivna,
+#lager-lista-tabela-wrap td.lager-kol-aktivna{
+  box-shadow: inset 0 0 0 9999px rgba(26,95,168,.07);
+}
+/* Presjek (sama celija) — malo jace, sa okvirom */
+#up-tabela tr.lager-red-aktivan > td.lager-kol-aktivna,
+#lager-lista-tabela-wrap tr.lager-red-aktivan > td.lager-kol-aktivna{
+  box-shadow: inset 0 0 0 9999px rgba(26,95,168,.16);
+  outline:1.5px solid rgba(26,95,168,.55);
+  outline-offset:-1.5px;
+}
+/* Zaglavlje kolone u kojoj je klik */
+#up-tabela th.lager-kol-aktivna,
+#lager-lista-tabela-wrap th.lager-kol-aktivna{ background:#2d55a0 !important; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -3687,6 +3710,40 @@ function prebaciGlavniTabRM(tab){
 let uvozIstPopunjenSelect=false;
 
 
+
+
+/* Isticanje reda i kolone na klik — kao u Excelu. Radi preko delegiranja dogadjaja na
+   omotacu, pa nastavlja da radi i posle svakog ponovnog iscrtavanja tabele (filter,
+   sortiranje) bez ikakvog dodatnog povezivanja. */
+(function(){
+  // Isto ponasanje i u LAGER listi i u UPOREDNOM pregledu (ta tabela je jos sira).
+  ['lager-lista-tabela-wrap','up-tabela'].forEach(id => povezi(id));
+
+  function povezi(id){
+  const omot = document.getElementById(id);
+  if(!omot) return;
+  omot.addEventListener('click', e => {
+    const td = e.target.closest('td');
+    const tabela = omot.querySelector('table');
+    if(!tabela) return;
+
+    // Ocisti prethodno isticanje
+    tabela.querySelectorAll('.lager-red-aktivan').forEach(x=>x.classList.remove('lager-red-aktivan'));
+    tabela.querySelectorAll('.lager-kol-aktivna').forEach(x=>x.classList.remove('lager-kol-aktivna'));
+    if(!td || !tabela.contains(td)) return;
+
+    // Red
+    td.parentElement.classList.add('lager-red-aktivan');
+
+    // Kolona — po REDNOM BROJU celije, ukljucujuci i zaglavlje
+    const idx = [...td.parentElement.children].indexOf(td);
+    tabela.querySelectorAll('tr').forEach(tr=>{
+      const c = tr.children[idx];
+      if(c) c.classList.add('lager-kol-aktivna');
+    });
+  });
+  }
+})();
 
 /* ═══ AKCIJE (snizenja) ═══════════════════════════════════════════════════════════
    Akcija se cuva odvojeno od cijene na lageru — redovna cijena ostaje, pa se na nalepnici
