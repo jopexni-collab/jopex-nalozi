@@ -2485,7 +2485,9 @@ let uvsgrupaFPKolona=null, uvsgrupaFPPretraga='', uvsgrupaFPDraft=new Set(), uvs
 
 function uvsgrupaDistinct(k){
   const sve=uvsgrupaRezultati.map(a=>uvsgrupaVrijednost(a,k));
-  const neprazne=[...new Set(sve.filter(v=>v!=null&&v!==''))].sort((x,y)=>String(x).localeCompare(String(y),'sr-Latn-BA'));
+  // {numeric:true} — poredi brojeve u tekstu brojcano ("sifra 10" poslije "sifra 9")
+  const neprazne=[...new Set(sve.filter(v=>v!=null&&v!==''))]
+    .sort((x,y)=>String(x).localeCompare(String(y),'sr-Latn-BA',{numeric:true}));
   return sve.some(v=>v==null||v==='') ? [...neprazne,''] : neprazne;
 }
 
@@ -3293,8 +3295,15 @@ function lagerRedoviBezJedneKolone(izuzKolona){
 function lagerDistinctVrijednosti(k){
   const izvor=lagerRedoviBezJedneKolone(k); // kaskadno — suženo prema OSTALIM filterima
   const svePop=izvor.map(s=>lagerVrijednostZaKolonu(s,k));
-  const nepraznih=[...new Set(svePop.filter(v=>v!=null&&v!==''))]
-    .sort((a,b)=>typeof a==='number'?a-b:String(a).localeCompare(String(b),'sr-Latn-BA'));
+  /* Sortiranje: ranije se gledao SAMO tip prvog elementa (typeof a), pa su brojevi koji
+     iz baze stignu kao TEKST bili poredani abecedno — "1.5, 10, 2, 20, 3, 8" umjesto
+     "1.5, 2, 3, 8, 10, 20". Sada se provjerava da li su SVE vrijednosti brojevi, pa se
+     tek onda poredi brojcano. */
+  const jedinstvene=[...new Set(svePop.filter(v=>v!=null&&v!==''))];
+  const sveSuBrojevi = jedinstvene.length>0 && jedinstvene.every(v=>!isNaN(parseFloat(v)) && isFinite(v));
+  const nepraznih = jedinstvene.sort((a,b)=>
+    sveSuBrojevi ? parseFloat(a)-parseFloat(b)
+                 : String(a).localeCompare(String(b),'sr-Latn-BA',{numeric:true}));
   // Ako postoji BAR JEDAN red sa praznom vrijednosti u ovoj koloni, dodaj eksplicitnu ""
   // opciju NA KRAJ liste — inače artikli bez imena/debljine potpuno nestaju iz filtera i
   // nema kako da se isključe/uključe.
@@ -4753,8 +4762,10 @@ function primijeniKretanjeFiltere(){
   if(kretanjeSortKolona){
     filtrirano=[...filtrirano].sort((a,b)=>{
       const va=kretanjeVrijednostZaSort(a,kretanjeSortKolona), vb=kretanjeVrijednostZaSort(b,kretanjeSortKolona);
-      if(typeof va==='string') return va.localeCompare(vb)*kretanjeSortSmjer;
-      return (va-vb)*kretanjeSortSmjer;
+      // Ako su OBJE vrijednosti brojevi (i kad stignu kao tekst), poredi brojcano.
+      const na=parseFloat(va), nb=parseFloat(vb);
+      if(!isNaN(na) && !isNaN(nb)) return (na-nb)*kretanjeSortSmjer;
+      return String(va??'').localeCompare(String(vb??''),'sr-Latn-BA',{numeric:true})*kretanjeSortSmjer;
     });
   }
 
