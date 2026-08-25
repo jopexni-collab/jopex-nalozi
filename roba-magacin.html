@@ -3827,6 +3827,12 @@ async function sacuvajAkciju(){
 }
 
 /* ── Spisak aktivnih akcija ── */
+/* ── Spisak akcija sa izborom za stampu ──
+   Akcija moze biti vise nego sto treba odstampati (npr. dio je za drugu PJ, dio je vec
+   odstampan). Zato se cekiraju one koje idu na stampu — i onda se sve odabrane otvore
+   odjednom, svaka na svojoj A4 strani. */
+let akSve = [];
+
 async function akUcitajSpisak(){
   const cont = document.getElementById('ak-spisak');
   if(!cont) return;
@@ -3835,39 +3841,87 @@ async function akUcitajSpisak(){
     const r = await fetch(`${API}/api/roba/akcije`);
     const d = await r.json();
     if(!r.ok) throw new Error(d.error||'Greška.');
-    if(!d.length){ cont.innerHTML='<div style="padding:12px;color:#8b96a5;font-size:12.5px;">Trenutno nema aktivnih akcija.</div>'; return; }
-    cont.innerHTML = `
-      <div style="text-align:right;margin-bottom:8px;">
-        <a href="akcija-nalepnica.html" target="_blank" rel="noopener" class="ce-tip-btn" style="text-decoration:none;">🖨️ Štampaj SVE nalepnice</a>
-      </div>
-      <table style="width:100%;border-collapse:collapse;font-size:12px;">
-        <thead><tr style="background:#1f3864;color:#fff;">
-          <th style="padding:6px 8px;text-align:left;">Artikal</th>
-          <th style="padding:6px 8px;text-align:right;">Redovna</th>
-          <th style="padding:6px 8px;text-align:right;">Akcijska</th>
-          <th style="padding:6px 8px;text-align:center;">Popust</th>
-          <th style="padding:6px 8px;text-align:left;">Važi do</th>
-          <th style="padding:6px 8px;"></th>
-        </tr></thead>
-        <tbody>${d.map((a,i)=>`
-          <tr style="background:${i%2?'#f7f8fa':'#fff'};border-bottom:1px solid #eef0f3;">
-            <td style="padding:5px 8px;">
-              <div style="font-weight:600;">${esc(a.naziv)}</div>
-              <div style="font-size:10px;color:#8b96a5;">${esc(a.sifra)}${a.objekt_naziv?' · '+esc(a.objekt_naziv):''}</div>
-            </td>
-            <td style="padding:5px 8px;text-align:right;color:#8b96a5;text-decoration:line-through;">${lagerFmMoney(a.redovna_cijena)}</td>
-            <td style="padding:5px 8px;text-align:right;font-weight:800;color:var(--red,#c0392b);">${lagerFmMoney(a.akcijska_cijena)}</td>
-            <td style="padding:5px 8px;text-align:center;"><span style="background:var(--red,#c0392b);color:#fff;padding:1px 7px;border-radius:9px;font-size:10.5px;font-weight:800;">−${a.popust_posto}%</span></td>
-            <td style="padding:5px 8px;font-size:11.5px;">${a.vazi_do ? new Date(a.vazi_do).toLocaleDateString('bs-BA') : 'do zaliha'}</td>
-            <td style="padding:5px 8px;text-align:right;white-space:nowrap;">
-              <a href="akcija-nalepnica.html?id=${a.id}" target="_blank" rel="noopener" title="Štampaj nalepnicu" style="text-decoration:none;font-size:15px;">🖨️</a>
-              <button onclick="akZavrsi(${a.id})" title="Završi akciju" style="background:none;border:none;cursor:pointer;font-size:14px;margin-left:4px;">✕</button>
-            </td>
-          </tr>`).join('')}</tbody>
-      </table>`;
+    akSve = Array.isArray(d) ? d : [];
+    if(!akSve.length){ cont.innerHTML='<div style="padding:12px;color:#8b96a5;font-size:12.5px;">Trenutno nema aktivnih akcija.</div>'; return; }
+    akRender();
   }catch(e){
     cont.innerHTML = `<div style="padding:12px;color:var(--red);font-size:12.5px;">✗ ${esc(e.message)}</div>`;
   }
+}
+
+function akRender(){
+  const cont = document.getElementById('ak-spisak');
+  const q = (document.getElementById('ak-pretraga')?.value||'').toLowerCase().trim();
+  const filPJ = document.getElementById('ak-fil-pj')?.value || '';
+  const prikaz = akSve.filter(a =>
+    (!q || String(a.sifra).toLowerCase().includes(q) || String(a.naziv).toLowerCase().includes(q))
+    && (!filPJ || String(a.objekt_naziv||'') === filPJ)
+  );
+  // Cekirani izbor se PAMTI dok se pretrazuje
+  const vecCekirani = new Set([...document.querySelectorAll('#ak-tbody input:checked')].map(i=>i.value));
+  const pjSve = [...new Set(akSve.map(a=>a.objekt_naziv).filter(Boolean))].sort();
+
+  cont.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+      <input type="text" id="ak-pretraga" value="${esc(q)}" placeholder="🔍 Šifra ili naziv..." oninput="akRender()" style="flex:1;min-width:150px;padding:5px 9px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12px;">
+      <select id="ak-fil-pj" onchange="akRender()" style="padding:5px 9px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12px;">
+        <option value="">— svi objekti —</option>
+        ${pjSve.map(p=>`<option value="${esc(p)}" ${filPJ===p?'selected':''}>${esc(p)}</option>`).join('')}
+      </select>
+      <button type="button" class="ce-tip-btn" style="font-size:11.5px;" onclick="akCekirajSve(true)">Izaberi prikazane</button>
+      <button type="button" class="ce-tip-btn" style="font-size:11.5px;" onclick="akCekirajSve(false)">Poništi</button>
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+      <button type="button" onclick="akStampajIzabrane()" style="padding:7px 14px;border:none;background:var(--red,#c0392b);color:#fff;border-radius:7px;cursor:pointer;font-size:12.5px;font-weight:700;">🖨️ Štampaj izabrane (<span id="ak-broj">0</span>)</button>
+      <span style="font-size:11.5px;color:#8b96a5;">${prikaz.length} od ${akSve.length} akcija</span>
+    </div>
+
+    <div style="max-height:calc(100vh - 330px);overflow:auto;border:1px solid var(--border,#ddd);border-radius:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:10.5px;line-height:1.25;">
+        <thead><tr style="background:#1f3864;color:#fff;">
+          <th style="padding:3px 5px;width:26px;text-align:center;position:sticky;top:0;background:#1f3864;"><input type="checkbox" onchange="akCekirajSve(this.checked)"></th>
+          <th style="padding:3px 5px;text-align:left;font-size:10px;position:sticky;top:0;background:#1f3864;">Artikal</th>
+          <th style="padding:3px 5px;text-align:right;font-size:10px;position:sticky;top:0;background:#1f3864;">Redovna</th>
+          <th style="padding:3px 5px;text-align:right;font-size:10px;position:sticky;top:0;background:#1f3864;">Akcijska</th>
+          <th style="padding:3px 5px;text-align:center;font-size:10px;position:sticky;top:0;background:#1f3864;">Popust</th>
+          <th style="padding:3px 5px;text-align:left;font-size:10px;position:sticky;top:0;background:#1f3864;">Važi do</th>
+          <th style="padding:3px 5px;position:sticky;top:0;background:#1f3864;"></th>
+        </tr></thead>
+        <tbody id="ak-tbody">${prikaz.map((a,i)=>`
+          <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
+            <td style="padding:1px 5px;text-align:center;"><input type="checkbox" value="${a.id}" ${vecCekirani.has(String(a.id))?'checked':''} onchange="akOsvjeziBroj()"></td>
+            <td style="padding:1px 5px;"><b>${esc(a.sifra)}</b> <span style="color:#8b96a5;font-weight:400;">${esc(a.naziv)}</span>${a.objekt_naziv?`<span style="color:#c3c9d1;"> · ${esc(a.objekt_naziv)}</span>`:''}</td>
+            <td style="padding:1px 5px;text-align:right;color:#8b96a5;text-decoration:line-through;">${lagerFmMoney(a.redovna_cijena)}</td>
+            <td style="padding:1px 5px;text-align:right;font-weight:800;color:var(--red,#c0392b);">${lagerFmMoney(a.akcijska_cijena)}</td>
+            <td style="padding:1px 5px;text-align:center;"><span style="background:var(--red,#c0392b);color:#fff;padding:0 6px;border-radius:8px;font-size:9.5px;font-weight:800;">−${a.popust_posto}%</span></td>
+            <td style="padding:1px 5px;white-space:nowrap;">${a.vazi_do ? new Date(a.vazi_do).toLocaleDateString('bs-BA') : 'do zaliha'}</td>
+            <td style="padding:1px 5px;text-align:right;white-space:nowrap;">
+              <a href="akcija-nalepnica.html?id=${a.id}" target="_blank" rel="noopener" title="Štampaj samo ovu" style="text-decoration:none;font-size:13px;">🖨️</a>
+              <button onclick="akZavrsi(${a.id})" title="Završi akciju" style="background:none;border:none;cursor:pointer;font-size:12px;margin-left:3px;">✕</button>
+            </td>
+          </tr>`).join('') || '<tr><td colspan="7" style="padding:12px;text-align:center;color:#8b96a5;">Nema rezultata.</td></tr>'}</tbody>
+      </table>
+    </div>`;
+  akOsvjeziBroj();
+}
+
+function akCekirajSve(oznaceno){
+  document.querySelectorAll('#ak-tbody input[type=checkbox]').forEach(i=>i.checked=oznaceno);
+  akOsvjeziBroj();
+}
+
+function akOsvjeziBroj(){
+  const n = document.querySelectorAll('#ak-tbody input:checked').length;
+  const el = document.getElementById('ak-broj');
+  if(el) el.textContent = n;
+}
+
+function akStampajIzabrane(){
+  const ids = [...document.querySelectorAll('#ak-tbody input:checked')].map(i=>i.value);
+  if(!ids.length){ alert('Čekiraj bar jednu akciju za štampu.'); return; }
+  // Sve izabrane u JEDNOM dokumentu — svaka na svojoj A4 strani
+  window.open(`akcija-nalepnica.html?id=${ids.join(',')}`, '_blank');
 }
 
 async function akZavrsi(id){
