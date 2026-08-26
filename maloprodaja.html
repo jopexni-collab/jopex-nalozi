@@ -402,8 +402,8 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <button type="button" class="ce-tip-btn" data-du-tip="drugo" onclick="postaviTipUsluge('drugo')">🔧 Drugo</button>
     </div>
     <input type="text" id="du-naziv" placeholder="Naziv (opciono, podrazumevano po tipu)..." style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:8px;box-sizing:border-box;">
-    <input type="number" id="du-kolicina" placeholder="Količina (npr. 1, ili 3 za 3 putovanja)..." value="1" min="1" step="1" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:8px;box-sizing:border-box;">
-    <input type="number" id="du-cijena" placeholder="Cijena po komadu..." min="0" step="0.01" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:12px;box-sizing:border-box;">
+    <input type="text" inputmode="decimal" id="du-kolicina" placeholder="Količina (npr. 1, ili 3 za 3 putovanja)..." value="1" min="1" step="1" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:8px;box-sizing:border-box;">
+    <input type="text" inputmode="decimal" id="du-cijena" placeholder="Cijena po komadu..." min="0" step="0.01" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:12px;box-sizing:border-box;">
     <div style="display:flex;gap:8px;">
       <button class="ce-tip-btn" style="flex:1;" onclick="document.getElementById('modal-dodaj-uslugu').style.display='none'">Otkaži</button>
       <button class="ce-tip-btn" style="flex:1;background:var(--blue,#1a5fa8);color:#fff;" onclick="potvrdiDodajUslugu()">✓ Dodaj u korpu</button>
@@ -450,7 +450,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
     <div class="kupac-fld">
       <label id="isp-iznos-lbl">Iznos (KM)</label>
-      <input type="number" id="isp-iznos" step="0.01" min="0.01" placeholder="0.00">
+      <input type="text" inputmode="decimal" id="isp-iznos" step="0.01" min="0.01" placeholder="0.00">
     </div>
     <button class="btn-generisi" onclick="pripremiIsplatu()">Dalje →</button>
     <div id="isplata-greska" style="display:none;background:#fce8e6;color:var(--red);border-radius:8px;padding:10px 12px;margin-top:8px;font-size:12.5px;font-weight:600;"></div>
@@ -480,8 +480,8 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <div class="uzorak-hint">Za dugove koji su nastali PRIJE ovog sistema (npr. iz Excel/papirne evidencije) — ne dira stanje robe, samo evidentira dug.</div>
     <select id="rd-objekat" onchange="azurirajRucniDugValutu()"><option value="">— izaberi prodajni objekat —</option></select>
     <input type="text" id="rd-kupac" placeholder="Ime i prezime / naziv kupca *">
-    <input type="number" id="rd-ukupno" step="0.01" min="0.01" placeholder="Ukupan iznos duga (KM) *">
-    <input type="number" id="rd-placeno" step="0.01" min="0" placeholder="Već plaćeno do sad (KM, 0 ako ništa)">
+    <input type="text" inputmode="decimal" id="rd-ukupno" step="0.01" min="0.01" placeholder="Ukupan iznos duga (KM) *">
+    <input type="text" inputmode="decimal" id="rd-placeno" step="0.01" min="0" placeholder="Već plaćeno do sad (KM, 0 ako ništa)">
     <input type="date" id="rd-datum" placeholder="Datum nastanka duga (opciono)">
     <input type="text" id="rd-napomena" placeholder="Napomena (npr. koji nalog/otpremnica, opis robe...)">
     <button class="btn-import" onclick="unesiRucniDug()">+ Unesi dug</button>
@@ -541,7 +541,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
     <div class="kupac-fld">
       <label id="upl-iznos-lbl">Iznos uplate (KM)</label>
-      <input type="number" id="upl-iznos" step="0.01" min="0.01" placeholder="0.00">
+      <input type="text" inputmode="decimal" id="upl-iznos" step="0.01" min="0.01" placeholder="0.00">
     </div>
     <input type="text" id="upl-napomena" placeholder="Napomena (opciono)">
     <button class="btn-generisi" onclick="pripremiUplatu()">Dalje →</button>
@@ -580,7 +580,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <div class="ov-iznos" id="nd-duguje" style="color:var(--red);">0.00 KM</div>
     <div class="ov-kupac-fld">
       <label>Iznos koji SADA plaća</label>
-      <input type="number" id="nd-iznos" step="0.01" min="0.01" placeholder="0.00">
+      <input type="text" inputmode="decimal" id="nd-iznos" step="0.01" min="0.01" placeholder="0.00">
     </div>
     <div class="kupac-fld" style="width:100%;max-width:420px;">
       <label>Izvor naplate</label>
@@ -787,7 +787,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <div id="das-cijena-blok">
         <div id="das-cijena-podrazumevano-mjesto">
           <label>Cijena (po jed.)</label>
-          <input type="number" id="das-kom-cijena" step="0.01" min="0" oninput="dasCijenaPromijenjena()" style="font-weight:700;">
+          <input type="text" inputmode="decimal" id="das-kom-cijena" step="0.01" min="0" oninput="dasCijenaPromijenjena()" style="font-weight:700;">
         </div>
         <div class="cijena-edit" id="das-kom-cijena-edit" style="display:none;">
           <div class="ce-preview" id="das-ce-preview"></div>
@@ -803,7 +803,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         <div style="display:flex;gap:8px;align-items:flex-end;">
           <div style="flex:1;">
             <label>Količina (kom)</label>
-            <input type="number" id="das-kom" step="0.001" min="0.001" placeholder="npr. 2 ili 2.5">
+            <input type="text" inputmode="decimal" id="das-kom" step="0.001" min="0.001" placeholder="npr. 2 ili 2.5">
           </div>
           <div style="padding-bottom:11px;font-weight:700;font-size:16px;color:#8b96a5;">×</div>
           <div id="das-kom-cijena-slot" style="flex:1;"></div>
@@ -819,7 +819,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
           <div style="display:flex;gap:8px;align-items:flex-end;">
             <div style="flex:1;">
               <label>Površina (m²)</label>
-              <input type="number" id="das-m2-vr" step="0.01" min="0.01" placeholder="npr. 1.68">
+              <input type="text" inputmode="decimal" id="das-m2-vr" step="0.01" min="0.01" placeholder="npr. 1.68">
             </div>
             <div style="padding-bottom:11px;font-weight:700;font-size:16px;color:#8b96a5;">×</div>
             <div id="das-m2-cijena-slot" style="flex:1;"></div>
@@ -827,11 +827,11 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         </div>
         <div id="das-m2-racunaj-blok" style="display:none">
           <label>Dužina (cm)</label>
-          <input type="number" id="das-m2-duzina" step="0.5" min="0" oninput="dasPreview()">
+          <input type="text" inputmode="decimal" id="das-m2-duzina" step="0.5" min="0" oninput="dasPreview()">
           <label>Visina (cm)</label>
-          <input type="number" id="das-m2-visina" step="0.5" min="0" oninput="dasPreview()">
+          <input type="text" inputmode="decimal" id="das-m2-visina" step="0.5" min="0" oninput="dasPreview()">
           <label>Broj komada tog formata</label>
-          <input type="number" id="das-m2-komada" step="1" min="1" value="1" oninput="dasPreview()">
+          <input type="text" inputmode="decimal" id="das-m2-komada" step="1" min="1" value="1" oninput="dasPreview()">
           <div class="das-preview" id="das-m2-preview"></div>
           <button type="button" class="btn-dodaj-dimenziju" onclick="dodajJosDimenzija()">+ Dodaj novu dimenziju istog artikla</button>
         </div>
@@ -846,7 +846,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
           <div style="display:flex;gap:8px;align-items:flex-end;">
             <div style="flex:1;">
               <label>Zapremina (m³)</label>
-              <input type="number" id="das-m3-vr" step="0.001" min="0.001" placeholder="npr. 0.084">
+              <input type="text" inputmode="decimal" id="das-m3-vr" step="0.001" min="0.001" placeholder="npr. 0.084">
             </div>
             <div style="padding-bottom:11px;font-weight:700;font-size:16px;color:#8b96a5;">×</div>
             <div id="das-m3-cijena-slot" style="flex:1;"></div>
@@ -854,13 +854,13 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         </div>
         <div id="das-m3-racunaj-blok" style="display:none">
           <label>Dužina (cm)</label>
-          <input type="number" id="das-m3-duzina" step="0.5" min="0" oninput="dasPreview()">
+          <input type="text" inputmode="decimal" id="das-m3-duzina" step="0.5" min="0" oninput="dasPreview()">
           <label>Visina (cm)</label>
-          <input type="number" id="das-m3-visina" step="0.5" min="0" oninput="dasPreview()">
+          <input type="text" inputmode="decimal" id="das-m3-visina" step="0.5" min="0" oninput="dasPreview()">
           <label>Debljina (cm)</label>
-          <input type="number" id="das-m3-debljina" step="0.5" min="0" oninput="dasPreview()">
+          <input type="text" inputmode="decimal" id="das-m3-debljina" step="0.5" min="0" oninput="dasPreview()">
           <label>Broj komada tog formata</label>
-          <input type="number" id="das-m3-komada" step="1" min="1" value="1" oninput="dasPreview()">
+          <input type="text" inputmode="decimal" id="das-m3-komada" step="1" min="1" value="1" oninput="dasPreview()">
           <div class="das-preview" id="das-m3-preview"></div>
           <button type="button" class="btn-dodaj-dimenziju" onclick="dodajJosDimenzija()">+ Dodaj novu dimenziju istog artikla</button>
         </div>
@@ -901,14 +901,14 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       </div>
       <div id="ov-djelimicno-fld" style="display:none;margin-top:8px;">
         <label id="ov-djelimicno-lbl">Iznos koji kupac plaća SADA (KM)</label>
-        <input type="number" id="ov-iznos-djelimicno" step="0.01" min="0.01" placeholder="0.00" oninput="azurirajPreostaliDug()">
+        <input type="text" inputmode="decimal" id="ov-iznos-djelimicno" step="0.01" min="0.01" placeholder="0.00" oninput="azurirajPreostaliDug()">
         <div id="ov-preostali-dug" style="font-size:12px;color:var(--red);font-weight:700;margin-top:4px;"></div>
       </div>
       <div id="ov-mesovito-fld" style="display:none;margin-top:8px;background:#f7f8fa;border-radius:8px;padding:10px;">
         <label>Iznos u gotovini SADA (KM)</label>
-        <input type="number" id="ov-iznos-gotovina-mes" step="0.01" min="0" placeholder="0.00" oninput="azurirajPreostaliDug()">
+        <input type="text" inputmode="decimal" id="ov-iznos-gotovina-mes" step="0.01" min="0" placeholder="0.00" oninput="azurirajPreostaliDug()">
         <label style="margin-top:8px;">Iznos na banku SADA (KM)</label>
-        <input type="number" id="ov-iznos-banka-mes" step="0.01" min="0" placeholder="0.00" oninput="azurirajPreostaliDug()">
+        <input type="text" inputmode="decimal" id="ov-iznos-banka-mes" step="0.01" min="0" placeholder="0.00" oninput="azurirajPreostaliDug()">
         <div class="ce-row" style="margin-top:6px;">
           <button type="button" class="ce-tip-btn" data-banka-mes="rfb" onclick="postaviBankaMesovito('rfb')">rfb</button>
           <button type="button" class="ce-tip-btn" data-banka-mes="uni" onclick="postaviBankaMesovito('uni')">uni</button>
@@ -929,7 +929,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         </div>
         <div id="ov-banka-iznos-fld" style="display:none;margin-top:8px;">
           <label>Iznos koji ide na izabranu banku SADA (KM)</label>
-          <input type="number" id="ov-iznos-banka" step="0.01" min="0.01" placeholder="0.00" oninput="azurirajPreostaliDug()">
+          <input type="text" inputmode="decimal" id="ov-iznos-banka" step="0.01" min="0.01" placeholder="0.00" oninput="azurirajPreostaliDug()">
           <div id="ov-preostali-dug-banka" style="font-size:12px;color:var(--red);font-weight:700;margin-top:4px;"></div>
         </div>
         <div id="ov-vp-napomena" style="display:none;font-size:11.5px;color:var(--red);margin-top:8px;line-height:1.4;">
@@ -990,6 +990,21 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 </div>
 
 <script>
+/* ═══ UNOS BROJEVA — zarez kao decimala ═══════════════════════════════════════════
+   PRAVILO: ZAREZ je uvijek decimala, TACKA razdvaja hiljade (1.234,56).
+   Izuzetak radi kompatibilnosti: ako zareza NEMA, tacka se cita kao decimala — svi
+   postojeci podaci i copy/paste iz Excela su u tom obliku.
+   Bez ovoga broj("17,55") vraca 17 — tiho se gubi 55 para. */
+function broj(v){
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/\s/g, '').replace(/[^\d.,-]/g, '');
+  if (!s) return 0;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(/,/g, '.');
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+
 const API='';
 let isAdmin=false, currentUser=null;
 let korpe=[];           // [{id, kupac, stavke}] — vise istovremenih korpi (npr. dva kupca u isto vrijeme)
@@ -1120,7 +1135,7 @@ function pozicionirajKorpaTabove(){
 window.addEventListener('resize', pozicionirajKorpaTabove);
 
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fm(n){return(broj(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
 // Prikaz iznosa u NATIVNOJ valuti trenutno izabranog PJ — KM za većinu, ali ako je PJ
 // podešen na EUR, prikazuje i KM-ekvivalent u zagradi (fiksni kurs 1€=1,95KM, samo za
 // prikaz — stvarno sačuvana vrijednost NIKAD se ne konvertuje/mijenja).
@@ -1315,7 +1330,7 @@ async function otvoriDeepLinkOtpremnicuAkoPostoji(){
       const r=await fetch(`${API}/api/otpremnice/${naplatiId}`);
       if(!r.ok){ alert('Otpremnica nije pronađena ili nemate pristup.'); return; }
       const otp=await r.json();
-      otp.duguje=+(parseFloat(otp.ukupan_iznos)-parseFloat(otp.iznos_placeno)).toFixed(2);
+      otp.duguje=+(broj(otp.ukupan_iznos)-broj(otp.iznos_placeno)).toFixed(2);
       if(otp.duguje<=0){ alert('Ova otpremnica je već u potpunosti plaćena.'); return; }
       document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
       document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -1460,7 +1475,7 @@ async function trazi(q){
       return;
     }
     list.innerHTML=rows.map(a=>{
-      const stanje=parseFloat(a.stanje);
+      const stanje=broj(a.stanje);
       let chip='chip-ok', txt=stanje+' '+esc(a.jed_mjera);
       if(stanje<0){chip='chip-nema';txt='⚠ MINUS: '+stanje+' '+esc(a.jed_mjera);} // negativno se SVESNO pokazuje, ne sakriva kao "Nema na stanju"
       else if(stanje===0){chip='chip-nema';txt='Nema na stanju';}
@@ -1662,7 +1677,7 @@ function pripremiIsplatu(){
   if(!trenutniObjekat){alert('Nedostaje izabrani prodajni objekat.');return;}
   const razlog=document.getElementById('isp-razlog').value;
   const napomena=document.getElementById('isp-napomena').value.trim();
-  const iznos=parseFloat(document.getElementById('isp-iznos').value);
+  const iznos=broj(document.getElementById('isp-iznos').value);
 
   if(!razlog){greskaDiv.textContent='⚠ Izaberite razlog isplate.';greskaDiv.style.display='block';return;}
   if(razlog==='povrat_komitentu' && !isplataKomitent){
@@ -1746,7 +1761,7 @@ let prLagerPodaci=[];
 let akTrenutni = null;
 
 function otvoriAkciju(id, naziv, sifra, cijena){
-  akTrenutni = { id, naziv, sifra, cijena: parseFloat(cijena) || 0 };
+  akTrenutni = { id, naziv, sifra, cijena: broj(cijena) || 0 };
   document.getElementById('ak-artikal').textContent = naziv;
   document.getElementById('ak-redovna').innerHTML =
     `Šifra ${esc(sifra)} · redovna cijena <b>${fmMoney(akTrenutni.cijena)}</b>`;
@@ -1771,7 +1786,7 @@ function otvoriAkciju(id, naziv, sifra, cijena){
 // Ziva racunica popusta — odmah se vidi koliko je snizenje
 function akRacunajPopust(){
   const el = document.getElementById('ak-popust');
-  const nova = parseFloat(document.getElementById('ak-cijena').value);
+  const nova = broj(document.getElementById('ak-cijena').value);
   if(!nova || !akTrenutni || nova <= 0){ el.textContent=''; return; }
   if(nova >= akTrenutni.cijena){
     el.style.color = 'var(--red,#c0392b)';
@@ -1786,7 +1801,7 @@ function akRacunajPopust(){
 
 async function sacuvajAkciju(){
   const greska = document.getElementById('ak-greska');
-  const nova = parseFloat(document.getElementById('ak-cijena').value);
+  const nova = broj(document.getElementById('ak-cijena').value);
   if(!nova || nova <= 0){ greska.style.display='block'; greska.textContent='Unesi akcijsku cijenu.'; return; }
   if(nova >= akTrenutni.cijena){
     greska.style.display='block';
@@ -1871,7 +1886,7 @@ function prLagerFiltrirajISortiraj(){
   const brojcano=kolona==='sifra'||kolona==='debljina'||kolona==='stanje'||kolona==='cijena';
   prikaz=[...prikaz].sort((a,b)=>{
     let va=prLagerVrijednost(a,kolona), vb=prLagerVrijednost(b,kolona);
-    let cmp=brojcano?(parseFloat(va)||0)-(parseFloat(vb)||0):String(va??'').localeCompare(String(vb??''),'sr-Latn-BA');
+    let cmp=brojcano?(broj(va)||0)-(broj(vb)||0):String(va??'').localeCompare(String(vb??''),'sr-Latn-BA');
     return smjer==='asc'?cmp:-cmp;
   });
   return prikaz;
@@ -2326,7 +2341,7 @@ async function ucitajIsplateListu(tiho){
         ${!o.stornirano?`<button onclick="stornirajIsplatu(${o.id})" style="width:100%;margin-top:8px;padding:7px;background:none;border:1px solid var(--red);color:var(--red);border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;">✕ Storniraj (greška — dupli klik i sl.)</button>`:''}
       </div>
     `).join('');
-    const ukupno=rows.reduce((s,o)=>s+parseFloat(o.iznos||0),0);
+    const ukupno=rows.reduce((s,o)=>s+broj(o.iznos||0),0);
     totalDiv.style.display='block';
     totalDiv.innerHTML=`− ${fmMoney(ukupno)}<span class="cnt">${rows.length} isplat${rows.length===1?'a':'e'} danas</span>`;
   }catch(e){
@@ -2410,7 +2425,7 @@ async function ucitajDugovanja(tiho){
         }
       </div>
     `).join('');
-    const ukupnoDuguje=rows.reduce((s,o)=>s+parseFloat(o.duguje||0),0);
+    const ukupnoDuguje=rows.reduce((s,o)=>s+broj(o.duguje||0),0);
     totalDiv.style.display='block';
     totalDiv.innerHTML=`${fmMoney(ukupnoDuguje)}<span class="cnt">${rows.length} otpremnic${rows.length===1?'a':rows.length<5?'e':'a'} sa dugom</span>`;
   }catch(e){
@@ -2539,11 +2554,11 @@ function promijeniIzvorNaplateDuga(){
 }
 
 async function potvrdiNaplatuDuga(){
-  const iznos=parseFloat(document.getElementById('nd-iznos').value);
+  const iznos=broj(document.getElementById('nd-iznos').value);
   const izvor=document.getElementById('nd-izvor').value;
   const nacinBanka=document.getElementById('nd-nacin-banka').value;
   if(!iznos||iznos<=0){alert('Unesite ispravan iznos.');return;}
-  if(izvor!=='avans' && iznos>parseFloat(dugZaNaplatu.duguje)){
+  if(izvor!=='avans' && iznos>broj(dugZaNaplatu.duguje)){
     if(!confirm(`Iznos (${fmMoney(iznos)}) je veći od trenutnog duga (${fmMoney(dugZaNaplatu.duguje)}). Višak će postati avans kupca. Nastaviti?`)) return;
   }
   const btn=document.getElementById('nd-btn-potvrdi');
@@ -2620,8 +2635,8 @@ async function unesiRucniDug(){
   const msg=document.getElementById('rucni-dug-msg');
   const objektId=document.getElementById('rd-objekat').value;
   const kupac=document.getElementById('rd-kupac').value.trim();
-  const ukupno=parseFloat(document.getElementById('rd-ukupno').value);
-  const placeno=parseFloat(document.getElementById('rd-placeno').value)||0;
+  const ukupno=broj(document.getElementById('rd-ukupno').value);
+  const placeno=broj(document.getElementById('rd-placeno').value)||0;
   const datum=document.getElementById('rd-datum').value||null;
   const napomena=document.getElementById('rd-napomena').value.trim()||null;
 
@@ -2697,12 +2712,12 @@ let dasArtikal=null, dasJedinica='kom', dasM2mode='direktno', dasM3mode='direktn
 
 function dodajUKosaricu(artikal){
   if(danZakljucan){ alert('🔒 Zaključao/la si današnji dan. Otključaj (dugme gore) da nastaviš sa prodajom.'); return; }
-  if(parseFloat(artikal.stanje)<=0){alert('Artikal "'+artikal.naziv+'" nema stanja.');return;}
+  if(broj(artikal.stanje)<=0){alert('Artikal "'+artikal.naziv+'" nema stanja.');return;}
   dasArtikal=artikal;
   document.getElementById('das-naziv').textContent=artikal.naziv;
   document.getElementById('das-sifra').textContent='Šifra: '+artikal.sifra+' · Zadana cijena: '+fmMoney(artikal.cijena)+' po '+esc(artikal.jed_mjera)+' · Stanje: '+artikal.stanje+' '+esc(artikal.jed_mjera);
   document.getElementById('das-kom').value='';
-  document.getElementById('das-kom-cijena').value=parseFloat(artikal.cijena).toFixed(2);
+  document.getElementById('das-kom-cijena').value=broj(artikal.cijena).toFixed(2);
   document.getElementById('das-kom-cijena-edit').style.display='none';
   dasOverridePodaci=null;
   document.getElementById('das-m2-vr').value='';
@@ -2732,8 +2747,8 @@ let dasOverridePodaci=null;
 
 function dasCijenaPromijenjena(){
   if(!dasArtikal) return;
-  const uneseno=parseFloat(document.getElementById('das-kom-cijena').value);
-  const zadana=parseFloat(dasArtikal.cijena);
+  const uneseno=broj(document.getElementById('das-kom-cijena').value);
+  const zadana=broj(dasArtikal.cijena);
   const blok=document.getElementById('das-kom-cijena-edit');
   if(isNaN(uneseno) || Math.abs(uneseno-zadana)<0.005){
     // Ista kao zadana (ili prazno) — nema odstupanja, sakrij blok.
@@ -2757,7 +2772,7 @@ function dasCijenaPromijenjena(){
 
 function dasOtkaziOdstupanje(){
   // Vrati cijenu na zadanu i zatvori blok — odustao od odstupanja.
-  document.getElementById('das-kom-cijena').value=parseFloat(dasArtikal.cijena).toFixed(2);
+  document.getElementById('das-kom-cijena').value=broj(dasArtikal.cijena).toFixed(2);
   document.getElementById('das-kom-cijena-edit').style.display='none';
   dasOverridePodaci=null;
 }
@@ -2813,8 +2828,8 @@ function dasM3Mode(mode){
 
 function dasPreview(){
   if(dasJedinica==='m2' && dasM2mode==='racunaj'){
-    const d=parseFloat(document.getElementById('das-m2-duzina').value);
-    const v=parseFloat(document.getElementById('das-m2-visina').value);
+    const d=broj(document.getElementById('das-m2-duzina').value);
+    const v=broj(document.getElementById('das-m2-visina').value);
     const kom=parseInt(document.getElementById('das-m2-komada').value)||1;
     const prev=document.getElementById('das-m2-preview');
     if(!isNaN(d)&&!isNaN(v)&&d>0&&v>0){
@@ -2823,9 +2838,9 @@ function dasPreview(){
     }else prev.textContent='';
   }
   if(dasJedinica==='m3' && dasM3mode==='racunaj'){
-    const d=parseFloat(document.getElementById('das-m3-duzina').value);
-    const v=parseFloat(document.getElementById('das-m3-visina').value);
-    const deb=parseFloat(document.getElementById('das-m3-debljina').value);
+    const d=broj(document.getElementById('das-m3-duzina').value);
+    const v=broj(document.getElementById('das-m3-visina').value);
+    const deb=broj(document.getElementById('das-m3-debljina').value);
     const kom=parseInt(document.getElementById('das-m3-komada').value)||1;
     const prev=document.getElementById('das-m3-preview');
     if(!isNaN(d)&&!isNaN(v)&&!isNaN(deb)&&d>0&&v>0&&deb>0){
@@ -2858,8 +2873,8 @@ function postaviTipUsluge(tip){
   document.querySelectorAll('[data-du-tip]').forEach(b=>b.classList.toggle('active', b.dataset.duTip===tip));
 }
 function potvrdiDodajUslugu(){
-  const kolicina=parseFloat(document.getElementById('du-kolicina').value);
-  const cijena=parseFloat(document.getElementById('du-cijena').value);
+  const kolicina=broj(document.getElementById('du-kolicina').value);
+  const cijena=broj(document.getElementById('du-cijena').value);
   if(!kolicina||kolicina<=0){alert('Unesite ispravnu količinu.');return;}
   if(isNaN(cijena)||cijena<0){alert('Unesite ispravnu cijenu.');return;}
   const naziv=document.getElementById('du-naziv').value.trim()||TIP_USLUGE_NAZIV[duTrenutniTip];
@@ -2875,13 +2890,13 @@ function izgradiIDodajStavku(){
   let kolicina=null, duzina_cm=null, visina_cm=null, debljina_cm=null, broj_komada=null;
 
   if(dasJedinica==='kom'){
-    kolicina=parseFloat(document.getElementById('das-kom').value);
+    kolicina=broj(document.getElementById('das-kom').value);
   }else if(dasJedinica==='m2'){
     if(dasM2mode==='direktno'){
-      kolicina=parseFloat(document.getElementById('das-m2-vr').value);
+      kolicina=broj(document.getElementById('das-m2-vr').value);
     }else{
-      const d=parseFloat(document.getElementById('das-m2-duzina').value);
-      const v=parseFloat(document.getElementById('das-m2-visina').value);
+      const d=broj(document.getElementById('das-m2-duzina').value);
+      const v=broj(document.getElementById('das-m2-visina').value);
       const kom=parseInt(document.getElementById('das-m2-komada').value)||1;
       if(!d||!v||d<=0||v<=0){alert('Unesite dužinu i visinu (cm).');return false;}
       if(kom<1){alert('Broj komada mora biti bar 1.');return false;}
@@ -2890,11 +2905,11 @@ function izgradiIDodajStavku(){
     }
   }else if(dasJedinica==='m3'){
     if(dasM3mode==='direktno'){
-      kolicina=parseFloat(document.getElementById('das-m3-vr').value);
+      kolicina=broj(document.getElementById('das-m3-vr').value);
     }else{
-      const d=parseFloat(document.getElementById('das-m3-duzina').value);
-      const v=parseFloat(document.getElementById('das-m3-visina').value);
-      const deb=parseFloat(document.getElementById('das-m3-debljina').value);
+      const d=broj(document.getElementById('das-m3-duzina').value);
+      const v=broj(document.getElementById('das-m3-visina').value);
+      const deb=broj(document.getElementById('das-m3-debljina').value);
       const kom=parseInt(document.getElementById('das-m3-komada').value)||1;
       if(!d||!v||!deb||d<=0||v<=0||deb<=0){alert('Unesite dužinu, visinu i debljinu (cm).');return false;}
       if(kom<1){alert('Broj komada mora biti bar 1.');return false;}
@@ -2912,8 +2927,8 @@ function izgradiIDodajStavku(){
   // odstupanje se ne dupliraju po jedinici.
   let overrideNovi=null;
   {
-    const uneseno=parseFloat(document.getElementById('das-kom-cijena').value);
-    const zadana=parseFloat(dasArtikal.cijena);
+    const uneseno=broj(document.getElementById('das-kom-cijena').value);
+    const zadana=broj(dasArtikal.cijena);
     if(!isNaN(uneseno) && Math.abs(uneseno-zadana)>=0.005){
       const razlog=document.getElementById('das-kom-razlog').value;
       if(!razlog){ alert('Cijena je različita od zadane — izaberite razlog odstupanja.'); return false; }
@@ -2928,8 +2943,8 @@ function izgradiIDodajStavku(){
   // materijal, stvarna količina se često razlikuje od upisane u šifrarniku) — samo
   // upozoravamo komercijalistu da nastavi svjesno.
   const vecUKosarici=kosarica.filter(k=>k.roba_id===dasArtikal.id).reduce((s,k)=>s+k.kolicina,0);
-  if(vecUKosarici+kolicina>parseFloat(dasArtikal.stanje)){
-    const manjak=+(vecUKosarici+kolicina-parseFloat(dasArtikal.stanje)).toFixed(3);
+  if(vecUKosarici+kolicina>broj(dasArtikal.stanje)){
+    const manjak=+(vecUKosarici+kolicina-broj(dasArtikal.stanje)).toFixed(3);
     if(!confirm(`⚠ Stanje nije dovoljno za "${dasArtikal.naziv}" (raspoloživo: ${dasArtikal.stanje} ${dasArtikal.jed_mjera}, već dodano u ovoj prodaji: ${vecUKosarici}, nedostaje ${manjak} ${dasArtikal.jed_mjera}).\n\nStanje će otići u MINUS. Nastaviti?`)) return false;
   }
 
@@ -2940,8 +2955,8 @@ function izgradiIDodajStavku(){
   }else{
     kosarica.push({
       roba_id:dasArtikal.id, sifra:dasArtikal.sifra, naziv:dasArtikal.naziv,
-      jed_mjera:dasJedinica, jed_mjera_zadana:dasArtikal.jed_mjera, cijena:parseFloat(dasArtikal.cijena),
-      kolicina, stanje_max:parseFloat(dasArtikal.stanje),
+      jed_mjera:dasJedinica, jed_mjera_zadana:dasArtikal.jed_mjera, cijena:broj(dasArtikal.cijena),
+      kolicina, stanje_max:broj(dasArtikal.stanje),
       duzina_cm, visina_cm, debljina_cm, broj_komada,
       override:overrideNovi, // { tip:'posto'|'iznos', vrijednost, razlog, napomena } kad trgovac odstupi od zadane cijene
     });
@@ -3059,7 +3074,7 @@ function promijeniKolicinu(idx, delta){
 // "oninput") da se ne re-renderuje na svaki taster dok se kuca — samo kad se izađe iz polja.
 function postaviKolicinuDirektno(idx, vrijednost){
   const it=kosarica[idx];
-  const nova=parseFloat(vrijednost);
+  const nova=broj(vrijednost);
   if(isNaN(nova)||nova<=0){ renderKosarica(); return; } // neispravno — vrati na staru vrijednost
   if(!it.tip_usluge && nova>it.stanje_max){
     if(!confirm(`⚠ "${it.naziv}" — stanje nije dovoljno (max ${it.stanje_max} ${it.jed_mjera}). Stanje će otići u MINUS. Nastaviti?`)){ renderKosarica(); return; }
@@ -3073,7 +3088,7 @@ function ukloniStavku(idx){ kosarica.splice(idx,1); renderKosarica(); }
 // Okvirna efektivna cijena za prikaz u košarici (samo procjena — konačna se računa na serveru uživo)
 function efektivnaCijenaProcjena(k){
   if(!k.override||k.override.vrijednost===''||k.override.vrijednost==null) return k.cijena;
-  const v=parseFloat(k.override.vrijednost);
+  const v=broj(k.override.vrijednost);
   if(isNaN(v)) return k.cijena;
   return k.override.tip==='posto' ? Math.max(0,k.cijena*(1-v/100)) : Math.max(0,v);
 }
@@ -3088,9 +3103,9 @@ function primijeniOdstupanje(idx){
   const vrijednost=document.getElementById('ce-vrijednost-'+idx).value;
   const razlog=document.getElementById('ce-razlog-'+idx).value;
   const napomena=document.getElementById('ce-napomena-'+idx).value;
-  if(vrijednost===''||isNaN(parseFloat(vrijednost))){alert('Unesite vrijednost.');return;}
+  if(vrijednost===''||isNaN(broj(vrijednost))){alert('Unesite vrijednost.');return;}
   if(!razlog){alert('Izaberite razlog odstupanja.');return;}
-  kosarica[idx].override={tip, vrijednost:parseFloat(vrijednost), razlog, napomena};
+  kosarica[idx].override={tip, vrijednost:broj(vrijednost), razlog, napomena};
   uredjivanjeIdx=null;
   renderKosarica();
 }
@@ -3110,7 +3125,7 @@ function postaviTipOdstupanja(idx, tip){
 function azurirajPreview(idx){
   const k=kosarica[idx];
   const tip=document.getElementById('ce-editor-'+idx)?.dataset.tip||'posto';
-  const vrijednost=parseFloat(document.getElementById('ce-vrijednost-'+idx)?.value);
+  const vrijednost=broj(document.getElementById('ce-vrijednost-'+idx)?.value);
   const prev=document.getElementById('ce-preview-'+idx);
   if(!prev) return;
   if(isNaN(vrijednost)){prev.textContent='';return;}
@@ -3165,7 +3180,7 @@ function renderKosarica(){
           </div>
           <div class="kos-qty">
             <button class="qty-btn" onclick="promijeniKolicinu(${idx},-1)">−</button>
-            <input type="number" class="qty-input" value="${k.kolicina}" step="1" min="1"
+            <input type="text" inputmode="decimal" class="qty-input" value="${k.kolicina}" step="1" min="1"
               onchange="postaviKolicinuDirektno(${idx},this.value)">
             <button class="qty-btn" onclick="promijeniKolicinu(${idx},1)">+</button>
           </div>
@@ -3192,7 +3207,7 @@ function renderKosarica(){
         </div>
         <div class="kos-qty">
           <button class="qty-btn" onclick="promijeniKolicinu(${idx},-1)">−</button>
-          <input type="number" class="qty-input" value="${k.kolicina}" step="0.001" min="0.001"
+          <input type="text" inputmode="decimal" class="qty-input" value="${k.kolicina}" step="0.001" min="0.001"
             onchange="postaviKolicinuDirektno(${idx},this.value)">
           <button class="qty-btn" onclick="promijeniKolicinu(${idx},1)">+</button>
         </div>
@@ -3213,7 +3228,7 @@ function renderKosarica(){
           <button type="button" class="ce-tip-btn ${((k.override?.tip||'posto')==='posto')?'active':''}" data-idx="${idx}" data-tip="posto" onclick="postaviTipOdstupanja(${idx},'posto')">% popusta</button>
           <button type="button" class="ce-tip-btn ${(k.override?.tip==='iznos')?'active':''}" data-idx="${idx}" data-tip="iznos" onclick="postaviTipOdstupanja(${idx},'iznos')">Nova cijena</button>
         </div>
-        <input type="number" id="ce-vrijednost-${idx}" step="0.01" min="0" placeholder="npr. 10" value="${k.override?.vrijednost??''}" oninput="azurirajPreview(${idx})">
+        <input type="text" inputmode="decimal" id="ce-vrijednost-${idx}" step="0.01" min="0" placeholder="npr. 10" value="${k.override?.vrijednost??''}" oninput="azurirajPreview(${idx})">
         <div class="ce-preview" id="ce-preview-${idx}"></div>
         <select id="ce-razlog-${idx}">
           <option value="">— izaberi razlog —</option>
@@ -3292,7 +3307,7 @@ async function generisiOtpremnicu(){
 
 let potvrdaUkupanIznos=0;
 function prikaziPotvrduEkran(pregled){
-  potvrdaUkupanIznos=parseFloat(pregled.ukupan_iznos);
+  potvrdaUkupanIznos=broj(pregled.ukupan_iznos);
   document.getElementById('ov-broj').textContent='Broj se dodjeljuje nakon potvrde';
   document.getElementById('ov-iznos').innerHTML=fmMoneyHtml(pregled.ukupan_iznos);
   document.getElementById('ov-stavke').innerHTML=pregled.stavke.map(s=>{
@@ -3401,10 +3416,10 @@ function azurirajPreostaliDug(){
   const jeVp = nacinPlacanjaTrenutni==='banka' && bankaVpTrenutno==='vp';
   const jeMesovito = nacinPlacanjaTrenutni==='mesovito';
   const placeno = jeMesovito
-    ? (parseFloat(document.getElementById('ov-iznos-gotovina-mes').value)||0) + (parseFloat(document.getElementById('ov-iznos-banka-mes').value)||0)
+    ? (broj(document.getElementById('ov-iznos-gotovina-mes').value)||0) + (broj(document.getElementById('ov-iznos-banka-mes').value)||0)
     : jeBankaKonkretna
-    ? (parseFloat(document.getElementById('ov-iznos-banka').value)||0)
-    : (parseFloat(document.getElementById('ov-iznos-djelimicno').value)||0);
+    ? (broj(document.getElementById('ov-iznos-banka').value)||0)
+    : (broj(document.getElementById('ov-iznos-djelimicno').value)||0);
   const koristiAvans=document.getElementById('ov-koristi-avans')?.checked;
   const bazniOstatak = (nacinPlacanjaTrenutni==='djelimicno' || jeBankaKonkretna || jeMesovito) ? (potvrdaUkupanIznos-placeno)
                       : jeVp ? potvrdaUkupanIznos
@@ -3445,7 +3460,7 @@ async function potvrdiOtpremnicu(){
   let iznosGotovinaMesZaSlanje=null, iznosBankaMesZaSlanje=null;
 
   if(nacinPlacanjaTrenutni==='djelimicno'){
-    iznosPlacenoSada=parseFloat(document.getElementById('ov-iznos-djelimicno').value);
+    iznosPlacenoSada=broj(document.getElementById('ov-iznos-djelimicno').value);
     if(!iznosPlacenoSada||iznosPlacenoSada<=0){alert('Unesite iznos koji kupac plaća sada.');return;}
     if(iznosPlacenoSada>potvrdaUkupanIznos){alert('Iznos ne može biti veći od ukupnog iznosa otpremnice.');return;}
   }else if(nacinPlacanjaTrenutni==='banka'){
@@ -3455,13 +3470,13 @@ async function potvrdiOtpremnicu(){
     }else{
       nacinZaSlanje='banka';
       nacinBankaZaSlanje=bankaVpTrenutno;
-      iznosPlacenoSada=parseFloat(document.getElementById('ov-iznos-banka').value);
+      iznosPlacenoSada=broj(document.getElementById('ov-iznos-banka').value);
       if(!iznosPlacenoSada||iznosPlacenoSada<=0){alert('Unesite iznos koji ide na banku.');return;}
       if(iznosPlacenoSada>potvrdaUkupanIznos){alert('Iznos ne može biti veći od ukupnog iznosa otpremnice.');return;}
     }
   }else if(nacinPlacanjaTrenutni==='mesovito'){
-    iznosGotovinaMesZaSlanje=parseFloat(document.getElementById('ov-iznos-gotovina-mes').value)||0;
-    iznosBankaMesZaSlanje=parseFloat(document.getElementById('ov-iznos-banka-mes').value)||0;
+    iznosGotovinaMesZaSlanje=broj(document.getElementById('ov-iznos-gotovina-mes').value)||0;
+    iznosBankaMesZaSlanje=broj(document.getElementById('ov-iznos-banka-mes').value)||0;
     if(iznosGotovinaMesZaSlanje<=0 && iznosBankaMesZaSlanje<=0){alert('Unesite bar jedan iznos (gotovina ili banka).');return;}
     if(iznosBankaMesZaSlanje>0 && !bankaMesovitoTrenutno){alert('Izaberite banku za bankovni dio.');return;}
     if((iznosGotovinaMesZaSlanje+iznosBankaMesZaSlanje)>potvrdaUkupanIznos){alert('Zbir gotovine i banke ne može biti veći od ukupnog iznosa otpremnice.');return;}
@@ -3617,7 +3632,7 @@ async function pripremiUplatu(){
   greskaDiv.style.display='none';
   if(!trenutniObjekat){alert('Nedostaje izabrani prodajni objekat.');return;}
   if(!uplKupacIzabran){greskaDiv.textContent='⚠ Izaberite kupca.';greskaDiv.style.display='block';return;}
-  const iznos=parseFloat(document.getElementById('upl-iznos').value);
+  const iznos=broj(document.getElementById('upl-iznos').value);
   if(!iznos||iznos<=0){greskaDiv.textContent='⚠ Unesite ispravan iznos.';greskaDiv.style.display='block';return;}
   const napomena=document.getElementById('upl-napomena').value.trim();
 
@@ -3786,21 +3801,21 @@ async function loadOtpremnice(brojOverride, tiho){
     const filObjektId=document.getElementById('fil-objekat').value;
     const iznosUKM=o=>{
       const valuta=window.__objektiPoId?.[o.objekt_id]?.valuta||'KM';
-      const iznos=parseFloat(o.ukupan_iznos||0);
+      const iznos=broj(o.ukupan_iznos||0);
       return valuta==='EUR' ? iznos*KURS_EUR_KM : iznos;
     };
-    const nekonvertovano=rows.filter(o=>o.status!=='stornirana').reduce((s,o)=>s+parseFloat(o.ukupan_iznos||0),0);
+    const nekonvertovano=rows.filter(o=>o.status!=='stornirana').reduce((s,o)=>s+broj(o.ukupan_iznos||0),0);
     const ukupno = filObjektId
       ? nekonvertovano // jedan PJ, ista valuta za sve redove — sirov zbir je tačan
       : rows.filter(o=>o.status!=='stornirana').reduce((s,o)=>s+iznosUKM(o),0); // mešano — normalizuj u KM PRIJE sabiranja
     // Dug — zbir NENAPLAĆENOG dela (ukupan_iznos - iznos_placeno), preko svih tipova
     // (banka, dug, VP) podjednako — ista logika bez obzira odakle dolazi.
-    const dugNekonvertovano=rows.filter(o=>o.status!=='stornirana').reduce((s,o)=>s+Math.max(0,parseFloat(o.ukupan_iznos||0)-parseFloat(o.iznos_placeno||0)),0);
+    const dugNekonvertovano=rows.filter(o=>o.status!=='stornirana').reduce((s,o)=>s+Math.max(0,broj(o.ukupan_iznos||0)-broj(o.iznos_placeno||0)),0);
     const dug = filObjektId
       ? dugNekonvertovano
       : rows.filter(o=>o.status!=='stornirana').reduce((s,o)=>{
           const valuta=window.__objektiPoId?.[o.objekt_id]?.valuta||'KM';
-          const d=Math.max(0,parseFloat(o.ukupan_iznos||0)-parseFloat(o.iznos_placeno||0));
+          const d=Math.max(0,broj(o.ukupan_iznos||0)-broj(o.iznos_placeno||0));
           return s+(valuta==='EUR'?d*KURS_EUR_KM:d);
         },0);
     const naplaceno=ukupno-dug;
@@ -4264,7 +4279,7 @@ provjeriZakljucanDan();
     <div id="ak-redovna" style="font-size:12.5px;color:#8b96a5;margin-bottom:14px;"></div>
 
     <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px;">Akcijska cijena (KM) *</label>
-    <input type="number" id="ak-cijena" step="0.01" min="0.01" oninput="akRacunajPopust()" style="width:100%;padding:10px 12px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:17px;font-weight:800;color:var(--red,#c0392b);margin-bottom:4px;">
+    <input type="text" inputmode="decimal" id="ak-cijena" step="0.01" min="0.01" oninput="akRacunajPopust()" style="width:100%;padding:10px 12px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:17px;font-weight:800;color:var(--red,#c0392b);margin-bottom:4px;">
     <div id="ak-popust" style="font-size:12.5px;font-weight:700;margin-bottom:12px;min-height:17px;"></div>
 
     <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px;">Važi do <span style="font-weight:400;color:#8b96a5;">(prazno = do isteka zaliha)</span></label>
@@ -4554,7 +4569,7 @@ function katPrikaziInfoTipa(){
   if(!t){ info.textContent=''; return; }
   info.textContent = t.dodaje_pdv
     ? `Maloprodajna cijena — osnovica + PDV`
-    : (parseFloat(t.popust_posto)>0 ? `Veleprodaja — popust ${t.popust_posto}%` : 'Veleprodaja — bez popusta (osnovica)');
+    : (broj(t.popust_posto)>0 ? `Veleprodaja — popust ${t.popust_posto}%` : 'Veleprodaja — bez popusta (osnovica)');
 }
 
 // Kvadratic MASTER grupe cekira/odcekira sve grupe ispod nje.
@@ -4820,6 +4835,29 @@ function katKopirajLink(){
 
 
 
+
+/* Ziva potvrda unosa — dok korisnik kuca, polje pokazuje kako ga je sistem RAZUMIO.
+   Npr. ukuca "17,5" -> ispod se pojavi "= 17,50". Tako se greska vidi ODMAH, a ne tek
+   kad se iznos proknjizi. Vezuje se na sva polja sa inputmode="decimal". */
+(function(){
+  const fmt = n => n.toLocaleString('sr-Latn-BA', {minimumFractionDigits:2, maximumFractionDigits:3});
+  document.addEventListener('input', e => {
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement) || el.getAttribute('inputmode') !== 'decimal') return;
+    let nagovjestaj = el.nextElementSibling;
+    if (!nagovjestaj || !nagovjestaj.classList?.contains('broj-nagovjestaj')) {
+      nagovjestaj = document.createElement('div');
+      nagovjestaj.className = 'broj-nagovjestaj';
+      nagovjestaj.style.cssText = 'font-size:10.5px;color:#8b96a5;margin-top:2px;min-height:13px;';
+      el.after(nagovjestaj);
+    }
+    const t = el.value.trim();
+    if (!t) { nagovjestaj.textContent = ''; return; }
+    const n = broj(t);
+    // Prikazuje se samo ako se unos RAZLIKUJE od prikaza — inace samo smeta
+    nagovjestaj.textContent = (t === String(n) || t === fmt(n)) ? '' : `= ${fmt(n)}`;
+  });
+})();
 </script>
 
 </body>
