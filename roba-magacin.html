@@ -365,31 +365,31 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Valuta nabavke</label>
         <select id="kalk-valuta-nabavke" onchange="kalkPredloziKurs()"><option value="EUR">EUR</option><option value="USD">USD</option></select>
       </div>
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Vrijednost nabavke (u toj valuti)</label><input type="number" step="0.01" id="kalk-vrednost-nabavke" value="0" oninput="kalkRenderStavke()"></div>
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Brodarina (u toj valuti)</label><input type="number" step="0.01" id="kalk-vrednost-brodarine" value="0" oninput="kalkRenderStavke()"></div>
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Kurs → KM</label><input type="number" step="0.00001" id="kalk-kurs" value="1.95583" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Vrijednost nabavke (u toj valuti)</label><input type="text" inputmode="decimal" step="0.01" id="kalk-vrednost-nabavke" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Brodarina (u toj valuti)</label><input type="text" inputmode="decimal" step="0.01" id="kalk-vrednost-brodarine" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Kurs → KM</label><input type="text" inputmode="decimal" step="0.00001" id="kalk-kurs" value="1.95583" oninput="kalkRenderStavke()"></div>
     </div>
 
     <h3 style="margin-top:16px;">Troškovi u KM</h3>
     <div class="ce-row">
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Trošak prevoza — interni (KM)</label><input type="number" step="0.01" id="kalk-trosak-prevoz" value="0" oninput="kalkRenderStavke()"></div>
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Od luke do istovara (KM)</label><input type="number" step="0.01" id="kalk-trosak-luka" value="0" oninput="kalkRenderStavke()"></div>
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Drugi troškovi (KM)</label><input type="number" step="0.01" id="kalk-drugi-troskovi" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Trošak prevoza — interni (KM)</label><input type="text" inputmode="decimal" step="0.01" id="kalk-trosak-prevoz" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Od luke do istovara (KM)</label><input type="text" inputmode="decimal" step="0.01" id="kalk-trosak-luka" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Drugi troškovi (KM)</label><input type="text" inputmode="decimal" step="0.01" id="kalk-drugi-troskovi" value="0" oninput="kalkRenderStavke()"></div>
     </div>
 
     <h3 style="margin-top:16px;">Carinski obračun</h3>
     <div class="uzorak-hint">Osnovica služi ISKLJUČIVO za obračun carine/PDV-a ispod — sam taj iznos se nigdje dalje ne koristi. Izračunata carina se automatski uključuje u raspoređivanje troškova po stavci (utiče na nabavnu cijenu). PDV se NE uključuje u nabavnu cijenu (obično je odbitan/povratan).</div>
     <div class="ce-row">
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Osnovica za carinjenje (KM)</label><input type="number" step="0.01" id="kalk-osnovica" value="0" oninput="kalkRenderStavke()"></div>
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Stopa carine (%)</label><input type="number" step="0.01" id="kalk-stopa-carine" value="0" oninput="kalkRenderStavke()"></div>
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Stopa PDV (%)</label><input type="number" step="0.01" id="kalk-stopa-pdv" value="17" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Osnovica za carinjenje (KM)</label><input type="text" inputmode="decimal" step="0.01" id="kalk-osnovica" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Stopa carine (%)</label><input type="text" inputmode="decimal" step="0.01" id="kalk-stopa-carine" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Stopa PDV (%)</label><input type="text" inputmode="decimal" step="0.01" id="kalk-stopa-pdv" value="17" oninput="kalkRenderStavke()"></div>
     </div>
     <div id="kalk-carina-pdv-info" style="font-size:12px;color:#6b7a8d;margin-top:4px;"></div>
 
     <h3 style="margin-top:16px;">Finansije prema dobavljaču</h3>
     <div class="ce-row">
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Avans uplaćen</label><input type="number" step="0.01" id="kalk-avans" value="0" oninput="kalkRenderStavke()"></div>
-      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Ostatak za uplatu</label><input type="number" step="0.01" id="kalk-ostatak" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Avans uplaćen</label><input type="text" inputmode="decimal" step="0.01" id="kalk-avans" value="0" oninput="kalkRenderStavke()"></div>
+      <div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#1a2733;display:block;margin-bottom:4px;">Ostatak za uplatu</label><input type="text" inputmode="decimal" step="0.01" id="kalk-ostatak" value="0" oninput="kalkRenderStavke()"></div>
     </div>
     <div class="uzorak-hint">Realna faktura (konačan iznos) se obično ne zna odmah — dodaj je posle, kad stigne, kroz listu kalkulacija.</div>
 
@@ -443,10 +443,10 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         <option value="custom">— prilagođeno (unesi sam) —</option>
       </select>
       <div id="qr-custom-polja" style="display:none;margin-top:8px;display:none;gap:8px;flex-wrap:wrap;align-items:center;">
-        <input type="number" id="qr-c-sirina" placeholder="Širina mm" step="0.1" style="width:110px;padding:6px 8px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12px;">
-        <input type="number" id="qr-c-visina" placeholder="Visina mm" step="0.1" style="width:110px;padding:6px 8px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12px;">
-        <input type="number" id="qr-c-kolona" placeholder="Kolona" style="width:90px;padding:6px 8px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12px;">
-        <input type="number" id="qr-c-redova" placeholder="Redova" style="width:90px;padding:6px 8px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12px;">
+        <input type="text" inputmode="decimal" id="qr-c-sirina" placeholder="Širina mm" step="0.1" style="width:110px;padding:6px 8px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12px;">
+        <input type="text" inputmode="decimal" id="qr-c-visina" placeholder="Visina mm" step="0.1" style="width:110px;padding:6px 8px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12px;">
+        <input type="text" inputmode="decimal" id="qr-c-kolona" placeholder="Kolona" style="width:90px;padding:6px 8px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12px;">
+        <input type="text" inputmode="decimal" id="qr-c-redova" placeholder="Redova" style="width:90px;padding:6px 8px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12px;">
         <button class="ce-tip-btn" onclick="qrPrimijeniCustom()" style="font-size:12px;">Primijeni</button>
       </div>
       <div id="qr-format-info" style="font-size:11px;color:#8b96a5;margin-top:5px;"></div>
@@ -455,10 +455,10 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         <div style="font-size:10.5px;color:#7a6a2f;margin-bottom:6px;">Većina štampača ne može da štampa do same ivice papira. Ako ti seče gornju/levu stranu, pomeri sadržaj za par mm.</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <label style="font-size:11px;">Pomeri desno:
-            <input type="number" id="qr-pomak-x" value="0" step="0.5" style="width:65px;padding:4px 6px;border:1px solid var(--border,#ddd);border-radius:5px;font-size:11px;"> mm
+            <input type="text" inputmode="decimal" id="qr-pomak-x" value="0" step="0.5" style="width:65px;padding:4px 6px;border:1px solid var(--border,#ddd);border-radius:5px;font-size:11px;"> mm
           </label>
           <label style="font-size:11px;">Pomeri dole:
-            <input type="number" id="qr-pomak-y" value="0" step="0.5" style="width:65px;padding:4px 6px;border:1px solid var(--border,#ddd);border-radius:5px;font-size:11px;"> mm
+            <input type="text" inputmode="decimal" id="qr-pomak-y" value="0" step="0.5" style="width:65px;padding:4px 6px;border:1px solid var(--border,#ddd);border-radius:5px;font-size:11px;"> mm
           </label>
           <button class="ce-tip-btn" style="font-size:11px;padding:4px 10px;" onclick="qrOsvjeziAkoTreba()">Primijeni</button>
         </div>
@@ -637,9 +637,9 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <div id="rucni-unos-naziv" style="display:none;font-weight:700;font-size:13px;margin-bottom:8px;line-height:1.35;"></div>
 
   <div id="rucni-unos-polja" style="display:none;">
-    <input type="number" id="rucni-unos-novo-stanje" placeholder="Novo stanje..." style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:6px;box-sizing:border-box;">
+    <input type="text" inputmode="decimal" id="rucni-unos-novo-stanje" placeholder="Novo stanje..." style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:6px;box-sizing:border-box;">
     <div style="font-size:11px;color:#8b96a5;margin-bottom:4px;">Cena:</div>
-    <input type="number" id="rucni-unos-nova-cijena" placeholder="Nova cena..." style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:8px;box-sizing:border-box;">
+    <input type="text" inputmode="decimal" id="rucni-unos-nova-cijena" placeholder="Nova cena..." style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;margin-bottom:8px;box-sizing:border-box;">
   </div>
 
   <div id="rucni-unos-popup-greska" style="display:none;color:var(--red);font-size:11px;margin-bottom:6px;"></div>
@@ -754,7 +754,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <div id="prenos-rezultati"></div>
       <div id="prenos-izabrano" style="display:none;background:#f7f8fa;border-radius:8px;padding:10px;margin:8px 0;">
         <div id="prenos-izabrano-naziv" style="font-weight:700;font-size:13px;margin-bottom:6px;"></div>
-        <input type="number" id="prenos-kolicina" step="0.001" min="0.001" placeholder="Količina za prebaciti">
+        <input type="text" inputmode="decimal" id="prenos-kolicina" step="0.001" min="0.001" placeholder="Količina za prebaciti">
         <button class="btn-import" onclick="dodajUPrenosListu()">+ Dodaj u listu</button>
       </div>
       <div id="prenos-lista"></div>
@@ -833,11 +833,11 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
                 <option value="izlaz">Izlaz</option>
               </select>
             </th>
-            <th style="padding:2px 4px;border-bottom:2px solid var(--border);background:#fff;position:sticky;top:22px;z-index:29;"><input type="number" id="kf-uslo-min" placeholder="min" step="0.01" oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:10px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;"></th>
+            <th style="padding:2px 4px;border-bottom:2px solid var(--border);background:#fff;position:sticky;top:22px;z-index:29;"><input type="text" inputmode="decimal" id="kf-uslo-min" placeholder="min" step="0.01" oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:10px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;"></th>
             <th style="padding:2px 4px;border-bottom:2px solid var(--border);background:#fff;position:sticky;top:22px;z-index:29;"><input type="text" id="kf-od-koga" placeholder="pretraga..." oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:10px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;"></th>
-            <th style="padding:2px 4px;border-bottom:2px solid var(--border);background:#fff;position:sticky;top:22px;z-index:29;"><input type="number" id="kf-izaslo-min" placeholder="min" step="0.01" oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:10px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;"></th>
+            <th style="padding:2px 4px;border-bottom:2px solid var(--border);background:#fff;position:sticky;top:22px;z-index:29;"><input type="text" inputmode="decimal" id="kf-izaslo-min" placeholder="min" step="0.01" oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:10px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;"></th>
             <th style="padding:2px 4px;border-bottom:2px solid var(--border);background:#fff;position:sticky;top:22px;z-index:29;"><input type="text" id="kf-kome" placeholder="pretraga..." oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:10px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;"></th>
-            <th style="padding:2px 4px;border-bottom:2px solid var(--border);background:#fff;position:sticky;top:22px;z-index:29;"><input type="number" id="kf-vrijednost-min" placeholder="min KM" step="0.01" oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:10px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;"></th>
+            <th style="padding:2px 4px;border-bottom:2px solid var(--border);background:#fff;position:sticky;top:22px;z-index:29;"><input type="text" inputmode="decimal" id="kf-vrijednost-min" placeholder="min KM" step="0.01" oninput="primijeniKretanjeFiltere()" style="width:100%;font:inherit;font-size:10px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;"></th>
           </tr>
         </thead>
         <tbody id="kretanje-tbody"><tr><td colspan="8" style="text-align:center;color:#9aa5b1;padding:16px;">Izaberi prodajni objekat.</td></tr></tbody>
@@ -946,7 +946,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         <input type="checkbox" id="up-sve" onchange="upUcitaj()"> I one bez stanja
       </label>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap;">
-        Količina: <input type="number" id="up-kolicina" value="1" step="0.001" min="0.001" style="width:72px;padding:5px 7px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12.5px;">
+        Količina: <input type="text" inputmode="decimal" id="up-kolicina" value="1" step="0.001" min="0.001" style="width:72px;padding:5px 7px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12.5px;">
       </label>
     </div>
 
@@ -1075,7 +1075,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <div class="modal-box">
     <h3 id="nivelacija-naslov">Nivelacija cijene</h3>
     <div style="font-size:12px;color:#6b7a8d;margin-bottom:8px;">Trenutna cijena: <b id="nivelacija-trenutna"></b></div>
-    <input type="number" id="nivelacija-cijena" step="0.01" min="0" placeholder="Nova cijena">
+    <input type="text" inputmode="decimal" id="nivelacija-cijena" step="0.01" min="0" placeholder="Nova cijena">
     <input type="text" id="nivelacija-napomena" placeholder="Razlog (opciono)">
     <div id="nivelacija-msg"></div>
     <div class="modal-btns" style="margin-top:8px">
@@ -1086,6 +1086,24 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 </div>
 
 <script>
+/* ═══ UNOS BROJEVA — zarez kao decimala ═══════════════════════════════════════════
+   ZAREZ je uvijek decimala, TACKA razdvaja hiljade (1.234,56). Ako zareza nema, tacka
+   se cita kao decimala — radi kompatibilnosti sa postojecim podacima i Excel unosom.
+   Bez ovoga broj("17,55") vraca 17 — tiho se gubi 55 para. */
+function broj(v){
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/\s/g, '').replace(/[^\d.,-]/g, '');
+  if (!s) return 0;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(/,/g, '.');
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+/* Upis broja U POLJE — sa zarezom, bez razdvajanja hiljada (da ostane uredivo). */
+function uPolje(n, dec){
+  return broj(n).toFixed(dec == null ? 2 : dec).replace('.', ',');
+}
+
 const API='';
 let currentUser=null;
 
@@ -1119,7 +1137,7 @@ let blicSelected=new Set();
 
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
-function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fm(n){return(broj(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
 
 function fd(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('sr-Latn-BA')+' '+dt.toLocaleTimeString('sr-Latn-BA',{hour:'2-digit',minute:'2-digit'});}
 
@@ -1252,7 +1270,7 @@ async function dodajPreskoceniRucno(i, objektId){
   try{
     const r=await fetch(`${API}/api/roba`,{
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ sifra, naziv, jed_mjera:'kom', cijena:parseFloat(cijena)||0, stanje:parseFloat(stanje)||0, objekt_id:objektId }),
+      body:JSON.stringify({ sifra, naziv, jed_mjera:'kom', cijena:broj(cijena)||0, stanje:broj(stanje)||0, objekt_id:objektId }),
     });
     const data=await r.json();
     if(!r.ok) throw new Error(data.error||'Greška.');
@@ -1359,8 +1377,8 @@ async function potvrdiUvoz(){
             <span style="font-size:11px;color:#8b8060;min-width:70px;">Red ${d.excel_red}</span>
             <input type="text" id="pr-sifra-${i}" placeholder="Šifra" value="${d.sifra!=='(prazno)'?esc(d.sifra):''}" style="width:100px;font-size:11.5px;padding:5px 6px;border:1px solid var(--border);border-radius:4px;">
             <input type="text" id="pr-naziv-${i}" placeholder="Naziv" value="${d.naziv!=='(prazno)'?esc(d.naziv):''}" style="flex:1;min-width:140px;font-size:11.5px;padding:5px 6px;border:1px solid var(--border);border-radius:4px;">
-            <input type="number" id="pr-cijena-${i}" placeholder="Cijena" step="0.01" style="width:75px;font-size:11.5px;padding:5px 6px;border:1px solid var(--border);border-radius:4px;">
-            <input type="number" id="pr-stanje-${i}" placeholder="Stanje" step="0.01" style="width:75px;font-size:11.5px;padding:5px 6px;border:1px solid var(--border);border-radius:4px;">
+            <input type="text" inputmode="decimal" id="pr-cijena-${i}" placeholder="Cijena" step="0.01" style="width:75px;font-size:11.5px;padding:5px 6px;border:1px solid var(--border);border-radius:4px;">
+            <input type="text" inputmode="decimal" id="pr-stanje-${i}" placeholder="Stanje" step="0.01" style="width:75px;font-size:11.5px;padding:5px 6px;border:1px solid var(--border);border-radius:4px;">
             <button type="button" class="btn-import" style="width:auto;padding:5px 12px;font-size:11px;" onclick="dodajPreskoceniRucno(${i},'${objektIdZaUvoz}')">+ Dodaj</button>
           </div>
         `).join('') +
@@ -1549,11 +1567,11 @@ function izaberiPrenosArtikal(artikal){
 }
 
 function dodajUPrenosListu(){
-  const kolicina=parseFloat(document.getElementById('prenos-kolicina').value);
+  const kolicina=broj(document.getElementById('prenos-kolicina').value);
   const msg=document.getElementById('prenos-msg');
   if(!prenosIzabraniArtikal){msg.style.color='red';msg.textContent='Izaberite artikal.';return;}
   if(!kolicina||kolicina<=0){msg.style.color='red';msg.textContent='Unesite ispravnu količinu.';return;}
-  if(kolicina>parseFloat(prenosIzabraniArtikal.stanje)){msg.style.color='red';msg.textContent='Nema dovoljno na stanju (raspoloživo: '+prenosIzabraniArtikal.stanje+').';return;}
+  if(kolicina>broj(prenosIzabraniArtikal.stanje)){msg.style.color='red';msg.textContent='Nema dovoljno na stanju (raspoloživo: '+prenosIzabraniArtikal.stanje+').';return;}
   msg.textContent='';
 
   const postojeci=prenosStavke.find(s=>s.roba_id===prenosIzabraniArtikal.id);
@@ -1562,7 +1580,7 @@ function dodajUPrenosListu(){
   }else{
     prenosStavke.push({
       roba_id:prenosIzabraniArtikal.id, sifra:prenosIzabraniArtikal.sifra, naziv:prenosIzabraniArtikal.naziv,
-      jed_mjera:prenosIzabraniArtikal.jed_mjera, kolicina, stanje_max:parseFloat(prenosIzabraniArtikal.stanje),
+      jed_mjera:prenosIzabraniArtikal.jed_mjera, kolicina, stanje_max:broj(prenosIzabraniArtikal.stanje),
     });
   }
   prenosIzabraniArtikal=null;
@@ -2432,7 +2450,7 @@ function uvsgrupaFiltrirano(){
   const {kolona,smjer}=uvsgrupaSort;
   prikaz=[...prikaz].sort((x,y)=>{
     const vx=uvsgrupaVrijednost(x,kolona), vy=uvsgrupaVrijednost(y,kolona);
-    const cmp=kolona==='sifra'?(parseFloat(vx)||0)-(parseFloat(vy)||0):String(vx??'').localeCompare(String(vy??''),'sr-Latn-BA');
+    const cmp=kolona==='sifra'?(broj(vx)||0)-(broj(vy)||0):String(vx??'').localeCompare(String(vy??''),'sr-Latn-BA');
     return smjer==='asc'?cmp:-cmp;
   });
   return prikaz;
@@ -2744,7 +2762,7 @@ function otvoriNivelaciju(robaId, naziv, trenutnaCijena){
 
 async function potvrdiNivelaciju(){
   const objektId=document.getElementById('lager-objekat').value;
-  const cijena=parseFloat(document.getElementById('nivelacija-cijena').value);
+  const cijena=broj(document.getElementById('nivelacija-cijena').value);
   const napomena=document.getElementById('nivelacija-napomena').value.trim();
   const msg=document.getElementById('nivelacija-msg');
   if(isNaN(cijena)||cijena<0){msg.style.color='red';msg.textContent='Unesite ispravnu cijenu.';return;}
@@ -2843,9 +2861,10 @@ function rucniUnosOtvoriPopupZaStavku(stavka){
   // "Staro stanje" tekst uklonjen — sad se vidi kao sivi placeholder direktno u polju za unos.
   // Placeholder = STARA količina (sivo, ne generički tekst) — vizuelni podsetnik da je ovo
   // baš to polje (u brzini se lako pomiješa sa poljem za šifru).
-  document.getElementById('rucni-unos-novo-stanje').placeholder=`trenutno: ${stavka.stanje}`;
+  document.getElementById('rucni-unos-novo-stanje').placeholder=`trenutno: ${uPolje(stavka.stanje, 3)}`;
   document.getElementById('rucni-unos-novo-stanje').value='';
-  document.getElementById('rucni-unos-nova-cijena').value=stavka.cijena;
+  // Cijena iz baze je sa TACKOM — u polje ide sa zarezom, dosljedno ostatku sistema.
+  document.getElementById('rucni-unos-nova-cijena').value=uPolje(stavka.cijena);
   document.getElementById('rucni-unos-btn-novi').style.display='block';
   document.getElementById('rucni-unos-btn-zavrsi').style.display='block';
 
@@ -2984,8 +3003,8 @@ function qrPromijeniFormat(){
 }
 
 function qrPrimijeniCustom(){
-  const s=parseFloat(document.getElementById('qr-c-sirina').value);
-  const v=parseFloat(document.getElementById('qr-c-visina').value);
+  const s=broj(document.getElementById('qr-c-sirina').value);
+  const v=broj(document.getElementById('qr-c-visina').value);
   const k=parseInt(document.getElementById('qr-c-kolona').value);
   const r=parseInt(document.getElementById('qr-c-redova').value);
   if(!s||!v||!k||!r){ alert('Popuni sva četiri polja (širina, visina, kolona, redova).'); return; }
@@ -3074,7 +3093,7 @@ function qrRucniToggle(sifra, checked){
 async function qrFilterPrimijeni(tip){
   let lista;
   if(tip==='sve') lista=lagerPodaci;
-  else if(tip==='stanje') lista=lagerPodaci.filter(a=>parseFloat(a.stanje)>0);
+  else if(tip==='stanje') lista=lagerPodaci.filter(a=>broj(a.stanje)>0);
   else if(tip==='rucno'){
     if(!qrRucniIzabrani.size){ alert('Izaberite bar jedan artikal.'); return; }
     lista=lagerPodaci.filter(a=>qrRucniIzabrani.has(a.sifra));
@@ -3098,8 +3117,8 @@ async function qrGenerisi(lista){
   grid.style.gridTemplateColumns=`repeat(${f.kolona}, ${f.sirina}mm)`;
   grid.style.gridAutoRows=`${f.visina}mm`;
   // Kalibracija — pomjera CIJELI raspored ako štampač ne može da štampa do same ivice.
-  const pomakX=parseFloat(document.getElementById('qr-pomak-x')?.value)||0;
-  const pomakY=parseFloat(document.getElementById('qr-pomak-y')?.value)||0;
+  const pomakX=broj(document.getElementById('qr-pomak-x')?.value)||0;
+  const pomakY=broj(document.getElementById('qr-pomak-y')?.value)||0;
   grid.style.setProperty('--qr-pomak-x', `${pomakX}mm`);
   grid.style.setProperty('--qr-pomak-y', `${pomakY}mm`);
 
@@ -3235,7 +3254,7 @@ function lagerFiltrirajISortiraj(){
   prikaz=[...prikaz].sort((a,b)=>{
     let va=lagerVrijednostZaKolonu(a,kolona), vb=lagerVrijednostZaKolonu(b,kolona);
     let cmp;
-    if(jeNumericko){ cmp=(parseFloat(va)||0)-(parseFloat(vb)||0); }
+    if(jeNumericko){ cmp=(broj(va)||0)-(broj(vb)||0); }
     else{ cmp=String(va??'').localeCompare(String(vb??''),'sr-Latn-BA'); }
     return smjer==='asc'?cmp:-cmp;
   });
@@ -3283,11 +3302,11 @@ function renderLagerZaglavlje(){
       <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#f26a5f;border-radius:3px;display:inline-block;"></span>Nema (0)</span>
       <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#f5d35a;border-radius:3px;display:inline-block;"></span>Nisko (do
         ${currentUser?.rola==='admin'
-          ? `<input type="number" id="lager-prag-zuto" value="${lagerPragovi.prag_zuto}" style="width:44px;padding:1px 3px;font-size:11px;border:1px solid var(--border);border-radius:4px;" onchange="sacuvajLagerPragove()">`
+          ? `<input type="text" inputmode="decimal" id="lager-prag-zuto" value="${lagerPragovi.prag_zuto}" style="width:44px;padding:1px 3px;font-size:11px;border:1px solid var(--border);border-radius:4px;" onchange="sacuvajLagerPragove()">`
           : lagerPragovi.prag_zuto})</span>
       <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#f5b96a;border-radius:3px;display:inline-block;"></span>Osrednje (do
         ${currentUser?.rola==='admin'
-          ? `<input type="number" id="lager-prag-narandzasto" value="${lagerPragovi.prag_narandzasto}" style="width:44px;padding:1px 3px;font-size:11px;border:1px solid var(--border);border-radius:4px;" onchange="sacuvajLagerPragove()">`
+          ? `<input type="text" inputmode="decimal" id="lager-prag-narandzasto" value="${lagerPragovi.prag_narandzasto}" style="width:44px;padding:1px 3px;font-size:11px;border:1px solid var(--border);border-radius:4px;" onchange="sacuvajLagerPragove()">`
           : lagerPragovi.prag_narandzasto})</span>
       <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#c3cf7a;border-radius:3px;display:inline-block;"></span>Dobro stanje</span>
       ${currentUser?.rola==='admin'?'<span id="lager-pragovi-msg" style="color:var(--green,#1f8a4c);"></span>':''}
@@ -3327,9 +3346,9 @@ function lagerDistinctVrijednosti(k){
      "1.5, 2, 3, 8, 10, 20". Sada se provjerava da li su SVE vrijednosti brojevi, pa se
      tek onda poredi brojcano. */
   const jedinstvene=[...new Set(svePop.filter(v=>v!=null&&v!==''))];
-  const sveSuBrojevi = jedinstvene.length>0 && jedinstvene.every(v=>!isNaN(parseFloat(v)) && isFinite(v));
+  const sveSuBrojevi = jedinstvene.length>0 && jedinstvene.every(v=>!isNaN(broj(v)) && isFinite(v));
   const nepraznih = jedinstvene.sort((a,b)=>
-    sveSuBrojevi ? parseFloat(a)-parseFloat(b)
+    sveSuBrojevi ? broj(a)-broj(b)
                  : String(a).localeCompare(String(b),'sr-Latn-BA',{numeric:true}));
   // Ako postoji BAR JEDAN red sa praznom vrijednosti u ovoj koloni, dodaj eksplicitnu ""
   // opciju NA KRAJ liste — inače artikli bez imena/debljine potpuno nestaju iz filtera i
@@ -3466,8 +3485,8 @@ document.addEventListener('click', e=>{
 });
 
 async function sacuvajLagerPragove(){
-  const zuto=parseFloat(document.getElementById('lager-prag-zuto').value);
-  const narandzasto=parseFloat(document.getElementById('lager-prag-narandzasto').value);
+  const zuto=broj(document.getElementById('lager-prag-zuto').value);
+  const narandzasto=broj(document.getElementById('lager-prag-narandzasto').value);
   const msg=document.getElementById('lager-pragovi-msg');
   try{
     const r=await fetch(`${API}/api/roba/lager-pragovi`,{
@@ -3493,7 +3512,7 @@ async function ucitajLagerPragove(){
   }catch(e){}
 }
 function lagerBojaStanja(stanje){
-  const s=parseFloat(stanje)||0;
+  const s=broj(stanje)||0;
   if(s<=0) return '#f26a5f'; // crveno — nema na stanju
   if(s<=lagerPragovi.prag_zuto) return '#f5d35a'; // žuto — nisko
   if(s<=lagerPragovi.prag_narandzasto) return '#f5b96a'; // narandžasto — osrednje nisko
@@ -3545,7 +3564,7 @@ function renderLagerRedovi(){
 
   prazno.style.display=prikaz.length?'none':'block';
 
-  const ukupnoPrikazano=prikaz.reduce((s,r)=>s+parseFloat(r.ukupno||0),0);
+  const ukupnoPrikazano=prikaz.reduce((s,r)=>s+broj(r.ukupno||0),0);
   totalDiv.style.display='block';
   // UKUPNA VRIJEDNOST lagera vidi SAMO admin — ostali (npr. magacin) vide broj artikala,
   // ali ne i koliko magacin ukupno vrijedi. Server takođe ne šalje 'ukupno' ne-adminu,
@@ -3755,7 +3774,7 @@ let uvozIstPopunjenSelect=false;
 let akTrenutni = null;
 
 function otvoriAkciju(id, naziv, sifra, cijena){
-  akTrenutni = { id, naziv, sifra, cijena: parseFloat(cijena) || 0 };
+  akTrenutni = { id, naziv, sifra, cijena: broj(cijena) || 0 };
   document.getElementById('ak-artikal').textContent = naziv;
   document.getElementById('ak-redovna').innerHTML =
     `Šifra ${esc(sifra)} · redovna cijena <b>${lagerFmMoney(akTrenutni.cijena)}</b>`;
@@ -3780,7 +3799,7 @@ function otvoriAkciju(id, naziv, sifra, cijena){
 // Ziva racunica popusta — odmah se vidi koliko je snizenje
 function akRacunajPopust(){
   const el = document.getElementById('ak-popust');
-  const nova = parseFloat(document.getElementById('ak-cijena').value);
+  const nova = broj(document.getElementById('ak-cijena').value);
   if(!nova || !akTrenutni || nova <= 0){ el.textContent=''; return; }
   if(nova >= akTrenutni.cijena){
     el.style.color = 'var(--red,#c0392b)';
@@ -3795,7 +3814,7 @@ function akRacunajPopust(){
 
 async function sacuvajAkciju(){
   const greska = document.getElementById('ak-greska');
-  const nova = parseFloat(document.getElementById('ak-cijena').value);
+  const nova = broj(document.getElementById('ak-cijena').value);
   if(!nova || nova <= 0){ greska.style.display='block'; greska.textContent='Unesi akcijsku cijenu.'; return; }
   if(nova >= akTrenutni.cijena){
     greska.style.display='block';
@@ -4071,7 +4090,7 @@ function upRender(){
 async function upPrebaci(i, izObjektaId){
   const x = upPodaci[i];
   if(!x || !upCilj) return;
-  const kol = parseFloat(document.getElementById('up-kolicina').value);
+  const kol = broj(document.getElementById('up-kolicina').value);
   if(!kol || kol <= 0){ alert('Unesi ispravnu količinu.'); return; }
 
   const raspolozivo = x.po_pj[izObjektaId]?.stanje || 0;
@@ -4444,7 +4463,7 @@ function renderPresekTabela(){
 function presekIzmeniPolje(indeks, polje, vrijednost){
   const s=presekStavke[indeks];
   if(polje==='stanje_novo'||polje==='cijena_nova'){
-    s[polje]=parseFloat(String(vrijednost).replace(',','.'))||0;
+    s[polje]=broj(String(vrijednost).replace(',','.'))||0;
   }else{
     s[polje]=vrijednost.trim();
   }
@@ -4607,13 +4626,13 @@ function kalkDodajStavku(artikal){
   if(kalkStavke.some(s=>s.roba_id===artikal.id)){ alert('Artikal je već dodat.'); return; }
   kalkStavke.push({
     roba_id:artikal.id, sifra:artikal.sifra, naziv:artikal.naziv, jed_mjera:artikal.jed_mjera,
-    kolicina:1, nabavna_cijena:parseFloat(artikal.cijena)||0, prodajna_cijena:parseFloat(artikal.cijena)||0,
+    kolicina:1, nabavna_cijena:broj(artikal.cijena)||0, prodajna_cijena:broj(artikal.cijena)||0,
   });
   kalkRenderStavke();
 }
 
 function kalkAzurirajStavku(i, polje, vrijednost){
-  kalkStavke[i][polje]=parseFloat(vrijednost)||0;
+  kalkStavke[i][polje]=broj(vrijednost)||0;
   kalkRenderStavke();
 }
 
@@ -4633,9 +4652,9 @@ function kalkPredloziKurs(){
 function kalkRenderStavke(){
   const tbody=document.getElementById('kalk-stavke-tbody');
   const objektId=document.getElementById('kalk-objekt').value;
-  const osnovica=parseFloat(document.getElementById('kalk-osnovica').value)||0;
-  const stopaCarine=parseFloat(document.getElementById('kalk-stopa-carine').value)||0;
-  const stopaPdv=parseFloat(document.getElementById('kalk-stopa-pdv').value)||0;
+  const osnovica=broj(document.getElementById('kalk-osnovica').value)||0;
+  const stopaCarine=broj(document.getElementById('kalk-stopa-carine').value)||0;
+  const stopaPdv=broj(document.getElementById('kalk-stopa-pdv').value)||0;
   const iznosCarine=+(osnovica*stopaCarine/100).toFixed(2);
   const iznosPdv=+((osnovica+iznosCarine)*stopaPdv/100).toFixed(2);
   document.getElementById('kalk-carina-pdv-info').innerHTML=
@@ -4643,8 +4662,8 @@ function kalkRenderStavke(){
 
   if(!kalkStavke.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#9aa5b1;padding:16px;">Nema dodanih stavki — pretraži artikal iznad.</td></tr>'; kalkAzurirajSume(0); return; }
 
-  const trProm=parseFloat(document.getElementById('kalk-trosak-prevoz').value)||0;
-  const trOst=parseFloat(document.getElementById('kalk-drugi-troskovi').value)||0;
+  const trProm=broj(document.getElementById('kalk-trosak-prevoz').value)||0;
+  const trOst=broj(document.getElementById('kalk-drugi-troskovi').value)||0;
   const ukupniTroskovi=trProm+iznosCarine+trOst;
   const ukupnaVrijednost=kalkStavke.reduce((s,x)=>s+x.kolicina*x.nabavna_cijena,0);
 
@@ -4655,11 +4674,11 @@ function kalkRenderStavke(){
     return `
     <tr>
       <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><b>${esc(s.sifra)}</b><br><span style="font-size:10.5px;color:#8b96a5;">${esc(s.naziv)}</span></td>
-      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><input type="number" step="0.001" value="${s.kolicina}" style="width:75px;padding:5px 6px;font-size:12px;" onchange="kalkAzurirajStavku(${i},'kolicina',this.value)"></td>
-      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><input type="number" step="0.01" value="${s.nabavna_cijena}" style="width:80px;padding:5px 6px;font-size:12px;" onchange="kalkAzurirajStavku(${i},'nabavna_cijena',this.value)"></td>
+      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><input type="text" inputmode="decimal" step="0.001" value="${s.kolicina}" style="width:75px;padding:5px 6px;font-size:12px;" onchange="kalkAzurirajStavku(${i},'kolicina',this.value)"></td>
+      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><input type="text" inputmode="decimal" step="0.01" value="${s.nabavna_cijena}" style="width:80px;padding:5px 6px;font-size:12px;" onchange="kalkAzurirajStavku(${i},'nabavna_cijena',this.value)"></td>
       <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;color:#8b96a5;">${fmMoneyOpste(udio,objektId)}</td>
       <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;font-weight:700;">${fmMoneyOpste(pravaCijena,objektId)}</td>
-      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><input type="number" step="0.01" value="${s.prodajna_cijena}" style="width:80px;padding:5px 6px;font-size:12px;" onchange="kalkAzurirajStavku(${i},'prodajna_cijena',this.value)"></td>
+      <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><input type="text" inputmode="decimal" step="0.01" value="${s.prodajna_cijena}" style="width:80px;padding:5px 6px;font-size:12px;" onchange="kalkAzurirajStavku(${i},'prodajna_cijena',this.value)"></td>
       <td style="padding:5px 7px;border-bottom:1px solid #f0f2f5;"><button class="btn-import sec" style="padding:4px 8px;" onclick="kalkObrisiStavku(${i})">🗑</button></td>
     </tr>`;
   }).join('');
@@ -4852,11 +4871,11 @@ function primijeniKretanjeFiltere(){
   const fDatum=document.getElementById('kf-datum').value.trim().toLowerCase();
   const fArtikal=document.getElementById('kf-artikal').value.trim().toLowerCase();
   const fTip=document.getElementById('kf-tip').value;
-  const fUsloMin=parseFloat(document.getElementById('kf-uslo-min').value);
+  const fUsloMin=broj(document.getElementById('kf-uslo-min').value);
   const fOdKoga=document.getElementById('kf-od-koga').value.trim().toLowerCase();
-  const fIzasloMin=parseFloat(document.getElementById('kf-izaslo-min').value);
+  const fIzasloMin=broj(document.getElementById('kf-izaslo-min').value);
   const fKome=document.getElementById('kf-kome').value.trim().toLowerCase();
-  const fVrijednostMin=parseFloat(document.getElementById('kf-vrijednost-min').value);
+  const fVrijednostMin=broj(document.getElementById('kf-vrijednost-min').value);
 
   // Svi filteri se primjenjuju ZAJEDNO (AND) na isti niz — kombinovani efekat je isto
   // što i "kaskadno sužavanje", samo bez dropdown-a koji bi trebalo ponovo graditi.
@@ -4878,7 +4897,7 @@ function primijeniKretanjeFiltere(){
     filtrirano=[...filtrirano].sort((a,b)=>{
       const va=kretanjeVrijednostZaSort(a,kretanjeSortKolona), vb=kretanjeVrijednostZaSort(b,kretanjeSortKolona);
       // Ako su OBJE vrijednosti brojevi (i kad stignu kao tekst), poredi brojcano.
-      const na=parseFloat(va), nb=parseFloat(vb);
+      const na=broj(va), nb=broj(vb);
       if(!isNaN(na) && !isNaN(nb)) return (na-nb)*kretanjeSortSmjer;
       return String(va??'').localeCompare(String(vb??''),'sr-Latn-BA',{numeric:true})*kretanjeSortSmjer;
     });
@@ -4947,6 +4966,26 @@ fetch(`${API}/api/auth/me`).then(r=>{
   izvozLogProvjeriNove(); // admin odmah vidi ako je neko izvozio lager
 }).catch(()=>location.href='login.html');
 
+
+/* Ziva potvrda unosa — dok se kuca, ispod polja pise kako je sistem RAZUMIO broj. */
+(function(){
+  const fmt = n => n.toLocaleString('sr-Latn-BA', {minimumFractionDigits:2, maximumFractionDigits:3});
+  document.addEventListener('input', e => {
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement) || el.getAttribute('inputmode') !== 'decimal') return;
+    let nag = el.nextElementSibling;
+    if (!nag || !nag.classList?.contains('broj-nagovjestaj')) {
+      nag = document.createElement('div');
+      nag.className = 'broj-nagovjestaj';
+      nag.style.cssText = 'font-size:10.5px;color:#8b96a5;margin-top:2px;min-height:13px;';
+      el.after(nag);
+    }
+    const t = el.value.trim();
+    if (!t) { nag.textContent = ''; return; }
+    const n = broj(t);
+    nag.textContent = (t === String(n) || t === fmt(n)) ? '' : `= ${fmt(n)}`;
+  });
+})();
 </script>
 
 
@@ -4975,7 +5014,7 @@ fetch(`${API}/api/auth/me`).then(r=>{
     <div id="ak-redovna" style="font-size:12.5px;color:#8b96a5;margin-bottom:14px;"></div>
 
     <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px;">Akcijska cijena (KM) *</label>
-    <input type="number" id="ak-cijena" step="0.01" min="0.01" oninput="akRacunajPopust()" style="width:100%;padding:10px 12px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:17px;font-weight:800;color:var(--red,#c0392b);margin-bottom:4px;">
+    <input type="text" inputmode="decimal" id="ak-cijena" step="0.01" min="0.01" oninput="akRacunajPopust()" style="width:100%;padding:10px 12px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:17px;font-weight:800;color:var(--red,#c0392b);margin-bottom:4px;">
     <div id="ak-popust" style="font-size:12.5px;font-weight:700;margin-bottom:12px;min-height:17px;"></div>
 
     <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px;">Važi do <span style="font-weight:400;color:#8b96a5;">(prazno = do isteka zaliha)</span></label>

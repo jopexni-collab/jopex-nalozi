@@ -87,11 +87,29 @@ table.gusta tr:hover td{background:#f7f8fa;}
   <div id="proizvodnja-lista"><div class="empty-msg">Učitavanje...</div></div>
 </main>
 <script>
+/* ═══ UNOS BROJEVA — zarez kao decimala ═══════════════════════════════════════════
+   ZAREZ je uvijek decimala, TACKA razdvaja hiljade (1.234,56). Ako zareza nema, tacka
+   se cita kao decimala — radi kompatibilnosti sa postojecim podacima i Excel unosom.
+   Bez ovoga broj("17,55") vraca 17 — tiho se gubi 55 para. */
+function broj(v){
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/\s/g, '').replace(/[^\d.,-]/g, '');
+  if (!s) return 0;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(/,/g, '.');
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+/* Upis broja U POLJE — sa zarezom, bez razdvajanja hiljada (da ostane uredivo). */
+function uPolje(n, dec){
+  return broj(n).toFixed(dec == null ? 2 : dec).replace('.', ',');
+}
+
 const API='';
 let me=null;
 
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fm(n){return(broj(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
 
 function statusBadge(status){
   const mapa={poslato:['Čeka potvrdu','st-poslato'], potvrdjeno:['Potvrđeno','st-potvrdjeno'], otkazano:['Otkazano','st-otkazano']};

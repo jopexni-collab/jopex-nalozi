@@ -268,6 +268,24 @@ a.lk{color:var(--blue);text-decoration:none;}
 </div>
 
 <script>
+/* ═══ UNOS BROJEVA — zarez kao decimala ═══════════════════════════════════════════
+   ZAREZ je uvijek decimala, TACKA razdvaja hiljade (1.234,56). Ako zareza nema, tacka
+   se cita kao decimala — radi kompatibilnosti sa postojecim podacima i Excel unosom.
+   Bez ovoga broj("17,55") vraca 17 — tiho se gubi 55 para. */
+function broj(v){
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/\s/g, '').replace(/[^\d.,-]/g, '');
+  if (!s) return 0;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(/,/g, '.');
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+/* Upis broja U POLJE — sa zarezom, bez razdvajanja hiljada (da ostane uredivo). */
+function uPolje(n, dec){
+  return broj(n).toFixed(dec == null ? 2 : dec).replace('.', ',');
+}
+
 const API='';
 const STATUSI=['Nije Započeto','Zakazano','U radu','Čeka isporuku','Isporučeno','Kasni','Otkazano'];
 const PRIORITETI=['Normal','Hitno','Zakazano'];
@@ -394,7 +412,7 @@ function fd(d){
   const [y,m,dd]=s.split('-');
   return `${dd}.${m}.${y.slice(2)}`;
 }
-function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fm(n){return(broj(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 // Skraćuje puno ime na "Ime P." (ime + prvo slovo prezimena) — koristi se svuda gdje se
 // prikazuje ko je nešto uradio, radi kraćeg/diskretnijeg prikaza.
@@ -480,9 +498,9 @@ function getCols(){
       // Precrtaj i ako je checkbox "Naplaćeno" štikliran RUČNO (npr. posle uvoza, gde
       // naplaceno_iznos možda nikad nije stvarno upisan kroz sistem) — ne samo kad postoji
       // stvaran naplaceno_iznos trag.
-      const placeno=r.naplaceno || (parseFloat(r.naplaceno_iznos||0)>0.005 && parseFloat(r.za_naplatu||0)<=0.005);
+      const placeno=r.naplaceno || (broj(r.naplaceno_iznos||0)>0.005 && broj(r.za_naplatu||0)<=0.005);
       const iznosPrikaz=placeno
-        ? `<span style="text-decoration:line-through;text-decoration-color:#000;text-decoration-thickness:1.5px;">${fm(parseFloat(r.ugovorena_suma||0)-parseFloat(r.avans||0))}</span>`
+        ? `<span style="text-decoration:line-through;text-decoration-color:#000;text-decoration-thickness:1.5px;">${fm(broj(r.ugovorena_suma||0)-broj(r.avans||0))}</span>`
         : fm(r.za_naplatu);
       return `<td class="num note-cell${cls}" data-note="${esc(r.naplaceno_opis||'')}" title="${naslov}">${iznosPrikaz}</td>`;
     },edit:{type:'naplata-split',field:'avans',label:'Naplata ostatka'}},
@@ -723,12 +741,12 @@ function render(){
   const imaZaNaplatu=cols.some(c=>c.k==='za_naplatu');
   if(imaUgovoreno||imaZaNaplatu){
     const zaSumu=rows.filter(r=>!r.stornirano && mozeVidjetiFin(r));
-    const sumaUgovoreno=zaSumu.reduce((s,r)=>s+(parseFloat(r.ugovorena_suma)||0),0);
+    const sumaUgovoreno=zaSumu.reduce((s,r)=>s+(broj(r.ugovorena_suma)||0),0);
     // "Za naplatu" suma broji SAMO ono što JOŠ NIJE naplaćeno — nalog gdje je "naplaceno"
     // štiklirano se isključuje iz sume (bez obzira šta trenutno piše u za_naplatu polju).
     // Negativan za_naplatu (preplaćen nalog) se RAČUNA kao negativan — umanjuje ukupnu
     // sumu, ne zaustavlja se na 0.
-    const sumaZaNaplatu=zaSumu.filter(r=>!r.naplaceno).reduce((s,r)=>s+(parseFloat(r.za_naplatu)||0),0);
+    const sumaZaNaplatu=zaSumu.filter(r=>!r.naplaceno).reduce((s,r)=>s+(broj(r.za_naplatu)||0),0);
     const redSume=`<tr style="background:#eef4fc;font-weight:700;border-top:2px solid var(--blue,#1a5fa8);">${cols.map(c=>{
       if(c.k==='ugovorena_suma') return `<td class="num">${fm(sumaUgovoreno)}</td>`;
       if(c.k==='za_naplatu') return `<td class="num">${fm(sumaZaNaplatu)}</td>`;
@@ -1025,7 +1043,7 @@ function openPop(td,row,editCfg){
     setTimeout(()=>{const el=document.getElementById('naplata-vrsta');if(el)el.focus();},100);
   } else if(editCfg.type==='avans'){
     const opisVal=row.avans_opis||'';
-    const trenutniAvans=parseFloat(row.avans||0);
+    const trenutniAvans=broj(row.avans||0);
     const rate=opisVal.split('\n').map(r=>r.trim()).filter(Boolean);
     const imenaBlagajnika = blagajniciImena;
     const banke=[['rfb','rfb (banka)'],['uni','uni (banka)'],['mf','mf (banka)'],['nlb','nlb (banka)'],['uni1','uni1 (banka)']];
@@ -1035,7 +1053,7 @@ function openPop(td,row,editCfg){
         ${rate.map(r=>`<div>• ${esc(r)}</div>`).join('')}
       </div>`:''}
       <div style="font-size:10.5px;color:#888;font-weight:600;">Nova rata — iznos (KM):</div>
-      <input type="number" id="rata-iznos" step="0.01" placeholder="0.00" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:3px;">
+      <input type="text" inputmode="decimal" id="rata-iznos" step="0.01" placeholder="0.00" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:3px;">
       <div style="font-size:10.5px;color:#888;font-weight:600;margin-top:8px;">Način uplate:</div>
       <select id="rata-nacin" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:3px;" onchange="prekaciNacinRate()">
         <option value="">— izaberi —</option>
@@ -1057,7 +1075,7 @@ function openPop(td,row,editCfg){
         <div style="font-size:10.5px;color:#888;font-weight:600;margin-bottom:4px;">💳 Pretplata kupca (uplata primljena prije naloga):</div>
         <div id="pretplata-info" style="font-size:11.5px;margin-bottom:6px;"></div>
         <div id="pretplata-akcija" style="display:none;">
-          <input type="number" id="pretplata-iznos" step="0.01" placeholder="Koliko iskoristiti" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;">
+          <input type="text" inputmode="decimal" id="pretplata-iznos" step="0.01" placeholder="Koliko iskoristiti" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;">
           <button type="button" onclick="iskoristiPretplatu()" style="width:100%;margin-top:6px;padding:7px;background:#6b4fa0;color:#fff;border:none;border-radius:5px;font-weight:700;cursor:pointer;">Prebaci u avans naloga</button>
           <div style="font-size:10px;color:#888;margin-top:4px;">Iznos se skida sa salda kupca i dodaje na avans ovog naloga — novac se ne broji dvaput.</div>
         </div>
@@ -1066,7 +1084,7 @@ function openPop(td,row,editCfg){
     // Provjeri da li kupac ima pretplatu (uplatu primljenu PRIJE nego što je nalog postojao).
     setTimeout(()=>ucitajPretplatuZaNalog(row.r_br), 30);
   } else if(editCfg.type==='naplata-split'){
-    const zaNaplatu=parseFloat(row.za_naplatu||0);
+    const zaNaplatu=broj(row.za_naplatu||0);
     const opisVal=row.naplaceno_opis||'';
     const rate=opisVal.split('\n').map(r=>r.trim()).filter(Boolean);
     const imenaBlagajnika = blagajniciImena;
@@ -1077,7 +1095,7 @@ function openPop(td,row,editCfg){
         ${rate.map(r=>`<div>• ${esc(r)}</div>`).join('')}
       </div>`:''}
       <div style="font-size:10.5px;color:#888;font-weight:600;">Dio preko banke (KM) — opciono:</div>
-      <input type="number" id="ns-banka-iznos" step="0.01" placeholder="0.00" value="0" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:3px;" oninput="azurirajNaplataSplit(${zaNaplatu})">
+      <input type="text" inputmode="decimal" id="ns-banka-iznos" step="0.01" placeholder="0.00" value="0" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:3px;" oninput="azurirajNaplataSplit(${zaNaplatu})">
       <select id="ns-banka-nacin" style="width:100%;font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ccc;border-radius:4px;margin-top:4px;">
         ${banke.map(([v,l])=>`<option value="${esc(v)}">${l}</option>`).join('')}
       </select>
@@ -1097,7 +1115,7 @@ function openPop(td,row,editCfg){
       <div id="ns-msg" style="font-size:11px;margin-top:6px;"></div>
       <input type="hidden" id="pop-inp" value="${esc(val||0)}">`;
   } else if(editCfg.type==='number'){
-    fEl.innerHTML=`<input type="number" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
+    fEl.innerHTML=`<input type="text" inputmode="decimal" id="pop-inp" step="0.01" value="${esc(val||0)}">`;
     setTimeout(()=>{
       const el=document.getElementById('pop-inp');
       if(el){el.focus();el.select();}
@@ -1176,7 +1194,7 @@ function updateOpisCombo(prefix){
 }
 
 function azurirajNaplataSplit(zaNaplatu){
-  const bankaIznos=parseFloat(document.getElementById('ns-banka-iznos').value)||0;
+  const bankaIznos=broj(document.getElementById('ns-banka-iznos').value)||0;
   const ostatak=Math.max(0, zaNaplatu-bankaIznos);
   document.getElementById('ns-gotovina-iznos-prikaz').textContent=fm(ostatak)+' KM';
   document.getElementById('ns-gotovina-polja').style.display=ostatak>0.005?'block':'none';
@@ -1184,7 +1202,7 @@ function azurirajNaplataSplit(zaNaplatu){
 
 async function sacuvajNaplataSplit(zaNaplatu){
   const msg=document.getElementById('ns-msg');
-  const bankaIznos=parseFloat(document.getElementById('ns-banka-iznos').value)||0;
+  const bankaIznos=broj(document.getElementById('ns-banka-iznos').value)||0;
   const nacinBanka=document.getElementById('ns-banka-nacin').value;
   const gotovinaIznos=Math.max(0, +(zaNaplatu-bankaIznos).toFixed(2));
   let imeGotovina='';
@@ -1269,7 +1287,7 @@ async function ucitajPretplatuZaNalog(rBr){
       sekcija.style.display='block';
       info.innerHTML=`<b style="color:var(--green,#1f8a4c);">${esc(d.kupac_naziv)}</b> ima <b>${fm(d.saldo)} KM</b> slobodne pretplate.`;
       akcija.style.display='block';
-      document.getElementById('pretplata-iznos').value=d.saldo.toFixed(2);
+      document.getElementById('pretplata-iznos').value=uPolje(d.saldo);
       document.getElementById('pretplata-iznos').max=d.saldo;
       popPozicioniraj();  // visina se promijenila
     }else if(d.saldo<-0.005){
@@ -1284,7 +1302,7 @@ async function ucitajPretplatuZaNalog(rBr){
 }
 
 async function iskoristiPretplatu(){
-  const iznos=parseFloat(document.getElementById('pretplata-iznos').value);
+  const iznos=broj(document.getElementById('pretplata-iznos').value);
   if(!iznos||iznos<=0){ alert('Unesi iznos koji se koristi.'); return; }
   if(!confirm(`Prebaciti ${fm(iznos)} KM iz pretplate kupca u avans naloga #${popRow.r_br}?\n\nIznos se SKIDA sa salda kupca.`)) return;
   try{
@@ -1302,7 +1320,7 @@ async function iskoristiPretplatu(){
 
 async function sacuvajRatuAvansa(){
   const msg=document.getElementById('rata-msg');
-  const iznos=parseFloat(document.getElementById('rata-iznos').value);
+  const iznos=broj(document.getElementById('rata-iznos').value);
   const nacin=document.getElementById('rata-nacin').value;
   if(!(iznos>0)){ msg.style.color='red'; msg.textContent='Unesite iznos veći od 0.'; return; }
   if(!nacin){ msg.style.color='red'; msg.textContent='Izaberite način uplate.'; return; }
@@ -1509,7 +1527,7 @@ async function popSave(){
     }
     // Preračunaj za_naplatu ako se mijenja avans ili ugovorena_suma
     if(popField==='avans'||popField==='ugovorena_suma'){
-      popRow.za_naplatu=(parseFloat(popRow.ugovorena_suma)||0)-(parseFloat(popRow.avans)||0);
+      popRow.za_naplatu=(broj(popRow.ugovorena_suma)||0)-(broj(popRow.avans)||0);
     }
     popClose();
     render();
@@ -2010,6 +2028,26 @@ async function knPotvrdiCekaju(){
 document.getElementById('logout').onclick=async e=>{e.preventDefault();await fetch(API+'/api/auth/logout',{method:'POST'});location.href='login.html';};
 document.getElementById('search').addEventListener('input',render);
 checkAuth();
+
+/* Ziva potvrda unosa — dok se kuca, ispod polja pise kako je sistem RAZUMIO broj. */
+(function(){
+  const fmt = n => n.toLocaleString('sr-Latn-BA', {minimumFractionDigits:2, maximumFractionDigits:3});
+  document.addEventListener('input', e => {
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement) || el.getAttribute('inputmode') !== 'decimal') return;
+    let nag = el.nextElementSibling;
+    if (!nag || !nag.classList?.contains('broj-nagovjestaj')) {
+      nag = document.createElement('div');
+      nag.className = 'broj-nagovjestaj';
+      nag.style.cssText = 'font-size:10.5px;color:#8b96a5;margin-top:2px;min-height:13px;';
+      el.after(nag);
+    }
+    const t = el.value.trim();
+    if (!t) { nag.textContent = ''; return; }
+    const n = broj(t);
+    nag.textContent = (t === String(n) || t === fmt(n)) ? '' : `= ${fmt(n)}`;
+  });
+})();
 </script>
 
 

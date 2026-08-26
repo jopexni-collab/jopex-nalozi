@@ -156,8 +156,8 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
       tek ako nema, nudi se cijela tabla sa lager liste.
     </p>
     <div class="red">
-      <label class="polje">Širina (mm)<input type="number" id="t_sirina" style="width:110px"></label>
-      <label class="polje">Visina (mm)<input type="number" id="t_visina" style="width:110px"></label>
+      <label class="polje">Širina (mm)<input type="text" inputmode="decimal" id="t_sirina" style="width:110px"></label>
+      <label class="polje">Visina (mm)<input type="text" inputmode="decimal" id="t_visina" style="width:110px"></label>
       <label class="polje">Master grupa<select id="t_master" onchange="osvjeziFiltere('master')" style="width:160px">
         <option value="">— sve —</option></select></label>
       <label class="polje">Grupa<select id="t_grupa" onchange="osvjeziFiltere('grupa')" style="width:150px">
@@ -169,7 +169,7 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
       <label class="polje">Ili naziv<input type="text" id="t_materijal" list="t_materijali" placeholder="npr. Carrara" style="width:170px">
         <datalist id="t_materijali"></datalist></label>
       <label class="polje">PJ<select id="t_objekt" style="width:170px"><option value="">— sve PJ —</option></select></label>
-      <label class="polje">Rez/rezerva (mm)<input type="number" id="t_rez" value="5" style="width:110px"></label>
+      <label class="polje">Rez/rezerva (mm)<input type="text" inputmode="decimal" id="t_rez" value="5" style="width:110px"></label>
       <label class="polje">Ako ništa ne staje<select id="t_odstupanje" style="width:180px">
         <option value="0">ne predlaži ništa</option>
         <option value="10">pokaži one kojima fali do 10 mm</option>
@@ -193,8 +193,8 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
     <div class="red">
       <label class="polje">Pretraga<input type="text" id="f_q" placeholder="oznaka, materijal, napomena" style="width:220px"></label>
       <label class="polje">PJ<select id="f_objekt" style="width:170px"><option value="">— sve PJ —</option></select></label>
-      <label class="polje">Staje komad Š (mm)<input type="number" id="f_sirina" oninput="crtajListu()" style="width:130px"></label>
-      <label class="polje">× V (mm)<input type="number" id="f_visina" oninput="crtajListu()" style="width:120px"></label>
+      <label class="polje">Staje komad Š (mm)<input type="text" inputmode="decimal" id="f_sirina" oninput="crtajListu()" style="width:130px"></label>
+      <label class="polje">× V (mm)<input type="text" inputmode="decimal" id="f_visina" oninput="crtajListu()" style="width:120px"></label>
       <label class="polje">Status<select id="f_status" style="width:150px">
         <option value="">Dostupni + rezervisani</option>
         <option value="dostupan">Dostupan</option>
@@ -217,11 +217,11 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
           <select id="n_roba" style="width:260px" onchange="artikalIzabran()">
             <option value="">— nije povezan (lager se NE mijenja) —</option>
           </select></label>
-        <label class="polje">Debljina (cm)<input type="number" step="0.1" id="n_debljina" style="width:110px"></label>
+        <label class="polje">Debljina (cm)<input type="text" inputmode="decimal" step="0.1" id="n_debljina" style="width:110px"></label>
         <label class="polje">Grupa<input type="text" id="n_grupa" style="width:140px"></label>
-        <label class="polje">Cijena (KM/m²)<input type="number" step="0.01" id="n_cijena" style="width:130px"></label>
+        <label class="polje">Cijena (KM/m²)<input type="text" inputmode="decimal" step="0.01" id="n_cijena" style="width:130px"></label>
         <label class="polje">Nastao iz naloga (R.Br.)<input type="text" id="n_nalog" style="width:150px"></label>
-        <label class="polje">Skini sa lagera (m²)<input type="number" step="0.01" id="n_lager" style="width:150px"></label>
+        <label class="polje">Skini sa lagera (m²)<input type="text" inputmode="decimal" step="0.01" id="n_lager" style="width:150px"></label>
       </div>
       <div class="hint" id="lager_pomoc" style="margin-top:8px">
         <span id="lager_najava">Sam restl OSTAJE na lageru — skidaš samo ono što je otišlo:
@@ -293,10 +293,10 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
           <option value="trapez">Kosi rez / trapez</option>
           <option value="nepravilan">Nepravilan</option>
         </select></label>
-        <label class="polje" id="w_a">A — širina *<input type="number" id="n_a" oninput="osvjeziCrtez()" style="width:110px"></label>
-        <label class="polje" id="w_b">B — visina *<input type="number" id="n_b" oninput="osvjeziCrtez()" style="width:110px"></label>
-        <label class="polje" id="w_c" style="display:none">C — izrez šir.<input type="number" id="n_c" oninput="osvjeziCrtez()" style="width:110px"></label>
-        <label class="polje" id="w_d" style="display:none">D — izrez vis.<input type="number" id="n_d" oninput="osvjeziCrtez()" style="width:110px"></label>
+        <label class="polje" id="w_a">A — širina *<input type="text" inputmode="decimal" id="n_a" oninput="osvjeziCrtez()" style="width:110px"></label>
+        <label class="polje" id="w_b">B — visina *<input type="text" inputmode="decimal" id="n_b" oninput="osvjeziCrtez()" style="width:110px"></label>
+        <label class="polje" id="w_c" style="display:none">C — izrez šir.<input type="text" inputmode="decimal" id="n_c" oninput="osvjeziCrtez()" style="width:110px"></label>
+        <label class="polje" id="w_d" style="display:none">D — izrez vis.<input type="text" inputmode="decimal" id="n_d" oninput="osvjeziCrtez()" style="width:110px"></label>
       </div>
 
       <!-- 1. CRTEŽ RUKOM -->
@@ -309,7 +309,7 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
               Prstom obiđi oblik komada — ne mora biti uredno, ravnaće se samo.
             </div>
             <label class="polje" style="margin-bottom:8px">Najduža strana je otprilike (mm)
-              <input type="number" id="skica_mjerilo" value="1200" style="width:130px"></label>
+              <input type="text" inputmode="decimal" id="skica_mjerilo" value="1200" style="width:130px"></label>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
               <button type="button" class="btn sec mali" onclick="ocistiSkicu()">Očisti</button>
               <button type="button" class="btn mali" onclick="primijeniSkicu()">Pretvori u oblik</button>
@@ -361,6 +361,24 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
 <div id="modal_host"></div>
 
 <script>
+/* ═══ UNOS BROJEVA — zarez kao decimala ═══════════════════════════════════════════
+   ZAREZ je uvijek decimala, TACKA razdvaja hiljade (1.234,56). Ako zareza nema, tacka
+   se cita kao decimala — radi kompatibilnosti sa postojecim podacima i Excel unosom.
+   Bez ovoga broj("17,55") vraca 17 — tiho se gubi 55 para. */
+function broj(v){
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/\s/g, '').replace(/[^\d.,-]/g, '');
+  if (!s) return 0;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(/,/g, '.');
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+/* Upis broja U POLJE — sa zarezom, bez razdvajanja hiljada (da ostane uredivo). */
+function uPolje(n, dec){
+  return broj(n).toFixed(dec == null ? 2 : dec).replace('.', ',');
+}
+
 /* ═══════════════ osnovno ═══════════════ */
 let LAGER_ZAKLJUCAN = true, MOGU_OTKLJUCATI = false;
 
@@ -387,7 +405,7 @@ function crtajLagerTraku(d) {
   const el = document.getElementById('lager_traka');
   if (!el) return;
   el.style.display = 'block';
-  const kada = d && d.kada ? new Date(d.kada).toLocaleString('bs-BA') : null;
+  const kada = d && d.kada ? new Date(d.kada).toLocaleString('sr-Latn-BA') : null;
   el.innerHTML = LAGER_ZAKLJUCAN
     ? '<div class="msg" style="background:#e8eefc;color:#134a85;display:flex;gap:10px;' +
       'align-items:center;flex-wrap:wrap"><span>🔒 <b>Lager je zaključan.</b> Restlovi se troše i ' +
@@ -412,7 +430,7 @@ async function prebaciLager(zakljucaj) {
 }
 let OBJEKTI = [], DOZVOLE = { vidi: false, unos: false }, JA = null;
 
-const fmt = n => (Number(n) || 0).toLocaleString('bs-BA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = n => (Number(n) || 0).toLocaleString('sr-Latn-BA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const m2 = n => fmt(n) + ' m²';
 
 function poruka(tekst, tip) {
@@ -797,7 +815,7 @@ function crtajStrane() {
       (IZABRANA_STRANA === i ? ';background:#eef4fc;border-radius:6px;padding:3px' : '') + '">' +
     '<span onclick="izaberiStranu(' + i + ')" style="font-weight:800;color:#134a85;width:18px;' +
       'font-size:14px;cursor:pointer">' + SLOVA_S[i] + '</span>' +
-    '<input class="st-duz" type="number" value="' + duzinaStrane(i) + '" style="width:110px" ' +
+    '<input class="st-duz" type="text" inputmode="decimal" value="' + duzinaStrane(i) + '" style="width:110px" ' +
       'onchange="postaviDuzinuStrane(' + i + ', Number(this.value))" ' +
       'onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}">' +
     '<span class="hint" style="margin:0">' + SLOVA_T[i] + '→' + SLOVA_T[(i+1) % TJEMENA.length] + '</span>' +
@@ -816,11 +834,11 @@ function crtajStrane() {
         (IZABRANO_TJEME === v ? ';background:#eef4fc;border-radius:6px;padding:3px' : '') + '">' +
       '<span onclick="izaberiTjeme(' + v + ')" style="font-weight:800;color:#134a85;width:18px;' +
         'font-size:14px;cursor:pointer">' + SLOVA_T[v] + '</span>' +
-      '<input type="number" value="' + Math.round(p[0] - o.minX) + '" style="width:88px" ' +
+      '<input type="text" inputmode="decimal" value="' + Math.round(p[0] - o.minX) + '" style="width:88px" ' +
         'onchange="postaviTjeme(' + v + ', Number(this.value), null)">' +
-      '<input type="number" value="' + Math.round(p[1] - o.minY) + '" style="width:88px" ' +
+      '<input type="text" inputmode="decimal" value="' + Math.round(p[1] - o.minY) + '" style="width:88px" ' +
         'onchange="postaviTjeme(' + v + ', null, Number(this.value))">' +
-      '<input type="number" value="' + Math.round(o.maxX - p[0]) + '" style="width:88px" ' +
+      '<input type="text" inputmode="decimal" value="' + Math.round(o.maxX - p[0]) + '" style="width:88px" ' +
         'onchange="postaviTjeme(' + v + ', (' + (o.maxX - o.minX) + ') - Number(this.value), null)">' +
       '<span class="hint" style="margin:0;color:' + (prav ? '#1f8a4c' : '#e67e22') + '">' +
         (prav ? '90°' : ugaoUTjemenu(v) + '°') + '</span>' +
@@ -2107,18 +2125,18 @@ function otvoriKoristi(id, w, h) {
   modal(
     '<h3>Uzmi restl za nalog</h3>' +
     '<div class="red"><label class="polje">Nalog (R.Br.)<input id="k_nalog" style="width:140px"></label>' +
-    '<label class="polje">Isječeno A (mm)<input type="number" id="k_a" value="' + (w || '') + '" style="width:120px"></label>' +
-    '<label class="polje">Isječeno B (mm)<input type="number" id="k_b" value="' + (h || '') + '" style="width:120px"></label></div>' +
+    '<label class="polje">Isječeno A (mm)<input type="text" inputmode="decimal" id="k_a" value="' + (w || '') + '" style="width:120px"></label>' +
+    '<label class="polje">Isječeno B (mm)<input type="text" inputmode="decimal" id="k_b" value="' + (h || '') + '" style="width:120px"></label></div>' +
     '<label style="display:flex;gap:8px;align-items:center;margin:14px 0">' +
     '<input type="checkbox" id="k_kraj" onchange="document.getElementById(\'k_ostatak\').style.display=this.checked?\'none\':\'block\'">' +
     ' Nema ostatka — restl je potrošen do kraja</label>' +
     '<fieldset id="k_ostatak"><legend>Ostatak postaje novi restl</legend>' +
     '<div class="red"><label class="polje">Oblik<select id="k_oblik" onchange="crtezModal()">' +
     '<option value="pravougaonik">Pravougaonik</option><option value="L">L-oblik</option></select></label>' +
-    '<label class="polje">A<input type="number" id="k_oa" oninput="crtezModal()" style="width:100px"></label>' +
-    '<label class="polje">B<input type="number" id="k_ob" oninput="crtezModal()" style="width:100px"></label>' +
-    '<label class="polje">C<input type="number" id="k_oc" oninput="crtezModal()" style="width:100px"></label>' +
-    '<label class="polje">D<input type="number" id="k_od" oninput="crtezModal()" style="width:100px"></label></div>' +
+    '<label class="polje">A<input type="text" inputmode="decimal" id="k_oa" oninput="crtezModal()" style="width:100px"></label>' +
+    '<label class="polje">B<input type="text" inputmode="decimal" id="k_ob" oninput="crtezModal()" style="width:100px"></label>' +
+    '<label class="polje">C<input type="text" inputmode="decimal" id="k_oc" oninput="crtezModal()" style="width:100px"></label>' +
+    '<label class="polje">D<input type="text" inputmode="decimal" id="k_od" oninput="crtezModal()" style="width:100px"></label></div>' +
     '<svg id="k_crtez" class="crtez" width="260" height="170" style="margin-top:10px"></svg>' +
     '<div class="hint">Cijena po m² se automatski nasljeđuje od ovog restla.</div>' +
     '</fieldset>' +
@@ -2201,7 +2219,7 @@ async function rodovnik(id) {
             '><td>' + k.oznaka + '</td><td>' + (k.nalog_r_br || '') + '</td>' +
             '<td>' + (k.uzeto_a || '?') + '×' + (k.uzeto_b || '?') + '</td>' +
             '<td>' + fmt(k.lager_umanjeno) + '</td><td>' + (k.korisnik_ime || '') + '</td>' +
-            '<td>' + new Date(k.kada).toLocaleString('bs-BA') + '</td>' +
+            '<td>' + new Date(k.kada).toLocaleString('sr-Latn-BA') + '</td>' +
             '<td>' + (!k.stornirano && DOZVOLE.unos
               ? '<button class="btn sec mali" onclick="stornirajKoristenje(' + k.id + ')">Storno</button>' : '') +
             '</td></tr>').join('') + '</tbody></table></div>'
@@ -2489,7 +2507,7 @@ function crtajSporne() {
         '<td>' + [st.materijal, st.tip].filter(Boolean).join(' ') + '</td>' +
         '<td style="white-space:nowrap">' + (st.status === 'potrosen' ? '—'
           : Math.round(st.sirina || 0) + '×' + Math.round(st.visina || 0)) + '</td>' +
-        '<td><input type="number" value="' + debMm + '" style="width:80px' +
+        '<td><input type="text" inputmode="decimal" value="' + debMm + '" style="width:80px' +
           (debMm ? '' : ';border-color:#c0392b') + '" placeholder="mm" ' +
           'onchange="UVOZ_STAVKE[' + i + '].debljina_cm=(Number(this.value)||0)/10||null;crtajSporne()"></td>' +
         '<td>' + st.greske.map(g => '<b style="color:#c0392b">' + g + '</b>')
@@ -2586,7 +2604,7 @@ async function ucitajSerije() {
       '<h3 style="margin-top:18px">Prethodni uvozi</h3><div class="tbl-wrap"><table><thead><tr>' +
       '<th>Kada</th><th>Fajl</th><th>PJ</th><th>Komada</th><th>m²</th><th>Ko</th><th></th></tr></thead><tbody>' +
       red.map(u => '<tr' + (u.stornirano ? ' style="opacity:.5;text-decoration:line-through"' : '') + '>' +
-        '<td>' + new Date(u.kada).toLocaleString('bs-BA') + '</td><td>' + (u.naziv_fajla || '') + '</td>' +
+        '<td>' + new Date(u.kada).toLocaleString('sr-Latn-BA') + '</td><td>' + (u.naziv_fajla || '') + '</td>' +
         '<td>' + (u.objekt_naziv || '') + '</td><td>' + u.komada + '</td><td>' + fmt(u.povrsina) + '</td>' +
         '<td>' + (u.korisnik_ime || '') + '</td><td>' +
         (!u.stornirano ? '<button class="btn sec mali" onclick="stornirajUvoz(' + u.id + ')">Storno</button>' : '') +
@@ -2722,6 +2740,26 @@ async function stornirajUvoz(id) {
   } catch (e) {
     console.error('Editor oblika nije pokrenut:', e);
   }
+})();
+
+/* Ziva potvrda unosa — dok se kuca, ispod polja pise kako je sistem RAZUMIO broj. */
+(function(){
+  const fmt = n => n.toLocaleString('sr-Latn-BA', {minimumFractionDigits:2, maximumFractionDigits:3});
+  document.addEventListener('input', e => {
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement) || el.getAttribute('inputmode') !== 'decimal') return;
+    let nag = el.nextElementSibling;
+    if (!nag || !nag.classList?.contains('broj-nagovjestaj')) {
+      nag = document.createElement('div');
+      nag.className = 'broj-nagovjestaj';
+      nag.style.cssText = 'font-size:10.5px;color:#8b96a5;margin-top:2px;min-height:13px;';
+      el.after(nag);
+    }
+    const t = el.value.trim();
+    if (!t) { nag.textContent = ''; return; }
+    const n = broj(t);
+    nag.textContent = (t === String(n) || t === fmt(n)) ? '' : `= ${fmt(n)}`;
+  });
 })();
 </script>
 </body>

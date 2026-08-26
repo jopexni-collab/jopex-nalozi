@@ -194,6 +194,24 @@ main{max-width:760px;margin:0 auto;padding:20px 16px 40px;}
 </div>
 
 <script>
+/* ═══ UNOS BROJEVA — zarez kao decimala ═══════════════════════════════════════════
+   ZAREZ je uvijek decimala, TACKA razdvaja hiljade (1.234,56). Ako zareza nema, tacka
+   se cita kao decimala — radi kompatibilnosti sa postojecim podacima i Excel unosom.
+   Bez ovoga broj("17,55") vraca 17 — tiho se gubi 55 para. */
+function broj(v){
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/\s/g, '').replace(/[^\d.,-]/g, '');
+  if (!s) return 0;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(/,/g, '.');
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+/* Upis broja U POLJE — sa zarezom, bez razdvajanja hiljada (da ostane uredivo). */
+function uPolje(n, dec){
+  return broj(n).toFixed(dec == null ? 2 : dec).replace('.', ',');
+}
+
 /* ══ POŠALJI KATALOG ══════════════════════════════════════════════════════════════
    Tok: vrsta kupca → grupe proizvoda → izgled → (kome) → napravi → pošalji.
    Cijene računa server prema izabranoj vrsti kupca (zajednička pravila iz cijene.js). */
@@ -355,7 +373,7 @@ function katPrikaziInfoTipa(){
   if(!t){ info.textContent=''; return; }
   info.textContent = t.dodaje_pdv
     ? `Maloprodajna cijena — osnovica + PDV`
-    : (parseFloat(t.popust_posto)>0 ? `Veleprodaja — popust ${t.popust_posto}%` : 'Veleprodaja — bez popusta (osnovica)');
+    : (broj(t.popust_posto)>0 ? `Veleprodaja — popust ${t.popust_posto}%` : 'Veleprodaja — bez popusta (osnovica)');
 }
 
 // Kvadratic MASTER grupe cekira/odcekira sve grupe ispod nje.

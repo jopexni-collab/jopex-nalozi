@@ -123,13 +123,31 @@ tr:hover td{background:#fbfcfd;}
 </div>
 
 <script>
+/* ═══ UNOS BROJEVA — zarez kao decimala ═══════════════════════════════════════════
+   ZAREZ je uvijek decimala, TACKA razdvaja hiljade (1.234,56). Ako zareza nema, tacka
+   se cita kao decimala — radi kompatibilnosti sa postojecim podacima i Excel unosom.
+   Bez ovoga broj("17,55") vraca 17 — tiho se gubi 55 para. */
+function broj(v){
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/\s/g, '').replace(/[^\d.,-]/g, '');
+  if (!s) return 0;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(/,/g, '.');
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+/* Upis broja U POLJE — sa zarezom, bez razdvajanja hiljada (da ostane uredivo). */
+function uPolje(n, dec){
+  return broj(n).toFixed(dec == null ? 2 : dec).replace('.', ',');
+}
+
 const API='';
 let sviZaposleni=[];
 let prosliMjesecMap={}; // kljuc (zaposleni_id ili "ime:x") -> isplaceno prethodnog mjeseca
 let trenutniRedovi=[];
 
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fm(n){return(broj(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function trenutniMesec(){ return document.getElementById('mesec-izbor').value; }
 function sledeciMesec(m){
   const [g,mm]=m.split('-').map(Number);
@@ -166,8 +184,8 @@ function selektorZaposlenih(trenutniId){
 // "dekorativne" cifre, nego stvarno menjaju konačan iznos za taj mjesec (na osnovu
 // odluke ili postignutih rezultata te osobe tog mjeseca).
 function izracunajUkupno(row){
-  return (parseFloat(row.iznos_gotovina_km)||0) + (parseFloat(row.iznos_racun_km)||0)
-       + (parseFloat(row.bonus_km)||0) - (parseFloat(row.kazna_km)||0);
+  return (broj(row.iznos_gotovina_km)||0) + (broj(row.iznos_racun_km)||0)
+       + (broj(row.bonus_km)||0) - (broj(row.kazna_km)||0);
 }
 
 let sortKolona=null, sortSmjer=1; // 1=rastuce, -1=opadajuce
@@ -180,7 +198,7 @@ function vrijednostZaSort(row, kljuc){
   if(kljuc==='ime') return imeReda(row).toLowerCase();
   if(kljuc==='ukupno') return izracunajUkupno(row);
   if(kljuc==='tag_planiranje') return row.tag_planiranje||'';
-  return parseFloat(row[kljuc])||0;
+  return broj(row[kljuc])||0;
 }
 
 function sortirajPo(kljuc){
@@ -264,25 +282,25 @@ function renderMjesecTabela(){
         }
       </td>
       <td>
-        <input type="number" step="0.01" class="mali-broj" value="${row.iznos_gotovina_eur||0}" onchange="azurirajGotovinaEur(${i},this.value)">
+        <input type="text" inputmode="decimal" step="0.01" class="mali-broj" value="${row.iznos_gotovina_eur||0}" onchange="azurirajGotovinaEur(${i},this.value)">
         <div style="display:flex;gap:2px;margin-top:2px;">
           <button class="btn-zaokruzi" onclick="zaokruziGotovinuEur(${i},-1)" title="Zaokruži na niže (5 €)">▼5</button>
           <button class="btn-zaokruzi" onclick="zaokruziGotovinuEur(${i},1)" title="Zaokruži na više (5 €)">▲5</button>
         </div>
       </td>
       <td>
-        <input type="number" step="0.01" class="mali-broj" value="${row.iznos_gotovina_km||0}" onchange="azurirajGotovinaKm(${i},this.value)">
+        <input type="text" inputmode="decimal" step="0.01" class="mali-broj" value="${row.iznos_gotovina_km||0}" onchange="azurirajGotovinaKm(${i},this.value)">
         <div style="display:flex;gap:2px;margin-top:2px;">
           <button class="btn-zaokruzi" onclick="zaokruziGotovinu(${i},-1)" title="Zaokruži na niže (5 KM)">▼5</button>
           <button class="btn-zaokruzi" onclick="zaokruziGotovinu(${i},1)" title="Zaokruži na više (5 KM)">▲5</button>
         </div>
       </td>
-      <td><input type="number" step="0.01" class="mali-broj" value="${row.iznos_racun_km||0}" onchange="azurirajRed(${i},'iznos_racun_km',this.value)" style="${row.tag_planiranje==='povecanje'?'background:#e6f4ea;color:var(--green);font-weight:700;':row.tag_planiranje==='smanjenje'?'background:#fce8e6;color:var(--red);font-weight:700;':''}" title="${row.tag_planiranje?(row.tag_planiranje==='povecanje'?'▲ primijenjeno':'▼ primijenjeno')+(row.tag_razlog?' — '+esc(row.tag_razlog):''):''}"></td>
+      <td><input type="text" inputmode="decimal" step="0.01" class="mali-broj" value="${row.iznos_racun_km||0}" onchange="azurirajRed(${i},'iznos_racun_km',this.value)" style="${row.tag_planiranje==='povecanje'?'background:#e6f4ea;color:var(--green);font-weight:700;':row.tag_planiranje==='smanjenje'?'background:#fce8e6;color:var(--red);font-weight:700;':''}" title="${row.tag_planiranje?(row.tag_planiranje==='povecanje'?'▲ primijenjeno':'▼ primijenjeno')+(row.tag_razlog?' — '+esc(row.tag_razlog):''):''}"></td>
       <td>
-        <input type="number" step="0.01" class="mali-broj" value="${row.bonus_km||0}" onchange="azurirajRed(${i},'bonus_km',this.value)" style="color:var(--green);" title="${esc(row.bonus_razlog||'')}">
+        <input type="text" inputmode="decimal" step="0.01" class="mali-broj" value="${row.bonus_km||0}" onchange="azurirajRed(${i},'bonus_km',this.value)" style="color:var(--green);" title="${esc(row.bonus_razlog||'')}">
       </td>
       <td>
-        <input type="number" step="0.01" class="mali-broj" value="${row.kazna_km||0}" onchange="azurirajRed(${i},'kazna_km',this.value)" style="color:var(--red);" title="${esc(row.kazna_razlog||'')}">
+        <input type="text" inputmode="decimal" step="0.01" class="mali-broj" value="${row.kazna_km||0}" onchange="azurirajRed(${i},'kazna_km',this.value)" style="color:var(--red);" title="${esc(row.kazna_razlog||'')}">
       </td>
       <td style="font-weight:800;text-align:right;${poredjenjeBoja}">${fm(ukupno)}</td>
       <td>${poredjenjeHtml}</td>
@@ -309,13 +327,13 @@ const KURS_EUR_KM=1.95;
 // EUR i KM (gotovina) su UVIJEK isti iznos u dvije valute — promjena jednog polja
 // odmah preračunava drugo, da nikad ne mogu da se raziđu.
 function azurirajGotovinaEur(i, eurVrijednost){
-  const eur=parseFloat(eurVrijednost)||0;
+  const eur=broj(eurVrijednost)||0;
   trenutniRedovi[i].iznos_gotovina_eur=eur;
   trenutniRedovi[i].iznos_gotovina_km=+(eur*KURS_EUR_KM).toFixed(2);
   renderMjesecTabela();
 }
 function azurirajGotovinaKm(i, kmVrijednost){
-  const km=parseFloat(kmVrijednost)||0;
+  const km=broj(kmVrijednost)||0;
   trenutniRedovi[i].iznos_gotovina_km=km;
   trenutniRedovi[i].iznos_gotovina_eur=+(km/KURS_EUR_KM).toFixed(2);
   renderMjesecTabela();
@@ -324,7 +342,7 @@ function azurirajGotovinaKm(i, kmVrijednost){
 // Zaokruživanje gotovine na najbliži iznos od 5 KM (na više ili na niže) — EUR se
 // automatski preračuna iz novog KM iznosa, isti kurs kao gore.
 function zaokruziGotovinu(i, smjer){
-  const trenutniKm=parseFloat(trenutniRedovi[i].iznos_gotovina_km)||0;
+  const trenutniKm=broj(trenutniRedovi[i].iznos_gotovina_km)||0;
   const noviKm = smjer>0 ? Math.ceil(trenutniKm/5)*5 : Math.floor(trenutniKm/5)*5;
   // Ako je vec tacno na petici, pomjeri za jos jednu peticu u tom smjeru (da dugme
   // uvijek nešto uradi, ne "zaglavi" na istoj vrijednosti).
@@ -335,7 +353,7 @@ function zaokruziGotovinu(i, smjer){
 // Isto, ali zaokruživanje polazi od EUR iznosa (za slučaj kad blagajnik razmišlja u
 // eurima) — KM se automatski preračuna iz novog EUR iznosa.
 function zaokruziGotovinuEur(i, smjer){
-  const trenutniEur=parseFloat(trenutniRedovi[i].iznos_gotovina_eur)||0;
+  const trenutniEur=broj(trenutniRedovi[i].iznos_gotovina_eur)||0;
   const noviEur = smjer>0 ? Math.ceil(trenutniEur/5)*5 : Math.floor(trenutniEur/5)*5;
   const finalniEur = noviEur===trenutniEur ? noviEur+(smjer>0?5:-5) : noviEur;
   azurirajGotovinaEur(i, Math.max(0,finalniEur));
@@ -353,7 +371,7 @@ function postaviTag(i, tag){
   // Svaki klik dodaje/oduzima 50 KM ODMAH i TRAJNO (kumulativno) — više klikova = veća
   // promjena. Ne "toggle-uje" nazad na drugi klik (to je bio bug — klik dva puta je
   // izgledao kao da se poništi umjesto da se udvostruči).
-  row.iznos_racun_km=(parseFloat(row.iznos_racun_km)||0) + (tag==='povecanje'?KORAK_PLATE:-KORAK_PLATE);
+  row.iznos_racun_km=(broj(row.iznos_racun_km)||0) + (tag==='povecanje'?KORAK_PLATE:-KORAK_PLATE);
   row.tag_planiranje=tag;
   if(!row.tag_razlog){
     const razlog=prompt(tag==='povecanje'?'Razlog za povećanje (opciono):':'Razlog za smanjenje (opciono):');
@@ -440,10 +458,10 @@ async function obrisiRed(i){
 
 function azurirajSume(){
   const ukupnoZaIsplatu=trenutniRedovi.reduce((s,r)=>s+izracunajUkupno(r),0);
-  const bonus=trenutniRedovi.reduce((s,r)=>s+(parseFloat(r.bonus_km)||0),0);
-  const kazna=trenutniRedovi.reduce((s,r)=>s+(parseFloat(r.kazna_km)||0),0);
-  const gotovina=trenutniRedovi.reduce((s,r)=>s+(parseFloat(r.iznos_gotovina_km)||0),0);
-  const racun=trenutniRedovi.reduce((s,r)=>s+(parseFloat(r.iznos_racun_km)||0),0);
+  const bonus=trenutniRedovi.reduce((s,r)=>s+(broj(r.bonus_km)||0),0);
+  const kazna=trenutniRedovi.reduce((s,r)=>s+(broj(r.kazna_km)||0),0);
+  const gotovina=trenutniRedovi.reduce((s,r)=>s+(broj(r.iznos_gotovina_km)||0),0);
+  const racun=trenutniRedovi.reduce((s,r)=>s+(broj(r.iznos_racun_km)||0),0);
   document.getElementById('mjesec-sume').innerHTML=`
     <div class="k"><div class="val">${fm(gotovina)}</div><div class="lbl">Gotovina</div></div>
     <div class="k"><div class="val">${fm(racun)}</div><div class="lbl">Na račun</div></div>
@@ -468,7 +486,7 @@ async function ucitajMesec(){
     prosliMjesecMap={};
     prosliRedovi.forEach(r=>{
       const kljuc=r.zaposleni_id||('ime:'+(r.ime_slobodno||'').toLowerCase().trim());
-      const ukupnoProsli=(parseFloat(r.iznos_gotovina_km)||0)+(parseFloat(r.iznos_racun_km)||0)+(parseFloat(r.bonus_km)||0)-(parseFloat(r.kazna_km)||0);
+      const ukupnoProsli=(broj(r.iznos_gotovina_km)||0)+(broj(r.iznos_racun_km)||0)+(broj(r.bonus_km)||0)-(broj(r.kazna_km)||0);
       prosliMjesecMap[kljuc]=ukupnoProsli;
     });
     renderMjesecTabela();
@@ -570,6 +588,26 @@ fetch(API+'/api/auth/me').then(r=>{
   document.getElementById('mesec-izbor').value=`${sad.getFullYear()}-${String(sad.getMonth()+1).padStart(2,'0')}`;
   ucitajMesec();
 }).catch(()=>location.href='login.html');
+
+/* Ziva potvrda unosa — dok se kuca, ispod polja pise kako je sistem RAZUMIO broj. */
+(function(){
+  const fmt = n => n.toLocaleString('sr-Latn-BA', {minimumFractionDigits:2, maximumFractionDigits:3});
+  document.addEventListener('input', e => {
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement) || el.getAttribute('inputmode') !== 'decimal') return;
+    let nag = el.nextElementSibling;
+    if (!nag || !nag.classList?.contains('broj-nagovjestaj')) {
+      nag = document.createElement('div');
+      nag.className = 'broj-nagovjestaj';
+      nag.style.cssText = 'font-size:10.5px;color:#8b96a5;margin-top:2px;min-height:13px;';
+      el.after(nag);
+    }
+    const t = el.value.trim();
+    if (!t) { nag.textContent = ''; return; }
+    const n = broj(t);
+    nag.textContent = (t === String(n) || t === fmt(n)) ? '' : `= ${fmt(n)}`;
+  });
+})();
 </script>
 </body>
 </html>

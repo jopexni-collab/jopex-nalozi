@@ -142,8 +142,8 @@ main{max-width:680px;margin:16px auto;padding:0 14px 60px;}
         </div>
         <div id="lager-izabrano" style="display:none;background:#f7f8fa;border-radius:8px;padding:10px;margin-bottom:10px;font-size:13px;font-weight:700;"></div>
         <div class="row2">
-          <div class="fg"><label>Količina</label><input type="number" id="lager-kolicina" step="0.01" min="0"></div>
-          <div class="fg"><label>Cijena (po jed.)</label><input type="number" id="lager-cijena" step="0.01" min="0"></div>
+          <div class="fg"><label>Količina</label><input type="text" inputmode="decimal" id="lager-kolicina" step="0.01" min="0"></div>
+          <div class="fg"><label>Cijena (po jed.)</label><input type="text" inputmode="decimal" id="lager-cijena" step="0.01" min="0"></div>
         </div>
         <div class="fg"><label>Link slike (opciono)</label><input type="text" id="lager-slika" placeholder="https://..."></div>
         <button type="button" class="btn btn-outline" onclick="dodajLagerStavku()">+ Dodaj stavku sa lagera</button>
@@ -169,7 +169,7 @@ main{max-width:680px;margin:16px auto;padding:0 14px 60px;}
           <select id="pr-kategorija"><option value="">— izaberi —</option></select>
         </div>
         <div class="fg"><label>Napomena / dimenzije</label><textarea id="pr-napomena" placeholder="Detalji dogovora..."></textarea></div>
-        <div class="fg"><label>Ponuđena cijena (KM)</label><input type="number" id="pr-cijena" step="0.01" min="0"></div>
+        <div class="fg"><label>Ponuđena cijena (KM)</label><input type="text" inputmode="decimal" id="pr-cijena" step="0.01" min="0"></div>
         <button type="button" class="btn btn-outline" onclick="dodajProizvodnjaStavku()">+ Dodaj stavku za proizvodnju</button>
       </div>
 
@@ -192,6 +192,24 @@ main{max-width:680px;margin:16px auto;padding:0 14px 60px;}
   </div>
 </main>
 <script>
+/* ═══ UNOS BROJEVA — zarez kao decimala ═══════════════════════════════════════════
+   ZAREZ je uvijek decimala, TACKA razdvaja hiljade (1.234,56). Ako zareza nema, tacka
+   se cita kao decimala — radi kompatibilnosti sa postojecim podacima i Excel unosom.
+   Bez ovoga broj("17,55") vraca 17 — tiho se gubi 55 para. */
+function broj(v){
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/\s/g, '').replace(/[^\d.,-]/g, '');
+  if (!s) return 0;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(/,/g, '.');
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+/* Upis broja U POLJE — sa zarezom, bez razdvajanja hiljada (da ostane uredivo). */
+function uPolje(n, dec){
+  return broj(n).toFixed(dec == null ? 2 : dec).replace('.', ',');
+}
+
 const API='';
 let me=null;
 let objekti=[];
@@ -249,8 +267,8 @@ function izaberiLagerArtikal(a){
 
 function dodajLagerStavku(){
   if(!lagerIzabranaRoba){ alert('Prvo izaberi artikal iz pretrage.'); return; }
-  const kolicina=parseFloat(document.getElementById('lager-kolicina').value);
-  const cijena=parseFloat(document.getElementById('lager-cijena').value);
+  const kolicina=broj(document.getElementById('lager-kolicina').value);
+  const cijena=broj(document.getElementById('lager-cijena').value);
   if(!(kolicina>0)){ alert('Unesite količinu veću od 0.'); return; }
   if(!(cijena>=0)){ alert('Unesite ispravnu cijenu.'); return; }
   stavke.push({
@@ -270,7 +288,7 @@ function dodajProizvodnjaStavku(){
   const zadatakIzabran=document.getElementById('pr-zadatak').value;
   const zadatak=zadatakIzabran==='__slobodno__'?document.getElementById('pr-zadatak-slobodno').value.trim():zadatakIzabran;
   if(!zadatak){ alert('Izaberite ili upišite zadatak.'); return; }
-  const cijena=parseFloat(document.getElementById('pr-cijena').value)||0;
+  const cijena=broj(document.getElementById('pr-cijena').value)||0;
   stavke.push({
     tip:'proizvodnja', zadatak, materijal:document.getElementById('pr-materijal').value||null,
     napomena_stavka:document.getElementById('pr-napomena').value||null, cijena_proizvodnja:cijena,
@@ -488,7 +506,7 @@ async function otkaziPonudu(id){
 }
 
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fm(n){return(broj(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
 
 async function checkAuth(){
   try{
@@ -856,7 +874,7 @@ function katPrikaziInfoTipa(){
   if(!t){ info.textContent=''; return; }
   info.textContent = t.dodaje_pdv
     ? `Maloprodajna cijena — osnovica + PDV`
-    : (parseFloat(t.popust_posto)>0 ? `Veleprodaja — popust ${t.popust_posto}%` : 'Veleprodaja — bez popusta (osnovica)');
+    : (broj(t.popust_posto)>0 ? `Veleprodaja — popust ${t.popust_posto}%` : 'Veleprodaja — bez popusta (osnovica)');
 }
 
 // Kvadratic MASTER grupe cekira/odcekira sve grupe ispod nje.
@@ -1119,6 +1137,26 @@ function katKopirajLink(){
     .then(()=>alert('✓ Link kopiran.'))
     .catch(()=>alert('Link: '+katLink()));
 }
+
+/* Ziva potvrda unosa — dok se kuca, ispod polja pise kako je sistem RAZUMIO broj. */
+(function(){
+  const fmt = n => n.toLocaleString('sr-Latn-BA', {minimumFractionDigits:2, maximumFractionDigits:3});
+  document.addEventListener('input', e => {
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement) || el.getAttribute('inputmode') !== 'decimal') return;
+    let nag = el.nextElementSibling;
+    if (!nag || !nag.classList?.contains('broj-nagovjestaj')) {
+      nag = document.createElement('div');
+      nag.className = 'broj-nagovjestaj';
+      nag.style.cssText = 'font-size:10.5px;color:#8b96a5;margin-top:2px;min-height:13px;';
+      el.after(nag);
+    }
+    const t = el.value.trim();
+    if (!t) { nag.textContent = ''; return; }
+    const n = broj(t);
+    nag.textContent = (t === String(n) || t === fmt(n)) ? '' : `= ${fmt(n)}`;
+  });
+})();
 </script>
 
 </body>

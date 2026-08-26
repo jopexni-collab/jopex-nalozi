@@ -2843,7 +2843,7 @@ function dasPreview(){
     const prev=document.getElementById('das-m2-preview');
     if(!isNaN(d)&&!isNaN(v)&&d>0&&v>0){
       const m2=(d*v)/10000*kom;
-      prev.textContent=`= ${m2.toFixed(3)} m² (${d} × ${v} cm${kom>1?' × '+kom+' kom':''})`;
+      prev.textContent=`= ${m2.toFixed(3).replace(".", ",")} m² (${d} × ${v} cm${kom>1?' × '+kom+' kom':''})`;
     }else prev.textContent='';
   }
   if(dasJedinica==='m3' && dasM3mode==='racunaj'){
@@ -2854,7 +2854,7 @@ function dasPreview(){
     const prev=document.getElementById('das-m3-preview');
     if(!isNaN(d)&&!isNaN(v)&&!isNaN(deb)&&d>0&&v>0&&deb>0){
       const m3=(d*v*deb)/1000000*kom;
-      prev.textContent=`= ${m3.toFixed(4)} m³ (${d} × ${v} × ${deb} cm${kom>1?' × '+kom+' kom':''})`;
+      prev.textContent=`= ${m3.toFixed(4).replace(".", ",")} m³ (${d} × ${v} × ${deb} cm${kom>1?' × '+kom+' kom':''})`;
     }else prev.textContent='';
   }
 }

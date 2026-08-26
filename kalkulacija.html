@@ -58,9 +58,9 @@ td input{padding:5px 6px;font-size:12px;}
       <div><label>Napomena</label><input type="text" id="napomena"></div>
     </div>
     <div class="red3">
-      <div><label>Trošak prevoza (KM)</label><input type="number" step="0.01" id="trosak-prevoz" value="0" oninput="preracunaj()"></div>
-      <div><label>Trošak carine (KM)</label><input type="number" step="0.01" id="trosak-carina" value="0" oninput="preracunaj()"></div>
-      <div><label>Ostali troškovi (KM)</label><input type="number" step="0.01" id="trosak-ostalo" value="0" oninput="preracunaj()"></div>
+      <div><label>Trošak prevoza (KM)</label><input type="text" inputmode="decimal" step="0.01" id="trosak-prevoz" value="0" oninput="preracunaj()"></div>
+      <div><label>Trošak carine (KM)</label><input type="text" inputmode="decimal" step="0.01" id="trosak-carina" value="0" oninput="preracunaj()"></div>
+      <div><label>Ostali troškovi (KM)</label><input type="text" inputmode="decimal" step="0.01" id="trosak-ostalo" value="0" oninput="preracunaj()"></div>
     </div>
     <div style="font-size:11px;color:#8b96a5;">Zavisni troškovi se automatski raspoređuju na stavke proporcionalno njihovoj vrijednosti (skuplja stavka nosi veći udio).</div>
   </div>
@@ -87,12 +87,30 @@ td input{padding:5px 6px;font-size:12px;}
 </div>
 
 <script>
+/* ═══ UNOS BROJEVA — zarez kao decimala ═══════════════════════════════════════════
+   ZAREZ je uvijek decimala, TACKA razdvaja hiljade (1.234,56). Ako zareza nema, tacka
+   se cita kao decimala — radi kompatibilnosti sa postojecim podacima i Excel unosom.
+   Bez ovoga broj("17,55") vraca 17 — tiho se gubi 55 para. */
+function broj(v){
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/\s/g, '').replace(/[^\d.,-]/g, '');
+  if (!s) return 0;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(/,/g, '.');
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+/* Upis broja U POLJE — sa zarezom, bez razdvajanja hiljada (da ostane uredivo). */
+function uPolje(n, dec){
+  return broj(n).toFixed(dec == null ? 2 : dec).replace('.', ',');
+}
+
 const API='';
 let stavke=[]; // {roba_id, sifra, naziv, jed_mjera, kolicina, nabavna_cijena, prodajna_cijena}
 let mojiPJovi=[];
 
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fm(n){return(broj(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
 
 async function ucitajObjekte(){
   try{
@@ -130,13 +148,13 @@ function dodajStavku(artikal){
   if(stavke.some(s=>s.roba_id===artikal.id)){ alert('Artikal je već dodat.'); return; }
   stavke.push({
     roba_id:artikal.id, sifra:artikal.sifra, naziv:artikal.naziv, jed_mjera:artikal.jed_mjera,
-    kolicina:1, nabavna_cijena:parseFloat(artikal.cijena)||0, prodajna_cijena:parseFloat(artikal.cijena)||0,
+    kolicina:1, nabavna_cijena:broj(artikal.cijena)||0, prodajna_cijena:broj(artikal.cijena)||0,
   });
   renderStavke();
 }
 
 function azurirajStavku(i, polje, vrijednost){
-  stavke[i][polje]=parseFloat(vrijednost)||0;
+  stavke[i][polje]=broj(vrijednost)||0;
   renderStavke();
 }
 
@@ -153,9 +171,9 @@ function renderStavke(){
   const tbody=document.getElementById('stavke-tbody');
   if(!stavke.length){ tbody.innerHTML='<tr><td colspan="7" class="empty">Nema dodanih stavki — pretraži artikal iznad.</td></tr>'; azurirajSume(0); return; }
 
-  const trProm=parseFloat(document.getElementById('trosak-prevoz').value)||0;
-  const trCar=parseFloat(document.getElementById('trosak-carina').value)||0;
-  const trOst=parseFloat(document.getElementById('trosak-ostalo').value)||0;
+  const trProm=broj(document.getElementById('trosak-prevoz').value)||0;
+  const trCar=broj(document.getElementById('trosak-carina').value)||0;
+  const trOst=broj(document.getElementById('trosak-ostalo').value)||0;
   const ukupniTroskovi=trProm+trCar+trOst;
   const ukupnaVrijednost=stavke.reduce((s,x)=>s+x.kolicina*x.nabavna_cijena,0);
 
@@ -166,11 +184,11 @@ function renderStavke(){
     return `
     <tr>
       <td><b>${esc(s.sifra)}</b><br><span style="font-size:10.5px;color:#8b96a5;">${esc(s.naziv)}</span></td>
-      <td><input type="number" step="0.001" value="${s.kolicina}" style="width:75px;" onchange="azurirajStavku(${i},'kolicina',this.value)"></td>
-      <td><input type="number" step="0.01" value="${s.nabavna_cijena}" style="width:80px;" onchange="azurirajStavku(${i},'nabavna_cijena',this.value)"></td>
+      <td><input type="text" inputmode="decimal" step="0.001" value="${s.kolicina}" style="width:75px;" onchange="azurirajStavku(${i},'kolicina',this.value)"></td>
+      <td><input type="text" inputmode="decimal" step="0.01" value="${s.nabavna_cijena}" style="width:80px;" onchange="azurirajStavku(${i},'nabavna_cijena',this.value)"></td>
       <td style="color:#8b96a5;">${fm(udio)} KM</td>
       <td style="font-weight:700;">${fm(pravaCijena)} KM</td>
-      <td><input type="number" step="0.01" value="${s.prodajna_cijena}" style="width:80px;" onchange="azurirajStavku(${i},'prodajna_cijena',this.value)"></td>
+      <td><input type="text" inputmode="decimal" step="0.01" value="${s.prodajna_cijena}" style="width:80px;" onchange="azurirajStavku(${i},'prodajna_cijena',this.value)"></td>
       <td><button class="btn sec" style="padding:4px 8px;" onclick="obrisiStavku(${i})">🗑</button></td>
     </tr>`;
   }).join('');
@@ -241,6 +259,26 @@ fetch(API+'/api/auth/me').then(r=>{
   document.getElementById('datum').value=new Date().toISOString().split('T')[0];
   await ucitajObjekte();
 }).catch(()=>location.href='login.html');
+
+/* Ziva potvrda unosa — dok se kuca, ispod polja pise kako je sistem RAZUMIO broj. */
+(function(){
+  const fmt = n => n.toLocaleString('sr-Latn-BA', {minimumFractionDigits:2, maximumFractionDigits:3});
+  document.addEventListener('input', e => {
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement) || el.getAttribute('inputmode') !== 'decimal') return;
+    let nag = el.nextElementSibling;
+    if (!nag || !nag.classList?.contains('broj-nagovjestaj')) {
+      nag = document.createElement('div');
+      nag.className = 'broj-nagovjestaj';
+      nag.style.cssText = 'font-size:10.5px;color:#8b96a5;margin-top:2px;min-height:13px;';
+      el.after(nag);
+    }
+    const t = el.value.trim();
+    if (!t) { nag.textContent = ''; return; }
+    const n = broj(t);
+    nag.textContent = (t === String(n) || t === fmt(n)) ? '' : `= ${fmt(n)}`;
+  });
+})();
 </script>
 </body>
 </html>
