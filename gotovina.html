@@ -145,7 +145,7 @@ td.num{text-align:right;font-weight:700;}
     <div id="razduzenje-forma" style="display:none;background:#f8f9fc;border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px;">
       <div style="font-weight:700;margin-bottom:8px;" id="razduzenje-naslov"></div>
       <div class="forma-grid">
-        <div class="fg"><label>Iznos</label><input type="number" id="razd-iznos" step="0.01" min="0.01"></div>
+        <div class="fg"><label>Iznos</label><input type="text" inputmode="decimal" id="razd-iznos" step="0.01" min="0.01"></div>
         <div class="fg"><label>Napomena (opciono)</label><input type="text" id="razd-napomena"></div>
         <div class="fg"><label>&nbsp;</label><button class="btn-add" onclick="potvrdiRazduzenje()">✓ Zabilježi</button></div>
       </div>
@@ -188,7 +188,7 @@ td.num{text-align:right;font-weight:700;}
   </div>
   <div class="forma-grid">
     <div class="fg"><label>Datum</label><div id="f-datum-wrap"></div></div>
-    <div class="fg"><label id="f-iznos-lbl">Iznos (KM)</label><input type="number" id="f-iznos" step="0.01" min="0" placeholder="0.00"></div>
+    <div class="fg"><label id="f-iznos-lbl">Iznos (KM)</label><input type="text" inputmode="decimal" id="f-iznos" step="0.01" min="0" placeholder="0.00"></div>
     <div class="fg"><label>Izvor</label>
       <select id="f-izvor" onchange="azurirajNalogPoljeVidljivost()">
         <option value="Proizvodnja">Proizvodnja</option>
@@ -196,7 +196,7 @@ td.num{text-align:right;font-weight:700;}
         <option value="Drugo">Drugo</option>
       </select>
     </div>
-    <div class="fg" id="f-nalog-fg"><label>Nalog R.Br. (opciono)</label><input type="number" id="f-nalog" placeholder="npr. 342" oninput="debounceTraziNalogBroj()"></div>
+    <div class="fg" id="f-nalog-fg"><label>Nalog R.Br. (opciono)</label><input type="text" inputmode="decimal" id="f-nalog" placeholder="npr. 342" oninput="debounceTraziNalogBroj()"></div>
     <div class="fg"><label>Opis</label><input type="text" id="f-opis" placeholder="napomena..."></div>
     <div class="fg"><label>&nbsp;</label><button class="btn-add" onclick="dodajNaplatu()">+ Dodaj</button></div>
   </div>
@@ -218,7 +218,7 @@ td.num{text-align:right;font-weight:700;}
   </div>
   <div class="forma-grid">
     <div class="fg"><label>Datum</label><div id="i-datum-wrap"></div></div>
-    <div class="fg"><label id="i-iznos-lbl">Iznos (KM)</label><input type="number" id="i-iznos" step="0.01" min="0" placeholder="0.00"></div>
+    <div class="fg"><label id="i-iznos-lbl">Iznos (KM)</label><input type="text" inputmode="decimal" id="i-iznos" step="0.01" min="0" placeholder="0.00"></div>
     <div class="fg"><label>Izvor</label>
       <select id="i-izvor">
         <option value="Proizvodnja">Proizvodnja</option>
@@ -226,7 +226,7 @@ td.num{text-align:right;font-weight:700;}
         <option value="Drugo">Drugo</option>
       </select>
     </div>
-    <div class="fg"><label>Nalog R.Br. (opciono)</label><input type="number" id="i-nalog" placeholder="npr. 342"></div>
+    <div class="fg"><label>Nalog R.Br. (opciono)</label><input type="text" inputmode="decimal" id="i-nalog" placeholder="npr. 342"></div>
     <div class="fg" id="i-opis-fg"><label>Opis (razlog isplate) *</label><input type="text" id="i-opis" placeholder="npr. gorivo, sitna popravka..."></div>
     <div class="fg"><label>&nbsp;</label><button class="btn-add" style="background:var(--red);" onclick="dodajIsplatuRucno()">− Dodaj isplatu</button></div>
 
@@ -335,7 +335,7 @@ td.num{text-align:right;font-weight:700;}
       <option value="rfb">rfb</option><option value="uni">uni</option><option value="mf">mf</option>
       <option value="nlb">nlb</option><option value="uni1">uni1</option>
     </select>
-    <input type="number" id="bq-iznos" step="0.01" min="0.01" placeholder="Iznos" style="flex:1;min-width:100px;padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:12.5px;">
+    <input type="text" inputmode="decimal" id="bq-iznos" step="0.01" min="0.01" placeholder="Iznos" style="flex:1;min-width:100px;padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:12.5px;">
     <button class="btn-sm" onclick="sacuvajBrziIstorijskiUnos()" style="background:var(--blue,#1a5fa8);color:#fff;white-space:nowrap;">+ Istorijski unos</button>
   </div>
   <div id="bq-msg" style="display:none;margin-bottom:10px;padding:7px 9px;border-radius:6px;font-size:12px;"></div>
@@ -373,7 +373,7 @@ td.num{text-align:right;font-weight:700;}
     </div>
     <div class="fg" style="margin-top:10px;">
       <label style="font-size:11.5px;font-weight:600;">Iznos</label>
-      <input type="number" id="oc-iznos" step="0.01" min="0.01" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;">
+      <input type="text" inputmode="decimal" id="oc-iznos" step="0.01" min="0.01" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;">
     </div>
     <div class="fg" style="margin-top:10px;">
       <label style="font-size:11.5px;font-weight:600;">Napomena (opciono)</label>
@@ -427,7 +427,7 @@ td.num{text-align:right;font-weight:700;}
     </div>
     <div class="fg" style="margin-top:10px;">
       <label style="font-size:11.5px;font-weight:600;">Iznos</label>
-      <input type="number" id="ist-iznos" step="0.01" min="0.01" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;">
+      <input type="text" inputmode="decimal" id="ist-iznos" step="0.01" min="0.01" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;">
     </div>
     <div class="fg" style="margin-top:10px;">
       <label style="font-size:11.5px;font-weight:600;">Napomena (opciono)</label>
@@ -512,9 +512,9 @@ td.num{text-align:right;font-weight:700;}
     <h3 id="kat-naslov" style="margin:0 0 6px;">Podela duga</h3>
     <div id="kat-ukupno-info" style="font-size:12px;color:#8b96a5;margin-bottom:14px;"></div>
     <label style="font-size:11px;font-weight:700;color:#1a2733;display:block;margin-bottom:4px;">Očekivana naplata (KM)</label>
-    <input type="number" id="kat-ocekivana" step="0.01" min="0" oninput="azurirajKategorizacijaOstatak()" style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:6px;margin-bottom:10px;">
+    <input type="text" inputmode="decimal" id="kat-ocekivana" step="0.01" min="0" oninput="azurirajKategorizacijaOstatak()" style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:6px;margin-bottom:10px;">
     <label style="font-size:11px;font-weight:700;color:#1a2733;display:block;margin-bottom:4px;">Teško naplativo (KM)</label>
-    <input type="number" id="kat-tesko" step="0.01" min="0" oninput="azurirajKategorizacijaOstatak()" style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:6px;margin-bottom:10px;">
+    <input type="text" inputmode="decimal" id="kat-tesko" step="0.01" min="0" oninput="azurirajKategorizacijaOstatak()" style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:6px;margin-bottom:10px;">
     <div id="kat-ostatak-info" style="font-size:12.5px;font-weight:700;margin-bottom:6px;"></div>
     <label style="font-size:11px;font-weight:700;color:#1a2733;display:block;margin-bottom:4px;">Napomena (opciono)</label>
     <input type="text" id="kat-napomena" placeholder="npr. dogovoren plan otplate na rate" style="width:100%;padding:8px 10px;border:1px solid var(--border,#ddd);border-radius:6px;margin-bottom:14px;">
@@ -526,10 +526,28 @@ td.num{text-align:right;font-weight:700;}
 </div>
 
 <script>
+/* ═══ UNOS BROJEVA — zarez kao decimala ═══════════════════════════════════════════
+   ZAREZ je uvijek decimala, TACKA razdvaja hiljade (1.234,56). Ako zareza nema, tacka
+   se cita kao decimala — radi kompatibilnosti sa postojecim podacima i Excel unosom.
+   Bez ovoga broj("17,55") vraca 17 — tiho se gubi 55 para. */
+function broj(v){
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/\s/g, '').replace(/[^\d.,-]/g, '');
+  if (!s) return 0;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(/,/g, '.');
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+/* Upis broja U POLJE — sa zarezom, bez razdvajanja hiljada (da ostane uredivo). */
+function uPolje(n, dec){
+  return broj(n).toFixed(dec == null ? 2 : dec).replace('.', ',');
+}
+
 const API='';
 let all=[], isAdmin=false, trenutniUser=null, blagajnaObjektId=null, razduzenjeTipTrenutni=null;
 
-function fm(n){return(parseFloat(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fm(n){return(broj(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
 // VAŽNO: koristi Date objekat (lokalna vremenska zona browsera), NE sirovo rezanje
 // teksta iz ISO stringa — string bi pokazao SERVERSKO/UTC vrijeme, ne lokalno, i moglo
 // bi biti pomjereno za 1-2 sata (i pogrešan datum oko ponoći).
@@ -769,7 +787,7 @@ async function ucitajBlagajnaBreakdown(tiho){
       if ((x.opis||'').startsWith('Dug po otpremnici')) return; // isto - vec spojeno gore, ili osamljeno (vec filtrirano ranije)
       const dan=String(x.datum).slice(0,10);
       const d=osiguraj(dan);
-      const iznos=parseFloat(x.iznos||0);
+      const iznos=broj(x.iznos||0);
       if(iznos>=0) d.uplate.push({iznos, opis:`${esc(skratiIme(x.primio))} — ${esc(x.opis||x.izvor||'')}`, datum:x.datum});
       else d.isplate.push({iznos:-iznos, opis:`Dug/isplata — ${esc(x.opis||x.izvor||'')}`, datum:x.datum});
     });
@@ -778,8 +796,8 @@ async function ucitajBlagajnaBreakdown(tiho){
       const dug=dugPoNalogu.get(bruto.nalog_r_br);
       const dan=String(bruto.datum).slice(0,10);
       const d=osiguraj(dan);
-      const uplaceno=+(parseFloat(bruto.iznos)-parseFloat(-dug.iznos)).toFixed(2);
-      const dugIznos=-parseFloat(dug.iznos);
+      const uplaceno=+(broj(bruto.iznos)-broj(-dug.iznos)).toFixed(2);
+      const dugIznos=-broj(dug.iznos);
       d.uplate.push({
         iznos: uplaceno, datum: bruto.datum, djelimicno: true, dugIznos,
         dugNaplacenKasnije: naloziNaplaceniKasnije.has(bruto.nalog_r_br),
@@ -789,7 +807,7 @@ async function ucitajBlagajnaBreakdown(tiho){
     rzRows.forEach(rz=>{
       const dan=String(rz.kreirano).slice(0,10);
       const d=osiguraj(dan);
-      d.isplate.push({iznos:parseFloat(rz.iznos||0), opis:`${rz.tip==='banka'?'🏦 Razduženo u banku':'🔒 Ostavljeno u sef'}${rz.napomena?' — '+esc(rz.napomena):''}${rz.status!=='potvrdjeno'?' (⏳ na čekanju potvrde)':''}`, datum:rz.kreirano});
+      d.isplate.push({iznos:broj(rz.iznos||0), opis:`${rz.tip==='banka'?'🏦 Razduženo u banku':'🔒 Ostavljeno u sef'}${rz.napomena?' — '+esc(rz.napomena):''}${rz.status!=='potvrdjeno'?' (⏳ na čekanju potvrde)':''}`, datum:rz.kreirano});
     });
 
     // KRITIČNO: dan bez NIJEDNE stavke (ni uplate ni isplate) se inače NIKAD ne dodaje u
@@ -875,9 +893,9 @@ async function udioUBlagajniPoZapisu(pj){
     const sviRedovi=sviRedoviSirovo.filter(x=>x.predao_blagajniku && !jeVpBankaRed(x)); // već sortirano najnovije-prvo
     const rStanje=await fetch(`${API}/api/blagajna-razduzenja/stanje?objekt_id=${blagajnaObjektId}`);
     const stanje=await rStanje.json();
-    let granica=parseFloat(stanje.trenutno_u_blagajni||0);
+    let granica=broj(stanje.trenutno_u_blagajni||0);
     for(const red of sviRedovi){
-      const iznos=parseFloat(red.iznos||0);
+      const iznos=broj(red.iznos||0);
       if(granica<=0.005){ mapa.set(red.id, 0); continue; } // potpuno razduženo
       if(granica>=iznos-0.005){ mapa.set(red.id, 1); granica-=iznos; continue; } // potpuno u blagajni
       mapa.set(red.id, granica/iznos); // granica pada usred ovog iznosa — djelimično
@@ -902,10 +920,10 @@ async function prikaziNepredano(d){
     const r=await fetch(`${API}/api/gotovina/suma`);
     const d2=await r.json();
     const zaPJ=(d2.nepredano_po_pj||[]).filter(x=>x.objekt_naziv===pj.naziv);
-    const nepredano=zaPJ.reduce((s,x)=>s+parseFloat(x.iznos||0),0);
+    const nepredano=zaPJ.reduce((s,x)=>s+broj(x.iznos||0),0);
     if(Math.abs(nepredano)<0.01){ el.style.display='none'; return; }
     el.style.display='block';
-    const uMinusu=parseFloat(d.trenutno_u_blagajni)<0;
+    const uMinusu=broj(d.trenutno_u_blagajni)<0;
     el.innerHTML=`<span style="color:${uMinusu?'#e0a800':'#8b96a5'};font-weight:${uMinusu?'700':'400'};">`
       +`⏳ Nepredano kod komercijalista: ${fmValuta(nepredano, d.valuta)}`
       +(uMinusu?` — minus je pokriven ovim kešom`:'')+`</span>`;
@@ -968,7 +986,7 @@ function otvoriRazduzenje(tip){
 }
 
 async function potvrdiRazduzenje(){
-  const iznos=parseFloat(document.getElementById('razd-iznos').value);
+  const iznos=broj(document.getElementById('razd-iznos').value);
   const napomena=document.getElementById('razd-napomena').value.trim();
   const msg=document.getElementById('razduzenje-msg');
   if(!iznos||iznos<=0){msg.style.color='red';msg.textContent='Unesite ispravan iznos.';return;}
@@ -1220,16 +1238,16 @@ function render(){
   const jePomocni = r => /^(Pokri.?e isplate|Iskori.?teno za isplatu|Ulaz iz nepredane gotovine|Razdu.?enje .*dao kes)/.test(r.opis||'');
   const prikaziPomocne = document.getElementById('fil-pomocni')?.checked;
   const rows=all.filter(r=>!jeVpBankaRed(r) && (prikaziPomocne || !jePomocni(r)));
-  const ukupnoKM=rows.reduce((s,r)=>s+parseFloat(r.iznos||0)*(r.valuta==='EUR'?1.95:1),0);
+  const ukupnoKM=rows.reduce((s,r)=>s+broj(r.iznos||0)*(r.valuta==='EUR'?1.95:1),0);
   document.getElementById('stat').textContent=`${rows.length} zapisa | Ukupno: ${fm(ukupnoKM)} KM`;
   if(!rows.length){
     document.getElementById('tbody').innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">Nema podataka.</td></tr>';
     return;
   }
   document.getElementById('tbody').innerHTML=rows.map(r=>{
-    const jeIsplata=parseFloat(r.iznos)<0;
+    const jeIsplata=broj(r.iznos)<0;
     const jeVp=jeVpBankaRed(r);
-    const jePlus=parseFloat(r.iznos)>=0;
+    const jePlus=broj(r.iznos)>=0;
 
     // Za VP/banka redove (roba odvezena, ali NEMA gotovine koju komercijalista predaje
     // blagajniku — novac stiže kasnije, na banku ili gotovinom sa terena) — ista kolona
@@ -1324,9 +1342,9 @@ async function ucitajVpCekanje(){
         </div>
         ${jePlaceno?`<div style="font-size:11px;color:#5a6b5f;margin-top:6px;padding-top:6px;border-top:1px dashed #a8d8b8;">
           Struktura naplate:
-          ${parseFloat(o.vp_iznos)>0?` <b>VP (u trenutku prodaje):</b> ${fmValuta(o.vp_iznos,o.valuta)}`:''}
-          ${parseFloat(o.naplaceno_gotovina)>0?` &middot; <b>Gotovina (docnije):</b> ${fmValuta(o.naplaceno_gotovina,o.valuta)}`:''}
-          ${parseFloat(o.naplaceno_banka)>0?` &middot; <b>Banka (docnije):</b> ${fmValuta(o.naplaceno_banka,o.valuta)}`:''}
+          ${broj(o.vp_iznos)>0?` <b>VP (u trenutku prodaje):</b> ${fmValuta(o.vp_iznos,o.valuta)}`:''}
+          ${broj(o.naplaceno_gotovina)>0?` &middot; <b>Gotovina (docnije):</b> ${fmValuta(o.naplaceno_gotovina,o.valuta)}`:''}
+          ${broj(o.naplaceno_banka)>0?` &middot; <b>Banka (docnije):</b> ${fmValuta(o.naplaceno_banka,o.valuta)}`:''}
         </div>`:''}
       </div>
     `;}).join('');
@@ -1554,14 +1572,14 @@ function otvoriNaplataNaloga(rBr, tip, zaNaplatu){
   const podrazumevano = tip==='sve' ? zaNaplatu : '';
   el.innerHTML=`
     <div style="font-size:11px;font-weight:600;margin-bottom:4px;">${tip==='avans'?'Iznos avansa':'Iznos (cijela naplata)'} (KM)</div>
-    <input type="number" id="naplata-iznos-${rBr}" step="0.01" min="0.01" value="${podrazumevano}" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:5px;margin-bottom:6px;">
+    <input type="text" inputmode="decimal" id="naplata-iznos-${rBr}" step="0.01" min="0.01" value="${podrazumevano}" style="width:100%;font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:5px;margin-bottom:6px;">
     <button class="btn-sm" style="width:100%;background:var(--green);color:#fff;" onclick="potvrdiNaplatuNaloga(${rBr},'${tip}')">✓ Potvrdi naplatu</button>
     <div id="naplata-msg-${rBr}" style="font-size:11px;margin-top:4px;"></div>
   `;
 }
 
 async function potvrdiNaplatuNaloga(rBr, tip){
-  const iznos=parseFloat(document.getElementById('naplata-iznos-'+rBr).value);
+  const iznos=broj(document.getElementById('naplata-iznos-'+rBr).value);
   const msg=document.getElementById('naplata-msg-'+rBr);
   if(!(iznos>0)){ msg.style.color='red'; msg.textContent='Unesite iznos veći od 0.'; return; }
   try{
@@ -1616,7 +1634,7 @@ function validirajDatumUnosa(prefix){
 
 async function dodajNaplatu(){
   if(!validirajDatumUnosa('f-datum')) return;
-  const iznos=parseFloat(document.getElementById('f-iznos').value);
+  const iznos=broj(document.getElementById('f-iznos').value);
   const napomena=gv('f-opis');
   const msg=document.getElementById('f-msg');
   if(!iznos||iznos<=0){msg.style.color='red';msg.textContent='Unesite iznos.';return;}
@@ -1682,7 +1700,7 @@ async function dodajNaplatu(){
 
 async function dodajIsplatuRucno(){
   if(!validirajDatumUnosa('i-datum')) return;
-  const iznos=parseFloat(document.getElementById('i-iznos').value);
+  const iznos=broj(document.getElementById('i-iznos').value);
   const opis=gv('i-opis');
   const msg=document.getElementById('i-msg');
   if(!iznos||iznos<=0){msg.style.color='red';msg.textContent='Unesite iznos.';return;}
@@ -2028,7 +2046,7 @@ function klijentiFiltrirano(){
   const tip=KLIJENTI_KOLONE.find(c=>c.k===kolona)?.tip;
   prikaz=[...prikaz].sort((a,b)=>{
     const va=klijentiVrijednost(a,kolona), vb=klijentiVrijednost(b,kolona);
-    const cmp = tip==='num' ? (parseFloat(va)||0)-(parseFloat(vb)||0)
+    const cmp = tip==='num' ? (broj(va)||0)-(broj(vb)||0)
                             : String(va??'').localeCompare(String(vb??''),'sr-Latn-BA');
     return smjer==='asc'?cmp:-cmp;
   });
@@ -2088,7 +2106,7 @@ function renderKlijentiTabelu(){
 
 // Zbir PRATI FILTER — kad filtriraš, zbir se odmah preračuna na ono što je prikazano.
 function klijentiPrikaziZbir(prikaz){
-  const zbir=(polje)=>prikaz.reduce((s,k)=>s+(parseFloat(k[polje])||0),0);
+  const zbir=(polje)=>prikaz.reduce((s,k)=>s+(broj(k[polje])||0),0);
   const stavke=[
     ['Duguje (aktivno)', zbir('duguje_aktivno'), 'var(--red,#c0392b)'],
     ['Očekivana naplata', zbir('kateg_ocekivana_naplata'), 'var(--blue,#1a5fa8)'],
@@ -2119,7 +2137,7 @@ function klijentiDistinct(kolona){
   const sve=klijentiSvi.map(k=>String(klijentiVrijednost(k,kolona)??''));
   const tip=KLIJENTI_KOLONE.find(c=>c.k===kolona)?.tip;
   const neprazne=[...new Set(sve.filter(v=>v!==''&&v!=='null'&&v!=='undefined'))];
-  neprazne.sort((a,b)=> tip==='num' ? (parseFloat(a)||0)-(parseFloat(b)||0) : a.localeCompare(b,'sr-Latn-BA'));
+  neprazne.sort((a,b)=> tip==='num' ? (broj(a)||0)-(broj(b)||0) : a.localeCompare(b,'sr-Latn-BA'));
   return sve.some(v=>v===''||v==='null'||v==='undefined') ? [...neprazne,''] : neprazne;
 }
 
@@ -2163,7 +2181,7 @@ function klijentiFPRenderListu(){
     </label>
     ${prikazane.map(v=>`
       <label style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11.5px;cursor:pointer;">
-        <input type="checkbox" ${klFPDraft.has(v)?'':'checked'} onchange="klijentiFPToggle('${esc(String(v)).replace(/'/g,"\\'")}',this.checked)"> ${v===''?'<i style="color:#8b96a5;">(prazno)</i>':(jeNum?fm(parseFloat(v)||0):esc(String(v)))}
+        <input type="checkbox" ${klFPDraft.has(v)?'':'checked'} onchange="klijentiFPToggle('${esc(String(v)).replace(/'/g,"\\'")}',this.checked)"> ${v===''?'<i style="color:#8b96a5;">(prazno)</i>':(jeNum?fm(broj(v)||0):esc(String(v)))}
       </label>`).join('')}`;
 }
 function klijentiFPToggle(v, oznaceno){
@@ -2231,7 +2249,7 @@ async function sacuvajIstorijskiUnos(){
   const msg=document.getElementById('ist-msg');
   msg.style.display='none';
   const naziv=document.getElementById('ist-kupac-naziv').value.trim();
-  const iznos=parseFloat(document.getElementById('ist-iznos').value);
+  const iznos=broj(document.getElementById('ist-iznos').value);
   if(!naziv){ msg.style.display='block'; msg.style.background='#fce8e6'; msg.style.color='var(--red)'; msg.textContent='Unesite klijenta.'; return; }
   if(!iznos||iznos<=0){ msg.style.display='block'; msg.style.background='#fce8e6'; msg.style.color='var(--red)'; msg.textContent='Unesite ispravan iznos.'; return; }
   try{
@@ -2347,8 +2365,8 @@ function otvoriKategorizacijaDuga(kljuc, kupacId, naziv, dugujeUkupno, ocekivana
 }
 function azurirajKategorizacijaOstatak(){
   if(!katTrenutni) return;
-  const ocek=parseFloat(document.getElementById('kat-ocekivana').value)||0;
-  const tesko=parseFloat(document.getElementById('kat-tesko').value)||0;
+  const ocek=broj(document.getElementById('kat-ocekivana').value)||0;
+  const tesko=broj(document.getElementById('kat-tesko').value)||0;
   const ostatak=+(katTrenutni.dugujeUkupno-ocek-tesko).toFixed(2);
   const el=document.getElementById('kat-ostatak-info');
   if(ostatak<0){
@@ -2361,8 +2379,8 @@ function azurirajKategorizacijaOstatak(){
 }
 async function sacuvajKategorizacijaDuga(){
   if(!katTrenutni) return;
-  const ocek=parseFloat(document.getElementById('kat-ocekivana').value)||0;
-  const tesko=parseFloat(document.getElementById('kat-tesko').value)||0;
+  const ocek=broj(document.getElementById('kat-ocekivana').value)||0;
+  const tesko=broj(document.getElementById('kat-tesko').value)||0;
   if(ocek+tesko>katTrenutni.dugujeUkupno+0.01){ alert('Zbir ne može premašiti ukupan dug.'); return; }
   try{
     const r=await fetch(`${API}/api/finansije/kategorizuj-dug`,{
@@ -2434,7 +2452,7 @@ async function sacuvajBrziIstorijskiUnos(){
   const msg=document.getElementById('bq-msg');
   msg.style.display='none';
   const naziv=document.getElementById('bq-kupac-naziv').value.trim();
-  const iznos=parseFloat(document.getElementById('bq-iznos').value);
+  const iznos=broj(document.getElementById('bq-iznos').value);
   if(!naziv){ msg.style.display='block'; msg.style.background='#fce8e6'; msg.style.color='var(--red)'; msg.textContent='Unesite klijenta.'; return; }
   if(!iznos||iznos<=0){ msg.style.display='block'; msg.style.background='#fce8e6'; msg.style.color='var(--red)'; msg.textContent='Unesite ispravan iznos.'; return; }
   try{
@@ -2502,7 +2520,7 @@ async function sacuvajOcekivanaUplata(){
   const msg=document.getElementById('oc-msg');
   msg.style.display='none';
   const naziv=document.getElementById('oc-kupac-naziv').value.trim();
-  const iznos=parseFloat(document.getElementById('oc-iznos').value);
+  const iznos=broj(document.getElementById('oc-iznos').value);
   if(!naziv){ msg.style.display='block'; msg.style.background='#fce8e6'; msg.style.color='var(--red)'; msg.textContent='Unesite klijenta.'; return; }
   if(!iznos||iznos<=0){ msg.style.display='block'; msg.style.background='#fce8e6'; msg.style.color='var(--red)'; msg.textContent='Unesite ispravan iznos.'; return; }
   try{
@@ -2570,6 +2588,27 @@ async function otkaziOcekivanaUplata(id){
     if(document.getElementById('tab-klijenti').style.display==='block') ucitajKlijentiListu();
   }catch(e){ alert('✗ Greška.'); }
 }
+
+/* Ziva potvrda unosa — dok se kuca, ispod polja pise kako je sistem RAZUMIO broj
+   (npr. "17,5" -> "= 17,50"). Greska se vidi odmah, a ne tek kad se iznos proknjizi. */
+(function(){
+  const fmt = n => n.toLocaleString('sr-Latn-BA', {minimumFractionDigits:2, maximumFractionDigits:3});
+  document.addEventListener('input', e => {
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement) || el.getAttribute('inputmode') !== 'decimal') return;
+    let nag = el.nextElementSibling;
+    if (!nag || !nag.classList?.contains('broj-nagovjestaj')) {
+      nag = document.createElement('div');
+      nag.className = 'broj-nagovjestaj';
+      nag.style.cssText = 'font-size:10.5px;color:#8b96a5;margin-top:2px;min-height:13px;';
+      el.after(nag);
+    }
+    const t = el.value.trim();
+    if (!t) { nag.textContent = ''; return; }
+    const n = broj(t);
+    nag.textContent = (t === String(n) || t === fmt(n)) ? '' : `= ${fmt(n)}`;
+  });
+})();
 </script>
 
 
