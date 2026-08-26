@@ -995,6 +995,15 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
    Izuzetak radi kompatibilnosti: ako zareza NEMA, tacka se cita kao decimala — svi
    postojeci podaci i copy/paste iz Excela su u tom obliku.
    Bez ovoga broj("17,55") vraca 17 — tiho se gubi 55 para. */
+
+/* Upis broja U POLJE — zarez kao decimala, bez razdvajanja hiljada (da se moze i dalje
+   uredjivati). toFixed() uvijek daje TACKU, pa se predlozena cijena pojavljivala kao
+   "17.55" iako korisnik unosi "17,55". */
+function uPolje(n, dec){
+  const v = broj(n);
+  return v.toFixed(dec == null ? 2 : dec).replace('.', ',');
+}
+
 function broj(v){
   if (v == null || v === '') return 0;
   if (typeof v === 'number') return isFinite(v) ? v : 0;
@@ -2717,7 +2726,7 @@ function dodajUKosaricu(artikal){
   document.getElementById('das-naziv').textContent=artikal.naziv;
   document.getElementById('das-sifra').textContent='Šifra: '+artikal.sifra+' · Zadana cijena: '+fmMoney(artikal.cijena)+' po '+esc(artikal.jed_mjera)+' · Stanje: '+artikal.stanje+' '+esc(artikal.jed_mjera);
   document.getElementById('das-kom').value='';
-  document.getElementById('das-kom-cijena').value=broj(artikal.cijena).toFixed(2);
+  document.getElementById('das-kom-cijena').value=uPolje(artikal.cijena);
   document.getElementById('das-kom-cijena-edit').style.display='none';
   dasOverridePodaci=null;
   document.getElementById('das-m2-vr').value='';
@@ -2772,7 +2781,7 @@ function dasCijenaPromijenjena(){
 
 function dasOtkaziOdstupanje(){
   // Vrati cijenu na zadanu i zatvori blok — odustao od odstupanja.
-  document.getElementById('das-kom-cijena').value=broj(dasArtikal.cijena).toFixed(2);
+  document.getElementById('das-kom-cijena').value=uPolje(dasArtikal.cijena);
   document.getElementById('das-kom-cijena-edit').style.display='none';
   dasOverridePodaci=null;
 }
