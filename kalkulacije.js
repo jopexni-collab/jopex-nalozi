@@ -9,6 +9,19 @@ const router = express.Router();
 const pool = require('./db');
 
 // GET /api/kalkulacije?objekt_id=X — lista (najnovije prvo).
+/* Citanje brojeva sa ZAREZOM kao decimalom — isto pravilo kao u pregledacu.
+   broj("1.234,56") vraca 1.234 (hiljadu puta manje), a broj("50,00") vraca 50
+   ali "17,55" vraca 17 — tiho se gube pare. */
+function broj(v) {
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/\s/g, '').replace(/[^\d.,-]/g, '');
+  if (!s) return 0;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(/,/g, '.');
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+
 router.get('/', async (req, res) => {
   if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
   try {
@@ -45,15 +58,15 @@ router.get('/:id', async (req, res) => {
 // Računa se pri ČITANJU (ne čuva se u bazi) da uvijek odražava trenutne vrijednosti.
 function dodajUkupnoZaduzenje(k) {
   const vrijednostRobe = k.realna_faktura_primljena && k.realna_faktura_iznos != null
-    ? parseFloat(k.realna_faktura_iznos) : parseFloat(k.vrednost_nabavke || 0);
-  const kurs = parseFloat(k.kurs) || 1;
+    ? broj(k.realna_faktura_iznos) : broj(k.vrednost_nabavke || 0);
+  const kurs = broj(k.kurs) || 1;
   const ukupno =
     vrijednostRobe * kurs +
-    parseFloat(k.vrednost_brodarine || 0) * kurs +
-    parseFloat(k.trosak_luka_km || 0) +
-    parseFloat(k.drugi_troskovi_km || 0) +
-    parseFloat(k.iznos_carine || 0) +
-    parseFloat(k.iznos_pdv || 0);
+    broj(k.vrednost_brodarine || 0) * kurs +
+    broj(k.trosak_luka_km || 0) +
+    broj(k.drugi_troskovi_km || 0) +
+    broj(k.iznos_carine || 0) +
+    broj(k.iznos_pdv || 0);
   return { ...k, ukupno_zaduzenje_km: +ukupno.toFixed(2) };
 }
 
@@ -80,9 +93,9 @@ router.post('/', async (req, res) => {
 
   // Carina/PDV — izračunato ODMAH (fiksira se u bazi, ne mijenja se ako se stope kasnije
   // promijene za NOVE kalkulacije).
-  const osnovica = parseFloat(osnovica_za_carinjenje) || 0;
-  const stopaCarine = parseFloat(stopa_carine_pct) || 0;
-  const stopaPdv = parseFloat(stopa_pdv_pct) || 0;
+  const osnovica = broj(osnovica_za_carinjenje) || 0;
+  const stopaCarine = broj(stopa_carine_pct) || 0;
+  const stopaPdv = broj(stopa_pdv_pct) || 0;
   const iznosCarine = +(osnovica * stopaCarine / 100).toFixed(2);
   const iznosPdv = +((osnovica + iznosCarine) * stopaPdv / 100).toFixed(2);
 
@@ -93,8 +106,8 @@ router.post('/', async (req, res) => {
     // Ukupna vrijednost svih stavki (nabavna_cijena × količina) — osnova za proporcionalno
     // raspoređivanje zavisnih troškova (skuplja stavka nosi veći udio). Carina (izračunata
     // gore) se dodaje u "trosak_carina" — PDV se NAMJERNO ne dodaje ovdje.
-    const ukupnaVrijednost = stavke.reduce((s, x) => s + (parseFloat(x.nabavna_cijena) || 0) * (parseFloat(x.kolicina) || 0), 0);
-    const ukupniTroskovi = (parseFloat(trosak_prevoz) || 0) + iznosCarine + (parseFloat(trosak_ostalo) || 0);
+    const ukupnaVrijednost = stavke.reduce((s, x) => s + (broj(x.nabavna_cijena) || 0) * (broj(x.kolicina) || 0), 0);
+    const ukupniTroskovi = (broj(trosak_prevoz) || 0) + iznosCarine + (broj(trosak_ostalo) || 0);
     if (ukupnaVrijednost <= 0) throw Object.assign(new Error('Ukupna vrijednost stavki mora biti veća od 0.'), { status: 400 });
 
     const zag = await client.query(
@@ -118,18 +131,32 @@ router.post('/', async (req, res) => {
     );
     const kalkulacijaId = zag.rows[0].id;
 
+    let obradjeno = 0;   // koliko stavki je STVARNO uslo u lager
     for (const s of stavke) {
-      const kolicina = parseFloat(s.kolicina) || 0;
-      const nabavnaCijena = parseFloat(s.nabavna_cijena) || 0;
-      const prodajnaCijena = parseFloat(s.prodajna_cijena) || 0;
-      if (kolicina <= 0) continue;
+      const kolicina = broj(s.kolicina) || 0;
+      const nabavnaCijena = broj(s.nabavna_cijena) || 0;
+      const prodajnaCijena = broj(s.prodajna_cijena) || 0;
+      /* Ranije se stavka sa kolicinom 0 TIHO preskakala — korisnik potvrdi kalkulaciju,
+         dobije poruku da je proslo, a stanje se ne promijeni i nema nikakvog traga zasto.
+         Sada se kalkulacija ODBIJA sa jasnim objasnjenjem koja stavka je sporna. */
+      obradjeno++;
+      if (kolicina <= 0) {
+        throw Object.assign(
+          new Error(`Stavka "${s.sifra || s.roba_id}" ima količinu 0 — unesi količinu ili je ukloni iz kalkulacije.`),
+          { status: 400 }
+        );
+      }
 
       const vrijednostStavke = nabavnaCijena * kolicina;
       const udioTroskova = ukupniTroskovi > 0 ? (vrijednostStavke / ukupnaVrijednost) * ukupniTroskovi : 0;
       const pravaNabavnaCijena = (vrijednostStavke + udioTroskova) / kolicina;
 
       const robaRes = await client.query('SELECT sifra, naziv FROM roba WHERE id=$1', [s.roba_id]);
-      if (!robaRes.rows.length) continue;
+      if (!robaRes.rows.length) {
+        throw Object.assign(
+          new Error(`Artikal sa ID ${s.roba_id} ne postoji u šifrarniku.`), { status: 400 }
+        );
+      }
 
       await client.query(
         `INSERT INTO kalkulacija_stavke (kalkulacija_id, roba_id, sifra, naziv, kolicina, nabavna_cijena, udio_troskova, prava_nabavna_cijena, prodajna_cijena)
@@ -161,7 +188,7 @@ router.post('/', async (req, res) => {
     }
 
     await client.query('COMMIT');
-    res.status(201).json({ ok: true, id: kalkulacijaId, iznos_carine: iznosCarine, iznos_pdv: iznosPdv });
+    res.status(201).json({ ok: true, id: kalkulacijaId, iznos_carine: iznosCarine, iznos_pdv: iznosPdv, obradjeno_stavki: obradjeno });
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(err.status || 500).json({ error: err.message });
@@ -177,7 +204,7 @@ router.patch('/:id/realna-faktura', async (req, res) => {
   const user = req.session?.user;
   if (!user) return res.status(401).json({ error: 'Niste prijavljeni.' });
   const { iznos } = req.body || {};
-  if (!(parseFloat(iznos) > 0)) return res.status(400).json({ error: 'Unesite ispravan iznos realne fakture.' });
+  if (!(broj(iznos) > 0)) return res.status(400).json({ error: 'Unesite ispravan iznos realne fakture.' });
   try {
     const r = await pool.query(
       `UPDATE kalkulacije SET realna_faktura_iznos=$1, realna_faktura_primljena=true WHERE id=$2 RETURNING *`,
