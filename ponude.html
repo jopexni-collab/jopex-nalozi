@@ -867,6 +867,15 @@ function broj(v){
   return isFinite(n) ? n : 0;
 }
 /* Upis broja U POLJE — sa zarezom, bez razdvajanja hiljada (da ostane uredivo). */
+/* Za FILTERE — prazno polje mora ostati "nema ogranicenja", pa vraca NaN (kao parseFloat).
+   Funkcija broj() vraca 0, sto je ispravno za racun, ali bi u filteru znacilo "min 0" i
+   izbacilo sve redove. Zato filteri koriste OVU funkciju. */
+function brojIliPrazno(v){
+  if (v == null || String(v).trim() === '') return NaN;
+  const n = brojIliPrazno(v);
+  return isFinite(n) ? n : NaN;
+}
+
 function uPolje(n, dec){
   return broj(n).toFixed(dec == null ? 2 : dec).replace('.', ',');
 }
@@ -1146,7 +1155,7 @@ function stranaDuzina(t,i){
 function getCornerRadiusMM(i){
   var v=cornerR[i];
   if(v===undefined||v===null) return 0;
-  var n=broj(v);
+  var n=brojIliPrazno(v);
   return isNaN(n)||n<0?0:n;
 }
 
@@ -2514,7 +2523,7 @@ function getMatD(){
   }
   return broj(sel.value)||20;
 }
-function gi(id){var e=ge(id);if(!e)return 0;var v=broj((e.value||'').replace(',','.'));return isNaN(v)?0:v;}
+function gi(id){var e=ge(id);if(!e)return 0;var v=brojIliPrazno((e.value||'').replace(',','.'));return isNaN(v)?0:v;}
 function fixComma(el){if(el&&el.value.indexOf(',')>=0){var pos=el.selectionStart;el.value=el.value.replace(',','.');try{el.setSelectionRange(pos,pos);}catch(e){}}}
 function gs(id){var e=ge(id);return e?e.value||'':'';}
 function gc(id){var e=ge(id);return e?e.checked:false;}
@@ -2904,7 +2913,7 @@ function _tablaMjere(){
 function _rezIvice(){
   var e=ge('kl-rez-ivice');
   if(e&&e.value!=='') {
-    var v=broj((e.value||'').toString().replace(',','.'));
+    var v=brojIliPrazno((e.value||'').toString().replace(',','.'));
     if(!isNaN(v)&&v>=0) return v;   // dozvoljena je i nula
   }
   return 50;
@@ -2944,7 +2953,7 @@ var REZ_SJECIVA=5;   // mm koje sjecivo pojede po rezu (podrazumijevano)
 function _rezSjeciva(){
   var e=ge('kl-rez-sjeciva');
   if(e&&e.value!==''){
-    var v=broj((e.value||'').toString().replace(',','.'));
+    var v=brojIliPrazno((e.value||'').toString().replace(',','.'));
     if(!isNaN(v)&&v>=0) return v;
   }
   return REZ_SJECIVA;
@@ -3283,7 +3292,7 @@ function _zidovi(){
 }
 // Sirina se mijenja ZA CIJELI zid - jedan zid, jedna sirina
 function zidSirina(zid,val){
-  var v=broj((val||'0').toString().replace(',','.'))||0;
+  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
   if(v<=0) return;
   (pozicije||[]).forEach(function(p){ if((p.zid!=null?p.zid:0)===zid) p.b=v; });
   syncToActive(); refresh();
@@ -3306,7 +3315,7 @@ function ukloniZid(zid){
 // se samo ostali, nezakljucani komadi. Ako se ne moze uskladiti, sistem trazi
 // da se doda jos jedan komad umjesto da tiho promijeni ono sto si unio.
 function zidPromijeniDuzinu(idx,val){
-  var v=broj((val||'0').toString().replace(',','.'))||0;
+  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
   if(v<=0||!pozicije[idx]) return;
   var z=(pozicije[idx].zid!=null)?pozicije[idx].zid:0;
   var svi=[];
@@ -3623,7 +3632,7 @@ function kopirajPoziciju(i){
 }
 function pozPolje(i,polje,val){
   if(!pozicije[i]) return;
-  var v=broj((val||'0').toString().replace(',','.'))||0;
+  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
   pozicije[i][polje]=(polje==='kom')?Math.max(1,Math.round(v)):v;
   syncToActive(); refresh();   // tabela se NE rebuilda, da fokus ostane u polju
 }
@@ -3637,7 +3646,7 @@ function pozObrada(i,segId,val){
 function pozBocna(i,segId,val){
   if(!pozicije[i]) return;
   pozicije[i].bd=pozicije[i].bd||{};
-  var v=broj((val||'0').toString().replace(',','.'))||0;
+  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
   if(v<=0) delete pozicije[i].bd[segId]; else pozicije[i].bd[segId]=v;
   syncToActive(); refresh();
 }
@@ -3653,7 +3662,7 @@ function pozSveObrada(segId,val){
   syncToActive(); buildIvice(); buildPozicijeTabelu(); refresh();
 }
 function pozSveBocna(segId,val){
-  var v=broj((val||'0').toString().replace(',','.'))||0;
+  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
   // Podrazumijevana vrijednost + brisanje izuzetaka, da nove pozicije naslijede
   if(v<=0) delete pozBdDef[segId]; else pozBdDef[segId]=v;
   pozicije.forEach(function(p){ if(p.bd) delete p.bd[segId]; });
@@ -4646,7 +4655,7 @@ function _trenRad(v){ try{ return getCornerRadiusMM(v)||0; }catch(e){ return 0; 
 // Radijus ugla na slobodnom obliku - isti nacin kao kod ostalih stolova,
 // samo sto svaki ugao ima svoju vrijednost.
 function skicaRadijus(v,val){
-  var n=broj((val||'0').toString().replace(',','.'));
+  var n=brojIliPrazno((val||'0').toString().replace(',','.'));
   if(isNaN(n)||n<0) n=0;
   cornerR[v]=n;
   getAct().cornerR=JSON.parse(JSON.stringify(cornerR));
@@ -4867,7 +4876,7 @@ function buildSkicaPanel(){
   con.innerHTML=h;
 }
 function skicaDuzina(i,val){
-  var v=broj((val||'0').toString().replace(',','.'))||0;
+  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
   if(v<=0) return;
   if(skStranaZakljucana(i)) return;              // zakljucana strana se ne mijenja
   var _n=(dims._tj||[]).length;
@@ -5056,7 +5065,7 @@ function buildTableDimWrap(){
   con.innerHTML=html;
 }
 function saveTableDim(key,val){
-  var v=broj((val||'0').toString().replace(',','.'))||0;
+  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
   dims[key]=v;
   if(shape==='okrugao') dims.B=v; // okrugao: B=A (prečnik)
 }
@@ -5401,7 +5410,7 @@ function updateIviceRez(segId,rez){
 }
 function updateIviceUgao(segId,val){
   var st=_ivGet(segId);
-  var v=broj((val||'0').toString().replace(',','.'))||0;
+  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
   st.ugao=Math.max(1,Math.min(89,v));
   refresh();
 }
@@ -5611,7 +5620,7 @@ function updateCustomOtvor(idx,field,value){
 }
 function updateCustomOtvorNum(idx,field,strVal){
   if(!customOtvori[idx]) return;
-  var v=broj((strVal||'0').toString().replace(',','.'));
+  var v=brojIliPrazno((strVal||'0').toString().replace(',','.'));
   customOtvori[idx][field]=isNaN(v)?0:v;
   refresh();
 }
@@ -5830,7 +5839,7 @@ function removeSlavina(idx){
 }
 function updateSlavinaNum(idx,field,strVal){
   if(!slavine[idx]) return;
-  var v=broj((strVal||'0').toString().replace(',','.'));
+  var v=brojIliPrazno((strVal||'0').toString().replace(',','.'));
   slavine[idx][field]=isNaN(v)?0:v;
   refresh();
 }
@@ -5888,7 +5897,7 @@ function updateTableHole(idx,field,value){
 }
 function updateTableHoleNum(idx,field,strVal){
   if(!tableHoles[idx]) return;
-  var v=broj((strVal||'0').toString().replace(',','.'));
+  var v=brojIliPrazno((strVal||'0').toString().replace(',','.'));
   tableHoles[idx][field]=isNaN(v)?0:v;
   refresh();
 }
@@ -8344,14 +8353,14 @@ function _pozR(p,u){
 }
 function pozRadijus(i,u,val){
   if(!pozicije[i]) return;
-  var v=broj((val||'0').toString().replace(',','.'))||0;
+  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
   pozicije[i].r=pozicije[i].r||{};
   if(v<=0&&(pozRDef[u]||0)===0) delete pozicije[i].r[u];
   else pozicije[i].r[u]=Math.max(0,v);
   syncToActive(); buildPozicijeTabelu(); refresh();
 }
 function pozSveRadijus(u,val){
-  var v=broj((val||'0').toString().replace(',','.'))||0;
+  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
   if(v<=0) delete pozRDef[u]; else pozRDef[u]=v;
   (pozicije||[]).forEach(function(p){ if(p.r) delete p.r[u]; });
   syncToActive(); buildPozicijeTabelu(); refresh();
@@ -9209,7 +9218,7 @@ function _editableUnitPrice(kmPrice,unitSuffix,onchangeFnName,onchangeArgs){
 // Pretvara prikazani (u trenutnoj valuti) broj nazad u KM - interno se SVE
 // uvijek čuva u KM, prikaz/unos je samo "prevod" za oči.
 function _toKM(displayVal,currency){
-  var v=broj((displayVal||'0').toString().replace(',','.'))||0;
+  var v=brojIliPrazno((displayVal||'0').toString().replace(',','.'))||0;
   if(currency==='EUR') return v*FX_EUR;
   if(currency==='RSD') return v/FX_RSD;
   return v;
@@ -11809,7 +11818,7 @@ document.addEventListener('focusin',function(e){
     }
     const t = el.value.trim();
     if (!t) { nag.textContent = ''; return; }
-    const n = broj(t);
+    const n = brojIliPrazno(t);
     nag.textContent = (t === String(n) || t === fmt(n)) ? '' : `= ${fmt(n)}`;
   });
 })();

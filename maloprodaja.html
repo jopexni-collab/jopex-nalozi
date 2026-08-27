@@ -999,8 +999,23 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 /* Upis broja U POLJE — zarez kao decimala, bez razdvajanja hiljada (da se moze i dalje
    uredjivati). toFixed() uvijek daje TACKU, pa se predlozena cijena pojavljivala kao
    "17.55" iako korisnik unosi "17,55". */
+/* Za FILTERE — prazno polje mora ostati "nema ogranicenja", pa vraca NaN (kao parseFloat).
+   Funkcija broj() vraca 0, sto je ispravno za racun, ali bi u filteru znacilo "min 0" i
+   izbacilo sve redove. Zato filteri koriste OVU funkciju. */
+function brojIliPrazno(v){
+  if (v == null) return NaN;
+  if (typeof v === 'number') return isFinite(v) ? v : NaN;
+  const t = String(v).trim();
+  if (t === '') return NaN;
+  // Mora sadrzati BAR JEDNU cifru — inace je tekst ("bengal"), ne broj. Bez ove provjere
+  // broj() bi slovo protumacio kao 0, pa bi tekst prosao kao ispravan broj.
+  if (!/\d/.test(t)) return NaN;
+  const n = broj(t);
+  return isFinite(n) ? n : NaN;
+}
+
 function uPolje(n, dec){
-  const v = broj(n);
+  const v = brojIliPrazno(n);
   return v.toFixed(dec == null ? 2 : dec).replace('.', ',');
 }
 
@@ -1795,7 +1810,7 @@ function otvoriAkciju(id, naziv, sifra, cijena){
 // Ziva racunica popusta — odmah se vidi koliko je snizenje
 function akRacunajPopust(){
   const el = document.getElementById('ak-popust');
-  const nova = broj(document.getElementById('ak-cijena').value);
+  const nova = brojIliPrazno(document.getElementById('ak-cijena').value);
   if(!nova || !akTrenutni || nova <= 0){ el.textContent=''; return; }
   if(nova >= akTrenutni.cijena){
     el.style.color = 'var(--red,#c0392b)';
@@ -1810,7 +1825,7 @@ function akRacunajPopust(){
 
 async function sacuvajAkciju(){
   const greska = document.getElementById('ak-greska');
-  const nova = broj(document.getElementById('ak-cijena').value);
+  const nova = brojIliPrazno(document.getElementById('ak-cijena').value);
   if(!nova || nova <= 0){ greska.style.display='block'; greska.textContent='Unesi akcijsku cijenu.'; return; }
   if(nova >= akTrenutni.cijena){
     greska.style.display='block';
@@ -2756,7 +2771,7 @@ let dasOverridePodaci=null;
 
 function dasCijenaPromijenjena(){
   if(!dasArtikal) return;
-  const uneseno=broj(document.getElementById('das-kom-cijena').value);
+  const uneseno=brojIliPrazno(document.getElementById('das-kom-cijena').value);
   const zadana=broj(dasArtikal.cijena);
   const blok=document.getElementById('das-kom-cijena-edit');
   if(isNaN(uneseno) || Math.abs(uneseno-zadana)<0.005){
@@ -2837,8 +2852,8 @@ function dasM3Mode(mode){
 
 function dasPreview(){
   if(dasJedinica==='m2' && dasM2mode==='racunaj'){
-    const d=broj(document.getElementById('das-m2-duzina').value);
-    const v=broj(document.getElementById('das-m2-visina').value);
+    const d=brojIliPrazno(document.getElementById('das-m2-duzina').value);
+    const v=brojIliPrazno(document.getElementById('das-m2-visina').value);
     const kom=parseInt(document.getElementById('das-m2-komada').value)||1;
     const prev=document.getElementById('das-m2-preview');
     if(!isNaN(d)&&!isNaN(v)&&d>0&&v>0){
@@ -2847,9 +2862,9 @@ function dasPreview(){
     }else prev.textContent='';
   }
   if(dasJedinica==='m3' && dasM3mode==='racunaj'){
-    const d=broj(document.getElementById('das-m3-duzina').value);
-    const v=broj(document.getElementById('das-m3-visina').value);
-    const deb=broj(document.getElementById('das-m3-debljina').value);
+    const d=brojIliPrazno(document.getElementById('das-m3-duzina').value);
+    const v=brojIliPrazno(document.getElementById('das-m3-visina').value);
+    const deb=brojIliPrazno(document.getElementById('das-m3-debljina').value);
     const kom=parseInt(document.getElementById('das-m3-komada').value)||1;
     const prev=document.getElementById('das-m3-preview');
     if(!isNaN(d)&&!isNaN(v)&&!isNaN(deb)&&d>0&&v>0&&deb>0){
@@ -2882,8 +2897,8 @@ function postaviTipUsluge(tip){
   document.querySelectorAll('[data-du-tip]').forEach(b=>b.classList.toggle('active', b.dataset.duTip===tip));
 }
 function potvrdiDodajUslugu(){
-  const kolicina=broj(document.getElementById('du-kolicina').value);
-  const cijena=broj(document.getElementById('du-cijena').value);
+  const kolicina=brojIliPrazno(document.getElementById('du-kolicina').value);
+  const cijena=brojIliPrazno(document.getElementById('du-cijena').value);
   if(!kolicina||kolicina<=0){alert('Unesite ispravnu količinu.');return;}
   if(isNaN(cijena)||cijena<0){alert('Unesite ispravnu cijenu.');return;}
   const naziv=document.getElementById('du-naziv').value.trim()||TIP_USLUGE_NAZIV[duTrenutniTip];
@@ -2904,8 +2919,8 @@ function izgradiIDodajStavku(){
     if(dasM2mode==='direktno'){
       kolicina=broj(document.getElementById('das-m2-vr').value);
     }else{
-      const d=broj(document.getElementById('das-m2-duzina').value);
-      const v=broj(document.getElementById('das-m2-visina').value);
+      const d=brojIliPrazno(document.getElementById('das-m2-duzina').value);
+      const v=brojIliPrazno(document.getElementById('das-m2-visina').value);
       const kom=parseInt(document.getElementById('das-m2-komada').value)||1;
       if(!d||!v||d<=0||v<=0){alert('Unesite dužinu i visinu (cm).');return false;}
       if(kom<1){alert('Broj komada mora biti bar 1.');return false;}
@@ -2916,9 +2931,9 @@ function izgradiIDodajStavku(){
     if(dasM3mode==='direktno'){
       kolicina=broj(document.getElementById('das-m3-vr').value);
     }else{
-      const d=broj(document.getElementById('das-m3-duzina').value);
-      const v=broj(document.getElementById('das-m3-visina').value);
-      const deb=broj(document.getElementById('das-m3-debljina').value);
+      const d=brojIliPrazno(document.getElementById('das-m3-duzina').value);
+      const v=brojIliPrazno(document.getElementById('das-m3-visina').value);
+      const deb=brojIliPrazno(document.getElementById('das-m3-debljina').value);
       const kom=parseInt(document.getElementById('das-m3-komada').value)||1;
       if(!d||!v||!deb||d<=0||v<=0||deb<=0){alert('Unesite dužinu, visinu i debljinu (cm).');return false;}
       if(kom<1){alert('Broj komada mora biti bar 1.');return false;}
@@ -2936,7 +2951,7 @@ function izgradiIDodajStavku(){
   // odstupanje se ne dupliraju po jedinici.
   let overrideNovi=null;
   {
-    const uneseno=broj(document.getElementById('das-kom-cijena').value);
+    const uneseno=brojIliPrazno(document.getElementById('das-kom-cijena').value);
     const zadana=broj(dasArtikal.cijena);
     if(!isNaN(uneseno) && Math.abs(uneseno-zadana)>=0.005){
       const razlog=document.getElementById('das-kom-razlog').value;
@@ -3083,7 +3098,7 @@ function promijeniKolicinu(idx, delta){
 // "oninput") da se ne re-renderuje na svaki taster dok se kuca — samo kad se izađe iz polja.
 function postaviKolicinuDirektno(idx, vrijednost){
   const it=kosarica[idx];
-  const nova=broj(vrijednost);
+  const nova=brojIliPrazno(vrijednost);
   if(isNaN(nova)||nova<=0){ renderKosarica(); return; } // neispravno — vrati na staru vrijednost
   if(!it.tip_usluge && nova>it.stanje_max){
     if(!confirm(`⚠ "${it.naziv}" — stanje nije dovoljno (max ${it.stanje_max} ${it.jed_mjera}). Stanje će otići u MINUS. Nastaviti?`)){ renderKosarica(); return; }
@@ -3097,7 +3112,7 @@ function ukloniStavku(idx){ kosarica.splice(idx,1); renderKosarica(); }
 // Okvirna efektivna cijena za prikaz u košarici (samo procjena — konačna se računa na serveru uživo)
 function efektivnaCijenaProcjena(k){
   if(!k.override||k.override.vrijednost===''||k.override.vrijednost==null) return k.cijena;
-  const v=broj(k.override.vrijednost);
+  const v=brojIliPrazno(k.override.vrijednost);
   if(isNaN(v)) return k.cijena;
   return k.override.tip==='posto' ? Math.max(0,k.cijena*(1-v/100)) : Math.max(0,v);
 }
@@ -3112,7 +3127,9 @@ function primijeniOdstupanje(idx){
   const vrijednost=document.getElementById('ce-vrijednost-'+idx).value;
   const razlog=document.getElementById('ce-razlog-'+idx).value;
   const napomena=document.getElementById('ce-napomena-'+idx).value;
-  if(vrijednost===''||isNaN(broj(vrijednost))){alert('Unesite vrijednost.');return;}
+  // brojIliPrazno vraca NaN za prazno I za tekst — broj() bi slovo protumacio kao 0
+  // i tiho propustio neispravan unos.
+  if(vrijednost===''||isNaN(brojIliPrazno(vrijednost))){alert('Unesite ispravnu vrijednost.');return;}
   if(!razlog){alert('Izaberite razlog odstupanja.');return;}
   kosarica[idx].override={tip, vrijednost:broj(vrijednost), razlog, napomena};
   uredjivanjeIdx=null;
@@ -3134,7 +3151,7 @@ function postaviTipOdstupanja(idx, tip){
 function azurirajPreview(idx){
   const k=kosarica[idx];
   const tip=document.getElementById('ce-editor-'+idx)?.dataset.tip||'posto';
-  const vrijednost=broj(document.getElementById('ce-vrijednost-'+idx)?.value);
+  const vrijednost=brojIliPrazno(document.getElementById('ce-vrijednost-'+idx)?.value);
   const prev=document.getElementById('ce-preview-'+idx);
   if(!prev) return;
   if(isNaN(vrijednost)){prev.textContent='';return;}

@@ -156,6 +156,21 @@ function broj(v){
   return isFinite(n) ? n : 0;
 }
 /* Upis broja U POLJE — sa zarezom, bez razdvajanja hiljada (da ostane uredivo). */
+/* Za FILTERE — prazno polje mora ostati "nema ogranicenja", pa vraca NaN (kao parseFloat).
+   Funkcija broj() vraca 0, sto je ispravno za racun, ali bi u filteru znacilo "min 0" i
+   izbacilo sve redove. Zato filteri koriste OVU funkciju. */
+function brojIliPrazno(v){
+  if (v == null) return NaN;
+  if (typeof v === 'number') return isFinite(v) ? v : NaN;
+  const t = String(v).trim();
+  if (t === '') return NaN;
+  // Mora sadrzati BAR JEDNU cifru — inace je tekst ("bengal"), ne broj. Bez ove provjere
+  // broj() bi slovo protumacio kao 0, pa bi tekst prosao kao ispravan broj.
+  if (!/\d/.test(t)) return NaN;
+  const n = broj(t);
+  return isFinite(n) ? n : NaN;
+}
+
 function uPolje(n, dec){
   return broj(n).toFixed(dec == null ? 2 : dec).replace('.', ',');
 }

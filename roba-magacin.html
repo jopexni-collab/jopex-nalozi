@@ -1100,6 +1100,21 @@ function broj(v){
   return isFinite(n) ? n : 0;
 }
 /* Upis broja U POLJE — sa zarezom, bez razdvajanja hiljada (da ostane uredivo). */
+/* Za FILTERE — prazno polje mora ostati "nema ogranicenja", pa vraca NaN (kao parseFloat).
+   Funkcija broj() vraca 0, sto je ispravno za racun, ali bi u filteru znacilo "min 0" i
+   izbacilo sve redove. Zato filteri koriste OVU funkciju. */
+function brojIliPrazno(v){
+  if (v == null) return NaN;
+  if (typeof v === 'number') return isFinite(v) ? v : NaN;
+  const t = String(v).trim();
+  if (t === '') return NaN;
+  // Mora sadrzati BAR JEDNU cifru — inace je tekst ("bengal"), ne broj. Bez ove provjere
+  // broj() bi slovo protumacio kao 0, pa bi tekst prosao kao ispravan broj.
+  if (!/\d/.test(t)) return NaN;
+  const n = broj(t);
+  return isFinite(n) ? n : NaN;
+}
+
 function uPolje(n, dec){
   return broj(n).toFixed(dec == null ? 2 : dec).replace('.', ',');
 }
@@ -2762,7 +2777,7 @@ function otvoriNivelaciju(robaId, naziv, trenutnaCijena){
 
 async function potvrdiNivelaciju(){
   const objektId=document.getElementById('lager-objekat').value;
-  const cijena=broj(document.getElementById('nivelacija-cijena').value);
+  const cijena=brojIliPrazno(document.getElementById('nivelacija-cijena').value);
   const napomena=document.getElementById('nivelacija-napomena').value.trim();
   const msg=document.getElementById('nivelacija-msg');
   if(isNaN(cijena)||cijena<0){msg.style.color='red';msg.textContent='Unesite ispravnu cijenu.';return;}
@@ -3346,7 +3361,9 @@ function lagerDistinctVrijednosti(k){
      "1.5, 2, 3, 8, 10, 20". Sada se provjerava da li su SVE vrijednosti brojevi, pa se
      tek onda poredi brojcano. */
   const jedinstvene=[...new Set(svePop.filter(v=>v!=null&&v!==''))];
-  const sveSuBrojevi = jedinstvene.length>0 && jedinstvene.every(v=>!isNaN(broj(v)) && isFinite(v));
+  // Provjera mora koristiti brojIliPrazno — broj() za tekst vraca 0, pa bi grupe poput
+  // "bengal" bile protumacene kao brojevi i sortirane pogresno.
+  const sveSuBrojevi = jedinstvene.length>0 && jedinstvene.every(v=>!isNaN(brojIliPrazno(v)));
   const nepraznih = jedinstvene.sort((a,b)=>
     sveSuBrojevi ? broj(a)-broj(b)
                  : String(a).localeCompare(String(b),'sr-Latn-BA',{numeric:true}));
@@ -4343,7 +4360,12 @@ async function presekUcitajObjekte(){
       objekti.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('');
     presekObjektiUcitani=true;
     presekIstorijaUcitaj();
-  }catch(e){}
+  }catch(e){
+    // Greska se PRIKAZUJE — ranije je tiho gutana, pa je tab ostajao prazan bez razloga.
+    const el=document.getElementById('presek-ist-lista') || document.getElementById('presek-poruka');
+    if(el) el.innerHTML=`<div style="padding:12px;color:var(--red,#c0392b);font-size:12.5px;">✗ ${esc(e.message)}</div>`;
+    else alert('Greška pri učitavanju objekata: '+e.message);
+  }
 }
 
 async function presekUcitajPregled(){
@@ -4769,14 +4791,22 @@ document.addEventListener('click', e=>{
 let kretanjeObjektiUcitani=false;
 
 async function kretanjeUcitajObjekte(){
-  kretanjeObjektiUcitani=true;
   try{
     const r=await fetch(`${API}/api/prodajni-objekti`);
+    if(!r.ok) throw new Error(`Server je vratio ${r.status}`);
     const objekti=await r.json();
+    if(!Array.isArray(objekti)) throw new Error(objekti?.error || 'Neocekivan odgovor servera.');
     document.getElementById('kretanje-objekat').innerHTML='<option value="">— izaberi prodajni objekat —</option>'+
       objekti.map(p=>`<option value="${p.id}">${esc(p.naziv)}</option>`).join('');
     window.__lagerObjektiValute={...(window.__lagerObjektiValute||{}), ...Object.fromEntries(objekti.map(p=>[String(p.id),p.valuta||'KM']))};
-  }catch(e){}
+    kretanjeObjektiUcitani=true;   // tek KAD uspije — inace se pokusava ponovo
+  }catch(e){
+    // Ranije je greska tiho gutana (catch prazan), pa je tab ostajao prazan bez ikakvog
+    // objasnjenja i nije se ponovo pokusavalo. Sada se greska VIDI.
+    const tb=document.getElementById('kretanje-tbody');
+    if(tb) tb.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:16px;color:var(--red,#c0392b);">✗ ${esc(e.message)}</td></tr>`;
+    return;
+  }
   postaviKretanjePeriod(7, document.querySelector('.ce-tip-btn[data-kper="7"]'));
 }
 
@@ -4871,11 +4901,11 @@ function primijeniKretanjeFiltere(){
   const fDatum=document.getElementById('kf-datum').value.trim().toLowerCase();
   const fArtikal=document.getElementById('kf-artikal').value.trim().toLowerCase();
   const fTip=document.getElementById('kf-tip').value;
-  const fUsloMin=broj(document.getElementById('kf-uslo-min').value);
+  const fUsloMin=brojIliPrazno(document.getElementById('kf-uslo-min').value);
   const fOdKoga=document.getElementById('kf-od-koga').value.trim().toLowerCase();
-  const fIzasloMin=broj(document.getElementById('kf-izaslo-min').value);
+  const fIzasloMin=brojIliPrazno(document.getElementById('kf-izaslo-min').value);
   const fKome=document.getElementById('kf-kome').value.trim().toLowerCase();
-  const fVrijednostMin=broj(document.getElementById('kf-vrijednost-min').value);
+  const fVrijednostMin=brojIliPrazno(document.getElementById('kf-vrijednost-min').value);
 
   // Svi filteri se primjenjuju ZAJEDNO (AND) na isti niz — kombinovani efekat je isto
   // što i "kaskadno sužavanje", samo bez dropdown-a koji bi trebalo ponovo graditi.
@@ -4897,7 +4927,7 @@ function primijeniKretanjeFiltere(){
     filtrirano=[...filtrirano].sort((a,b)=>{
       const va=kretanjeVrijednostZaSort(a,kretanjeSortKolona), vb=kretanjeVrijednostZaSort(b,kretanjeSortKolona);
       // Ako su OBJE vrijednosti brojevi (i kad stignu kao tekst), poredi brojcano.
-      const na=broj(va), nb=broj(vb);
+      const na=brojIliPrazno(va), nb=broj(vb);
       if(!isNaN(na) && !isNaN(nb)) return (na-nb)*kretanjeSortSmjer;
       return String(va??'').localeCompare(String(vb??''),'sr-Latn-BA',{numeric:true})*kretanjeSortSmjer;
     });
