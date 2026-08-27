@@ -130,9 +130,23 @@ function fm(n){return(broj(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDi
 async function ucitajObjekte(){
   try{
     const r=await fetch(`${API}/api/prodajni-objekti`);
+    if(!r.ok){
+      const d=await r.json().catch(()=>({}));
+      throw new Error(d.error || `Server je vratio ${r.status}`);
+    }
     mojiPJovi=await r.json();
+    if(!Array.isArray(mojiPJovi) || !mojiPJovi.length) throw new Error('Nema dostupnih prodajnih objekata.');
     document.getElementById('objekt').innerHTML=mojiPJovi.map(p=>`<option value="${p.id}">${esc(p.naziv)}</option>`).join('');
-  }catch(e){}
+  }catch(e){
+    /* Ranije je greska tiho gutana — padajuca lista objekata bi ostala PRAZNA, kalkulacija
+       se nije mogla poslati, a korisnik nije imao pojma zasto (bas to se desilo: ruta
+       /api/prodajni-objekti nije propustala pravo "Roba i magacini" i vracala je 403). */
+    const sel=document.getElementById('objekt');
+    if(sel) sel.innerHTML='<option value="">— greška pri učitavanju —</option>';
+    const msg=document.getElementById('msg');
+    if(msg){ msg.className='msg err'; msg.textContent='✗ Ne mogu učitati prodajne objekte: '+e.message; }
+    else alert('Ne mogu učitati prodajne objekte: '+e.message);
+  }
 }
 
 let pretragaTimer=null;

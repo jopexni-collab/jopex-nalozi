@@ -6,8 +6,12 @@ const pool = require('./db');
 // moze_ugovarati (potrebno i terencu i "Ponude robe" korisnicima za listu PJ-ova).
 router.use((req, res, next) => {
   const u = req.session?.user;
-  if (u?.rola === 'admin' || u?.moze_prodavati || u?.komercijalista_teren || u?.moze_ugovarati) return next();
-  return res.status(403).json({ error: 'Nemate dozvolu za maloprodaju.' });
+  // moze_roba_magacin je DODAT: magacioneru treba spisak PJ-ova za Kretanje robe,
+  // Presek, Prenosnicu i Uporedni pregled. Bez toga ruta vraca 403, padajuca lista
+  // objekata ostane prazna i ti tabovi izgledaju "pokvareno" bez ikakvog objasnjenja.
+  if (u?.rola === 'admin' || u?.moze_prodavati || u?.komercijalista_teren
+      || u?.moze_ugovarati || u?.moze_roba_magacin) return next();
+  return res.status(403).json({ error: 'Nemate dozvolu za pregled prodajnih objekata.' });
 });
 
 // GET /api/prodajni-objekti/kupci-grupe - lista grupa kupaca (za admin podešavanje po PJ
