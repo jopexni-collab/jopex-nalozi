@@ -332,7 +332,7 @@ router.post('/', async (req, res) => {
          naplaceno_iznos, naplaceno_fakturisano, naplaceno)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
        ON CONFLICT (r_br) DO NOTHING
-       RETURNING r_br, zadatak, narucilac, ugovorena_suma, status`;
+       RETURNING r_br, zadatak, narucilac, ugovorena_suma, status, avans, avans_opis`;
       insertVals = [
         r_br_import,
         zadatak, prioritet || 'Normal',
@@ -353,7 +353,7 @@ router.post('/', async (req, res) => {
          link_ponuda, ugovorena_suma, avans, gotovo, reklamacija_dodatni_rad, izvor, kategorija_bonus_id,
          naplaceno_iznos, naplaceno_fakturisano, naplaceno)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
-       RETURNING r_br, zadatak, narucilac, ugovorena_suma, status`;
+       RETURNING r_br, zadatak, narucilac, ugovorena_suma, status, avans, avans_opis`;
       insertVals = [
         zadatak, prioritet || 'Normal',
         stvarniUgovorioId, ugovorioIme,
@@ -390,6 +390,35 @@ router.post('/', async (req, res) => {
         );
       }
     }
+    /* AVANS UPISAN PRI KREIRANJU NALOGA — knjizi se i u BLAGAJNU.
+       Ranije se avans upisivao samo u nalog, pa je novac "nestajao": nalog je pokazivao
+       da je naplaceno, a u blagajni ga nije bilo. Kad bi se posle dodala i prava rata
+       kroz listu, iznosi bi se sabrali i avans ispao dvostruk (nalozi 375 i 377).
+       Knjizi se SAMO ako je opis gotovinski ("got ...") ili ako opisa nema — bankovne
+       uplate ne idu u blagajnu. */
+    const avansUpisan = parseFloat(r.rows[0]?.avans || 0);
+    if (avansUpisan > 0) {
+      const opisAvansa = String(r.rows[0]?.avans_opis || '').trim();
+      const jeBanka = /\b(banka|rfb|uni|mf|nlb|virman|uplatnic)/i.test(opisAvansa);
+      if (!jeBanka) {
+        const imeUneseno = izvuciPrimio(opisAvansa) || user?.ime_prezime || '';
+        const smijeAutoPredano = jeIstoIme(imeUneseno, user?.ime_prezime)
+                                 && await jeBlagajnik(user?.id);
+        const opisG = `Avans - nalog #${r.rows[0].r_br}`
+                    + (r.rows[0].narucilac ? ` (${r.rows[0].narucilac})` : '');
+        await pool.query(
+          smijeAutoPredano
+            ? `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv,
+                                     predao_blagajniku, datum_predaje, preuzeo_ime)
+               VALUES (CURRENT_DATE,$1,$2,'Proizvodnja',$3,$4,$5,true,now(),$2)`
+            : `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv)
+               VALUES (CURRENT_DATE,$1,$2,'Proizvodnja',$3,$4,$5)`,
+          [avansUpisan, imeUneseno || user?.ime_prezime || '', String(r.rows[0].r_br),
+           opisG, PROIZVODNJA_PJ]
+        ).catch(e => console.error('Avans nije proknjizen u blagajnu:', e.message));
+      }
+    }
+
     res.status(201).json(r.rows[0]);
   } catch (err) {
     console.error(err);
@@ -702,6 +731,23 @@ router.patch('/:r_br', async (req, res) => {
     [req.params.r_br]
   );
   if (!postojeciRes.rows.length) return res.status(404).json({ error: 'Nalog nije pronađen.' });
+
+  /* AVANS se NE SMIJE mijenjati direktnim upisom u polje — taj put ne knjizi novac u
+     blagajnu, pa nalog pokaze da je naplaceno, a novca u evidenciji nema. Kad se posle
+     doda i prava rata, iznosi se saberu i avans ispadne dvostruk (desilo se na nalozima
+     375 i 377). Jedini ispravan put je "+ Dodaj ratu", koji u JEDNOJ transakciji upise
+     i avans i zapis u blagajnu. */
+  if ('avans' in req.body) {
+    const stari = parseFloat(postojeciRes.rows[0].avans || 0);
+    const novi = parseFloat(req.body.avans || 0);
+    if (Math.abs(stari - novi) > 0.005) {
+      return res.status(400).json({
+        error: 'Avans se ne upisuje direktno u polje — koristi dugme "+ Dodaj ratu". '
+             + 'Tako se novac istovremeno knjiži i u blagajnu. '
+             + `(Trenutni avans: ${stari.toFixed(2)} KM)`,
+      });
+    }
+  }
   const jeSvoj = postojeciRes.rows[0].ugovorio_id === user?.id;
   const staroSvaPolja = postojeciRes.rows[0];
 
