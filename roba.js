@@ -1023,7 +1023,23 @@ router.post('/izvoz-log/oznaci-pregledano', async (req, res) => {
   }
 });
 
-router.get('/:id', zahtijevaProdaju, async (req, res) => {
+/* ── ZASTITA OD ZASJENJIVANJA ───────────────────────────────────────────────────────
+   Express uzima PRVU rutu koja odgovara. Neke rute sa konkretnim imenom (npr.
+   '/presek-batch', '/uvoz-batch', '/lager-pragovi', '/import') definisane su NIZE u
+   fajlu, pa bi ih genericka '/:id' progutala — zahtjev bi trazio artikal sa sifrom
+   "presek-batch" i pao. Umjesto rizicnog premjestanja stotina redova, ovdje se takve
+   putanje jednostavno PROPUSTAJU dalje (next('route')), pa stignu do svoje prave rute. */
+const KONKRETNE_PUTANJE = new Set([
+  'presek-batch', 'uvoz-batch', 'lager-pragovi', 'import', 'presek',
+  'rucni-unos', 'bulk-jedinica',
+]);
+function preskociAkoNijeArtikal(req, res, next) {
+  const prvi = String(req.params.id || '').toLowerCase();
+  if (KONKRETNE_PUTANJE.has(prvi)) return next('route');
+  next();
+}
+
+router.get('/:id', preskociAkoNijeArtikal, zahtijevaProdaju, async (req, res) => {
   try {
     const objektId = trebaObjekat(req.query.objekt_id);
     if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat (objekt_id).' });
@@ -1043,7 +1059,7 @@ router.get('/:id', zahtijevaProdaju, async (req, res) => {
 // GET /api/roba/:id/kartica?objekt_id=X - robna kartica artikla za taj PJ: spaja uvoz i
 // nivelaciju (roba_kretanja), prodaju (otpremnica_stavke), i prenose (prenosi_robe) u
 // jedan hronološki prikaz.
-router.get('/:id/kartica', zahtijevaProdaju, async (req, res) => {
+router.get('/:id/kartica', preskociAkoNijeArtikal, zahtijevaProdaju, async (req, res) => {
   try {
     const objektId = trebaObjekat(req.query.objekt_id);
     if (!objektId) return res.status(400).json({ error: 'Nedostaje prodajni objekat.' });
@@ -1104,7 +1120,7 @@ router.get('/:id/kartica', zahtijevaProdaju, async (req, res) => {
 
 // POST /api/roba/:id/nivelacija - SAMO admin. Ručna izmjena cijene artikla za taj PJ,
 // bilježi se u roba_kretanja (istorija — vidi se u kartici) sa razlogom.
-router.post('/:id/nivelacija', async (req, res) => {
+router.post('/:id/nivelacija', preskociAkoNijeArtikal, async (req, res) => {
   if (!smijeMijenjatiCijene(req))
     return res.status(403).json({ error: 'Nemate dozvolu za mijenjanje cijena.' });
   try {
@@ -1180,7 +1196,7 @@ router.patch('/bulk-jedinica', async (req, res) => {
 
 // PATCH /api/roba/:id - izmjena. naziv/jed_mjera/aktivan su ZAJEDNIČKI za sve PJ (mijenjaju `roba`),
 // cijena/stanje su PO PJ (mijenjaju `roba_pj`, zahtijeva objekt_id). Samo admin.
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', preskociAkoNijeArtikal, async (req, res) => {
   // Sifrarnik (naziv, JM, aktivan) mijenja SAMO admin. Cijenu smije i onaj sa moze_cijene —
   // pa se propusta ako se salje ISKLJUCIVO cijena/stanje za odredjeni objekat.
   const samoCijenaIliStanje = Object.keys(req.body || {})
@@ -1232,7 +1248,7 @@ router.patch('/:id', async (req, res) => {
 });
 
 // DELETE /api/roba/:id - samo admin (briše artikal iz šifrarnika za SVE PJ, jer je roba_pj CASCADE)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', preskociAkoNijeArtikal, async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Nema pristupa.' });
   try {
@@ -1968,7 +1984,7 @@ router.post('/presek-batch/:id/storniraj', async (req, res) => {
 // artikal (alat "Ručni unos" u Lager listi — za povremena ručna usaglašavanja, između
 // dva "velika" preseka). Piše ODMAH (ne čeka grupnu potvrdu kao presek), po jedan artikal
 // odjednom.
-router.post('/:id/rucni-unos', async (req, res) => {
+router.post('/:id/rucni-unos', preskociAkoNijeArtikal, async (req, res) => {
   if (req.session?.user?.rola !== 'admin')
     return res.status(403).json({ error: 'Samo admin može raditi ručna usaglašavanja.' });
   try {
@@ -2053,7 +2069,7 @@ router.post('/rucni-unos/obrisi-nedavne', async (req, res) => {
 
 // PATCH /api/roba/:id/debljina — izmjena debljine artikla (mnogi stari artikli je
 // nemaju uneseno). Debljina je svojstvo SAMOG artikla (roba tabela), ne po PJ.
-router.patch('/:id/debljina', async (req, res) => {
+router.patch('/:id/debljina', preskociAkoNijeArtikal, async (req, res) => {
   if (req.session?.user?.rola !== 'admin') return res.status(403).json({ error: 'Samo admin.' });
   try {
     const debljina = req.body.debljina_cm === '' || req.body.debljina_cm == null
@@ -2078,7 +2094,7 @@ router.patch('/:id/debljina', async (req, res) => {
 // GET /api/roba/:id/model3d — proxy koji ČITA FBX sa R2 i prosleđuje ga pregledaču.
 // Potreban jer R2 (kao i ranije kod ponuda) ne šalje CORS zaglavlja, pa pregledač odbija
 // da direktno učita fajl sa druge adrese — server nema to ograničenje.
-router.get('/:id/model3d', zahtijevaProdaju, async (req, res) => {
+router.get('/:id/model3d', preskociAkoNijeArtikal, zahtijevaProdaju, async (req, res) => {
   try {
     const r = await pool.query('SELECT model_3d_url FROM roba WHERE id=$1', [req.params.id]);
     const url = r.rows[0]?.model_3d_url;
@@ -2094,7 +2110,7 @@ router.get('/:id/model3d', zahtijevaProdaju, async (req, res) => {
   }
 });
 
-router.post('/:id/model3d', zahtijevaProdaju, upload.single('model'), async (req, res) => {
+router.post('/:id/model3d', preskociAkoNijeArtikal, zahtijevaProdaju, upload.single('model'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Nema fajla.' });
   const ime = (req.file.originalname || '').toLowerCase();
   if (!ime.endsWith('.fbx')) return res.status(400).json({ error: 'Podržan je samo .fbx format.' });
@@ -2109,7 +2125,7 @@ router.post('/:id/model3d', zahtijevaProdaju, upload.single('model'), async (req
 });
 
 // DELETE /api/roba/:id/model3d — uklanja vezu ka 3D modelu (undo pogrešnog unosa).
-router.delete('/:id/model3d', zahtijevaProdaju, async (req, res) => {
+router.delete('/:id/model3d', preskociAkoNijeArtikal, zahtijevaProdaju, async (req, res) => {
   try {
     await pool.query('UPDATE roba SET model_3d_url=NULL, azurirano=now() WHERE id=$1', [req.params.id]);
     res.json({ ok: true });
@@ -2118,7 +2134,7 @@ router.delete('/:id/model3d', zahtijevaProdaju, async (req, res) => {
   }
 });
 
-router.post('/:id/slika', zahtijevaProdaju, upload.fields([{name:'slika',maxCount:1},{name:'thumb',maxCount:1}]), async (req, res) => {
+router.post('/:id/slika', preskociAkoNijeArtikal, zahtijevaProdaju, upload.fields([{name:'slika',maxCount:1},{name:'thumb',maxCount:1}]), async (req, res) => {
   const glavniFajl = req.files?.slika?.[0];
   const thumbFajl = req.files?.thumb?.[0];
   if (!glavniFajl) return res.status(400).json({ error: 'Nema fajla.' });
@@ -2151,7 +2167,7 @@ router.post('/:id/slika', zahtijevaProdaju, upload.fields([{name:'slika',maxCoun
 });
 
 // GET /api/roba/:id/slike — lista svih slika za jedan artikal, glavna prva.
-router.get('/:id/slike', zahtijevaProdaju, async (req, res) => {
+router.get('/:id/slike', preskociAkoNijeArtikal, zahtijevaProdaju, async (req, res) => {
   try {
     const r = await pool.query(
       'SELECT id, url, redosled, glavna FROM roba_slike WHERE roba_id=$1 ORDER BY glavna DESC, redosled ASC',
@@ -2165,7 +2181,7 @@ router.get('/:id/slike', zahtijevaProdaju, async (req, res) => {
 
 // POST /api/roba/:id/slike/:slikaId/glavna — postavlja jednu sliku kao glavnu (skida
 // oznaku sa svih ostalih tog artikla).
-router.post('/:id/slike/:slikaId/glavna', zahtijevaProdaju, async (req, res) => {
+router.post('/:id/slike/:slikaId/glavna', preskociAkoNijeArtikal, zahtijevaProdaju, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -2184,7 +2200,7 @@ router.post('/:id/slike/:slikaId/glavna', zahtijevaProdaju, async (req, res) => 
 
 // DELETE /api/roba/:id/slike/:slikaId — briše jednu sliku. Ako je bila glavna, sledeća
 // (po redosledu) automatski postaje glavna, ako postoji.
-router.delete('/:id/slike/:slikaId', zahtijevaProdaju, async (req, res) => {
+router.delete('/:id/slike/:slikaId', preskociAkoNijeArtikal, zahtijevaProdaju, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
