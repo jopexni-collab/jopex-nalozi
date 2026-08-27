@@ -10,8 +10,8 @@ const pool = require('./db');
 
 // GET /api/kalkulacije?objekt_id=X — lista (najnovije prvo).
 /* Citanje brojeva sa ZAREZOM kao decimalom — isto pravilo kao u pregledacu.
-   broj("1.234,56") vraca 1.234 (hiljadu puta manje), a broj("50,00") vraca 50
-   ali "17,55" vraca 17 — tiho se gube pare. */
+   Bez ovoga parseFloat("1.234,56") vraca 1.234 (hiljadu puta manje), a "17,55" vraca 17
+   — tiho se gube pare. */
 function broj(v) {
   if (v == null || v === '') return 0;
   if (typeof v === 'number') return isFinite(v) ? v : 0;

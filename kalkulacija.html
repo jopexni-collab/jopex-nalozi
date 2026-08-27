@@ -46,6 +46,30 @@ td input{padding:5px 6px;font-size:12px;}
 </header>
 
 <div class="wrap">
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+    <button type="button" id="tabbtn-nova" onclick="prebaciTabKalk('nova')"
+      style="padding:8px 16px;border:1px solid var(--border,#ddd);background:var(--blue,#1a5fa8);color:#fff;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;">➕ Nova kalkulacija</button>
+    <button type="button" id="tabbtn-spisak" onclick="prebaciTabKalk('spisak')"
+      style="padding:8px 16px;border:1px solid var(--border,#ddd);background:#fff;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;">📋 Spisak kalkulacija</button>
+  </div>
+
+  <!-- SPISAK — do sada nije postojao nigdje u aplikaciji, pa se nije ni moglo vidjeti da
+       li je kalkulacija stvarno snimljena (zbog toga je problem sa 8165/8166 dugo ostao
+       neprimijecen). -->
+  <div id="tab-spisak" style="display:none;">
+    <div class="card">
+      <h2>📋 Snimljene kalkulacije</h2>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+        <input type="text" id="sp-pretraga" placeholder="🔍 Dobavljač, broj ili PJ..." oninput="renderSpisak()"
+               style="flex:1;min-width:170px;padding:6px 10px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12.5px;">
+        <button type="button" onclick="ucitajSpisak()"
+                style="padding:6px 12px;border:1px solid var(--border,#ddd);background:#fff;border-radius:6px;cursor:pointer;font-size:12px;">↻ Osvježi</button>
+      </div>
+      <div id="sp-sadrzaj"></div>
+    </div>
+  </div>
+
+  <div id="tab-nova">
   <div class="card">
     <h2>Podaci o pošiljci</h2>
     <div class="red3">
@@ -84,6 +108,7 @@ td input{padding:5px 6px;font-size:12px;}
 
   <button class="btn green" onclick="sacuvajKalkulaciju()" style="width:100%;padding:12px;font-size:14px;">✓ Sačuvaj kalkulaciju (uvećava stanje robe)</button>
   <div class="msg" id="msg"></div>
+</div><!-- /tab-nova -->
 </div>
 
 <script>
@@ -126,6 +151,100 @@ let mojiPJovi=[];
 
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function fm(n){return(broj(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+
+/* ═══ SPISAK KALKULACIJA ═══════════════════════════════════════════════════════════
+   Do sada ga nije bilo — pravio si kalkulaciju i nisi imao gdje provjeriti da li je
+   stvarno snimljena. Zato se problem sa sifrarma 8165/8166 dugo nije primijetio. */
+let spisakSve = [];
+
+function prebaciTabKalk(tab){
+  document.getElementById('tab-nova').style.display   = tab==='nova'   ? 'block' : 'none';
+  document.getElementById('tab-spisak').style.display = tab==='spisak' ? 'block' : 'none';
+  const aktivan = 'background:var(--blue,#1a5fa8);color:#fff;';
+  const miran   = 'background:#fff;color:inherit;';
+  document.getElementById('tabbtn-nova').style.cssText =
+    'padding:8px 16px;border:1px solid var(--border,#ddd);border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;' + (tab==='nova'?aktivan:miran);
+  document.getElementById('tabbtn-spisak').style.cssText =
+    'padding:8px 16px;border:1px solid var(--border,#ddd);border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;' + (tab==='spisak'?aktivan:miran);
+  if(tab==='spisak') ucitajSpisak();
+}
+
+async function ucitajSpisak(){
+  const cont = document.getElementById('sp-sadrzaj');
+  cont.innerHTML = '<div style="padding:14px;color:#8b96a5;font-size:12.5px;">Učitavanje...</div>';
+  try{
+    const r = await fetch(`${API}/api/kalkulacije`);
+    if(!r.ok){
+      const d = await r.json().catch(()=>({}));
+      throw new Error(d.error || `Server je vratio ${r.status}`);
+    }
+    spisakSve = await r.json();
+    renderSpisak();
+  }catch(e){
+    cont.innerHTML = `<div style="padding:14px;color:var(--red,#c0392b);font-size:12.5px;">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+function renderSpisak(){
+  const cont = document.getElementById('sp-sadrzaj');
+  const q = (document.getElementById('sp-pretraga')?.value||'').toLowerCase().trim();
+  const prikaz = spisakSve.filter(k => !q
+    || String(k.dobavljac||'').toLowerCase().includes(q)
+    || String(k.broj||'').toLowerCase().includes(q)
+    || String(k.objekt_naziv||'').toLowerCase().includes(q));
+
+  if(!spisakSve.length){
+    cont.innerHTML = '<div style="padding:14px;color:#8b96a5;font-size:12.5px;">Još nema snimljenih kalkulacija.</div>';
+    return;
+  }
+  cont.innerHTML = `
+    <div style="font-size:12px;color:#8b96a5;margin-bottom:6px;">${prikaz.length} od ${spisakSve.length} kalkulacija</div>
+    <div style="max-height:calc(100vh - 300px);overflow:auto;border:1px solid var(--border,#ddd);border-radius:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:11px;line-height:1.3;">
+        <thead><tr style="background:#1f3864;color:#fff;">
+          <th style="padding:4px 6px;text-align:left;position:sticky;top:0;background:#1f3864;">Datum</th>
+          <th style="padding:4px 6px;text-align:left;position:sticky;top:0;background:#1f3864;">Broj</th>
+          <th style="padding:4px 6px;text-align:left;position:sticky;top:0;background:#1f3864;">Dobavljač</th>
+          <th style="padding:4px 6px;text-align:left;position:sticky;top:0;background:#1f3864;">Objekat</th>
+          <th style="padding:4px 6px;text-align:center;position:sticky;top:0;background:#1f3864;">Stavki</th>
+          <th style="padding:4px 6px;text-align:right;position:sticky;top:0;background:#1f3864;">Zaduženje</th>
+          <th style="padding:4px 6px;text-align:left;position:sticky;top:0;background:#1f3864;">Upisao</th>
+        </tr></thead>
+        <tbody>${prikaz.map((k,i)=>`
+          <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;cursor:pointer;"
+              onclick="otvoriKalkulaciju(${k.id})" title="Klikni za stavke">
+            <td style="padding:2px 6px;white-space:nowrap;">${k.datum ? new Date(k.datum).toLocaleDateString('bs-BA') : ''}</td>
+            <td style="padding:2px 6px;font-weight:700;">${esc(k.broj||'—')}</td>
+            <td style="padding:2px 6px;">${esc(k.dobavljac||'—')}</td>
+            <td style="padding:2px 6px;">${esc(k.objekt_naziv||'—')}</td>
+            <td style="padding:2px 6px;text-align:center;">
+              ${parseInt(k.broj_stavki)>0
+                ? `<b>${k.broj_stavki}</b>`
+                : '<span style="color:var(--red,#c0392b);font-weight:700;" title="Nijedna stavka nije ušla u lager">0 ⚠</span>'}
+            </td>
+            <td style="padding:2px 6px;text-align:right;font-weight:700;">${fm(k.ukupno_zaduzenje||0)}</td>
+            <td style="padding:2px 6px;">${esc(k.upisao_ime||'')}</td>
+          </tr>`).join('') || '<tr><td colspan="7" style="padding:12px;text-align:center;color:#8b96a5;">Nema rezultata.</td></tr>'}</tbody>
+      </table>
+    </div>`;
+}
+
+async function otvoriKalkulaciju(id){
+  try{
+    const r = await fetch(`${API}/api/kalkulacije/${id}`);
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    const st = d.stavke || [];
+    const red = s => `${s.sifra}  ${s.naziv}\n     količina ${s.kolicina}  ·  nabavna ${fm(s.nabavna_cijena)}  ·  prodajna ${fm(s.prodajna_cijena)}`;
+    alert(
+      `Kalkulacija ${d.broj||'#'+d.id}\n`
+      + `${d.dobavljac||''} · ${d.objekt_naziv||''}\n`
+      + `${'-'.repeat(40)}\n`
+      + (st.length ? st.map(red).join('\n') : '(nema stavki — ništa nije ušlo u lager)')
+    );
+  }catch(e){ alert('✗ '+e.message); }
+}
 
 async function ucitajObjekte(){
   try{
