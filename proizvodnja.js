@@ -737,6 +737,16 @@ router.patch('/:r_br', async (req, res) => {
      doda i prava rata, iznosi se saberu i avans ispadne dvostruk (desilo se na nalozima
      375 i 377). Jedini ispravan put je "+ Dodaj ratu", koji u JEDNOJ transakciji upise
      i avans i zapis u blagajnu. */
+  /* "naplaceno" se NE postavlja rucno — racuna se sam pri svakoj uplati (kad dug padne
+     na nulu). Rucno oznacavanje je precrtavalo iznos i zakljucavalo polje, pa se nalog
+     vise nije mogao naplatiti (desilo se na nalogu 376). */
+  if ('naplaceno' in req.body && req.session?.user?.rola !== 'admin') {
+    return res.status(400).json({
+      error: 'Oznaka "Naplaćeno" se postavlja sama kad se naplati cijeli iznos. '
+           + 'Za naplatu koristi kolonu "Avans" — "+ Dodaj ratu" ili "Naplati ostatak".',
+    });
+  }
+
   if ('avans' in req.body) {
     const stari = parseFloat(postojeciRes.rows[0].avans || 0);
     const novi = parseFloat(req.body.avans || 0);

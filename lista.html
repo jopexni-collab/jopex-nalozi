@@ -519,7 +519,13 @@ function getCols(){
         : fm(r.za_naplatu);
       return `<td class="num note-cell${cls}" data-note="${esc(r.naplaceno_opis||'')}" title="${naslov}">${iznosPrikaz}</td>`;
     },edit:{type:'naplata-split',field:'avans',label:'Naplata ostatka'}},
-    {k:'naplaceno',l:'✓ Napl.',w:55,filter:'sel',opts:['Da','Ne'],render:r=>mozeVidjetiFin(r)?`<td class="center">${r.naplaceno?'<span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span>':''}</td>`:'<td class="center">—</td>',edit:{type:'check',field:'naplaceno',label:'Naplaćeno'}},
+    /* "Naplaćeno" se NE postavlja rucno — kvacica se pojavi SAMA kad uplate dostignu
+       ugovoreni iznos. Ranije je postojao izbor Da/Ne, pa se moglo greskom oznaciti kao
+       naplaceno bez ijedne uplate: iznos bi se precrtao, polje zakljucalo, i vise se nije
+       moglo naplatiti (desilo se na nalogu 376). Naplata ide iskljucivo kroz kolonu
+       "Avans" -> "+ Dodaj ratu" ili "Naplati ostatak", gdje se novac istovremeno knjizi
+       i u blagajnu. */
+    {k:'naplaceno',l:'✓ Napl.',w:55,filter:'sel',opts:['Da','Ne'],render:r=>mozeVidjetiFin(r)?`<td class="center">${r.naplaceno?'<span style="color:#1f8a4c;font-size:16px;font-weight:900">✓</span>':''}</td>`:'<td class="center">—</td>',edit:null},   // NAMJERNO bez rucnog uredjivanja — vidi napomenu ispod
   ];
   const admOnly=isAdmin?[
     {k:'_del',l:'',w:40,filter:null,render:r=>`<td class="center"><button onclick="obrisiNalog(${r.r_br},event)" style="background:none;border:none;cursor:pointer;font-size:14px;color:#c0392b;" title="Obriši nalog">🗑</button></td>`,edit:null},
