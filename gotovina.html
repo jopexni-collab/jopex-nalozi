@@ -905,7 +905,7 @@ async function udioUBlagajniPoZapisu(pj){
     // Isti filter kao u prikazu — samo PREDANI zapisi ulaze u računicu (vidi napomenu
     // gore u ucitajBlagajnaBreakdown). Bez ovoga bi nepredani (npr. tek napravljena
     // otpremnica) "pojeo" dio granice u proračunu, pomjerajući sve ostalo pogrešno.
-    const sviRedovi=sviRedoviSirovo.filter(x=>x.predao_blagajniku && !jeVpBankaRed(x)); // već sortirano najnovije-prvo
+    const sviRedovi=sviRedoviSirovo.filter(x=>x.predao_blagajniku && !jeVpBankaRed(x, sviRedoviSirovo)); // već sortirano najnovije-prvo
     const rStanje=await fetch(`${API}/api/blagajna-razduzenja/stanje?objekt_id=${blagajnaObjektId}`);
     const stanje=await rStanje.json();
     let granica=broj(stanje.trenutno_u_blagajni||0);
@@ -1252,7 +1252,7 @@ function render(){
      Prikazuju se samo ako se ukljuci prekidac "Prikazi i pomocne zapise". */
   const jePomocni = r => /^(Pokri.?e isplate|Iskori.?teno za isplatu|Ulaz iz nepredane gotovine|Razdu.?enje .*dao kes)/.test(r.opis||'');
   const prikaziPomocne = document.getElementById('fil-pomocni')?.checked;
-  const rows=all.filter(r=>!jeVpBankaRed(r) && (prikaziPomocne || !jePomocni(r)));
+  const rows=all.filter(r=>!jeVpBankaRed(r, all) && (prikaziPomocne || !jePomocni(r)));
   const ukupnoKM=rows.reduce((s,r)=>s+broj(r.iznos||0)*(r.valuta==='EUR'?1.95:1),0);
   document.getElementById('stat').textContent=`${rows.length} zapisa | Ukupno: ${fm(ukupnoKM)} KM`;
   if(!rows.length){
@@ -1261,7 +1261,7 @@ function render(){
   }
   document.getElementById('tbody').innerHTML=rows.map(r=>{
     const jeIsplata=broj(r.iznos)<0;
-    const jeVp=jeVpBankaRed(r);
+    const jeVp=jeVpBankaRed(r, all);
     const jePlus=broj(r.iznos)>=0;
 
     // Za VP/banka redove (roba odvezena, ali NEMA gotovine koju komercijalista predaje
@@ -1317,9 +1317,24 @@ function render(){
 // samo je tekst prilagođen (nema fizičkog novca koji komercijalista predaje, blagajnik
 // samo potvrđuje da zna da je stanje magacina umanjeno; novac stiže kasnije, na banku
 // ili gotovinom sa terena).
-function jeVpBankaRed(r){
-  const o=r.opis||'';
-  return o.startsWith('Prodaja (bruto)') || o.startsWith('Dug po otpremnici');
+/* Par "Prodaja (bruto)" + "Dug po otpremnici" nastaje kad roba ode a naplata je odgodena.
+   Ako NISTA nije naplaceno, ta dva reda se ponistavaju (neto 0) i nemaju sta da rade u
+   spisku za predaju — zato se skrivaju.
+   ALI ako je dio placen u gotovini, neto NIJE nula (npr. 324 - 24 = 300 KM) — to je pravi
+   novac koji blagajnik mora da vidi i potvrdi. Ranije su se oba reda skrivala bez obzira
+   na iznos, pa se novac pojavljivao u zbiru gore, a dolje ga nije bilo. */
+function jeVpBankaRed(r, sviRedovi){
+  const o = r.opis || '';
+  const jePar = o.startsWith('Prodaja (bruto)') || o.startsWith('Dug po otpremnici');
+  if (!jePar) return false;
+  if (!Array.isArray(sviRedovi)) return true;   // bez konteksta — staro ponasanje
+
+  // Neto za tu otpremnicu: ako je 0, par se ponistava i skriva se.
+  const neto = sviRedovi
+    .filter(x => x.nalog_r_br === r.nalog_r_br &&
+                 ((x.opis||'').startsWith('Prodaja (bruto)') || (x.opis||'').startsWith('Dug po otpremnici')))
+    .reduce((s, x) => s + parseFloat(x.iznos || 0), 0);
+  return Math.abs(neto) < 0.005;
 }
 
 /* ── VP — potvrda po otpremnici (jedan klik, jedan događaj) ────────────── */
