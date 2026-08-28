@@ -326,7 +326,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
             <option value="40">40 mm</option>
             <option value="custom">Drugo...</option>
           </select>
-          <input type="text" inputmode="decimal" id="mat-d-inp" value="30" min="1" max="200" style="display:none;width:60px" oninput="fixComma(this);refresh()">
+          <input type="number" id="mat-d-inp" value="30" min="1" max="200" style="display:none;width:60px" oninput="fixComma(this);refresh()">
         </div>
       </div>
     </div>
@@ -381,7 +381,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
         Crtež je <b>samo polazna tačka</b>: poslije ispravi mjere i zaključaj prave uglove.</div>
       <div class="r2" style="margin-bottom:6px">
         <div class="fg"><label>Najduža strana (mm)</label>
-          <input type="text" inputmode="decimal" id="sk-najduza" value="3000" min="100" step="10"></div>
+          <input type="number" id="sk-najduza" value="3000" min="100" step="10"></div>
         <div class="fg" style="display:flex;align-items:flex-end">
           <button type="button" onclick="skicaOcisti()"
             style="width:100%;font:inherit;font-size:11px;padding:7px;border:1px solid #dde2ea;
@@ -429,12 +429,12 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <div class="cbrow"><input type="checkbox" id="cb-sud" checked onchange="tcb('sud');refresh()"><label for="cb-sud" style="color:#1a5fa8">Otvor – sudopera</label></div>
       <div class="cbsub on" id="sub-sud">
         <div class="r2">
-          <div class="fg"><label>Širina (mm)</label><input type="text" inputmode="decimal" id="sud-w" value="500" min="50" oninput="fixComma(this);refresh()"></div>
-          <div class="fg"><label>Dubina (mm)</label><input type="text" inputmode="decimal" id="sud-h" value="500" min="50" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Širina (mm)</label><input type="number" id="sud-w" value="500" min="50" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Dubina (mm)</label><input type="number" id="sud-h" value="500" min="50" oninput="fixComma(this);refresh()"></div>
         </div>
         <div class="r2">
           <div class="fg"><label>Vrsta</label><select id="sud-t" onchange="onVrstaObradeChange('sud');refresh()"><option value="bez">Bez obrade</option><option value="polirano">Polirano</option><option value="upusteno">Upušteno</option></select></div>
-          <div class="fg"><label>Cijena (KM)</label><input type="text" inputmode="decimal" id="sud-c" step="0.01" value="100" min="0" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Cijena (KM)</label><input type="number" id="sud-c" step="0.01" value="100" min="0" oninput="fixComma(this);refresh()"></div>
         </div>
         <div class="r2" id="sud-upst-wrap">
           <div class="fg"><label>Dubina upuštanja (mm)</label><input type="text" inputmode="decimal" id="sud-dub" value="5" oninput="fixComma(this);refresh()"></div>
@@ -445,9 +445,9 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
           <div class="r2">
             <div class="fg"><label>Mjeri od</label><select id="sud-ref" onchange="refresh()"><option value="linije">⊞ Zamišljenih linija (okvir)</option></select></div>
           <div class="fg"><label>Orijentacija otvora</label><select id="sud-orij" onchange="refresh()"><option value="vodoravno">↔ Paralelno vodoravno</option><option value="uspravno">↕ Paralelno uspravno</option></select></div>
-            <div class="fg"><label id="sud-lbly">Y — okomito (mm)</label><input type="text" inputmode="decimal" id="sud-odmak" value="50" oninput="fixComma(this);refresh()"></div>
+            <div class="fg"><label id="sud-lbly">Y — okomito (mm)</label><input type="number" id="sud-odmak" value="50" oninput="fixComma(this);refresh()"></div>
           </div>
-          <div class="fg"><label id="sud-lblx">X — uzduž (mm)</label><input type="text" inputmode="decimal" id="sud-duz" value="200" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label id="sud-lblx">X — uzduž (mm)</label><input type="number" id="sud-duz" value="200" oninput="fixComma(this);refresh()"></div>
         </div>
         <div id="sud-osa-red"><div class="hint">Pozicija otvora — biraj od koje se STVARNE ivice kraka mjeri</div>
         <div class="r2">
@@ -457,7 +457,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
               <option value="desna">Od desne ivice</option>
             </select>
           </div>
-          <div class="fg"><label>Rastojanje (mm)</label><input type="text" inputmode="decimal" id="sud-x" value="200" min="0" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Rastojanje (mm)</label><input type="number" id="sud-x" value="200" min="0" oninput="fixComma(this);refresh()"></div>
         </div>
         <div class="r2">
           <div class="fg"><label>Uspravno</label>
@@ -466,7 +466,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
               <option value="zadnja">Od zadnje ivice</option>
             </select>
           </div>
-          <div class="fg"><label>Rastojanje (mm)</label><input type="text" inputmode="decimal" id="sud-y" value="50" min="0" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Rastojanje (mm)</label><input type="number" id="sud-y" value="50" min="0" oninput="fixComma(this);refresh()"></div>
         </div>
         </div>
         <div class="hint">Radijus uglova otvora (R mm)</div>
@@ -475,13 +475,13 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
             <select id="sud-r-tl-sel" onchange="onRadSelChange('sud-r-tl');refresh()">
               <option value="0">Oštar</option><option value="5">R5</option><option value="10">R10</option><option value="20">R20</option><option value="custom">Proizvoljno</option>
             </select>
-            <input type="text" inputmode="decimal" id="sud-r-tl-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
+            <input type="number" id="sud-r-tl-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
           </div>
           <div class="fg"><label>Gore-desno</label>
             <select id="sud-r-tr-sel" onchange="onRadSelChange('sud-r-tr');refresh()">
               <option value="0">Oštar</option><option value="5">R5</option><option value="10">R10</option><option value="20">R20</option><option value="custom">Proizvoljno</option>
             </select>
-            <input type="text" inputmode="decimal" id="sud-r-tr-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
+            <input type="number" id="sud-r-tr-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
           </div>
         </div>
         <div class="r2">
@@ -489,25 +489,25 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
             <select id="sud-r-br-sel" onchange="onRadSelChange('sud-r-br');refresh()">
               <option value="0">Oštar</option><option value="5">R5</option><option value="10">R10</option><option value="20">R20</option><option value="custom">Proizvoljno</option>
             </select>
-            <input type="text" inputmode="decimal" id="sud-r-br-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
+            <input type="number" id="sud-r-br-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
           </div>
           <div class="fg"><label>Dolje-lijevo</label>
             <select id="sud-r-bl-sel" onchange="onRadSelChange('sud-r-bl');refresh()">
               <option value="0">Oštar</option><option value="5">R5</option><option value="10">R10</option><option value="20">R20</option><option value="custom">Proizvoljno</option>
             </select>
-            <input type="text" inputmode="decimal" id="sud-r-bl-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
+            <input type="number" id="sud-r-bl-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
           </div>
         </div>
       </div>
       <div class="cbrow"><input type="checkbox" id="cb-plo" onchange="tcb('plo');refresh()"><label for="cb-plo" style="color:#c0392b">Otvor – ploča za kuvanje</label></div>
       <div class="cbsub" id="sub-plo">
         <div class="r2">
-          <div class="fg"><label>Širina (mm)</label><input type="text" inputmode="decimal" id="plo-w" value="500" min="50" oninput="fixComma(this);refresh()"></div>
-          <div class="fg"><label>Dubina (mm)</label><input type="text" inputmode="decimal" id="plo-h" value="500" min="50" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Širina (mm)</label><input type="number" id="plo-w" value="500" min="50" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Dubina (mm)</label><input type="number" id="plo-h" value="500" min="50" oninput="fixComma(this);refresh()"></div>
         </div>
         <div class="r2">
           <div class="fg"><label>Vrsta</label><select id="plo-t" onchange="onVrstaObradeChange('plo');refresh()"><option value="bez">Bez obrade</option><option value="polirano">Polirano</option><option value="upusteno">Upušteno</option></select></div>
-          <div class="fg"><label>Cijena (KM)</label><input type="text" inputmode="decimal" id="plo-c" step="0.01" value="100" min="0" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Cijena (KM)</label><input type="number" id="plo-c" step="0.01" value="100" min="0" oninput="fixComma(this);refresh()"></div>
         </div>
         <div class="r2" id="plo-upst-wrap">
           <div class="fg"><label>Dubina upuštanja (mm)</label><input type="text" inputmode="decimal" id="plo-dub" value="5" oninput="fixComma(this);refresh()"></div>
@@ -518,9 +518,9 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
           <div class="r2">
             <div class="fg"><label>Mjeri od</label><select id="plo-ref" onchange="refresh()"><option value="linije">⊞ Zamišljenih linija (okvir)</option></select></div>
           <div class="fg"><label>Orijentacija otvora</label><select id="plo-orij" onchange="refresh()"><option value="vodoravno">↔ Paralelno vodoravno</option><option value="uspravno">↕ Paralelno uspravno</option></select></div>
-            <div class="fg"><label id="plo-lbly">Y — okomito (mm)</label><input type="text" inputmode="decimal" id="plo-odmak" value="50" oninput="fixComma(this);refresh()"></div>
+            <div class="fg"><label id="plo-lbly">Y — okomito (mm)</label><input type="number" id="plo-odmak" value="50" oninput="fixComma(this);refresh()"></div>
           </div>
-          <div class="fg"><label id="plo-lblx">X — uzduž (mm)</label><input type="text" inputmode="decimal" id="plo-duz" value="1000" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label id="plo-lblx">X — uzduž (mm)</label><input type="number" id="plo-duz" value="1000" oninput="fixComma(this);refresh()"></div>
         </div>
         <div id="plo-osa-red"><div class="hint">Pozicija otvora — biraj od koje se STVARNE ivice kraka mjeri</div>
         <div class="r2">
@@ -530,7 +530,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
               <option value="desna">Od desne ivice</option>
             </select>
           </div>
-          <div class="fg"><label>Rastojanje (mm)</label><input type="text" inputmode="decimal" id="plo-x" value="1000" min="0" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Rastojanje (mm)</label><input type="number" id="plo-x" value="1000" min="0" oninput="fixComma(this);refresh()"></div>
         </div>
         <div class="r2">
           <div class="fg"><label>Uspravno</label>
@@ -539,7 +539,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
               <option value="zadnja">Od zadnje ivice</option>
             </select>
           </div>
-          <div class="fg"><label>Rastojanje (mm)</label><input type="text" inputmode="decimal" id="plo-y" value="50" min="0" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Rastojanje (mm)</label><input type="number" id="plo-y" value="50" min="0" oninput="fixComma(this);refresh()"></div>
         </div>
         </div>
         <div class="hint">Radijus uglova otvora (R mm)</div>
@@ -548,13 +548,13 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
             <select id="plo-r-tl-sel" onchange="onRadSelChange('plo-r-tl');refresh()">
               <option value="0">Oštar</option><option value="5">R5</option><option value="10">R10</option><option value="20">R20</option><option value="custom">Proizvoljno</option>
             </select>
-            <input type="text" inputmode="decimal" id="plo-r-tl-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
+            <input type="number" id="plo-r-tl-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
           </div>
           <div class="fg"><label>Gore-desno</label>
             <select id="plo-r-tr-sel" onchange="onRadSelChange('plo-r-tr');refresh()">
               <option value="0">Oštar</option><option value="5">R5</option><option value="10">R10</option><option value="20">R20</option><option value="custom">Proizvoljno</option>
             </select>
-            <input type="text" inputmode="decimal" id="plo-r-tr-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
+            <input type="number" id="plo-r-tr-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
           </div>
         </div>
         <div class="r2">
@@ -562,13 +562,13 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
             <select id="plo-r-br-sel" onchange="onRadSelChange('plo-r-br');refresh()">
               <option value="0">Oštar</option><option value="5">R5</option><option value="10">R10</option><option value="20">R20</option><option value="custom">Proizvoljno</option>
             </select>
-            <input type="text" inputmode="decimal" id="plo-r-br-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
+            <input type="number" id="plo-r-br-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
           </div>
           <div class="fg"><label>Dolje-lijevo</label>
             <select id="plo-r-bl-sel" onchange="onRadSelChange('plo-r-bl');refresh()">
               <option value="0">Oštar</option><option value="5">R5</option><option value="10">R10</option><option value="20">R20</option><option value="custom">Proizvoljno</option>
             </select>
-            <input type="text" inputmode="decimal" id="plo-r-bl-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
+            <input type="number" id="plo-r-bl-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
           </div>
         </div>
       </div>
@@ -645,11 +645,11 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
     <div class="sec">
       <div class="sec-hd">Gazišta</div>
       <div class="hint">A = dužina gazišta · B = dubina gazišta</div>
-      <div class="fg"><label>Broj stepenica</label><input type="text" inputmode="decimal" id="st-br" value="12" min="1" oninput="fixComma(this);refresh()"></div>
+      <div class="fg"><label>Broj stepenica</label><input type="number" id="st-br" value="12" min="1" oninput="fixComma(this);refresh()"></div>
       <div class="r3">
-        <div class="fg"><label>A – dužina (mm)</label><input type="text" inputmode="decimal" id="st-a" value="1000" min="200" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>B – dubina (mm)</label><input type="text" inputmode="decimal" id="st-b" value="300" min="100" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Deb. (mm)</label><input type="text" inputmode="decimal" id="st-d" value="20" min="10" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>A – dužina (mm)</label><input type="number" id="st-a" value="1000" min="200" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>B – dubina (mm)</label><input type="number" id="st-b" value="300" min="100" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Deb. (mm)</label><input type="number" id="st-d" value="20" min="10" oninput="fixComma(this);refresh()"></div>
       </div>
       <div class="r2">
         
@@ -661,12 +661,12 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <div class="cbrow"><input type="checkbox" id="cb-cel" checked onchange="tcb('cel');refresh()"><label for="cb-cel">Ugraditi čela stepenica</label></div>
       <div class="cbsub on" id="sub-cel">
         <div class="r2">
-          <div class="fg"><label>Dužina čela (mm)</label><input type="text" inputmode="decimal" id="cel-a" value="1300" oninput="fixComma(this);refresh()"></div>
-          <div class="fg"><label>Visina čela (mm)</label><input type="text" inputmode="decimal" id="cel-b" value="170" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Dužina čela (mm)</label><input type="number" id="cel-a" value="1300" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Visina čela (mm)</label><input type="number" id="cel-b" value="170" oninput="fixComma(this);refresh()"></div>
         </div>
         <div class="r2">
-          <div class="fg"><label>Debljina (mm)</label><input type="text" inputmode="decimal" id="cel-d" value="12" oninput="fixComma(this);refresh()"></div>
-          <div class="fg"><label>Broj komada čela</label><input type="text" inputmode="decimal" id="cel-k" value="1" min="1" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Debljina (mm)</label><input type="number" id="cel-d" value="12" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Broj komada čela</label><input type="number" id="cel-k" value="1" min="1" oninput="fixComma(this);refresh()"></div>
         </div>
         <div class="fg"><label>Cijena čela (KM/m²)</label><input type="text" inputmode="decimal" id="cel-c" value="75" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
@@ -712,7 +712,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
         <div class="hint">Svaki ugao može imati svoj radijus zaokruženja (R mm)</div>
         <div id="sto-corner-con"></div>
       </div>
-      <div class="fg"><label>Broj komada</label><input type="text" inputmode="decimal" id="sto-br" value="1" min="1" oninput="fixComma(this);refresh()"></div>
+      <div class="fg"><label>Broj komada</label><input type="number" id="sto-br" value="1" min="1" oninput="fixComma(this);refresh()"></div>
     </div>
     <div class="sec" id="sto-radius-sec" style="display:none">
       <div class="sec-hd">Radijusi zakrivljenja</div>
@@ -722,15 +722,15 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
           <option value="0">Oštar</option><option value="5">R5</option><option value="10">R10</option>
           <option value="20" selected>R20</option><option value="40">R40</option><option value="custom">Proizvoljno</option>
         </select>
-        <input type="text" inputmode="decimal" id="sto-r-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
+        <input type="number" id="sto-r-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
       </div>
       <div id="sto-rl-wrap" style="display:none;margin-top:10px">
         <div class="hint">Radijus zakrivljenja DUŽE strane (mm) - veći radijus = blaže zakrivljenje</div>
-        <input type="text" inputmode="decimal" id="sto-rl" value="3000" min="100" oninput="fixComma(this);refresh()">
+        <input type="number" id="sto-rl" value="3000" min="100" oninput="fixComma(this);refresh()">
       </div>
       <div id="sto-rs-wrap" style="display:none;margin-top:10px">
         <div class="hint">Radijus zakrivljenja KRAĆE strane (mm)</div>
-        <input type="text" inputmode="decimal" id="sto-rs" value="3000" min="100" oninput="fixComma(this);refresh()">
+        <input type="number" id="sto-rs" value="3000" min="100" oninput="fixComma(this);refresh()">
       </div>
     </div>
     <div class="sec">
@@ -853,33 +853,6 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
 
 </div><!-- /app -->
 <script>
-/* ═══ UNOS BROJEVA — zarez kao decimala ═══════════════════════════════════════════
-   ZAREZ je uvijek decimala, TACKA razdvaja hiljade (1.234,56). Ako zareza nema, tacka
-   se cita kao decimala — radi kompatibilnosti sa postojecim podacima i Excel unosom.
-   Bez ovoga broj("17,55") vraca 17 — tiho se gubi 55 para. */
-function broj(v){
-  if (v == null || v === '') return 0;
-  if (typeof v === 'number') return isFinite(v) ? v : 0;
-  let s = String(v).trim().replace(/\s/g, '').replace(/[^\d.,-]/g, '');
-  if (!s) return 0;
-  if (s.includes(',')) s = s.replace(/\./g, '').replace(/,/g, '.');
-  const n = parseFloat(s);
-  return isFinite(n) ? n : 0;
-}
-/* Upis broja U POLJE — sa zarezom, bez razdvajanja hiljada (da ostane uredivo). */
-/* Za FILTERE — prazno polje mora ostati "nema ogranicenja", pa vraca NaN (kao parseFloat).
-   Funkcija broj() vraca 0, sto je ispravno za racun, ali bi u filteru znacilo "min 0" i
-   izbacilo sve redove. Zato filteri koriste OVU funkciju. */
-function brojIliPrazno(v){
-  if (v == null || String(v).trim() === '') return NaN;
-  const n = brojIliPrazno(v);
-  return isFinite(n) ? n : NaN;
-}
-
-function uPolje(n, dec){
-  return broj(n).toFixed(dec == null ? 2 : dec).replace('.', ',');
-}
-
 
 
 
@@ -1155,7 +1128,7 @@ function stranaDuzina(t,i){
 function getCornerRadiusMM(i){
   var v=cornerR[i];
   if(v===undefined||v===null) return 0;
-  var n=brojIliPrazno(v);
+  var n=parseFloat(v);
   return isNaN(n)||n<0?0:n;
 }
 
@@ -1490,17 +1463,17 @@ function getTableRadiusMM(){
   if(!sel) return 0;
   if(sel.value==='custom'){
     var inp=ge('sto-r-inp');
-    return inp?Math.max(0,broj((inp.value||'0').replace(',','.'))||0):0;
+    return inp?Math.max(0,parseFloat((inp.value||'0').replace(',','.'))||0):0;
   }
-  return broj(sel.value)||0;
+  return parseFloat(sel.value)||0;
 }
 function getTableLongRadiusMM(){
   var inp=ge('sto-rl');
-  return inp?Math.max(0,broj((inp.value||'0').replace(',','.'))||0):0;
+  return inp?Math.max(0,parseFloat((inp.value||'0').replace(',','.'))||0):0;
 }
 function getTableShortRadiusMM(){
   var inp=ge('sto-rs');
-  return inp?Math.max(0,broj((inp.value||'0').replace(',','.'))||0):0;
+  return inp?Math.max(0,parseFloat((inp.value||'0').replace(',','.'))||0):0;
 }
 
 // ═══ BURE / FULL BURE - prava geometrija (kružni lukovi) ═══════
@@ -2519,11 +2492,11 @@ function getMatD(){
   if(!sel) return 20;
   if(sel.value==='custom'){
     var inp=ge('mat-d-inp');
-    return inp?broj((inp.value||'20').replace(',','.'))||20:20;
+    return inp?parseFloat((inp.value||'20').replace(',','.'))||20:20;
   }
-  return broj(sel.value)||20;
+  return parseFloat(sel.value)||20;
 }
-function gi(id){var e=ge(id);if(!e)return 0;var v=brojIliPrazno((e.value||'').replace(',','.'));return isNaN(v)?0:v;}
+function gi(id){var e=ge(id);if(!e)return 0;var v=parseFloat((e.value||'').replace(',','.'));return isNaN(v)?0:v;}
 function fixComma(el){if(el&&el.value.indexOf(',')>=0){var pos=el.selectionStart;el.value=el.value.replace(',','.');try{el.setSelectionRange(pos,pos);}catch(e){}}}
 function gs(id){var e=ge(id);return e?e.value||'':'';}
 function gc(id){var e=ge(id);return e?e.checked:false;}
@@ -2797,15 +2770,15 @@ function onVrstaObradeChange(prefix){
   toggleUpustenoFields(prefix);
   var sel=ge(prefix+'-t');
   if(sel&&sel.value==='upusteno'){
-    var w=broj((gs(prefix+'-w')||'0').replace(',','.'))||0;
-    var h=broj((gs(prefix+'-h')||'0').replace(',','.'))||0;
+    var w=parseFloat((gs(prefix+'-w')||'0').replace(',','.'))||0;
+    var h=parseFloat((gs(prefix+'-h')||'0').replace(',','.'))||0;
     var cEl=ge(prefix+'-c');
     if(cEl) cEl.value=getUpustenoDefaultCena(w,h);
     // Defaultne vrijednosti dubine i širine samo ako su 0 ili prazne
     var dubEl=ge(prefix+'-dub');
-    if(dubEl&&(!dubEl.value||broj(dubEl.value)===0)) dubEl.value='3';
+    if(dubEl&&(!dubEl.value||parseFloat(dubEl.value)===0)) dubEl.value='3';
     var stepEl=ge(prefix+'-step');
-    if(stepEl&&(!stepEl.value||broj(stepEl.value)===0)) stepEl.value='5';
+    if(stepEl&&(!stepEl.value||parseFloat(stepEl.value)===0)) stepEl.value='5';
   } else {
     // Bez obrade ili Polirano - obriši dubinu/step da simbol nestane sa crteža
     var dubEl2=ge(prefix+'-dub');
@@ -2913,7 +2886,7 @@ function _tablaMjere(){
 function _rezIvice(){
   var e=ge('kl-rez-ivice');
   if(e&&e.value!=='') {
-    var v=brojIliPrazno((e.value||'').toString().replace(',','.'));
+    var v=parseFloat((e.value||'').toString().replace(',','.'));
     if(!isNaN(v)&&v>=0) return v;   // dozvoljena je i nula
   }
   return 50;
@@ -2953,7 +2926,7 @@ var REZ_SJECIVA=5;   // mm koje sjecivo pojede po rezu (podrazumijevano)
 function _rezSjeciva(){
   var e=ge('kl-rez-sjeciva');
   if(e&&e.value!==''){
-    var v=brojIliPrazno((e.value||'').toString().replace(',','.'));
+    var v=parseFloat((e.value||'').toString().replace(',','.'));
     if(!isNaN(v)&&v>=0) return v;
   }
   return REZ_SJECIVA;
@@ -3179,7 +3152,7 @@ function _ledMjere(){
     sirina:gi('kl-led-sir')||10,
     dubina:gi('kl-led-dub')||12,
     cijena:(function(){var e=ge('kl-led-c');
-      return e?(broj((e.value||'0').replace(',','.'))||0):0;})()
+      return e?(parseFloat((e.value||'0').replace(',','.'))||0):0;})()
   };
 }
 // Strane na kojima LED kanal ne smije biti, jer je tamo vodeni kanal
@@ -3292,7 +3265,7 @@ function _zidovi(){
 }
 // Sirina se mijenja ZA CIJELI zid - jedan zid, jedna sirina
 function zidSirina(zid,val){
-  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
   if(v<=0) return;
   (pozicije||[]).forEach(function(p){ if((p.zid!=null?p.zid:0)===zid) p.b=v; });
   syncToActive(); refresh();
@@ -3315,7 +3288,7 @@ function ukloniZid(zid){
 // se samo ostali, nezakljucani komadi. Ako se ne moze uskladiti, sistem trazi
 // da se doda jos jedan komad umjesto da tiho promijeni ono sto si unio.
 function zidPromijeniDuzinu(idx,val){
-  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
   if(v<=0||!pozicije[idx]) return;
   var z=(pozicije[idx].zid!=null)?pozicije[idx].zid:0;
   var svi=[];
@@ -3632,7 +3605,7 @@ function kopirajPoziciju(i){
 }
 function pozPolje(i,polje,val){
   if(!pozicije[i]) return;
-  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
   pozicije[i][polje]=(polje==='kom')?Math.max(1,Math.round(v)):v;
   syncToActive(); refresh();   // tabela se NE rebuilda, da fokus ostane u polju
 }
@@ -3646,7 +3619,7 @@ function pozObrada(i,segId,val){
 function pozBocna(i,segId,val){
   if(!pozicije[i]) return;
   pozicije[i].bd=pozicije[i].bd||{};
-  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
   if(v<=0) delete pozicije[i].bd[segId]; else pozicije[i].bd[segId]=v;
   syncToActive(); refresh();
 }
@@ -3662,7 +3635,7 @@ function pozSveObrada(segId,val){
   syncToActive(); buildIvice(); buildPozicijeTabelu(); refresh();
 }
 function pozSveBocna(segId,val){
-  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
   // Podrazumijevana vrijednost + brisanje izuzetaka, da nove pozicije naslijede
   if(v<=0) delete pozBdDef[segId]; else pozBdDef[segId]=v;
   pozicije.forEach(function(p){ if(p.bd) delete p.bd[segId]; });
@@ -3773,7 +3746,7 @@ function buildPozicijeTabelu(){
       +'flex:1;min-width:118px;background:'+(sviIsti?'#fff':'#fff8f0')+'">'
       +optProf(zaSve,null)+'</select>'
       +(sviIsti?'':'<span style="font-size:9.5px;color:#e67e22" title="Neki redovi imaju svoj izbor">\u26a0</span>')
-      +'<input type="text" inputmode="decimal" min="0" placeholder="cijela" value="'+(bdDef||'')+'"'
+      +'<input type="number" min="0" placeholder="cijela" value="'+(bdDef||'')+'"'
       +' title="Obradi samo prvih N mm (vidljivi dio)"'
       +' onchange="pozSveBocna(\''+sd.id+'\',this.value)" style="width:70px;font-size:11px;'
       +'padding:3px 5px;border:1px solid '+(bdIsti?'#dde2ea':'#e67e22')+';border-radius:4px;text-align:right">'
@@ -3816,16 +3789,16 @@ function buildPozicijeTabelu(){
       h+='<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-top:4px;'
         +'padding-left:18px">'
         +'<label style="font-size:10px;color:#6b7a8d">\u0160irina</label>'
-        +'<input type="text" inputmode="decimal" min="1" value="'+lm.sirina+'" style="width:52px;font:inherit;'
+        +'<input type="number" min="1" value="'+lm.sirina+'" style="width:52px;font:inherit;'
         +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
         +' oninput="fixComma(this);_ledPolje(\'kl-led-sir\',this.value)">'
         +'<label style="font-size:10px;color:#6b7a8d">Dubina</label>'
-        +'<input type="text" inputmode="decimal" min="1" value="'+lm.dubina+'" style="width:52px;font:inherit;'
+        +'<input type="number" min="1" value="'+lm.dubina+'" style="width:52px;font:inherit;'
         +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
         +' oninput="fixComma(this);_ledPolje(\'kl-led-dub\',this.value)">'
         +'<span style="font-size:10px;color:#8a93a3">mm</span>'
         +'<label style="font-size:10px;color:#6b7a8d;margin-left:4px">Cijena</label>'
-        +'<input type="text" inputmode="decimal" min="0" step="0.01" value="'+lm.cijena+'" style="width:62px;font:inherit;'
+        +'<input type="number" min="0" step="0.01" value="'+lm.cijena+'" style="width:62px;font:inherit;'
         +'font-size:11px;padding:3px 5px;border:1px solid #b8860b;border-radius:4px;text-align:right;'
         +'font-weight:600" oninput="fixComma(this);_ledPolje(\'kl-led-c\',this.value)">'
         +'<span style="font-size:10px;color:#8a93a3">KM/m</span>'
@@ -3854,7 +3827,7 @@ function buildPozicijeTabelu(){
         return '<span style="display:flex;align-items:center;gap:3px;background:#fff;'
           +'border:1px solid '+(razl?'#e67e22':'#e8ecf1')+';border-radius:4px;padding:2px 5px">'
           +'<b style="font-size:9.5px;color:#6b7a8d" title="'+ug.lbl+'">'+ug.strane+'</b>'
-          +'<input type="text" inputmode="decimal" min="0" step="5" value="'+(pozRDef[ug.i]||'')+'" '
+          +'<input type="number" min="0" step="5" value="'+(pozRDef[ug.i]||'')+'" '
           +'placeholder="0" style="width:46px;font:inherit;font-size:10.5px;padding:1px 3px;'
           +'border:1px solid #dde2ea;border-radius:3px;text-align:right" '
           +'onchange="fixComma(this);pozSveRadijus('+ug.i+',this.value)">'
@@ -3872,19 +3845,19 @@ function buildPozicijeTabelu(){
       +'<span style="font-size:10px;font-weight:700;color:#7a4fa0;letter-spacing:.5px">ZIDOVI</span>'
       +'<span style="font-size:10px;color:#8a93a3;flex:1">jedan zid \u2014 jedna \u0161irina</span>'
       +'<label style="font-size:10px;color:#6b7a8d">Tabla</label>'
-      +'<input type="text" inputmode="decimal" id="kl-tabla-a" min="100" value="'+tbl.a+'" style="width:62px;font:inherit;'
+      +'<input type="number" id="kl-tabla-a" min="100" value="'+tbl.a+'" style="width:62px;font:inherit;'
       +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
       +' onchange="fixComma(this);tablaPromijenjena()"><span style="font-size:10px;color:#8a93a3">\u00d7</span>'
-      +'<input type="text" inputmode="decimal" id="kl-tabla-b" min="100" value="'+tbl.b+'" style="width:62px;font:inherit;'
+      +'<input type="number" id="kl-tabla-b" min="100" value="'+tbl.b+'" style="width:62px;font:inherit;'
       +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
       +' onchange="fixComma(this);tablaPromijenjena()"><span style="font-size:10px;color:#8a93a3">mm</span>'
       +'<label style="font-size:10px;color:#6b7a8d;margin-left:4px" title="Sirove ivice table se odsijecaju prije rezanja">Ivice</label>'
-      +'<input type="text" inputmode="decimal" id="kl-rez-ivice" min="0" value="'+_rezIvice()+'" style="width:52px;font:inherit;'
+      +'<input type="number" id="kl-rez-ivice" min="0" value="'+_rezIvice()+'" style="width:52px;font:inherit;'
       +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
       +' onchange="fixComma(this);tablaPromijenjena()">'
       +'<span style="font-size:10px;color:#8a93a3">mm</span>'
       +'<label style="font-size:10px;color:#6b7a8d;margin-left:4px" title="Debljina sjeciva \u2014 gubitak po svakom rezu">Rez</label>'
-      +'<input type="text" inputmode="decimal" id="kl-rez-sjeciva" min="0" step="0.5" value="'+_rezSjeciva()+'" style="width:44px;font:inherit;'
+      +'<input type="number" id="kl-rez-sjeciva" min="0" step="0.5" value="'+_rezSjeciva()+'" style="width:44px;font:inherit;'
       +'font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
       +' onchange="fixComma(this);tablaPromijenjena()">'
       +'<span style="font-size:10px;color:#8a93a3">mm</span>'
@@ -3906,12 +3879,12 @@ function buildPozicijeTabelu(){
         +'<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">'
         +'<b style="font-size:11px;color:#7a4fa0;min-width:44px">Zid '+(zi+1)+'</b>'
         +'<label style="font-size:10px;color:#6b7a8d">\u0160irina</label>'
-        +'<input type="text" inputmode="decimal" min="1" value="'+z.b+'" style="width:64px;font:inherit;font-size:11.5px;'
+        +'<input type="number" min="1" value="'+z.b+'" style="width:64px;font:inherit;font-size:11.5px;'
         +'padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
         +' oninput="fixComma(this);zidSirina('+z.zid+',this.value)">'
         +'<span style="font-size:10px;color:#8a93a3">mm</span>'
         +'<label style="font-size:10px;color:#6b7a8d;margin-left:4px">Ukupno</label>'
-        +'<input type="text" inputmode="decimal" min="1" id="zid-uk-'+z.zid+'" value="'+ukD+'" style="width:74px;font:inherit;'
+        +'<input type="number" min="1" id="zid-uk-'+z.zid+'" value="'+ukD+'" style="width:74px;font:inherit;'
         +'font-size:11.5px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right">'
         +'<span style="font-size:10px;color:#8a93a3">mm</span>'
         +'<button type="button" onclick="podijeliZid('+z.zid+')" style="font:inherit;font-size:10.5px;'
@@ -3977,7 +3950,7 @@ function buildPozicijeTabelu(){
       +'<b'+(jeZidnaKlupica()?' style="color:#7a4fa0" title="Zid '
         +(((p.zid!=null?p.zid:0))+1)+'"':'')+'>'
       +(jeZidnaKlupica()?((((p.zid!=null?p.zid:0))+1)+'.'+(_zidoviRedniBroj(i))):(i+1)+'.')+'</b>'
-      +'<input type="text" inputmode="decimal" min="1" value="'+(p.a||0)+'" data-poz="'+i+'" data-pol="a"'
+      +'<input type="number" min="1" value="'+(p.a||0)+'" data-poz="'+i+'" data-pol="a"'
       +' onkeydown="pozEnter(event,'+i+',\'a\')"'
       +(jeZidnaKlupica()
         ? (' onchange="fixComma(this);zidPromijeniDuzinu('+i+',this.value)"'
@@ -3991,12 +3964,12 @@ function buildPozicijeTabelu(){
            +'padding:0 2px">\ud83d\udd12</button>') : '')
       +'<span>\u00d7</span>'
       +(jeZidnaKlupica()
-        ? ('<input type="text" inputmode="decimal" value="'+(p.b||0)+'" readonly title="\u0160irina se mijenja na nivou zida"'
+        ? ('<input type="number" value="'+(p.b||0)+'" readonly title="\u0160irina se mijenja na nivou zida"'
            +' style="background:#f0f2f5;color:#8a93a3;cursor:not-allowed">')
-        : ('<input type="text" inputmode="decimal" min="1" value="'+(p.b||0)+'" data-poz="'+i+'" data-pol="b"'
+        : ('<input type="number" min="1" value="'+(p.b||0)+'" data-poz="'+i+'" data-pol="b"'
            +' onkeydown="pozEnter(event,'+i+',\'b\')" oninput="fixComma(this);pozPolje('+i+',\'b\',this.value)">'))
       +'<span>mm</span>'
-      +'<input type="text" inputmode="decimal" min="1" value="'+kom+'" class="poz-kom" data-poz="'+i+'" data-pol="kom"'
+      +'<input type="number" min="1" value="'+kom+'" class="poz-kom" data-poz="'+i+'" data-pol="kom"'
       +' onkeydown="pozEnter(event,'+i+',\'kom\')" oninput="fixComma(this);pozPolje('+i+',\'kom\',this.value)">'
       +'<span>kom</span>'
       +'<button type="button" onclick="pozOtvori('+i+')" class="poz-izm" title="Izmijeni obradu ovog reda">'
@@ -4019,7 +3992,7 @@ function buildPozicijeTabelu(){
           +'<select onchange="pozObrada('+i+',\''+sd.id+'\',this.value)" style="font-size:11px;'
           +'padding:3px 5px;border:1px solid '+(izuz?'#7a4fa0':'#dde2ea')+';border-radius:4px;flex:1;min-width:118px">'
           +optProf(izuz?p.ob[sd.id]:'','\u2014 kao za sve \u2014')+'</select>'
-          +'<input type="text" inputmode="decimal" min="0" placeholder="cijela" value="'+bd+'"'
+          +'<input type="number" min="0" placeholder="cijela" value="'+bd+'"'
           +' title="Obradi samo prvih N mm" oninput="fixComma(this);pozBocna('+i+',\''+sd.id+'\',this.value)"'
           +' style="width:70px;font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right">'
           +'<span style="font-size:9.5px;color:#8a93a3">mm</span></div>';
@@ -4065,7 +4038,7 @@ function buildPozicijeTabelu(){
           var izuz=(p.r&&p.r[ug.i]!=null);
           return '<span style="display:flex;align-items:center;gap:2px">'
             +'<b style="font-size:9px;color:'+(izuz?'#7a4fa0':'#8a93a3')+'">'+ug.strane+'</b>'
-            +'<input type="text" inputmode="decimal" min="0" step="5" value="'+(izuz?p.r[ug.i]:'')+'" '
+            +'<input type="number" min="0" step="5" value="'+(izuz?p.r[ug.i]:'')+'" '
             +'placeholder="'+(pozRDef[ug.i]||0)+'" style="width:42px;font:inherit;font-size:10.5px;'
             +'padding:1px 3px;border:1px solid '+(izuz?'#7a4fa0':'#dde2ea')+';border-radius:3px;'
             +'text-align:right" onchange="fixComma(this);pozRadijus('+i+','+ug.i+',this.value)">'
@@ -4118,7 +4091,7 @@ function pozEnter(e,i,polje){
 // strana nema kanal.
 function podijeliZid(zid){
   var el=ge('zid-uk-'+zid);
-  var uk=el?(broj((el.value||'0').replace(',','.'))||0):0;
+  var uk=el?(parseFloat((el.value||'0').replace(',','.'))||0):0;
   if(uk<=0){ alert('Unesi ukupnu du\u017einu zida.'); return; }
   var zz=_zidovi().filter(function(z){return z.zid===zid;})[0];
   if(!zz) return;
@@ -4220,7 +4193,7 @@ function _skVezi(){
 }
 function _skPoruka(t){ var m=ge('sk-poruka'); if(m) m.innerHTML=t||''; }
 function skicaPrimijeni(){
-  var najduza=broj((ge('sk-najduza')||{}).value)||3000;
+  var najduza=parseFloat((ge('sk-najduza')||{}).value)||3000;
   var tj=skicaUTjemena(SKICA,najduza);
   if(!tj){ _skPoruka('<b style="color:#c0392b">Potez je prekratak — nacrtaj veći oblik.</b>'); return; }
   if(tj.length>12){ _skPoruka('<b style="color:#c0392b">Previše uglova ('+tj.length+') — crtaj mirnije.</b>'); return; }
@@ -4448,12 +4421,12 @@ function buildVelikiAlati(){
     +'padding:7px 9px;background:#f0f4fa;border-radius:6px">'
     +'<span style="font-size:11px;color:#6b7a8d;font-weight:600">Ukupno</span>'
     +'<label style="font-size:10.5px;color:#8a93a3">\u0160</label>'
-    +'<input type="text" inputmode="decimal" min="50" value="'+Math.round(_bbA.w)+'" style="width:78px;font:inherit;'
+    +'<input type="number" min="50" value="'+Math.round(_bbA.w)+'" style="width:78px;font:inherit;'
     +'font-size:12px;padding:5px 7px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
     +' onchange="fixComma(this);skicaSkaliraj(\'w\',this.value,gc(\'sk-prop\'))">'
     +'<span style="font-size:10px;color:#8a93a3">\u00d7</span>'
     +'<label style="font-size:10.5px;color:#8a93a3">V</label>'
-    +'<input type="text" inputmode="decimal" min="50" value="'+Math.round(_bbA.h)+'" style="width:78px;font:inherit;'
+    +'<input type="number" min="50" value="'+Math.round(_bbA.h)+'" style="width:78px;font:inherit;'
     +'font-size:12px;padding:5px 7px;border:1px solid #dde2ea;border-radius:4px;text-align:right"'
     +' onchange="fixComma(this);skicaSkaliraj(\'h\',this.value,gc(\'sk-prop\'))">'
     +'<span style="font-size:10px;color:#8a93a3">mm</span>'
@@ -4484,7 +4457,7 @@ function buildVelikiAlati(){
       +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
       +(zak?'<span style="font-size:11px;color:#6b7a8d">Otklju\u010daj da bi mijenjao mjere.</span>'
            :'<label style="font-size:11px;color:#6b7a8d">Du\u017eina</label>'
-            +'<input type="text" inputmode="decimal" min="1" value="'+Math.round(stranaDuzina(t,i))+'" style="width:88px;'
+            +'<input type="number" min="1" value="'+Math.round(stranaDuzina(t,i))+'" style="width:88px;'
             +'font:inherit;font-size:12px;padding:5px 7px;border:1px solid #dde2ea;border-radius:4px"'
             +' oninput="fixComma(this);skicaDuzina('+i+',this.value)"> <span style="font-size:10px;color:#8a93a3">mm</span>'
             +d('\u21ba poravnaj vodoravno',"skicaIzravnaj("+i+",'vodoravno')",ravna==='vodoravno'?'#1f8a4c':null,
@@ -4515,7 +4488,7 @@ function buildVelikiAlati(){
           +(pr===0?'O\u0161tar':'R'+pr+' mm')+'<\/option>'; }).join('')
       +'<option value="custom"'+(RAD_PRESETS.indexOf(_trenRad(v))<0?' selected':'')+'>Proizvoljno<\/option>'
       +'</select>'
-      +'<input type="text" inputmode="decimal" min="0" step="1" value="'+_trenRad(v)+'" style="width:64px;'
+      +'<input type="number" min="0" step="1" value="'+_trenRad(v)+'" style="width:64px;'
       +'font:inherit;font-size:11px;padding:4px 6px;border:1px solid #dde2ea;border-radius:4px;'
       +'text-align:right" oninput="fixComma(this);skicaRadijus('+v+',this.value)">'
       +'<span style="font-size:10px;color:#8a93a3">mm</span></div></div>';
@@ -4625,7 +4598,7 @@ function _imaZakljucanih(){ return SK_ZAK_T.length>0||SK_ZAK_S.length>0; }
 function skicaSkaliraj(osa,val,proporcionalno){
   var t=(dims&&dims._tj)||[];
   if(t.length<3) return;
-  var nova=broj((val||'0').toString().replace(',','.'))||0;
+  var nova=parseFloat((val||'0').toString().replace(',','.'))||0;
   if(nova<50) return;
   var bb=_bbPolyTj(t);
   var trenutno=(osa==='w')?bb.w:bb.h;
@@ -4655,7 +4628,7 @@ function _trenRad(v){ try{ return getCornerRadiusMM(v)||0; }catch(e){ return 0; 
 // Radijus ugla na slobodnom obliku - isti nacin kao kod ostalih stolova,
 // samo sto svaki ugao ima svoju vrijednost.
 function skicaRadijus(v,val){
-  var n=brojIliPrazno((val||'0').toString().replace(',','.'));
+  var n=parseFloat((val||'0').toString().replace(',','.'));
   if(isNaN(n)||n<0) n=0;
   cornerR[v]=n;
   getAct().cornerR=JSON.parse(JSON.stringify(cornerR));
@@ -4855,7 +4828,7 @@ function buildSkicaPanel(){
       +(_izb?';background:#eef4fb;border-color:#1a5fa8':'')+'">'
       +'<b style="color:#1a5fa8;min-width:58px">'+slovoS+' <small style="font-weight:400;color:#8a93a3">('
       +slovo+'\u2192'+sljed+')</small></b>'
-      +'<input type="text" inputmode="decimal" min="1" step="1" value="'+duz+'" style="width:82px"'
+      +'<input type="number" min="1" step="1" value="'+duz+'" style="width:82px"'
       +' oninput="fixComma(this);skicaDuzina('+i+',this.value)">'
       +'<span style="font-size:10px;color:#8a93a3">mm</span>'
       +'<div style="flex-basis:100%;display:flex;align-items:center;gap:6px;margin-top:4px;'
@@ -4876,7 +4849,7 @@ function buildSkicaPanel(){
   con.innerHTML=h;
 }
 function skicaDuzina(i,val){
-  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
   if(v<=0) return;
   if(skStranaZakljucana(i)) return;              // zakljucana strana se ne mijenja
   var _n=(dims._tj||[]).length;
@@ -5055,9 +5028,9 @@ function buildTableDimWrap(){
   var isRound=(shape==='okrugao');
   var aLbl=isRound?'Prečnik (mm)':'A – širina (mm)';
   var html='<div class="r2">'
-    +'<div class="fg"><label>'+aLbl+'</label><input type="text" inputmode="decimal" id="sto-a" value="'+(dims.A||1600)+'" min="100" oninput="fixComma(this);saveTableDim(\'A\',this.value);refresh()"></div>';
+    +'<div class="fg"><label>'+aLbl+'</label><input type="number" id="sto-a" value="'+(dims.A||1600)+'" min="100" oninput="fixComma(this);saveTableDim(\'A\',this.value);refresh()"></div>';
   if(!isRound){
-    html+='<div class="fg"><label>B – dubina (mm)</label><input type="text" inputmode="decimal" id="sto-b" value="'+(dims.B||900)+'" min="100" oninput="fixComma(this);saveTableDim(\'B\',this.value);refresh()"></div>';
+    html+='<div class="fg"><label>B – dubina (mm)</label><input type="number" id="sto-b" value="'+(dims.B||900)+'" min="100" oninput="fixComma(this);saveTableDim(\'B\',this.value);refresh()"></div>';
   } else {
     html+='<div></div>';
   }
@@ -5065,7 +5038,7 @@ function buildTableDimWrap(){
   con.innerHTML=html;
 }
 function saveTableDim(key,val){
-  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
   dims[key]=v;
   if(shape==='okrugao') dims.B=v; // okrugao: B=A (prečnik)
 }
@@ -5163,7 +5136,7 @@ function buildDimTable(){
     rows+='<tr>'
       +'<td class="dim-lbl">'+dd.l+'</td>'
       +'<td class="dim-desc">'+dd.h+'</td>'
-      +'<td><input class="dim-inp" type="text" inputmode="decimal" data-d="'+dd.l
+      +'<td><input class="dim-inp" type="number" data-d="'+dd.l
       +'" value="'+(dims[dd.l]||600)+'" min="10"'
       +' oninput="saveDim(this);rebuildAll()"></td>'
       +'<td class="dim-unit">mm</td></tr>';
@@ -5175,7 +5148,7 @@ function buildDimTable(){
       var exprMap={'kosi':'|C-D|×1.41','auto':'A-|C-D|','A-diff':'A-|C-D|','C+D+diff':'C+|C-D|+D'};
       var expr=exprMap[sh.computed[k]]||sh.computed[k];'<td class="dim-lbl" style="color:var(--gold)">'+k+'</td>'
         +'<td class="dim-desc" style="color:var(--muted)">= '+expr+' (automatski)</td>'
-        +'<td><input class="dim-inp" id="computed-'+k+'" type="text" inputmode="decimal" value="'+val
+        +'<td><input class="dim-inp" id="computed-'+k+'" type="number" value="'+val
         +'" readonly style="background:#f8f6ee;color:var(--muted);cursor:default;border-color:#e0d8b0"></td>'
         +'<td class="dim-unit">mm</td></tr>';
     });
@@ -5214,7 +5187,7 @@ function getComputedDim(k,sh){
 }
 
 function saveDim(inp){
-  dims[inp.dataset.d]=broj(inp.value)||0;
+  dims[inp.dataset.d]=parseFloat(inp.value)||0;
   var sh=getShape(shape);
   applyComputedDims(sh);
   // Azurirati readonly polja za computed dims
@@ -5241,7 +5214,7 @@ function extToggle(cb){
   buildExtSection();buildIvice();refresh();
 }
 function extHeightChanged(inp){
-  extState[inp.dataset.side+'_h']=broj(inp.value)||900;
+  extState[inp.dataset.side+'_h']=parseFloat(inp.value)||900;
   buildIvice();refresh();
 }
 function buildExtSection(){
@@ -5262,7 +5235,7 @@ function buildExtSection(){
       +'<input type="checkbox"'+(on?' checked':'')+' data-side="'+end.id+'" onchange="extToggle(this)">'
       +'<span class="ivlbl">'+end.lbl+'</span>';
     if(on){
-      html+='<input type="text" inputmode="decimal" value="'+hval+'" min="100" data-side="'+end.id+'"'
+      html+='<input type="number" value="'+hval+'" min="100" data-side="'+end.id+'"'
         +' oninput="extHeightChanged(this)"'
         +' style="width:72px;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:12px;text-align:right">'
         +'<span style="font-size:10px;color:var(--muted)">mm</span>';
@@ -5353,16 +5326,16 @@ function getIvSegs(sh,d){
     return [{id:'A-zad',lbl:'A',len:getTablePerimeter(sh,d)}];
   }
   if(sh==='kl'){
-    var ka=ge('kl-a')?broj((ge('kl-a').value||'0').replace(',','.'))||0:0;
-    var kb=ge('kl-b')?broj((ge('kl-b').value||'0').replace(',','.'))||0:0;
+    var ka=ge('kl-a')?parseFloat((ge('kl-a').value||'0').replace(',','.'))||0:0;
+    var kb=ge('kl-b')?parseFloat((ge('kl-b').value||'0').replace(',','.'))||0:0;
     return [{id:'A-zad',lbl:'A',len:ka},{id:'B-lev',lbl:'B',len:kb},
             {id:'C-des',lbl:'C',len:kb},{id:'D-pred',lbl:'D',len:ka}];
   }
   if(sh==='st'){
-    var sa=ge('st-a')?broj((ge('st-a').value||'0').replace(',','.'))||0:0;
-    var sb=ge('st-b')?broj((ge('st-b').value||'0').replace(',','.'))||0:0;
-    var ca=ge('cel-a')?broj((ge('cel-a').value||'0').replace(',','.'))||0:0;
-    var cb=ge('cel-b')?broj((ge('cel-b').value||'0').replace(',','.'))||0:0;
+    var sa=ge('st-a')?parseFloat((ge('st-a').value||'0').replace(',','.'))||0:0;
+    var sb=ge('st-b')?parseFloat((ge('st-b').value||'0').replace(',','.'))||0:0;
+    var ca=ge('cel-a')?parseFloat((ge('cel-a').value||'0').replace(',','.'))||0:0;
+    var cb=ge('cel-b')?parseFloat((ge('cel-b').value||'0').replace(',','.'))||0:0;
     return [{id:'A-zad',lbl:'A',len:sa},{id:'B-lev',lbl:'B',len:sb},
             {id:'C-des',lbl:'C',len:sb},{id:'D-pred',lbl:'D',len:sa},
             {id:'E-czad',lbl:'E',len:ca},{id:'F-clev',lbl:'F',len:cb},
@@ -5410,7 +5383,7 @@ function updateIviceRez(segId,rez){
 }
 function updateIviceUgao(segId,val){
   var st=_ivGet(segId);
-  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
   st.ugao=Math.max(1,Math.min(89,v));
   refresh();
 }
@@ -5419,7 +5392,7 @@ function updateIviceUgao(segId,val){
 function getRezPrice(rez){
   var prefix=(tip==='kl')?'ivp-kl-':(tip==='st'?'ivp-st-':(tip==='sto'?'ivp-sto-':'ivp-'));
   var el=ge(prefix+'rez'+rez);
-  return el?broj((el.value||'0').replace(',','.'))||0:0;
+  return el?parseFloat((el.value||'0').replace(',','.'))||0:0;
 }
 function getRezData(){
   var ivShape=(tip==='kl')?'kl':(tip==='st'?'st':shape);
@@ -5455,7 +5428,7 @@ function _ivRowHTML(s,bojaSlova,dodatniStil){
       +'<span class="iv-rez-lbl">Rez</span>'
       +'<select onchange="updateIviceRez(\''+s.id+'\',this.value)">'+optsRez+'</select>';
   if(curRez==='ugao'){
-    h+='<input type="text" inputmode="decimal" min="1" max="89" value="'+(st.ugao||45)+'"'
+    h+='<input type="number" min="1" max="89" value="'+(st.ugao||45)+'"'
       +' title="Ugao reza (ne utice na cijenu)"'
       +' oninput="fixComma(this);updateIviceUgao(\''+s.id+'\',this.value)">'
       +'<span class="iv-rez-unit">\u00b0</span>';
@@ -5544,7 +5517,7 @@ function buildCornerR(){
     html+='<div class="ivrow" data-ci="'+i+'">'
       +'<b style="color:#1a5fa8;margin-right:6px;min-width:46px;display:inline-block">'+cornerLbl+'</b>'
       +'<select style="width:104px" onchange="onCornerRChange(this,'+i+')">'+opts+'</select>'
-      +'<input type="text" inputmode="decimal" min="0" step="1" style="width:54px;margin-left:4px;'+(selVal==='custom'?'':'display:none')+'" value="'+(selVal==='custom'?val:'')+'" placeholder="mm" oninput="fixComma(this);onCornerRInput(this,'+i+')">'
+      +'<input type="number" min="0" step="1" style="width:54px;margin-left:4px;'+(selVal==='custom'?'':'display:none')+'" value="'+(selVal==='custom'?val:'')+'" placeholder="mm" oninput="fixComma(this);onCornerRInput(this,'+i+')">'
       +'</div>';
   });
   con.innerHTML=html;
@@ -5553,15 +5526,15 @@ function onCornerRChange(sel,i){
   var row=sel.closest('.ivrow');
   var inp=row?row.querySelector('input'):null;
   if(sel.value==='custom'){
-    if(inp){ inp.style.display=''; if(!inp.value) inp.value='15'; cornerR[i]=Math.max(0,broj((inp.value||'15').replace(',','.'))||15); }
+    if(inp){ inp.style.display=''; if(!inp.value) inp.value='15'; cornerR[i]=Math.max(0,parseFloat((inp.value||'15').replace(',','.'))||15); }
   } else {
     if(inp) inp.style.display='none';
-    cornerR[i]=broj(sel.value)||0;
+    cornerR[i]=parseFloat(sel.value)||0;
   }
   refresh();
 }
 function onCornerRInput(inp,i){
-  cornerR[i]=Math.max(0,broj((inp.value||'0').replace(',','.'))||0);
+  cornerR[i]=Math.max(0,parseFloat((inp.value||'0').replace(',','.'))||0);
   refresh();
 }
 
@@ -5577,18 +5550,18 @@ function getSinkRadius(corner){
   if(!sel) return 0;
   if(sel.value==='custom'){
     var inp=ge('sud-r-'+corner+'-inp');
-    return inp?Math.max(0,broj((inp.value||'0').replace(',','.'))||0):0;
+    return inp?Math.max(0,parseFloat((inp.value||'0').replace(',','.'))||0):0;
   }
-  return broj(sel.value)||0;
+  return parseFloat(sel.value)||0;
 }
 function getPloRadius(corner){
   var sel=ge('plo-r-'+corner+'-sel');
   if(!sel) return 0;
   if(sel.value==='custom'){
     var inp=ge('plo-r-'+corner+'-inp');
-    return inp?Math.max(0,broj((inp.value||'0').replace(',','.'))||0):0;
+    return inp?Math.max(0,parseFloat((inp.value||'0').replace(',','.'))||0):0;
   }
-  return broj(sel.value)||0;
+  return parseFloat(sel.value)||0;
 }
 
 // ═══ DODATNI OTVORI (dinamička lista) ═══════════════
@@ -5620,7 +5593,7 @@ function updateCustomOtvor(idx,field,value){
 }
 function updateCustomOtvorNum(idx,field,strVal){
   if(!customOtvori[idx]) return;
-  var v=brojIliPrazno((strVal||'0').toString().replace(',','.'));
+  var v=parseFloat((strVal||'0').toString().replace(',','.'));
   customOtvori[idx][field]=isNaN(v)?0:v;
   refresh();
 }
@@ -5665,16 +5638,16 @@ function updateCustomOtvorRadiusSel(idx,ci,selEl){
   var inp=span?span.querySelector('input[data-rinp]'):null;
   if(selEl.value==='custom'){
     if(inp){ inp.style.display=''; if(!inp.value) inp.value='10'; }
-    customOtvori[idx].r[ci]=inp?Math.max(0,broj((inp.value||'10').replace(',','.'))||10):10;
+    customOtvori[idx].r[ci]=inp?Math.max(0,parseFloat((inp.value||'10').replace(',','.'))||10):10;
   } else {
     if(inp) inp.style.display='none';
-    customOtvori[idx].r[ci]=broj(selEl.value)||0;
+    customOtvori[idx].r[ci]=parseFloat(selEl.value)||0;
   }
   refresh();
 }
 function updateCustomOtvorRadiusInp(idx,ci,inpEl){
   if(!customOtvori[idx]) return;
-  customOtvori[idx].r[ci]=Math.max(0,broj((inpEl.value||'0').replace(',','.'))||0);
+  customOtvori[idx].r[ci]=Math.max(0,parseFloat((inpEl.value||'0').replace(',','.'))||0);
   refresh();
 }
 function buildCustomOtvoriUI(){
@@ -5694,7 +5667,7 @@ function buildCustomOtvoriUI(){
     return '<span style="display:inline-block;margin:2px 8px 4px 0;vertical-align:top">'
       +'<small style="color:var(--muted)">'+labelTxt+'</small><br>'
       +'<select style="width:80px" onchange="updateCustomOtvorRadiusSel('+idx+','+ci+',this)">'+opts+'</select>'
-      +'<input type="text" inputmode="decimal" min="0" data-rinp style="width:48px;margin-left:2px;'+(selVal==='custom'?'':'display:none')+'" value="'+(selVal==='custom'?curVal:'')+'" oninput="fixComma(this);updateCustomOtvorRadiusInp('+idx+','+ci+',this)">'
+      +'<input type="number" min="0" data-rinp style="width:48px;margin-left:2px;'+(selVal==='custom'?'':'display:none')+'" value="'+(selVal==='custom'?curVal:'')+'" oninput="fixComma(this);updateCustomOtvorRadiusInp('+idx+','+ci+',this)">'
       +'</span>';
   }
   var html='';
@@ -5741,7 +5714,7 @@ function buildCustomOtvoriUI(){
     }
     html+='<div class="r2" style="margin-bottom:6px">'
       +'<div class="fg"><label>Cijena usluge (KM)</label>'
-      +'<input type="text" inputmode="decimal" min="0" value="'+(c.cost||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'cost\',this.value)"></div>'
+      +'<input type="number" min="0" value="'+(c.cost||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'cost\',this.value)"></div>'
       +'<div class="fg"><label>Vrsta obrade</label>'
       +'<select onchange="updateCustomOtvorVrsta('+idx+',this.value)">'
       +'<option value="bez"'+((c.vrsta||'bez')==='bez'?' selected':'')+'>Bez obrade</option>'
@@ -5759,12 +5732,12 @@ function buildCustomOtvoriUI(){
       var xLbl=isExt?'Od početka strane - "U" (mm)':'Od lijeve ivice (mm)';
       var yLbl=isExt?'Od unutrašnje ivice - "U" (mm)':'Od prednje ivice (mm)';
       html+='<div class="r2">'
-        +'<div class="fg"><label>'+xLbl+'</label><input type="text" inputmode="decimal" min="0" value="'+(c.x||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'x\',this.value)"></div>'
-        +'<div class="fg"><label>'+yLbl+'</label><input type="text" inputmode="decimal" min="0" value="'+(c.y||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'y\',this.value)"></div>'
+        +'<div class="fg"><label>'+xLbl+'</label><input type="number" min="0" value="'+(c.x||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'x\',this.value)"></div>'
+        +'<div class="fg"><label>'+yLbl+'</label><input type="number" min="0" value="'+(c.y||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'y\',this.value)"></div>'
         +'</div>'
         +'<div class="r2">'
-        +'<div class="fg"><label>Širina (mm)</label><input type="text" inputmode="decimal" min="0" value="'+(c.w||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'w\',this.value)"></div>'
-        +'<div class="fg"><label>Visina (mm)</label><input type="text" inputmode="decimal" min="0" value="'+(c.h||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'h\',this.value)"></div>'
+        +'<div class="fg"><label>Širina (mm)</label><input type="number" min="0" value="'+(c.w||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'w\',this.value)"></div>'
+        +'<div class="fg"><label>Visina (mm)</label><input type="number" min="0" value="'+(c.h||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'h\',this.value)"></div>'
         +'</div>'
         +'<div class="hint">Radijus uglova otvora</div><div>'
         +radSelectHTML(idx,0,c.r[0]||0,'Gore-lijevo')
@@ -5782,11 +5755,11 @@ function buildCustomOtvoriUI(){
       }
       html+='<div class="r2">'
         +'<div class="fg"><label>Strana '+(isExt?'produžetka':'ploče')+'</label><select onchange="updateCustomOtvor('+idx+',\'edgeIdx\',parseInt(this.value,10))">'+edgeOpts+'</select></div>'
-        +'<div class="fg"><label>Pozicija od početka strane (mm)</label><input type="text" inputmode="decimal" min="0" value="'+(c.pos||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'pos\',this.value)"></div>'
+        +'<div class="fg"><label>Pozicija od početka strane (mm)</label><input type="number" min="0" value="'+(c.pos||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'pos\',this.value)"></div>'
         +'</div>'
         +'<div class="r2">'
-        +'<div class="fg"><label>Širina otvora (mm)</label><input type="text" inputmode="decimal" min="0" value="'+(c.w||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'w\',this.value)"></div>'
-        +'<div class="fg"><label>Dubina otvora (mm)</label><input type="text" inputmode="decimal" min="0" value="'+(c.h||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'h\',this.value)"></div>'
+        +'<div class="fg"><label>Širina otvora (mm)</label><input type="number" min="0" value="'+(c.w||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'w\',this.value)"></div>'
+        +'<div class="fg"><label>Dubina otvora (mm)</label><input type="number" min="0" value="'+(c.h||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'h\',this.value)"></div>'
         +'</div>'
         +'<div class="hint">Radijus uglova otvora (redom duž konture)</div><div>'
         +radSelectHTML(idx,0,c.r[0]||0,'Ugao 1')
@@ -5808,8 +5781,8 @@ function buildCustomOtvoriUI(){
         +'<div></div>'
         +'</div>'
         +'<div class="r2">'
-        +'<div class="fg"><label>Dubina prema prethodnoj strani (mm)</label><input type="text" inputmode="decimal" min="0" value="'+(c.d1||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'d1\',this.value)"></div>'
-        +'<div class="fg"><label>Dubina prema sljedećoj strani (mm)</label><input type="text" inputmode="decimal" min="0" value="'+(c.d2||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'d2\',this.value)"></div>'
+        +'<div class="fg"><label>Dubina prema prethodnoj strani (mm)</label><input type="number" min="0" value="'+(c.d1||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'d1\',this.value)"></div>'
+        +'<div class="fg"><label>Dubina prema sljedećoj strani (mm)</label><input type="number" min="0" value="'+(c.d2||0)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'d2\',this.value)"></div>'
         +'</div>'
         +'<div class="hint">Radijus uglova otvora</div><div>'
         +radSelectHTML(idx,0,c.r[0]||0,'Ugao 1')
@@ -5839,7 +5812,7 @@ function removeSlavina(idx){
 }
 function updateSlavinaNum(idx,field,strVal){
   if(!slavine[idx]) return;
-  var v=brojIliPrazno((strVal||'0').toString().replace(',','.'));
+  var v=parseFloat((strVal||'0').toString().replace(',','.'));
   slavine[idx][field]=isNaN(v)?0:v;
   refresh();
 }
@@ -5858,13 +5831,13 @@ function buildSlavinaUI(){
     html+='<button type="button" title="Ukloni" style="background:#e74c3c;color:#fff;border:none;border-radius:5px;width:26px;height:26px;cursor:pointer;flex-shrink:0" onclick="removeSlavina('+idx+')">✕</button>';
     html+='</div>';
     html+='<div class="r2">'
-      +'<div class="fg"><label>Promjer fi (mm)</label><input type="text" inputmode="decimal" min="10" value="'+(s.fi||35)+'" oninput="fixComma(this);updateSlavinaNum('+idx+',\'fi\',this.value)"></div>'
-      +'<div class="fg"><label>Cijena bušenja (KM)</label><input type="text" inputmode="decimal" min="0" value="'+(s.cost||0)+'" oninput="fixComma(this);updateSlavinaNum('+idx+',\'cost\',this.value)"></div>'
+      +'<div class="fg"><label>Promjer fi (mm)</label><input type="number" min="10" value="'+(s.fi||35)+'" oninput="fixComma(this);updateSlavinaNum('+idx+',\'fi\',this.value)"></div>'
+      +'<div class="fg"><label>Cijena bušenja (KM)</label><input type="number" min="0" value="'+(s.cost||0)+'" oninput="fixComma(this);updateSlavinaNum('+idx+',\'cost\',this.value)"></div>'
       +'</div>';
     html+='<div class="hint">Pozicija: od ZADNJE ivice i od lijeve ivice</div>';
     html+='<div class="r2">'
-      +'<div class="fg"><label>Od zadnje ivice (mm)</label><input type="text" inputmode="decimal" min="0" value="'+(s.yz||50)+'" oninput="fixComma(this);updateSlavinaNum('+idx+',\'yz\',this.value)"></div>'
-      +'<div class="fg"><label>Od lijeve ivice (mm)</label><input type="text" inputmode="decimal" min="0" value="'+(s.x||400)+'" oninput="fixComma(this);updateSlavinaNum('+idx+',\'x\',this.value)"></div>'
+      +'<div class="fg"><label>Od zadnje ivice (mm)</label><input type="number" min="0" value="'+(s.yz||50)+'" oninput="fixComma(this);updateSlavinaNum('+idx+',\'yz\',this.value)"></div>'
+      +'<div class="fg"><label>Od lijeve ivice (mm)</label><input type="number" min="0" value="'+(s.x||400)+'" oninput="fixComma(this);updateSlavinaNum('+idx+',\'x\',this.value)"></div>'
       +'</div>';
     html+='</div>';
   });
@@ -5897,7 +5870,7 @@ function updateTableHole(idx,field,value){
 }
 function updateTableHoleNum(idx,field,strVal){
   if(!tableHoles[idx]) return;
-  var v=brojIliPrazno((strVal||'0').toString().replace(',','.'));
+  var v=parseFloat((strVal||'0').toString().replace(',','.'));
   tableHoles[idx][field]=isNaN(v)?0:v;
   refresh();
 }
@@ -5913,16 +5886,16 @@ function updateTableHoleRadiusSel(idx,ci,selEl){
   var inp=span?span.querySelector('input[data-rinp]'):null;
   if(selEl.value==='custom'){
     if(inp){ inp.style.display=''; if(!inp.value) inp.value='10'; }
-    tableHoles[idx].r[ci]=inp?Math.max(0,broj((inp.value||'10').replace(',','.'))||10):10;
+    tableHoles[idx].r[ci]=inp?Math.max(0,parseFloat((inp.value||'10').replace(',','.'))||10):10;
   } else {
     if(inp) inp.style.display='none';
-    tableHoles[idx].r[ci]=broj(selEl.value)||0;
+    tableHoles[idx].r[ci]=parseFloat(selEl.value)||0;
   }
   refresh();
 }
 function updateTableHoleRadiusInp(idx,ci,inpEl){
   if(!tableHoles[idx]) return;
-  tableHoles[idx].r[ci]=Math.max(0,broj((inpEl.value||'0').replace(',','.'))||0);
+  tableHoles[idx].r[ci]=Math.max(0,parseFloat((inpEl.value||'0').replace(',','.'))||0);
   refresh();
 }
 function buildTableHoleUI(){
@@ -5942,7 +5915,7 @@ function buildTableHoleUI(){
     return '<span style="display:inline-block;margin:2px 8px 4px 0;vertical-align:top">'
       +'<small style="color:var(--muted)">'+labelTxt+'</small><br>'
       +'<select style="width:80px" onchange="updateTableHoleRadiusSel('+idx+','+ci+',this)">'+opts+'</select>'
-      +'<input type="text" inputmode="decimal" min="0" data-rinp style="width:48px;margin-left:2px;'+(selVal==='custom'?'':'display:none')+'" value="'+(selVal==='custom'?curVal:'')+'" oninput="fixComma(this);updateTableHoleRadiusInp('+idx+','+ci+',this)">'
+      +'<input type="number" min="0" data-rinp style="width:48px;margin-left:2px;'+(selVal==='custom'?'':'display:none')+'" value="'+(selVal==='custom'?curVal:'')+'" oninput="fixComma(this);updateTableHoleRadiusInp('+idx+','+ci+',this)">'
       +'</span>';
   }
   tableHoles.forEach(function(h,idx){
@@ -5957,18 +5930,18 @@ function buildTableHoleUI(){
       +'<option value="round"'+(h.shape==='round'?' selected':'')+'>Okrugla</option>'
       +'<option value="rect"'+(h.shape==='rect'?' selected':'')+'>Četvrtasta</option>'
       +'</select></div>'
-      +'<div class="fg"><label>Cijena bušenja (KM)</label><input type="text" inputmode="decimal" min="0" value="'+(h.cost||0)+'" oninput="fixComma(this);updateTableHoleNum('+idx+',\'cost\',this.value)"></div>'
+      +'<div class="fg"><label>Cijena bušenja (KM)</label><input type="number" min="0" value="'+(h.cost||0)+'" oninput="fixComma(this);updateTableHoleNum('+idx+',\'cost\',this.value)"></div>'
       +'</div>';
     html+='<div class="r2">'
-      +'<div class="fg"><label>Od lijeve ivice (mm)</label><input type="text" inputmode="decimal" min="0" value="'+(h.x||0)+'" oninput="fixComma(this);updateTableHoleNum('+idx+',\'x\',this.value)"></div>'
-      +'<div class="fg"><label>Od gornje ivice (mm)</label><input type="text" inputmode="decimal" min="0" value="'+(h.y||0)+'" oninput="fixComma(this);updateTableHoleNum('+idx+',\'y\',this.value)"></div>'
+      +'<div class="fg"><label>Od lijeve ivice (mm)</label><input type="number" min="0" value="'+(h.x||0)+'" oninput="fixComma(this);updateTableHoleNum('+idx+',\'x\',this.value)"></div>'
+      +'<div class="fg"><label>Od gornje ivice (mm)</label><input type="number" min="0" value="'+(h.y||0)+'" oninput="fixComma(this);updateTableHoleNum('+idx+',\'y\',this.value)"></div>'
       +'</div>';
     if(h.shape==='round'){
-      html+='<div class="fg"><label>Promjer fi (mm)</label><input type="text" inputmode="decimal" min="5" value="'+(h.fi||35)+'" oninput="fixComma(this);updateTableHoleNum('+idx+',\'fi\',this.value)"></div>';
+      html+='<div class="fg"><label>Promjer fi (mm)</label><input type="number" min="5" value="'+(h.fi||35)+'" oninput="fixComma(this);updateTableHoleNum('+idx+',\'fi\',this.value)"></div>';
     } else {
       html+='<div class="r2">'
-        +'<div class="fg"><label>Širina (mm)</label><input type="text" inputmode="decimal" min="5" value="'+(h.w||100)+'" oninput="fixComma(this);updateTableHoleNum('+idx+',\'w\',this.value)"></div>'
-        +'<div class="fg"><label>Visina (mm)</label><input type="text" inputmode="decimal" min="5" value="'+(h.h||100)+'" oninput="fixComma(this);updateTableHoleNum('+idx+',\'h\',this.value)"></div>'
+        +'<div class="fg"><label>Širina (mm)</label><input type="number" min="5" value="'+(h.w||100)+'" oninput="fixComma(this);updateTableHoleNum('+idx+',\'w\',this.value)"></div>'
+        +'<div class="fg"><label>Visina (mm)</label><input type="number" min="5" value="'+(h.h||100)+'" oninput="fixComma(this);updateTableHoleNum('+idx+',\'h\',this.value)"></div>'
         +'</div>'
         +'<div class="hint">Radijus uglova otvora</div><div>'
         +radSelectHTML(idx,0,h.r[0]||0,'Gore-lijevo')
@@ -6027,7 +6000,7 @@ function getIvData(){
   function getIvPrice(prof){
     var prefix=(tip==='kl')?'ivp-kl-':(tip==='st'?'ivp-st-':(tip==='sto'?'ivp-sto-':'ivp-'));
     var el=ge(prefix+prof);
-    return el?broj((el.value||'0').replace(',','.'))||0:0;
+    return el?parseFloat((el.value||'0').replace(',','.'))||0:0;
   }
   segs.forEach(function(s){
     var st=ivSt[s.id]||{prof:'none'};
@@ -6064,7 +6037,7 @@ function _racunajPozicije(){
   var m2=0, obrada={}, rezUk=0, komUk=0;
   var ivPrefix=(tip==='st')?'ivp-st-':'ivp-kl-';
   var cijenaProf=function(pr){
-    var e=ge(ivPrefix+pr); return e?broj((e.value||'0').replace(',','.'))||0:0;
+    var e=ge(ivPrefix+pr); return e?parseFloat((e.value||'0').replace(',','.'))||0:0;
   };
   var strane=_pozStrane();
   (pozicije||[]).forEach(function(p){
@@ -6196,8 +6169,8 @@ function calcItemCost(){
     var m=getArea(),ivd=getIvData();
     var ivT=ivd.reduce(function(s,x){return s+x.uk;},0);
     var otv=(gc('cb-sud')?gi('sud-c'):0)+(gc('cb-plo')?gi('plo-c'):0)
-      +(customOtvori||[]).reduce(function(s,c){return s+(broj(c.cost)||0);},0);
-    var slav=(slavine||[]).reduce(function(s,x){return s+(broj(x.cost)||0);},0);
+      +(customOtvori||[]).reduce(function(s,c){return s+(parseFloat(c.cost)||0);},0);
+    var slav=(slavine||[]).reduce(function(s,x){return s+(parseFloat(x.cost)||0);},0);
     mat=Math.round(m*gi('mat-c')*100)/100;
     iv=ivT;
     usl=gi('k-ugr')+gi('k-mer');
@@ -6207,7 +6180,7 @@ function calcItemCost(){
       : (shape+(vOrient===1?' (zrcaljeno)':''));
     rows+=trow('Kuhinjska radna ploča – '+shLbl+' ('+ms+')',m.toFixed(4)+' m²',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
     (slavine||[]).forEach(function(s,si){
-      rows+=trow('Bušenje slavine #'+(si+1)+' fi'+(s.fi||35)+' mm','1 kom',_editableUnitPrice(broj(s.cost)||0,'','setSlavinaCost',[activeIdx,si]),f(broj(s.cost)||0));
+      rows+=trow('Bušenje slavine #'+(si+1)+' fi'+(s.fi||35)+' mm','1 kom',_editableUnitPrice(parseFloat(s.cost)||0,'','setSlavinaCost',[activeIdx,si]),f(parseFloat(s.cost)||0));
     });
     function otvObradaTxt(prefix){
       var v=gs(prefix+'-t');
@@ -6223,7 +6196,7 @@ function calcItemCost(){
         :('('+(c.d1||0)+'×'+(c.d2||0)+' mm)');
       var obrTxt=c.vrsta==='upusteno'?(', Upušteno (dubina '+(c.dub!=null?c.dub:5)+' mm, širina upuštanja '+(c.step!=null?c.step:5)+' mm)')
         :c.vrsta==='polirano'?', Polirano':', Bez obrade';
-      rows+=trow((c.name||'Dodatni otvor')+' '+dimTxt+obrTxt,'1 kom',_editableUnitPrice(broj(c.cost)||0,'','setCustomOtvorCostPon',[activeIdx,ci]),f(broj(c.cost)||0));
+      rows+=trow((c.name||'Dodatni otvor')+' '+dimTxt+obrTxt,'1 kom',_editableUnitPrice(parseFloat(c.cost)||0,'','setCustomOtvorCostPon',[activeIdx,ci]),f(parseFloat(c.cost)||0));
     });
     ivd.forEach(function(iv2){rows+=trow('Obrada ivice – '+iv2.profLbl+' ('+iv2.lbl+')',iv2.m.toFixed(2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-',iv2.prof]),f(iv2.uk));});
     var _rzK=_rezRedovi(1); rows+=_rzK.rows; rez=_rzK.uk; uk+=rez;
@@ -6288,7 +6261,7 @@ function calcItemCost(){
     mat=Math.round(m3o*gi('mat-c')*100)/100;
     var ivdSto2=getIvData();
     iv=Math.round(ivdSto2.reduce(function(s,x){return s+x.uk;},0)*stoBr2*100)/100;
-    var holesUk2=(tableHoles||[]).reduce(function(s,h){return s+(broj(h.cost)||0);},0)*stoBr2;
+    var holesUk2=(tableHoles||[]).reduce(function(s,h){return s+(parseFloat(h.cost)||0);},0)*stoBr2;
     usl=gi('sto-ugr')*stoBr2+gi('sto-mer')+holesUk2;
     uk=mat+iv+usl;
     var stoShLbl={okrugao:'Okrugao',jajasto:'Elipsa',oblutak:'Oblutak',radijus:'Sa radijusom',bure:'Bure',fbure:'Full bure'}[shape]||shape;
@@ -6299,7 +6272,7 @@ function calcItemCost(){
     var _rzSto=_rezRedovi(stoBr2); rows+=_rzSto.rows; rez=_rzSto.uk; uk+=rez;
     (tableHoles||[]).forEach(function(h,hi){
       var hDim=(h.shape==='round')?('ø'+(h.fi||35)+' mm'):((h.w||0)+'×'+(h.h||0)+' mm');
-      rows+=trow((h.name||'Otvor')+' '+hDim+(stoBr2>1?' (×'+stoBr2+')':''),stoBr2+' kom',_editableUnitPrice(broj(h.cost)||0,'','setTableHoleCostPon',[activeIdx,hi]),f((broj(h.cost)||0)*stoBr2));
+      rows+=trow((h.name||'Otvor')+' '+hDim+(stoBr2>1?' (×'+stoBr2+')':''),stoBr2+' kom',_editableUnitPrice(parseFloat(h.cost)||0,'','setTableHoleCostPon',[activeIdx,hi]),f((parseFloat(h.cost)||0)*stoBr2));
     });
     rows+=trow('Ugradnja',stoBr2+' kom',_editableUnitPrice(gi('sto-ugr'),'','setItemFieldPrice',[activeIdx,'sto-ugr']),f(gi('sto-ugr')*stoBr2));
     rows+=trow('Mjerenje','1',_editableUnitPrice(gi('sto-mer'),'','setItemFieldPrice',[activeIdx,'sto-mer']),f(gi('sto-mer')));
@@ -6366,9 +6339,9 @@ function refresh(){
     var m=getArea(),ivd=getIvData();
     iv=ivd.reduce(function(s,i){return s+i.uk;},0);
     var otv=(gc('cb-sud')?gi('sud-c'):0)+(gc('cb-plo')?gi('plo-c'):0)
-      +(customOtvori||[]).reduce(function(s,c){return s+(broj(c.cost)||0);},0);
+      +(customOtvori||[]).reduce(function(s,c){return s+(parseFloat(c.cost)||0);},0);
     mat=Math.round(m*gi('mat-c')*100)/100;
-    var slav=(slavine||[]).reduce(function(s,x){return s+(broj(x.cost)||0);},0);
+    var slav=(slavine||[]).reduce(function(s,x){return s+(parseFloat(x.cost)||0);},0);
     usl=gi('k-ugr')+gi('k-mer')+otv+slav;
     // Produzeci prema podu/zidu
     var extUk=0;
@@ -6413,7 +6386,7 @@ function refresh(){
     mat=Math.round(m3*gi('mat-c')*100)/100;
     var ivdSto=getIvData();
     iv=Math.round(ivdSto.reduce(function(s,x){return s+x.uk;},0)*stoBr*100)/100;
-    var holesUk=(tableHoles||[]).reduce(function(s,h){return s+(broj(h.cost)||0);},0)*stoBr;
+    var holesUk=(tableHoles||[]).reduce(function(s,h){return s+(parseFloat(h.cost)||0);},0)*stoBr;
     usl=gi('sto-ugr')*stoBr+gi('sto-mer')+holesUk;
     uk=mat+iv+usl; pov=m3.toFixed(4)+' m² ('+stoBr+' kom)';
   } else if(tip==='st'&&imaPozicije()){
@@ -6595,7 +6568,7 @@ function _openInlineEditor(region,clientX,clientY){
       return '<option value="'+o.value+'"'+(String(o.value)===String(curVal)?' selected':'')+'>'+o.label+'</option>';
     }).join('')+'</select>';
   } else if(ed.kind==='number'){
-    html='<input id="inline-ed-input" type="text" inputmode="decimal" autofocus value="'+(curVal!=null?curVal:0)+'"'
+    html='<input id="inline-ed-input" type="number" autofocus value="'+(curVal!=null?curVal:0)+'"'
       +(ed.min!=null?' min="'+ed.min+'"':'')+(ed.max!=null?' max="'+ed.max+'"':'')+' step="'+(ed.step||1)+'">'
       +(ed.unit?'<span class="inline-ed-unit">'+ed.unit+'</span>':'');
   } else {
@@ -6613,7 +6586,7 @@ function _openInlineEditor(region,clientX,clientY){
   var inp=ge('inline-ed-input');
   function commit(){
     var v=inp.value;
-    if(ed.kind==='number'){ v=broj((v||'0').toString().replace(',','.'))||0; if(ed.min!=null) v=Math.max(ed.min,v); if(ed.max!=null) v=Math.min(ed.max,v); }
+    if(ed.kind==='number'){ v=parseFloat((v||'0').toString().replace(',','.'))||0; if(ed.min!=null) v=Math.max(ed.min,v); if(ed.max!=null) v=Math.min(ed.max,v); }
     ed.set(v);
     _closeInlineEditor();
   }
@@ -8008,7 +7981,7 @@ function drawK(ctx,W,H){
     }
   } else if(sh==='U'){
     var xR=E+A;
-    var maxH=Math.max(broj(d.B)||0, broj(d.C)||0);
+    var maxH=Math.max(parseFloat(d.B)||0, parseFloat(d.C)||0);
     var maxHpx=maxH*sc;
     if(vOrient===0){
       // vOrient=0: A gore, kraci idu dolje
@@ -8291,12 +8264,12 @@ function drawK(ctx,W,H){
       // Horizontalni produzetak - kota linija horizontalno, na sredini visine (Y)
       var midY=(ay+by)/2;
       var k1x=ax+nx*hh, k1y=midY;
-      kota(ctx,ax+nx*2,midY,k1x,k1y,(extState[end.id+'_h']||900)+' mm',_extHeightEditDesc(end.id),'#ext-con input[type="text" inputmode="decimal"][data-side="'+end.id+'"]');
+      kota(ctx,ax+nx*2,midY,k1x,k1y,(extState[end.id+'_h']||900)+' mm',_extHeightEditDesc(end.id),'#ext-con input[type="number"][data-side="'+end.id+'"]');
     } else {
       // Vertikalni produzetak - kota linija vertikalno, na sredini sirine (X)
       var midX=(ax+bx)/2;
       var k1x2=midX, k1y2=ay+ny*hh;
-      kota(ctx,midX,ay+ny*2,k1x2,k1y2,(extState[end.id+'_h']||900)+' mm',_extHeightEditDesc(end.id),'#ext-con input[type="text" inputmode="decimal"][data-side="'+end.id+'"]');
+      kota(ctx,midX,ay+ny*2,k1x2,k1y2,(extState[end.id+'_h']||900)+' mm',_extHeightEditDesc(end.id),'#ext-con input[type="number"][data-side="'+end.id+'"]');
     }
     ctx.setLineDash([]);ctx.restore();
 
@@ -8353,14 +8326,14 @@ function _pozR(p,u){
 }
 function pozRadijus(i,u,val){
   if(!pozicije[i]) return;
-  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
   pozicije[i].r=pozicije[i].r||{};
   if(v<=0&&(pozRDef[u]||0)===0) delete pozicije[i].r[u];
   else pozicije[i].r[u]=Math.max(0,v);
   syncToActive(); buildPozicijeTabelu(); refresh();
 }
 function pozSveRadijus(u,val){
-  var v=brojIliPrazno((val||'0').toString().replace(',','.'))||0;
+  var v=parseFloat((val||'0').toString().replace(',','.'))||0;
   if(v<=0) delete pozRDef[u]; else pozRDef[u]=v;
   (pozicije||[]).forEach(function(p){ if(p.r) delete p.r[u]; });
   syncToActive(); buildPozicijeTabelu(); refresh();
@@ -8471,7 +8444,7 @@ function buildPozNav(){
     +'<span style="font-size:11px;color:#6b7a8d;font-weight:600">'
     +n+' pozicija na '+_pozBrojStrana()+' strana</span>'
     +'<span style="font-size:10px;color:#8a93a3;margin-left:auto">po strani:</span>'
-    +'<input type="text" inputmode="decimal" min="1" max="20" value="'+POZ_PO_STRANI+'" style="width:48px;'
+    +'<input type="number" min="1" max="20" value="'+POZ_PO_STRANI+'" style="width:48px;'
     +'font:inherit;font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;'
     +'text-align:right" onchange="pozPoStrani(this.value)"></div>';
 }
@@ -9218,7 +9191,7 @@ function _editableUnitPrice(kmPrice,unitSuffix,onchangeFnName,onchangeArgs){
 // Pretvara prikazani (u trenutnoj valuti) broj nazad u KM - interno se SVE
 // uvijek čuva u KM, prikaz/unos je samo "prevod" za oči.
 function _toKM(displayVal,currency){
-  var v=brojIliPrazno((displayVal||'0').toString().replace(',','.'))||0;
+  var v=parseFloat((displayVal||'0').toString().replace(',','.'))||0;
   if(currency==='EUR') return v*FX_EUR;
   if(currency==='RSD') return v/FX_RSD;
   return v;
@@ -9233,7 +9206,7 @@ function setItemMatPrice(itemIdx,displayVal,currency){
   activeIdx=itemIdx;
   syncFromActive();loadItemInputs();
   var el=ge('mat-c');
-  if(el) el.value=uPolje(km);
+  if(el) el.value=km.toFixed(2);
   syncToActive();
   activeIdx=savedIdx;
   syncFromActive();loadItemInputs();
@@ -9296,7 +9269,7 @@ function setItemFieldPrice(itemIdx,fieldId,displayVal,currency){
   activeIdx=itemIdx;
   syncFromActive();loadItemInputs();
   var el=ge(fieldId);
-  if(el) el.value=uPolje(km);
+  if(el) el.value=km.toFixed(2);
   syncToActive();
   activeIdx=savedIdx;
   syncFromActive();loadItemInputs();
@@ -9312,7 +9285,7 @@ function setCelMatPrice(itemIdx,displayVal,currency){
   activeIdx=itemIdx;
   syncFromActive();loadItemInputs();
   var el=ge('cel-c');
-  if(el) el.value=uPolje(km);
+  if(el) el.value=km.toFixed(2);
   syncToActive();
   activeIdx=savedIdx;
   syncFromActive();loadItemInputs();
@@ -9324,7 +9297,7 @@ function setCelMatPrice(itemIdx,displayVal,currency){
 function setRezPrice(prefix,rez,displayVal,currency){
   var km=_toKM(displayVal,currency);
   var el=ge(prefix+'rez'+rez);
-  if(el) el.value=uPolje(km);
+  if(el) el.value=km.toFixed(2);
   refresh();
   genPon(_lastPonCurrency);
 }
@@ -9334,7 +9307,7 @@ function setRezPrice(prefix,rez,displayVal,currency){
 function setIvPrice(prefix,prof,displayVal,currency){
   var km=_toKM(displayVal,currency);
   var el=ge(prefix+prof);
-  if(el) el.value=uPolje(km);
+  if(el) el.value=km.toFixed(2);
   refresh();
   genPon(_lastPonCurrency);
 }
@@ -9420,9 +9393,7 @@ function loadProject(){
           if(ge('mat-v'))     ge('mat-v').value=p.materijal.vrsta||'';
           if(ge('mat-naziv')) ge('mat-naziv').value=p.materijal.naziv||'';
           if(ge('mat-d'))     ge('mat-d').value=p.materijal.debljina||'';
-          // Stare ponude su snimljene sa TACKOM (17.55). Racun je i tako tacan, ali se
-          // u polju prikazuje sa zarezom radi dosljednosti sa ostatkom sistema.
-          if(ge('mat-c'))     ge('mat-c').value=p.materijal.cena!=null&&p.materijal.cena!==''?uPolje(p.materijal.cena):'';
+          if(ge('mat-c'))     ge('mat-c').value=p.materijal.cena||'';
         }
         // Postavi referenta
         if(p.referent){
@@ -9463,10 +9434,10 @@ function loadProject(){
           if(!it.slavine && it.inputs && it.inputs['cb-slav']){
             it.slavine=[{
               id:'sl'+Date.now()+Math.floor(Math.random()*1000),
-              fi:broj(it.inputs['slav-fi'])||35,
-              cost:broj(it.inputs['slav-c'])||0,
-              x:broj(it.inputs['slav-x'])||400,
-              yz:broj(it.inputs['slav-yz'])||50
+              fi:parseFloat(it.inputs['slav-fi'])||35,
+              cost:parseFloat(it.inputs['slav-c'])||0,
+              x:parseFloat(it.inputs['slav-x'])||400,
+              yz:parseFloat(it.inputs['slav-yz'])||50
             }];
           } else if(!it.slavine){
             it.slavine=[];
@@ -9823,7 +9794,7 @@ function genPon(currency){
     allSections+
     (function(){
       var popustStr=gs('pon-popust')||'';
-      var popustPct=broj(popustStr.replace('%','').replace(',','.'))||0;
+      var popustPct=parseFloat(popustStr.replace('%','').replace(',','.'))||0;
       var popustIzn=popustPct>0?Math.round(uk*popustPct/100*100)/100:0;
       var ukSaPopust=popustPct>0?Math.round((uk-popustIzn)*100)/100:uk;
       var pdv2=Math.round(ukSaPopust*pdvStopa*100)/100;
@@ -9923,8 +9894,8 @@ function genDXF(){
 
   function ln(x1,y1,x2,y2,lay){
     g(0,'LINE'); g(8,lay||'KONTURA');
-    g(10,broj(x1.toFixed(2))); g(20,broj((-y1).toFixed(2))); g(30,0.0);
-    g(11,broj(x2.toFixed(2))); g(21,broj((-y2).toFixed(2))); g(31,0.0);
+    g(10,parseFloat(x1.toFixed(2))); g(20,parseFloat((-y1).toFixed(2))); g(30,0.0);
+    g(11,parseFloat(x2.toFixed(2))); g(21,parseFloat((-y2).toFixed(2))); g(31,0.0);
   }
   function rc(x,y,w,h,lay){
     ln(x,y,x+w,y,lay); ln(x+w,y,x+w,y+h,lay);
@@ -9932,8 +9903,8 @@ function genDXF(){
   }
   function tx(x,y,h,s,lay){
     g(0,'TEXT'); g(8,lay||'TEKST');
-    g(10,broj(x.toFixed(2))); g(20,broj((-y).toFixed(2))); g(30,0.0);
-    g(40,broj(h.toFixed(2))); g(1,String(s)); g(7,'STANDARD');
+    g(10,parseFloat(x.toFixed(2))); g(20,parseFloat((-y).toFixed(2))); g(30,0.0);
+    g(40,parseFloat(h.toFixed(2))); g(1,String(s)); g(7,'STANDARD');
   }
   function dH(x1,y,x2,lbl,off){
     off=off||40;
@@ -9990,9 +9961,9 @@ function genDXF(){
     var start=a1,end=a2;
     if(sweepFwd>180){start=a2;end=a1;}
     g(0,'ARC'); g(8,lay||'KONTURA');
-    g(10,broj(center.x.toFixed(2))); g(20,broj((-(center.y+yOff)).toFixed(2))); g(30,0.0);
-    g(40,broj(r.toFixed(2)));
-    g(50,broj(start.toFixed(2))); g(51,broj(end.toFixed(2)));
+    g(10,parseFloat(center.x.toFixed(2))); g(20,parseFloat((-(center.y+yOff)).toFixed(2))); g(30,0.0);
+    g(40,parseFloat(r.toFixed(2)));
+    g(50,parseFloat(start.toFixed(2))); g(51,parseFloat(end.toFixed(2)));
   }
   // pts: niz {x,y} (mm, bez yOff) - zatvoreni poligon; radii: niz mm radijusa po vrhu
   function dxfRoundedPoly(pts,radii,lay,yOff){
@@ -10992,7 +10963,7 @@ async function _ucitajPonudu(linkJson, naziv, ponudaId){
     items.forEach(function(it){
       it.wallSides={};
       if(!it.slavine && it.inputs && it.inputs['cb-slav']){
-        it.slavine=[{id:'sl'+Date.now()+Math.floor(Math.random()*1000),fi:broj(it.inputs['slav-fi'])||35,cost:broj(it.inputs['slav-c'])||0,x:broj(it.inputs['slav-x'])||400,yz:broj(it.inputs['slav-yz'])||50}];
+        it.slavine=[{id:'sl'+Date.now()+Math.floor(Math.random()*1000),fi:parseFloat(it.inputs['slav-fi'])||35,cost:parseFloat(it.inputs['slav-c'])||0,x:parseFloat(it.inputs['slav-x'])||400,yz:parseFloat(it.inputs['slav-yz'])||50}];
       } else if(!it.slavine){ it.slavine=[]; }
     });
     activeIdx = Math.min(p.activeIdx||0, items.length-1);
@@ -11106,7 +11077,7 @@ async function _ucitajLager(){
       lista.forEach(function(x){
         sve.push({id:x.id, sifra:x.sifra, naziv:x.naziv, grupa:x.grupa,
           debljina:x.debljina_cm, jm:x.jed_mjera,
-          cijena:broj(x.cijena)||0, stanje:broj(x.stanje)||0,
+          cijena:parseFloat(x.cijena)||0, stanje:parseFloat(x.stanje)||0,
           pj:trazeni[i].naziv, pjId:trazeni[i].id});
       });
     }
@@ -11202,7 +11173,7 @@ async function otvoriLager(){
     +'oninput="_lagerFilter()" style="flex:1;min-width:150px;font:inherit;font-size:13px;'
     +'padding:7px 9px;border:1px solid #dde2ea;border-radius:6px">'
     +'<label style="font-size:11px;color:#6b7a8d">Koeficijent</label>'
-    +'<input id="lager-koef" type="text" inputmode="decimal" min="1" step="0.1" value="'+MAT_KOEF+'" '
+    +'<input id="lager-koef" type="number" min="1" step="0.1" value="'+MAT_KOEF+'" '
     +'oninput="_lagerFilter()" style="width:60px;font:inherit;font-size:13px;padding:7px;'
     +'border:1px solid #1a5fa8;border-radius:6px;text-align:right;font-weight:700;color:#134a85">'
     +'<span style="font-size:11px;color:#8a93a3">\u00d7 nabavna</span></div>'
@@ -11263,9 +11234,9 @@ function _lagerFilter(){
   var l=ge('lager-lista'); if(!l||!_lagerKes) return;
   _napuniLagerFiltere();
   var q=(gs('lager-trazi')||'').toLowerCase().trim();
-  var koef=broj((gs('lager-koef')||'').replace(',','.'))||MAT_KOEF;
+  var koef=parseFloat((gs('lager-koef')||'').replace(',','.'))||MAT_KOEF;
   var fg=gs('lager-grupa')||'';
-  var fd=broj(gs('lager-debljina')||'')||0;
+  var fd=parseFloat(gs('lager-debljina')||'')||0;
   var samoP=gc('lager-samo-ploce');
   var skriveno=0;
   var lista=_lagerKes.filter(function(x){
@@ -11313,10 +11284,10 @@ function _lagerFilter(){
 function _lagerIzaberi(id,pjId){
   var x=(_lagerKes||[]).filter(function(y){return y.id===id&&y.pjId===pjId;})[0];
   if(!x) return;
-  var koef=broj((gs('lager-koef')||'').replace(',','.'))||MAT_KOEF;
+  var koef=parseFloat((gs('lager-koef')||'').replace(',','.'))||MAT_KOEF;
   _saveUndo();
   var en=ge('mat-naziv'); if(en) en.value=x.naziv||'';
-  var ec=ge('mat-c');     if(ec) ec.value=uPolje(Math.round(x.cijena*koef*100)/100);
+  var ec=ge('mat-c');     if(ec) ec.value=(Math.round(x.cijena*koef*100)/100).toFixed(2);
   // Debljina: LAGER JE U CENTIMETRIMA, polje u milimetrima - obavezna konverzija.
   // Polje je 'mat-d-sel' (ne 'mat-d'); ako ponudjena debljina nije u popisu,
   // prebacuje se na "Drugo..." i upisuje u 'mat-d-inp'.
@@ -11540,7 +11511,7 @@ async function usvojiPonudu(){
   });
 
   // Izračunaj iznos SA popustom i SA PDV-om
-  var popustPct=broj((ge('pon-popust')?ge('pon-popust').value:'').replace('%','').replace(',','.'))||0;
+  var popustPct=parseFloat((ge('pon-popust')?ge('pon-popust').value:'').replace('%','').replace(',','.'))||0;
   var popustIzn=popustPct>0?Math.round(ukupno*popustPct/100*100)/100:0;
   var ukSaPopust=Math.round((ukupno-popustIzn)*100)/100;
   var pdvStopa=0.17;
@@ -11802,26 +11773,6 @@ document.addEventListener('focusin',function(e){
   if(!brojcano) return;
   setTimeout(function(){ try{ el.select(); }catch(err){} },0);
 });
-
-/* Ziva potvrda unosa — dok se kuca, ispod polja pise kako je sistem RAZUMIO broj. */
-(function(){
-  const fmt = n => n.toLocaleString('sr-Latn-BA', {minimumFractionDigits:2, maximumFractionDigits:3});
-  document.addEventListener('input', e => {
-    const el = e.target;
-    if (!(el instanceof HTMLInputElement) || el.getAttribute('inputmode') !== 'decimal') return;
-    let nag = el.nextElementSibling;
-    if (!nag || !nag.classList?.contains('broj-nagovjestaj')) {
-      nag = document.createElement('div');
-      nag.className = 'broj-nagovjestaj';
-      nag.style.cssText = 'font-size:10.5px;color:#8b96a5;margin-top:2px;min-height:13px;';
-      el.after(nag);
-    }
-    const t = el.value.trim();
-    if (!t) { nag.textContent = ''; return; }
-    const n = brojIliPrazno(t);
-    nag.textContent = (t === String(n) || t === fmt(n)) ? '' : `= ${fmt(n)}`;
-  });
-})();
 </script>
 </body>
 </html>
