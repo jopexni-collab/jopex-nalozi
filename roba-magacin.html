@@ -327,6 +327,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 <div class="ce-row" style="margin-bottom:14px;">
   <button type="button" class="glavni-tab-btn active" data-tab="lager" onclick="prebaciGlavniTabRM('lager')">📋 Lager lista</button>
   <button type="button" class="glavni-tab-btn" data-tab="kalkulacija" onclick="prebaciGlavniTabRM('kalkulacija')">📦 Kalkulacija</button>
+  <button type="button" class="glavni-tab-btn" data-tab="kalk-spisak" onclick="prebaciGlavniTabRM('kalk-spisak')">📋 Spisak kalkulacija</button>
   <button type="button" class="glavni-tab-btn" data-tab="presek" onclick="prebaciGlavniTabRM('presek')">⚖️ Presek / Usaglašavanje</button>
   <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
   <button type="button" class="glavni-tab-btn" data-tab="uporedi" onclick="prebaciGlavniTabRM('uporedi')">⚖️ Uporedi PJ</button>
@@ -337,6 +338,22 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <button type="button" class="glavni-tab-btn" data-tab="uvoz-istorija" onclick="prebaciGlavniTabRM('uvoz-istorija')">🗂️ Istorija uvoza</button>
   <button type="button" class="glavni-tab-btn" data-tab="master-grupe" onclick="prebaciGlavniTabRM('master-grupe')">🗂️ Master grupe</button>
   <button type="button" class="glavni-tab-btn" data-tab="izvoz-log" id="tab-btn-izvoz-log" style="display:none;" onclick="prebaciGlavniTabRM('izvoz-log')">🔐 Izvozi <span id="izvoz-log-badge" style="display:none;background:var(--red,#c0392b);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;"></span></button>
+</div>
+
+<div id="tab-kalk-spisak" style="display:none;">
+  <div class="import-box">
+    <h3>📋 Snimljene kalkulacije</h3>
+    <div class="uzorak-hint">
+      Pregled svih kalkulacija. Kalkulacija sa <b>0 stavki</b> označena je crveno — to znači
+      da ništa nije ušlo u lager, pa se odmah vidi da nešto nije prošlo.
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      <input type="text" id="ksp-pretraga" placeholder="🔍 Dobavljač, broj ili objekat..." oninput="kspRender()"
+             style="flex:1;min-width:170px;padding:6px 10px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12.5px;">
+      <button type="button" class="ce-tip-btn" style="font-size:11.5px;" onclick="kspUcitaj()">↻ Osvježi</button>
+    </div>
+    <div id="ksp-sadrzaj"></div>
+  </div>
 </div>
 
 <div id="tab-kalkulacija" style="display:none;">
@@ -3726,6 +3743,8 @@ document.getElementById('logout').onclick=async e=>{
 function prebaciGlavniTabRM(tab){
   document.querySelectorAll('.glavni-tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   document.getElementById('tab-kalkulacija').style.display = tab==='kalkulacija' ? 'block' : 'none';
+  document.getElementById('tab-kalk-spisak').style.display = tab==='kalk-spisak' ? 'block' : 'none';
+  if(tab==='kalk-spisak') kspUcitaj();
   document.getElementById('tab-lager').style.display = tab==='lager' ? 'block' : 'none';
   document.getElementById('tab-uvoz-istorija').style.display = tab==='uvoz-istorija' ? 'block' : 'none';
   document.getElementById('tab-presek').style.display = tab==='presek' ? 'block' : 'none';
@@ -3784,6 +3803,87 @@ let uvozIstPopunjenSelect=false;
   });
   }
 })();
+
+
+/* ═══ SPISAK KALKULACIJA ═══════════════════════════════════════════════════════════
+   Do sada ga nije bilo — napravis kalkulaciju i nemas gdje provjeriti da li je stvarno
+   snimljena. Zato je problem sa sifrarma 8165/8166 dugo ostao neprimijecen. */
+let kspSve = [];
+
+async function kspUcitaj(){
+  const cont = document.getElementById('ksp-sadrzaj');
+  cont.innerHTML = '<div style="padding:14px;color:#8b96a5;font-size:12.5px;">Učitavanje...</div>';
+  try{
+    const r = await fetch(`${API}/api/kalkulacije`);
+    if(!r.ok){
+      const d = await r.json().catch(()=>({}));
+      throw new Error(d.error || `Server je vratio ${r.status}`);
+    }
+    kspSve = await r.json();
+    kspRender();
+  }catch(e){
+    cont.innerHTML = `<div style="padding:14px;color:var(--red,#c0392b);font-size:12.5px;">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+function kspRender(){
+  const cont = document.getElementById('ksp-sadrzaj');
+  const q = (document.getElementById('ksp-pretraga')?.value||'').toLowerCase().trim();
+  const prikaz = kspSve.filter(k => !q
+    || String(k.dobavljac||'').toLowerCase().includes(q)
+    || String(k.broj||'').toLowerCase().includes(q)
+    || String(k.objekt_naziv||'').toLowerCase().includes(q));
+
+  if(!kspSve.length){
+    cont.innerHTML = '<div style="padding:14px;color:#8b96a5;font-size:12.5px;">Još nema snimljenih kalkulacija.</div>';
+    return;
+  }
+  cont.innerHTML = `
+    <div style="font-size:11.5px;color:#8b96a5;margin-bottom:6px;">${prikaz.length} od ${kspSve.length} kalkulacija</div>
+    <div style="max-height:calc(100vh - 300px);overflow:auto;border:1px solid var(--border,#ddd);border-radius:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:10.5px;line-height:1.25;">
+        <thead><tr style="background:#1f3864;color:#fff;">
+          <th style="padding:3px 5px;text-align:left;font-size:10px;position:sticky;top:0;background:#1f3864;">Datum</th>
+          <th style="padding:3px 5px;text-align:left;font-size:10px;position:sticky;top:0;background:#1f3864;">Broj</th>
+          <th style="padding:3px 5px;text-align:left;font-size:10px;position:sticky;top:0;background:#1f3864;">Dobavljač</th>
+          <th style="padding:3px 5px;text-align:left;font-size:10px;position:sticky;top:0;background:#1f3864;">Objekat</th>
+          <th style="padding:3px 5px;text-align:center;font-size:10px;position:sticky;top:0;background:#1f3864;">Stavki</th>
+          <th style="padding:3px 5px;text-align:right;font-size:10px;position:sticky;top:0;background:#1f3864;">Zaduženje</th>
+          <th style="padding:3px 5px;text-align:left;font-size:10px;position:sticky;top:0;background:#1f3864;">Upisao</th>
+        </tr></thead>
+        <tbody>${prikaz.map((k,i)=>`
+          <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;cursor:pointer;"
+              onclick="kspOtvori(${k.id})" title="Klikni za stavke">
+            <td style="padding:1px 5px;white-space:nowrap;">${k.datum ? new Date(k.datum).toLocaleDateString('bs-BA') : ''}</td>
+            <td style="padding:1px 5px;font-weight:700;">${esc(k.broj||'—')}</td>
+            <td style="padding:1px 5px;font-weight:700;">${esc(k.dobavljac||'—')}</td>
+            <td style="padding:1px 5px;">${esc(k.objekt_naziv||'—')}</td>
+            <td style="padding:1px 5px;text-align:center;">
+              ${parseInt(k.broj_stavki)>0
+                ? `<b>${k.broj_stavki}</b>`
+                : '<span style="color:var(--red,#c0392b);font-weight:800;" title="Nijedna stavka nije ušla u lager">0 ⚠</span>'}
+            </td>
+            <td style="padding:1px 5px;text-align:right;font-weight:700;">${lagerFmMoney(k.ukupno_zaduzenje||0)}</td>
+            <td style="padding:1px 5px;">${esc(k.upisao_ime||'')}</td>
+          </tr>`).join('') || '<tr><td colspan="7" style="padding:12px;text-align:center;color:#8b96a5;">Nema rezultata.</td></tr>'}</tbody>
+      </table>
+    </div>`;
+}
+
+async function kspOtvori(id){
+  try{
+    const r = await fetch(`${API}/api/kalkulacije/${id}`);
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    const st = d.stavke || [];
+    const red = s => `${s.sifra}  ${s.naziv}\n     količina ${s.kolicina} · nabavna ${lagerFmMoney(s.nabavna_cijena)} · prodajna ${lagerFmMoney(s.prodajna_cijena)}`;
+    alert(
+      `Kalkulacija ${d.broj||'#'+d.id}\n${d.dobavljac||''} · ${d.objekt_naziv||''}\n`
+      + '-'.repeat(42) + '\n'
+      + (st.length ? st.map(red).join('\n') : '(nema stavki — ništa nije ušlo u lager)')
+    );
+  }catch(e){ alert('✗ '+e.message); }
+}
 
 /* ═══ AKCIJE (snizenja) ═══════════════════════════════════════════════════════════
    Akcija se cuva odvojeno od cijene na lageru — redovna cijena ostaje, pa se na nalepnici
@@ -4617,7 +4717,16 @@ async function kalkUcitajObjekte(){
     const aleksandrovac=kalkMojiPJovi.find(p=>p.naziv?.toLowerCase().includes('aleksandrovac'));
     if(aleksandrovac) document.getElementById('kalk-objekt').value=aleksandrovac.id;
     kalkRenderStavke(); // ponovo iscrtaj ako je vec bilo stavki, da se valuta odmah primijeni
-  }catch(e){}
+  }catch(e){
+    /* Ranije je greska TIHO gutana: padajuca lista objekata ostane prazna, pa se
+       kalkulacija ne moze sacuvati ("Izaberite prodajni objekat"), a korisnik nema pojma
+       zasto. Bas to se desavalo — ruta /api/prodajni-objekti vracala je 403 za pravo
+       "Roba i magacini". */
+    const sel=document.getElementById('kalk-objekt');
+    if(sel) sel.innerHTML='<option value="">— greška pri učitavanju —</option>';
+    const msg=document.getElementById('kalk-msg');
+    if(msg){ msg.style.color='red'; msg.textContent='✗ Ne mogu učitati prodajne objekte: '+e.message; }
+  }
 }
 
 let kalkPretragaTimer=null;
