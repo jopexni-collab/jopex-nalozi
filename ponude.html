@@ -356,7 +356,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
         <option value="X66"><option value="X80"><option value="Pandora"><option value="Taj Mahal">
       </datalist>
     </div>
-    <div class="fg"><label>Cijena materijala (KM/m²)</label><input type="text" inputmode="decimal" id="mat-c" value="450" min="0" oninput="fixComma(this);refresh()"></div>
+    <div class="fg"><label>Cijena materijala (KM/m²)</label><input type="number" id="mat-c" value="450" min="0" oninput="fixComma(this);refresh()"></div>
     <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap">
       <button type="button" onclick="otvoriLager()" style="flex:1;font:inherit;font-size:11px;
         padding:6px 8px;border:1px solid #1a5fa8;background:#eef4fb;color:#1a5fa8;border-radius:5px;
@@ -400,18 +400,18 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <div class="hint" style="margin-top:10px;font-weight:600;color:#1d8a6e">Obrada ivica ploče</div>
       <div class="hint">Cijene profila (KM/m)</div>
       <div class="r3">
-        <div class="fg"><label>Ravna</label><input type="text" inputmode="decimal" id="ivp-ravna" value="10" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>C obrada</label><input type="text" inputmode="decimal" id="ivp-polukrug" value="25" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Bevel</label><input type="text" inputmode="decimal" id="ivp-bevel" value="10" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Ravna</label><input type="number" id="ivp-ravna" value="10" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>C obrada</label><input type="number" id="ivp-polukrug" value="25" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Bevel</label><input type="number" id="ivp-bevel" value="10" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div class="r2">
-        <div class="fg"><label>Polu C</label><input type="text" inputmode="decimal" id="ivp-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Gerovanje</label><input type="text" inputmode="decimal" id="ivp-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Polu C</label><input type="number" id="ivp-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Gerovanje</label><input type="number" id="ivp-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
             <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Cijene rezanja (KM/m)</div>
       <div class="r2">
-        <div class="fg"><label>Pravolinijsko</label><input type="text" inputmode="decimal" id="ivp-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Pod uglom</label><input type="text" inputmode="decimal" id="ivp-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Pravolinijsko</label><input type="number" id="ivp-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Pod uglom</label><input type="number" id="ivp-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div id="iv-con"></div>
     </div>
@@ -437,8 +437,8 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
           <div class="fg"><label>Cijena (KM)</label><input type="number" id="sud-c" step="0.01" value="100" min="0" oninput="fixComma(this);refresh()"></div>
         </div>
         <div class="r2" id="sud-upst-wrap">
-          <div class="fg"><label>Dubina upuštanja (mm)</label><input type="text" inputmode="decimal" id="sud-dub" value="5" oninput="fixComma(this);refresh()"></div>
-          <div class="fg"><label>Širina upuštanja (mm)</label><input type="text" inputmode="decimal" id="sud-step" value="5" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Dubina upuštanja (mm)</label><input type="number" id="sud-dub" value="5" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Širina upuštanja (mm)</label><input type="number" id="sud-step" value="5" oninput="fixComma(this);refresh()"></div>
         </div>
         <div id="sud-strana-red" style="display:none">
           <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Slobodan oblik — izaberi OD ČEGA se mjeri (okvir ili bilo koja strana) i kako je otvor OKRENUT. Negativan Y stavlja otvor na drugu stranu te ivice.</div>
@@ -510,8 +510,8 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
           <div class="fg"><label>Cijena (KM)</label><input type="number" id="plo-c" step="0.01" value="100" min="0" oninput="fixComma(this);refresh()"></div>
         </div>
         <div class="r2" id="plo-upst-wrap">
-          <div class="fg"><label>Dubina upuštanja (mm)</label><input type="text" inputmode="decimal" id="plo-dub" value="5" oninput="fixComma(this);refresh()"></div>
-          <div class="fg"><label>Širina upuštanja (mm)</label><input type="text" inputmode="decimal" id="plo-step" value="5" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Dubina upuštanja (mm)</label><input type="number" id="plo-dub" value="5" oninput="fixComma(this);refresh()"></div>
+          <div class="fg"><label>Širina upuštanja (mm)</label><input type="number" id="plo-step" value="5" oninput="fixComma(this);refresh()"></div>
         </div>
         <div id="plo-strana-red" style="display:none">
           <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Slobodan oblik — izaberi OD ČEGA se mjeri (okvir ili bilo koja strana) i kako je otvor OKRENUT. Negativan Y stavlja otvor na drugu stranu te ivice.</div>
@@ -588,8 +588,8 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
     <div class="sec">
       <div class="sec-hd">Usluge</div>
       <div class="r2">
-        <div class="fg"><label>Ugradnja (KM)</label><input type="text" inputmode="decimal" id="k-ugr" value="0" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Mjerenje (KM)</label><input type="text" inputmode="decimal" id="k-mer" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Ugradnja (KM)</label><input type="number" id="k-ugr" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Mjerenje (KM)</label><input type="number" id="k-mer" value="0" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
     </div>
   </div>
@@ -611,8 +611,8 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <input type="hidden" id="kl-led-dub" value="12">
       <input type="hidden" id="kl-led-c" value="0">
       <div class="r2">
-        <div class="fg"><label>Ugradnja/kom (KM)</label><input type="text" inputmode="decimal" id="kl-u" value="0" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Mjerenje (KM)</label><input type="text" inputmode="decimal" id="kl-m" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Ugradnja/kom (KM)</label><input type="number" id="kl-u" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Mjerenje (KM)</label><input type="number" id="kl-m" value="0" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div class="fg"><label>Napomena</label><input type="text" id="kl-n" placeholder="npr. spavaća soba" oninput="refresh()"></div>
       <input type="hidden" id="kl-vrsta" value="prozorska">
@@ -624,18 +624,18 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <div class="sec-hd" style="color:#b8860b">Obrada ivica</div>
       <div class="hint">Cijene profila (KM/m)</div>
       <div class="r3">
-        <div class="fg"><label>Ravna</label><input type="text" inputmode="decimal" id="ivp-kl-ravna" value="10" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>C obrada</label><input type="text" inputmode="decimal" id="ivp-kl-polukrug" value="25" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Bevel</label><input type="text" inputmode="decimal" id="ivp-kl-bevel" value="10" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Ravna</label><input type="number" id="ivp-kl-ravna" value="10" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>C obrada</label><input type="number" id="ivp-kl-polukrug" value="25" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Bevel</label><input type="number" id="ivp-kl-bevel" value="10" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div class="r2">
-        <div class="fg"><label>Polu C</label><input type="text" inputmode="decimal" id="ivp-kl-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Gerovanje</label><input type="text" inputmode="decimal" id="ivp-kl-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Polu C</label><input type="number" id="ivp-kl-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Gerovanje</label><input type="number" id="ivp-kl-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
             <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Cijene rezanja (KM/m)</div>
       <div class="r2">
-        <div class="fg"><label>Pravolinijsko</label><input type="text" inputmode="decimal" id="ivp-kl-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Pod uglom</label><input type="text" inputmode="decimal" id="ivp-kl-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Pravolinijsko</label><input type="number" id="ivp-kl-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Pod uglom</label><input type="number" id="ivp-kl-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div id="iv-con-kl"></div>
     </div></div>
@@ -668,11 +668,11 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
           <div class="fg"><label>Debljina (mm)</label><input type="number" id="cel-d" value="12" oninput="fixComma(this);refresh()"></div>
           <div class="fg"><label>Broj komada čela</label><input type="number" id="cel-k" value="1" min="1" oninput="fixComma(this);refresh()"></div>
         </div>
-        <div class="fg"><label>Cijena čela (KM/m²)</label><input type="text" inputmode="decimal" id="cel-c" value="75" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Cijena čela (KM/m²)</label><input type="number" id="cel-c" value="75" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div class="r2">
-        <div class="fg"><label>Ugradnja/kom (KM)</label><input type="text" inputmode="decimal" id="st-u" value="0" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Mjerenje (KM)</label><input type="text" inputmode="decimal" id="st-m" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Ugradnja/kom (KM)</label><input type="number" id="st-u" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Mjerenje (KM)</label><input type="number" id="st-m" value="0" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div class="fg"><label>Napomena</label><input type="text" id="st-n" placeholder="npr. ulaz, terasa" oninput="refresh()"></div>
       <div class="cbrow" style="margin-top:8px">
@@ -686,18 +686,18 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <div class="sec-hd" style="color:#b8860b">Obrada ivica</div>
       <div class="hint">Cijene profila (KM/m)</div>
       <div class="r3">
-        <div class="fg"><label>Ravna</label><input type="text" inputmode="decimal" id="ivp-st-ravna" value="10" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>C obrada</label><input type="text" inputmode="decimal" id="ivp-st-polukrug" value="25" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Bevel</label><input type="text" inputmode="decimal" id="ivp-st-bevel" value="10" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Ravna</label><input type="number" id="ivp-st-ravna" value="10" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>C obrada</label><input type="number" id="ivp-st-polukrug" value="25" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Bevel</label><input type="number" id="ivp-st-bevel" value="10" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div class="r2">
-        <div class="fg"><label>Polu C</label><input type="text" inputmode="decimal" id="ivp-st-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Gerovanje</label><input type="text" inputmode="decimal" id="ivp-st-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Polu C</label><input type="number" id="ivp-st-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Gerovanje</label><input type="number" id="ivp-st-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
             <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Cijene rezanja (KM/m)</div>
       <div class="r2">
-        <div class="fg"><label>Pravolinijsko</label><input type="text" inputmode="decimal" id="ivp-st-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Pod uglom</label><input type="text" inputmode="decimal" id="ivp-st-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Pravolinijsko</label><input type="number" id="ivp-st-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Pod uglom</label><input type="number" id="ivp-st-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div id="iv-con-st"></div>
     </div></div>
@@ -737,18 +737,18 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <div class="sec-hd" style="color:#b8860b">Obrada ivica</div>
       <div class="hint">Cijene profila (KM/m)</div>
       <div class="r3">
-        <div class="fg"><label>Ravna</label><input type="text" inputmode="decimal" id="ivp-sto-ravna" value="10" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>C obrada</label><input type="text" inputmode="decimal" id="ivp-sto-polukrug" value="25" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Bevel</label><input type="text" inputmode="decimal" id="ivp-sto-bevel" value="10" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Ravna</label><input type="number" id="ivp-sto-ravna" value="10" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>C obrada</label><input type="number" id="ivp-sto-polukrug" value="25" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Bevel</label><input type="number" id="ivp-sto-bevel" value="10" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div class="r2">
-        <div class="fg"><label>Polu C</label><input type="text" inputmode="decimal" id="ivp-sto-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Gerovanje</label><input type="text" inputmode="decimal" id="ivp-sto-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Polu C</label><input type="number" id="ivp-sto-ogee" value="20" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Gerovanje</label><input type="number" id="ivp-sto-mitered" value="20" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
             <div class="hint" style="color:#8e44ad;background:#f3eef8;border-left-color:#8e44ad">Cijene rezanja (KM/m)</div>
       <div class="r2">
-        <div class="fg"><label>Pravolinijsko</label><input type="text" inputmode="decimal" id="ivp-sto-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Pod uglom</label><input type="text" inputmode="decimal" id="ivp-sto-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Pravolinijsko</label><input type="number" id="ivp-sto-rezravno" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Pod uglom</label><input type="number" id="ivp-sto-rezugao" value="0" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div id="iv-con-sto"></div>
     </div>
@@ -761,8 +761,8 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
     <div class="sec">
       <div class="sec-hd">Usluge</div>
       <div class="r2">
-        <div class="fg"><label>Ugradnja (KM)</label><input type="text" inputmode="decimal" id="sto-ugr" value="0" min="0" oninput="fixComma(this);refresh()"></div>
-        <div class="fg"><label>Mjerenje (KM)</label><input type="text" inputmode="decimal" id="sto-mer" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Ugradnja (KM)</label><input type="number" id="sto-ugr" value="0" min="0" oninput="fixComma(this);refresh()"></div>
+        <div class="fg"><label>Mjerenje (KM)</label><input type="number" id="sto-mer" value="0" min="0" oninput="fixComma(this);refresh()"></div>
       </div>
       <div class="fg"><label>Napomena</label><input type="text" id="sto-n" placeholder="npr. baštenski sto" oninput="refresh()"></div>
     </div>
@@ -853,6 +853,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
 
 </div><!-- /app -->
 <script>
+
 
 
 
@@ -5723,8 +5724,8 @@ function buildCustomOtvoriUI(){
       +'</select></div></div>';
     if(c.vrsta==='upusteno'){
       html+='<div class="r2" style="margin-bottom:6px">'
-        +'<div class="fg"><label>Dubina upuštanja (mm)</label><input type="text" inputmode="decimal" value="'+(c.dub!=null?c.dub:5)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'dub\',this.value)"></div>'
-        +'<div class="fg"><label>Širina upuštanja (mm)</label><input type="text" inputmode="decimal" value="'+(c.step!=null?c.step:5)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'step\',this.value)"></div>'
+        +'<div class="fg"><label>Dubina upuštanja (mm)</label><input type="number" value="'+(c.dub!=null?c.dub:5)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'dub\',this.value)"></div>'
+        +'<div class="fg"><label>Širina upuštanja (mm)</label><input type="number" value="'+(c.step!=null?c.step:5)+'" oninput="fixComma(this);updateCustomOtvorNum('+idx+',\'step\',this.value)"></div>'
         +'</div>';
     }
 
@@ -9183,7 +9184,7 @@ function _editableUnitPrice(kmPrice,unitSuffix,onchangeFnName,onchangeArgs){
   if(_ponCurrency==='EUR') disp=kmPrice/FX_EUR;
   else if(_ponCurrency==='RSD') disp=kmPrice*FX_RSD;
   var argsStr=onchangeArgs.map(function(a){return typeof a==='number'?a:"'"+String(a).replace(/'/g,"\\'")+"'";}).join(',');
-  return '<input type="text" inputmode="decimal" value="'+disp.toFixed(2)+'" '
+  return '<input type="number" value="'+disp.toFixed(2)+'" '
     +'onchange="'+onchangeFnName+'('+argsStr+',this.value,\''+_ponCurrency+'\')" '
     +'style="width:54px;border:1px solid #cdd5e0;border-radius:3px;padding:3px 5px;'
     +'text-align:right;font:inherit;font-size:12px;background:#fffceb"> '+_curSymbol()+unitSuffix;
@@ -9393,6 +9394,8 @@ function loadProject(){
           if(ge('mat-v'))     ge('mat-v').value=p.materijal.vrsta||'';
           if(ge('mat-naziv')) ge('mat-naziv').value=p.materijal.naziv||'';
           if(ge('mat-d'))     ge('mat-d').value=p.materijal.debljina||'';
+          // Stare ponude su snimljene sa TACKOM (17.55). Racun je i tako tacan, ali se
+          // u polju prikazuje sa zarezom radi dosljednosti sa ostatkom sistema.
           if(ge('mat-c'))     ge('mat-c').value=p.materijal.cena||'';
         }
         // Postavi referenta
@@ -9805,7 +9808,7 @@ function genPon(currency){
           '<span style="font-size:13px;font-weight:600">'+f(uk)+'</span>'+
         '</div>'+
         (function(){
-          var popustInputHtml='<input type="text" inputmode="decimal" value="'+(popustPct||'')+'" placeholder="0" '
+          var popustInputHtml='<input type="number" value="'+(popustPct||'')+'" placeholder="0" '
             +'onchange="setPonPopust(this.value)" '
             +'style="width:40px;border:1px solid rgba(255,255,255,.5);border-radius:3px;padding:3px 5px;'
             +'text-align:center;font:inherit;font-size:12px;background:rgba(255,255,255,.15);color:#fff">';
@@ -11773,6 +11776,8 @@ document.addEventListener('focusin',function(e){
   if(!brojcano) return;
   setTimeout(function(){ try{ el.select(); }catch(err){} },0);
 });
+
+
 </script>
 </body>
 </html>
