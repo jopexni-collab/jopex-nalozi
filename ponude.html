@@ -373,7 +373,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
   <div class="blok on" id="blok-k">
     <div id="os-wrap" style="display:none"></div>
     <div class="sec">
-      <div class="sec-hd" style="color:#1d8a6e">Oblik radne ploče</div>
+      <div class="sec-hd" id="sec-hd-oblik" style="color:#1d8a6e">Oblik radne ploče</div>
       <div class="shp-grid" id="shp-grid"></div>
       <button class="orient-btn" id="obtn" style="display:none" onclick="toggleOrient()">⇄ Okreni orijentaciju</button>
       <div id="dim-wrap"></div>
@@ -418,7 +418,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
       <div id="iv-con"></div>
     </div>
     <div class="sec" id="sec-corner">
-      <div class="sec-hd">Radijus uglova ploče</div>
+      <div class="sec-hd" id="sec-hd-rad">Radijus uglova ploče</div>
       <div class="hint">Svaki ugao ploče može imati svoj radijus zaokruženja (R mm)</div>
       <div id="corner-con"></div>
     </div>
@@ -428,7 +428,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
     </div>
     <div class="sec">
       <div class="sec-hd">Otvori</div>
-      <div class="cbrow"><input type="checkbox" id="cb-sud" checked onchange="tcb('sud');refresh()"><label for="cb-sud" style="color:#1a5fa8">Otvor – sudopera</label></div>
+      <div class="cbrow"><input type="checkbox" id="cb-sud" checked onchange="tcb('sud');refresh()"><label for="cb-sud" id="lbl-cb-sud" style="color:#1a5fa8">Otvor – sudopera</label></div>
       <div class="cbsub on" id="sub-sud">
         <div class="r2">
           <div class="fg"><label>Širina (mm)</label><input type="text" inputmode="decimal" id="sud-w" value="500" min="50" oninput="fixComma(this);refresh()"></div>
@@ -501,7 +501,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
           </div>
         </div>
       </div>
-      <div class="cbrow"><input type="checkbox" id="cb-plo" onchange="tcb('plo');refresh()"><label for="cb-plo" style="color:#c0392b">Otvor – ploča za kuvanje</label></div>
+      <div class="cbrow"><input type="checkbox" id="cb-plo" onchange="tcb('plo');refresh()"><label for="cb-plo" id="lbl-cb-plo" style="color:#c0392b">Otvor – ploča za kuvanje</label></div>
       <div class="cbsub" id="sub-plo">
         <div class="r2">
           <div class="fg"><label>Širina (mm)</label><input type="text" inputmode="decimal" id="plo-w" value="500" min="50" oninput="fixComma(this);refresh()"></div>
@@ -2801,7 +2801,7 @@ function setTip(t){
     var el=ge('tab-'+x); if(el) el.className='tip-tab'+(x===t?' on':'');
   });
   var os=ge('os-wrap'); if(os) os.style.display=(t==='os')?'':'none';
-  if(t==='os'){ try{ buildOstaloPanel(); }catch(e){} }
+  try{ buildOstaloPanel(); }catch(e){}
   // Prebacivanje taba mora prikazati i TABELU POZICIJA, ne samo dugmad
   // podtipa. Bez ovoga klik na "Klupica" pokaze prazan panel dok se ne
   // doda stavka - a dio za unos raznih dimenzija izgleda kao da je nestao.
@@ -2829,6 +2829,12 @@ function _osPodaci(){
   if(!a.ostalo) a.ostalo={naziv:'Ostalo', usl:[]};
   if(!a.ostalo.usl) a.ostalo.usl=[];
   return a.ostalo;
+}
+// Naziv otvora: kod "Ostalo" neutralno (Otvor 1 / Otvor 2)
+function _otvNaziv(prefix){
+  var je=jeOstalo();
+  if(prefix==='sud') return je?'Otvor 1':'sudopere';
+  return je?'Otvor 2':'ploče za kuvanje';
 }
 function jeOstalo(it){
   var a=it||items[activeIdx];
@@ -2872,8 +2878,23 @@ function _osUsluge(it){
   if(!a||!a.ostalo||!a.ostalo.usl) return 0;
   return a.ostalo.usl.reduce(function(z,u){ return z+(_broj(u.cijena)||0); },0);
 }
+// Naslovi u kuhinjskom panelu koji sadrze kuhinjske rijeci. Kod "Ostalo"
+// se mijenjaju u neutralne, jer stavka moze biti polica, obloga, uzglavlje...
+var OS_NASLOVI=[
+  {sel:'sec-hd-oblik', k:'Oblik radne ploče',      o:'Oblik ploče'},
+  {sel:'sec-hd-rad',   k:'Radijus uglova ploče',   o:'Radijus uglova'},
+  {sel:'lbl-cb-sud',   k:'Otvor – sudopera',        o:'Otvor 1'},
+  {sel:'lbl-cb-plo',   k:'Otvor – ploča za kuvanje',o:'Otvor 2'}
+];
+function _osPrimijeniNaslove(){
+  var je=(uiTip==='os');
+  OS_NASLOVI.forEach(function(x){
+    var el=ge(x.sel); if(el) el.textContent=je?x.o:x.k;
+  });
+}
 function buildOstaloPanel(){
   var con=ge('os-wrap'); if(!con) return;
+  _osPrimijeniNaslove();
   if(uiTip!=='os'){ con.style.display='none'; return; }
   con.style.display='';
   var o=_osPodaci();
@@ -4525,7 +4546,7 @@ function _sviOtvoriMM(){
   if(tip!=='k') return out;
   if(gc('cb-sud')){
     var rs=getOtvorRectMM('sud');
-    if(rs.pts) out.push({vrsta:'sud',naziv:'Sudopera',boja:'#1a5fa8',pts:rs.pts,r:rs});
+    if(rs.pts) out.push({vrsta:'sud',naziv:(jeOstalo()?'Otvor 1':'Sudopera'),boja:'#1a5fa8',pts:rs.pts,r:rs});
   }
   if(gc('cb-plo')){
     var rp=getOtvorRectMM('plo');
@@ -6495,8 +6516,10 @@ function calcItemCost(){
       if(v==='polirano') return ', Polirano';
       return ', Bez obrade';
     }
-    if(gc('cb-sud')) rows+=trow('Otvor sudopera '+gi('sud-w')+'×'+gi('sud-h')+' mm'+otvObradaTxt('sud'),'1 kom',_editableUnitPrice(gi('sud-c'),'','setItemFieldPrice',[activeIdx,'sud-c']),f(gi('sud-c')));
-    if(gc('cb-plo')) rows+=trow('Otvor ploča za kuvanje '+gi('plo-w')+'×'+gi('plo-h')+' mm'+otvObradaTxt('plo'),'1 kom',_editableUnitPrice(gi('plo-c'),'','setItemFieldPrice',[activeIdx,'plo-c']),f(gi('plo-c')));
+    // Kod stavke "Ostalo" nema kuhinjskih naziva - samo "Otvor"
+    var _os=jeOstalo();
+    if(gc('cb-sud')) rows+=trow((_os?'Otvor 1 ':'Otvor sudopera ')+gi('sud-w')+'×'+gi('sud-h')+' mm'+otvObradaTxt('sud'),'1 kom',_editableUnitPrice(gi('sud-c'),'','setItemFieldPrice',[activeIdx,'sud-c']),f(gi('sud-c')));
+    if(gc('cb-plo')) rows+=trow((_os?'Otvor 2 ':'Otvor ploča za kuvanje ')+gi('plo-w')+'×'+gi('plo-h')+' mm'+otvObradaTxt('plo'),'1 kom',_editableUnitPrice(gi('plo-c'),'','setItemFieldPrice',[activeIdx,'plo-c']),f(gi('plo-c')));
     (customOtvori||[]).forEach(function(c,ci){
       var dimTxt=c.sides===4?((c.w||0)+'×'+(c.h||0)+' mm')
         :c.sides===3?('š'+(c.w||0)+'×dub'+(c.h||0)+' mm')
@@ -7641,7 +7664,7 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
     if(_rS.pts){
       // Slobodan oblik - otvor prati stranu (moze biti zarotiran).
       // NE koristimo return: ispod slijedi ploca za kuvanje i ostali otvori.
-      drawOtvorPoly(ctx,_rS.pts,sc,'#1a5fa8','Sudopera',gi('sud-w'),gi('sud-h'),
+      drawOtvorPoly(ctx,_rS.pts,sc,'#1a5fa8',(jeOstalo()?'Otvor 1':'Sudopera'),gi('sud-w'),gi('sud-h'),
         '#sub-sud',_vrstaObradeEditDesc('sud'));
       _koteOtvoraUzStranu(ctx,sc,_rS,'sud','#1a5fa8');
     } else {
@@ -7650,16 +7673,16 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
       tl:getSinkRadius('tl'),tr:getSinkRadius('tr'),br:getSinkRadius('br'),bl:getSinkRadius('bl')
     };
     _sudR.tlPx=_sudR.tl*sc;_sudR.trPx=_sudR.tr*sc;_sudR.brPx=_sudR.br*sc;_sudR.blPx=_sudR.bl*sc;
-    drawOtvor(ctx,sx,sy,ssw,ssh,'#1a5fa8','Sudopera',gi('sud-w'),gi('sud-h'),_sudR,gs('sud-t')==='upusteno'?gi('sud-step')*sc:0,['#sud-r-tl-sel','#sud-r-tr-sel','#sud-r-br-sel','#sud-r-bl-sel'],function(key){
-      return {kind:'number',label:'Radijus ugla sudopere ('+key+', mm)',unit:'mm',min:0,step:1,
+    drawOtvor(ctx,sx,sy,ssw,ssh,'#1a5fa8',(jeOstalo()?'Otvor 1':'Sudopera'),gi('sud-w'),gi('sud-h'),_sudR,gs('sud-t')==='upusteno'?gi('sud-step')*sc:0,['#sud-r-tl-sel','#sud-r-tr-sel','#sud-r-br-sel','#sud-r-bl-sel'],function(key){
+      return {kind:'number',label:'Radijus ugla '+_otvNaziv('sud')+' ('+key+', mm)',unit:'mm',min:0,step:1,
         get:function(){return getSinkRadius(key);},
         set:function(v){_setRadiusSelInline('sud-r-'+key,v);}};
     });
     _regClickRect(sx,sy,ssw,ssh,'#sub-sud',_vrstaObradeEditDesc('sud'));
     if(gs('sud-t')==='upusteno') drawUpustenoSymbol(ctx,sx+ssw-13,sy+13,'#1a5fa8',gi('sud-dub'),gi('sud-step'));
     // Dimenzije otvora
-    kota(ctx,sx,sy-22,sx+ssw,sy-22,gi('sud-w')+' mm',_inputEditDesc('sud-w','Širina sudopere'),'#sud-w');
-    kota(ctx,sx+ssw+18,sy,sx+ssw+18,sy+ssh,gi('sud-h')+' mm',_inputEditDesc('sud-h','Visina sudopere'),'#sud-h');
+    kota(ctx,sx,sy-22,sx+ssw,sy-22,gi('sud-w')+' mm',_inputEditDesc('sud-w','Širina '+_otvNaziv('sud')),'#sud-w');
+    kota(ctx,sx+ssw+18,sy,sx+ssw+18,sy+ssh,gi('sud-h')+' mm',_inputEditDesc('sud-h','Visina '+_otvNaziv('sud')),'#sud-h');
     // Kote pozicije IDU OD STVARNE REFERENTNE IVICE tog kraka (ne od
     // bounding boxa) i prate izbor lijeva/desna odnosno prednja/zadnja.
     _kotePozicijeOtvora(ctx,sc,_rS,'sud','#1a5fa8',22,38);
@@ -7688,8 +7711,8 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
     _regClickRect(px2,py2,ppw,pph,'#sub-plo',_vrstaObradeEditDesc('plo'));
     if(gs('plo-t')==='upusteno') drawUpustenoSymbol(ctx,px2+ppw-13,py2+13,'#c0392b',gi('plo-dub'),gi('plo-step'));
     // Dimenzije otvora
-    kota(ctx,px2,py2+pph+18,px2+ppw,py2+pph+18,gi('plo-w')+' mm',_inputEditDesc('plo-w','Širina ploče za kuvanje'),'#plo-w');
-    kota(ctx,px2-22,py2,px2-22,py2+pph,gi('plo-h')+' mm',_inputEditDesc('plo-h','Visina ploče za kuvanje'),'#plo-h');
+    kota(ctx,px2,py2+pph+18,px2+ppw,py2+pph+18,gi('plo-w')+' mm',_inputEditDesc('plo-w','Širina '+_otvNaziv('plo')),'#plo-w');
+    kota(ctx,px2-22,py2,px2-22,py2+pph,gi('plo-h')+' mm',_inputEditDesc('plo-h','Visina '+_otvNaziv('plo')),'#plo-h');
     _kotePozicijeOtvora(ctx,sc,_rP,'plo','#c0392b',42,58);
     }
   }
