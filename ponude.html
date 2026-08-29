@@ -6382,6 +6382,41 @@ function _ivDijelovi(segId,duz){
 }
 // Susjedne strane - one koje se dodiruju sa ovom u uglovima. Sluze da se
 // kaze OD KOJE strane se mjeri, jer "prvih 500 mm" ne kaze sa kog kraja.
+// Klik na simbol obrade dijela na crtezu - mijenja vrstu obrade tog dijela
+function _ivDioProfEditDesc(segId,idx){
+  var st=ivSt[segId]||{};
+  var uk=(st.dio&&st.dio.length)||0;
+  return {kind:'select',
+    label:'Strana '+segId.charAt(0)+' — obrada dijela '+(idx+1)+'/'+uk,
+    options:Object.keys(PLbl).map(function(pp){
+      return {value:pp,label:PSym[pp]+' '+PLbl[pp]};
+    }),
+    get:function(){
+      var s2=ivSt[segId];
+      return (s2&&s2.dio&&s2.dio[idx])?(s2.dio[idx].prof||'none'):'none';
+    },
+    set:function(v){ ivDioProf(segId,idx,v); }};
+}
+// Klik na kotu dijela - mijenja njegovu duzinu
+function _ivDioDuzEditDesc(segId,idx){
+  var st=ivSt[segId]||{};
+  var uk=(st.dio&&st.dio.length)||0;
+  var zadnji=(idx===uk-1);
+  return {kind:'number',
+    label:'Strana '+segId.charAt(0)+' — dužina dijela '+(idx+1)+'/'+uk
+      +(zadnji?' (ostatak)':''),
+    unit:'mm', min:1, step:5,
+    get:function(){
+      var s2=ivSt[segId];
+      if(!s2||!s2.dio||!s2.dio[idx]) return 0;
+      if(s2.dio[idx].d==null){
+        var d=_ivDijelovi(segId,_ivDuzinaStrane(segId));
+        return d[idx]?Math.round(d[idx].d):0;
+      }
+      return s2.dio[idx].d;
+    },
+    set:function(v){ ivDioDuz(segId,idx,v); }};
+}
 function _ivSusjedi(segId){
   var ivShape=(tip==='kl')?'kl':(tip==='st'?'st':shape);
   var segs=getIvSegs(ivShape,dims);
@@ -7294,8 +7329,26 @@ function _drawKotaRaw(ctx,x1,y1,x2,y2,lbl,offH,offV,editDesc,sel){
   ctx.restore();
 }
 
+// Prepreke koje kote MORAJU zaobici - simboli obrade, oznake radijusa i
+// slicno. Registruju se tokom crtanja, a _flushKotes ih uzima u obzir.
+var _kotaPrepreke=[];
+function _kotaPrepreka(x,y,r){
+  // BEZ uslova - simbol se cesto crta PRIJE prve kote, pa bi provjera na
+  // _kotaCtx preskocila prepreku i kota bi pala preko simbola.
+  var a=_toAbsXY(x,y);
+  _kotaPrepreke.push({x:a.x, y:a.y, r:r||10});
+  if(_kotaPrepreke.length>400) _kotaPrepreke.shift();
+}
+// Da li bi natpis kote pao preko neke prepreke
+function _kotaSudar(cx,cy,pol){
+  for(var i=0;i<_kotaPrepreke.length;i++){
+    var p=_kotaPrepreke[i];
+    if(Math.abs(cx-p.x)<(p.r+pol) && Math.abs(cy-p.y)<(p.r+11)) return p;
+  }
+  return null;
+}
 function _flushKotes(){
-  if(!_kotaCtx||!_kotaQueue.length) return;
+  if(!_kotaCtx||!_kotaQueue.length){ _kotaPrepreke.length=0; return; }
   var ctx=_kotaCtx;
   var MIN_GAP=22; // minimalni razmak px između linija kota
 
@@ -7348,9 +7401,35 @@ function _flushKotes(){
 
   // Nacrtaj sve kote sa prilagođenim offsetima
   _kotaQueue.forEach(function(k){
-    _drawKotaRaw(ctx,k.x1,k.y1,k.x2,k.y2,k.lbl,k.offH||0,k.offV||0,k.edit,k.sel);
+    // Ako bi natpis pao preko simbola obrade, pomjeri kotu dalje. Trazi se
+    // prvi slobodan pomak, u koracima od 14 px, do 6 pokusaja.
+    // Trazi pomak na kojem natpis ne dira nijedan simbol. Probaju se OBA
+    // smjera i vise rastojanja - kod slozenih oblika (U, G) je jedan smjer
+    // cesto zauzet susjednom stranom.
+    var _oH=k.offH||0, _oV=k.offV||0;
+    var _pol=Math.max(18,String(k.lbl||'').length*4.2);
+    var _bazaH=_oH, _bazaV=_oV;
+    // VAZNO: offH pomjera VODORAVNU kotu po Y, a offV USPRAVNU po X
+    // (vidi _drawKotaRaw). Zamjena osi je ranije davala pomak u pogresnom
+    // smjeru, pa se sudar nije rjesavao.
+    var _kand=[[_bazaH,_bazaV]];
+    for(var _d=1;_d<=10;_d++){
+      var _p=_d*16;
+      if(k.vert) _kand.push([_bazaH,_bazaV+_p],[_bazaH,_bazaV-_p]);
+      else       _kand.push([_bazaH+_p,_bazaV],[_bazaH-_p,_bazaV]);
+    }
+    for(var _t=0;_t<_kand.length;_t++){
+      var _cH=_kand[_t][0], _cV=_kand[_t][1];
+      var _sx=(k.x1+k.x2)/2+(k.vert?_cV:0);
+      var _sy=(k.y1+k.y2)/2+(k.vert?0:_cH);
+      var _a=_toAbsXY(_sx,_sy);
+      if(!_kotaSudar(_a.x,_a.y,_pol)){ _oH=_cH; _oV=_cV; break; }
+      if(_t===_kand.length-1){ _oH=_kand[1][0]; _oV=_kand[1][1]; }
+    }
+    _drawKotaRaw(ctx,k.x1,k.y1,k.x2,k.y2,k.lbl,_oH,_oV,k.edit,k.sel);
   });
   _kotaQueue=[];
+  _kotaPrepreke.length=0;
   _kotaCtx=null;
 }
 
@@ -7435,6 +7514,7 @@ function edgeLbl(ctx,x,y,lbl,segId,orient){
   ctx.fillRect(x-tw/2,y-9,tw,18);
   ctx.fillStyle='#1a5fa8';
   ctx.fillText(lbl,x,y);
+  _kotaPrepreka(x,y,13);   // kote moraju zaobici slovo strane
   if(segId){
     var _stE=ivSt[segId]||{};
     var prof=_stE.prof||'none';
@@ -8652,7 +8732,7 @@ function drawK(ctx,W,H){
           var _od=26;   // koliko je kota odmaknuta od ivice
           // Kota duzine ovog dijela
           kota(ctx,_x1+_nx*_od,_y1+_ny*_od,_x2+_nx*_od,_y2+_ny*_od,
-               fmtMm(iv.duz)+' mm');
+               fmtMm(iv.duz)+' mm', _ivDioDuzEditDesc(iv.id,iv.dio));
           // Granicna crtica na pocetku dijela
           ctx.save();
           ctx.strokeStyle='#b8860b'; ctx.lineWidth=1.4; ctx.setLineDash([3,2]);
@@ -8667,8 +8747,14 @@ function drawK(ctx,W,H){
             ctx.stroke();
           }
           ctx.setLineDash([]);
-          // Simbol obrade na sredini dijela, van ploce
-          var _tx=_sx+_nx*(_od+13), _ty=_sy+_ny*(_od+13);
+          // Simbol se crta VAN ploce, ali pomjeren DUZ ivice na cetvrtinu
+          // dijela - natpis kote stoji na sredini, pa se ne poklapaju.
+          // (Ni unutra ne moze: kod U i G oblika tamo su kote unutrasnjih
+          // krakova.)
+          var _ux=_dx/_dl, _uy=_dy/_dl;
+          var _pom=Math.min(Math.max(_dl*0.25,14),_dl/2-2);
+          var _tx=_x1+_ux*_pom+_nx*(_od+13);
+          var _ty=_y1+_uy*_pom+_ny*(_od+13);
           ctx.font='bold 12px Segoe UI,Arial';
           ctx.textAlign='center'; ctx.textBaseline='middle';
           ctx.fillStyle='#fff';
@@ -8684,6 +8770,13 @@ function drawK(ctx,W,H){
           ctx.fillStyle='#b8860b';
           ctx.fillText(String(iv.dio+1),_tx+11,_ty-7.5);
           ctx.restore();
+          // Kote moraju zaobici simbol i broj dijela
+          _kotaPrepreka(_tx,_ty,15);
+          _kotaPrepreka(_tx+11,_ty-8,10);
+          // KLIK NA SIMBOL mijenja obradu tog dijela, a klik na kotu
+          // mijenja njegovu duzinu - oboje direktno sa crteza.
+          _regClickRect(_tx-11,_ty-11,22,22,'.iv-row-'+iv.id,
+            _ivDioProfEditDesc(iv.id,iv.dio));
         }
         // Oznaka odakle se mjeri (nulta tacka)
         if(iv.dio===0&&si===0){
@@ -8696,6 +8789,7 @@ function drawK(ctx,W,H){
           ctx.textAlign='center'; ctx.textBaseline='middle';
           ctx.fillText('0',_zx,_zy+0.5);
           ctx.restore();
+          _kotaPrepreka(_zx,_zy,10);
         }
       });
     });
@@ -9126,6 +9220,7 @@ function _crtajStranuPozicija(ctx,W,lista,m,strIdx,brStr,svi){
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText('R'+rmm,sx2,sy2);
         ctx.restore();
+        _kotaPrepreka(sx2,sy2,13);
       }
     });
 
@@ -9171,6 +9266,7 @@ function _crtajStranuPozicija(ctx,W,lista,m,strIdx,brStr,svi){
       ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillStyle=(pr&&pr!=='none')?'#1a5fa8':'#c8d2dd';
       ctx.fillText(sd.lbl+((pr&&pr!=='none')?(' '+PSym[pr]):''),tx2,ty2);
+      _kotaPrepreka(tx2,ty2,12);
       if(dj){
         ctx.font='bold 8.5px Segoe UI,Arial'; ctx.fillStyle='#8a6d3b';
         ctx.fillText(d+'mm',tx2,ty2+10);
@@ -11407,6 +11503,30 @@ async function _cloudSaveCore(){
   // 2. Red u tabeli: ako vec postoji -> IZMIJENI ga, ne pravi novi
   const kupac = (document.getElementById('kl-ime')||{}).value.trim()||null;
   const telo = { naziv, kupac, link_json: d1.link };
+
+  // Naziv je JEDINSTVEN kljuc ponude. Ako je id iz nekog razloga izgubljen
+  // (stara lista, server nije vratio id), trazi se red po NAZIVU - inace bi
+  // svako cuvanje pravilo novi red sa istim imenom i lista bi se napunila
+  // kopijama.
+  if(!(_ponudaInfo && _ponudaInfo.id)){
+    try{
+      const rl = await fetch(API_URL+'/api/ponude');
+      if(rl.ok){
+        const lista = await rl.json().catch(function(){return null;});
+        const niz = Array.isArray(lista) ? lista : ((lista&&lista.ponude)||[]);
+        const isti = niz.filter(function(x){ return x && x.naziv===naziv; });
+        if(isti.length){
+          // Zadrzi najstariji, obrisi eventualne ranije kopije
+          isti.sort(function(a,b){ return (a.id||0)-(b.id||0); });
+          _ponudaInfo = { id: isti[0].id, naziv: naziv };
+          for(var q=1;q<isti.length;q++){
+            try{ await fetch(API_URL+'/api/ponude/'+isti[q].id,{method:'DELETE'}); }catch(e){}
+          }
+        }
+      }
+    }catch(e){ /* lista nedostupna - nastavlja se kao i do sad */ }
+  }
+
   if(_ponudaInfo && _ponudaInfo.id){
     const rp = await fetch(API_URL+'/api/ponude/'+_ponudaInfo.id,{
       method:'PATCH', headers:{'Content-Type':'application/json'},
@@ -11472,6 +11592,22 @@ async function cloudLoad(){
 }
 
 function _prikaziListuPonuda(lista){
+  // Grupisi po NAZIVU - ako je ranija greska ostavila kopije istog imena,
+  // prikazi samo jednu (najnoviju) i ponudi ciscenje viska.
+  var poNazivu={};
+  (lista||[]).forEach(function(p){
+    if(!p||!p.naziv) return;
+    (poNazivu[p.naziv]=poNazivu[p.naziv]||[]).push(p);
+  });
+  var visak=[], cista=[];
+  Object.keys(poNazivu).forEach(function(nz){
+    var grupa=poNazivu[nz].slice().sort(function(a,b){ return (b.id||0)-(a.id||0); });
+    cista.push(grupa[0]);
+    for(var i=1;i<grupa.length;i++) visak.push(grupa[i]);
+  });
+  cista.sort(function(a,b){ return (b.id||0)-(a.id||0); });
+  _visakPonuda=visak;
+  lista=cista;
   // Ukloni stari modal ako postoji
   const stari = document.getElementById('cloud-modal');
   if(stari) stari.remove();
@@ -11486,6 +11622,7 @@ function _prikaziListuPonuda(lista){
         <div style="display:flex;gap:6px;align-items:center;">
           <button onclick="cloudLoad()" title="Ponovo učitaj listu sa servera"
             style="font:inherit;font-size:11px;padding:5px 10px;background:#eef4fb;color:#1a5fa8;border:1px solid #1a5fa8;border-radius:5px;cursor:pointer;">⟳ Osvježi</button>
+          ${_visakPonuda.length?`<button onclick="_ocistiKopije()" title="Ranije greške su ostavile kopije istih ponuda" style="font:inherit;font-size:11px;padding:5px 10px;background:#fff3e0;color:#c0392b;border:1px solid #c0392b;border-radius:5px;cursor:pointer;">Obriši ${_visakPonuda.length} kopija</button>`:''}
           <button onclick="document.getElementById('cloud-modal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
         </div>
       </div>
@@ -11515,6 +11652,24 @@ function _prikaziListuPonuda(lista){
   document.body.appendChild(modal);
 }
 
+var _visakPonuda=[];
+// Brise visak redova sa istim nazivom (posljedica ranije greske u cuvanju)
+async function _ocistiKopije(){
+  if(!_visakPonuda.length) return;
+  if(!confirm('Obrisati '+_visakPonuda.length+' kopij'
+    +(_visakPonuda.length===1?'u':'a')+' ponuda sa istim nazivom?\n\n'
+    +'Najnovija verzija svake ponude OSTAJE.')) return;
+  var gr=0;
+  for(var i=0;i<_visakPonuda.length;i++){
+    try{
+      var r=await fetch(API_URL+'/api/ponude/'+_visakPonuda[i].id,{method:'DELETE'});
+      if(!r.ok) gr++;
+    }catch(e){ gr++; }
+  }
+  _visakPonuda=[];
+  alert(gr?('Obrisano, ali '+gr+' nije uspjelo.'):'Kopije obrisane.');
+  cloudLoad();
+}
 async function _ucitajPonudu(linkJson, naziv, ponudaId){
   if(!linkJson){ alert('Nema linka za učitavanje.'); return; }
   try{
