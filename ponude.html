@@ -6480,17 +6480,29 @@ function ivDioDodaj(segId){
   var st=ivSt[segId]||(ivSt[segId]={prof:'none'});
   var duz=_ivDuzinaStrane(segId);
   if(!st.dio||!st.dio.length){
-    // Prvi put: postojeca obrada postaje prvi dio (pola strane), ostatak bez
-    st.dio=[{d:Math.round(duz/2), prof:st.prof||'none'},{d:null, prof:'none'}];
+    // Prvi put: postojeca obrada postaje prvi dio (pola strane), ostatak bez.
+    // Obrada CIJELE strane se PONISTAVA - strana vise nema jedinstvenu
+    // obradu, isto kao sto izbor jedne obrade ponistava podjelu.
+    var pocetna=st.prof||'none';
+    st.dio=[{d:Math.round(duz/2), prof:pocetna},{d:null, prof:'none'}];
+    st.prof='none';
+    st.chk=false;
   } else {
-    st.dio.splice(st.dio.length-1,0,{d:Math.round(duz/4), prof:st.prof||'none'});
+    // Novi dio nasljedjuje obradu prvog dijela, ne cijele strane
+    var uzor=(st.dio[0]&&st.dio[0].prof)||'none';
+    st.dio.splice(st.dio.length-1,0,{d:Math.round(duz/4), prof:uzor});
   }
   syncToActive(); buildIvice(); refresh();
 }
 function ivDioUkloni(segId,idx){
   var st=ivSt[segId]; if(!st||!st.dio) return;
   st.dio.splice(idx,1);
-  if(st.dio.length<=1) delete st.dio;   // nazad na cijelu stranu
+  if(st.dio.length<=1){
+    // Ostao je samo jedan dio - to je opet cijela strana
+    var prof=(st.dio[0]&&st.dio[0].prof)||'none';
+    delete st.dio; delete st.smjer;
+    st.prof=prof; st.chk=(prof!=='none');
+  }
   syncToActive(); buildIvice(); refresh();
 }
 function ivDioProf(segId,idx,prof){
@@ -6505,7 +6517,13 @@ function ivDioDuz(segId,idx,val){
 }
 function ivCijelaStrana(segId){
   var st=ivSt[segId]; if(!st) return;
-  delete st.dio;
+  // Povratak na cijelu stranu: uzima se obrada PRVOG dijela, da se ne
+  // izgubi ono sto je vec izabrano (obrada cijele strane je pri podjeli
+  // bila ponistena).
+  var prvi=(st.dio&&st.dio[0]&&st.dio[0].prof)||'none';
+  delete st.dio; delete st.smjer;
+  st.prof=prvi;
+  st.chk=(prvi!=='none');
   syncToActive(); buildIvice(); refresh();
 }
 function _ivDuzinaStrane(segId){
