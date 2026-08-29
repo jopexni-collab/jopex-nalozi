@@ -5712,10 +5712,15 @@ function getRezData(){
 function _ivRowHTML(s,bojaSlova,dodatniStil){
   var st=ivSt[s.id]||{prof:'none'};
   var curProf=st.prof||'none', curRez=st.rez||'none';
+  var _pod=!!(st.dio&&st.dio.length);
   var m=(Math.max(0,s.len)/1000).toFixed(2);
-  var optsProf=Object.keys(PLbl).map(function(p){
-    return '<option value="'+p+'"'+(p===curProf?' selected':'')+'>'+PSym[p]+' '+PLbl[p]+'</option>';
-  }).join('');
+  var optsProf=(_pod
+    ? '<option value="__pod" selected>\u2702 Podijeljena — vidi dijelove</option>'
+    : '')
+    +Object.keys(PLbl).map(function(p){
+      return '<option value="'+p+'"'+((!_pod&&p===curProf)?' selected':'')+'>'
+        +PSym[p]+' '+PLbl[p]+'</option>';
+    }).join('');
   var optsRez=Object.keys(RezLbl).map(function(p){
     return '<option value="'+p+'"'+(p===curRez?' selected':'')+'>'+RezSym[p]+' '+RezLbl[p]+'</option>';
   }).join('');
@@ -5801,6 +5806,16 @@ function _ivRowHTML(s,bojaSlova,dodatniStil){
 }
 
 function updateIviceProfile(segId,prof){
+  if(prof==='__pod') return;   // oznaka "podijeljena" - nije stvarni izbor
+  // Izbor jedne obrade za CIJELU stranu ponistava podjelu: strana ne moze
+  // istovremeno biti podijeljena i imati jednu obradu preko cijele duzine.
+  var _s0=ivSt[segId];
+  if(_s0&&_s0.dio&&_s0.dio.length){
+    if(!confirm('Strana je podijeljena na '+_s0.dio.length+' dijela.\n\n'
+      +'Izborom jedne obrade podjela se PONI\u0160TAVA i cijela strana dobija '
+      +'tu obradu.\n\nNastaviti?')){ buildIvice(); return; }
+    delete _s0.dio; delete _s0.smjer;
+  }
   var _st=_ivGet(segId);
   _st.chk=prof!=='none'; _st.prof=prof;   // NE brise rez/rezC/ugao te strane
   // KRITIČNO: refresh() SAMO preračunava cijene i ponovo crta canvas - NE
@@ -6443,6 +6458,13 @@ function ivSmjer(segId,v){
 function _ivPodijeljena(segId){
   var st=ivSt[segId]||{};
   return !!(st.dio&&st.dio.length);
+}
+// Obrada strane KAO CJELINE. Podijeljena strana NEMA jedinstvenu obradu -
+// vraca 'podijeljena', da je nista ne prikazuje kao npr. "cijela C obrada".
+function _ivProfCjeline(segId){
+  var st=ivSt[segId]||{};
+  if(st.dio&&st.dio.length) return 'podijeljena';
+  return st.prof||'none';
 }
 // Kratak opis za prikaz: "500 mm ◗ · ostatak ―"
 function _ivDioOpis(segId,duz){
@@ -8755,24 +8777,18 @@ function drawK(ctx,W,H){
           var _pom=Math.min(Math.max(_dl*0.25,14),_dl/2-2);
           var _tx=_x1+_ux*_pom+_nx*(_od+13);
           var _ty=_y1+_uy*_pom+_ny*(_od+13);
-          ctx.font='bold 12px Segoe UI,Arial';
-          ctx.textAlign='center'; ctx.textBaseline='middle';
-          ctx.fillStyle='#fff';
-          ctx.beginPath(); ctx.arc(_tx,_ty,9,0,Math.PI*2); ctx.fill();
-          ctx.strokeStyle='#1a5fa8'; ctx.lineWidth=1.2; ctx.stroke();
-          ctx.fillStyle='#1a5fa8';
-          ctx.fillText(PSym[iv.prof]||'?',_tx,_ty+0.5);
-          // Redni broj dijela u malom krugu uz simbol
+          // ISTI simbol kakav stoji uz slovo strane kod neprodijeljenih
+          // strana - da se crtez cita jednako u oba slucaja.
+          drawProfSymbol(ctx,_tx,_ty,iv.prof);
+          // Redni broj dijela sitno uz simbol
           ctx.font='bold 8px Segoe UI,Arial';
-          ctx.fillStyle='#fff';
-          ctx.beginPath(); ctx.arc(_tx+11,_ty-8,6,0,Math.PI*2); ctx.fill();
-          ctx.strokeStyle='#b8860b'; ctx.lineWidth=1; ctx.stroke();
+          ctx.textAlign='center'; ctx.textBaseline='middle';
           ctx.fillStyle='#b8860b';
-          ctx.fillText(String(iv.dio+1),_tx+11,_ty-7.5);
+          ctx.fillText(String(iv.dio+1),_tx,_ty-13);
           ctx.restore();
           // Kote moraju zaobici simbol i broj dijela
-          _kotaPrepreka(_tx,_ty,15);
-          _kotaPrepreka(_tx+11,_ty-8,10);
+          _kotaPrepreka(_tx,_ty,16);
+          _kotaPrepreka(_tx,_ty-13,10);
           // KLIK NA SIMBOL mijenja obradu tog dijela, a klik na kotu
           // mijenja njegovu duzinu - oboje direktno sa crteza.
           _regClickRect(_tx-11,_ty-11,22,22,'.iv-row-'+iv.id,
@@ -8875,7 +8891,7 @@ function drawK(ctx,W,H){
     // ispod pune linije kod obrađene strane.
     function _drawExtSeg(segId,px1,py1,px2,py2){
       var st=ivSt[segId];
-      var treated=!!(st&&st.prof&&st.prof!=='none');
+      var treated=!!(st&&((st.dio&&st.dio.length)||(st.prof&&st.prof!=='none')));
       if(treated){
         ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.lineCap='butt';ctx.setLineDash([]);
         ctx.beginPath();ctx.moveTo(px1,py1);ctx.lineTo(px2,py2);ctx.stroke();
@@ -9394,7 +9410,7 @@ function drawKlSematski(ctx,W,H){
   //   D (zadnja, uz prozor) = GORE     A (prednja, vidljiva) = DOLJE
   var geo={'D-pred':[0,0,A,0],'B-lev':[0,B,0,0],'C-des':[A,B,A,0],'A-zad':[0,B,A,B]};
   // Puna linija = obradjena strana; kod djelimicne obrade samo dio
-  var pod=function(id){ var st=ivSt[id]; return (st&&st.prof)||'none'; };
+  var pod=function(id){ return _ivProfCjeline(id); };
   // Da li SVE pozicije imaju istu obradu te strane
   var jedinstveno=function(id){
     var v=(pozicije||[]).map(function(p){return _pozProf(p,id);});
