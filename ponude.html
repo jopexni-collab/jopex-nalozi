@@ -5628,8 +5628,21 @@ function _ivRowHTML(s,bojaSlova,dodatniStil){
   var _st2=ivSt[s.id]||{};
   if(_st2.dio&&_st2.dio.length){
     var _d=_ivDijelovi(s.id,_duz);
+    var _sus=_ivSusjedi(s.id);
+    var _obr=_ivObrnuto(s.id);
+    var _odLbl=_obr?_sus.kraj:_sus.pocetak;
+    var _kaLbl=_obr?_sus.pocetak:_sus.kraj;
     h+='<div style="margin-top:5px;padding:6px 8px;background:#fdf8ef;'
       +'border:1px solid #e8d9bd;border-radius:5px">'
+      +'<div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;flex-wrap:wrap">'
+      +'<span style="font-size:10px;color:#8a6d3b">mjeri se od strane</span>'
+      +'<select onchange="ivSmjer(\''+s.id+'\',this.value)" style="font:inherit;font-size:10.5px;'
+      +'padding:2px 5px;border:1px solid #b8860b;border-radius:3px;font-weight:700;color:#8a6d3b">'
+      +'<option value="naprijed"'+(_obr?'':' selected')+'>'+_sus.pocetak+'<\/option>'
+      +'<option value="nazad"'+(_obr?' selected':'')+'>'+_sus.kraj+'<\/option>'
+      +'</select>'
+      +'<span style="font-size:10px;color:#8a6d3b">prema <b>'+_kaLbl+'</b></span>'
+      +'</div>'
       +'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
       +'<b style="font-size:9.5px;color:#8a6d3b;letter-spacing:.4px">DIJELOVI STRANE</b>'
       +'<button type="button" onclick="ivCijelaStrana(\''+s.id+'\')" '
@@ -5638,7 +5651,8 @@ function _ivRowHTML(s,bojaSlova,dodatniStil){
     _st2.dio.forEach(function(x,xi){
       var zadnji=(xi===_st2.dio.length-1);
       h+='<div style="display:flex;gap:4px;align-items:center;margin-bottom:3px">'
-        +'<span style="font-size:9.5px;color:#8a6d3b;min-width:12px">'+(xi+1)+'.</span>'
+        +'<span style="font-size:9.5px;color:#8a6d3b;min-width:12px" '
+        +'title="'+(xi===0?('po\u010dinje od '+_odLbl):'nastavlja se')+'">'+(xi+1)+'.</span>'
         +(zadnji
           ? '<span style="font-size:10px;color:#8a93a3;width:74px">ostatak '
             +fmtMm(_d[xi]?_d[xi].d:0)+' mm</span>'
@@ -6256,6 +6270,30 @@ function _ivDijelovi(segId,duz){
   if(ostalo>0.5) out.push({d:ostalo, prof:'none'});
   return out;
 }
+// Susjedne strane - one koje se dodiruju sa ovom u uglovima. Sluze da se
+// kaze OD KOJE strane se mjeri, jer "prvih 500 mm" ne kaze sa kog kraja.
+function _ivSusjedi(segId){
+  var ivShape=(tip==='kl')?'kl':(tip==='st'?'st':shape);
+  var segs=getIvSegs(ivShape,dims);
+  var i=-1;
+  for(var k=0;k<segs.length;k++) if(segs[k].id===segId){ i=k; break; }
+  if(i<0) return {pocetak:'?', kraj:'?'};
+  var n=segs.length;
+  return {
+    pocetak:(segs[(i-1+n)%n]||{}).lbl||'?',   // ugao na pocetku strane
+    kraj:   (segs[(i+1)%n]||{}).lbl||'?'      // ugao na kraju strane
+  };
+}
+// Da li se mjeri od kraja umjesto od pocetka
+function _ivObrnuto(segId){
+  var st=ivSt[segId]||{};
+  return st.smjer==='nazad';
+}
+function ivSmjer(segId,v){
+  var st=ivSt[segId]; if(!st) return;
+  if(v==='nazad') st.smjer='nazad'; else delete st.smjer;
+  syncToActive(); buildIvice(); refresh();
+}
 // Da li strana ima podijeljenu obradu (vise dijelova ili nepotpunu)
 function _ivPodijeljena(segId){
   var st=ivSt[segId]||{};
@@ -6322,9 +6360,11 @@ function getIvData(){
     var duz=Math.max(0,s.len);
     var dijelovi=_ivDijelovi(s.id,duz);
     var podijeljena=(dijelovi.length>1||!dijelovi[0].cio);
+    var obrnuto=_ivObrnuto(s.id);
     var pocetak=0;
     dijelovi.forEach(function(x,xi){
-      var pocetakOvog=pocetak;
+      // Kad se mjeri OD DRUGOG KRAJA, dio se racuna unazad
+      var pocetakOvog=obrnuto?(duz-pocetak-x.d):pocetak;
       pocetak+=x.d;
       if(!x.prof||x.prof==='none') return;
       var m=Math.max(0,x.d)/1000;
@@ -6333,10 +6373,19 @@ function getIvData(){
       var uk=Math.round(m*price*100)/100;
       // baseLbl je ORIGINALNO slovo strane - crtanje ga koristi za spajanje
       // sa geometrijom. lbl je opisni naziv za ponudu i nalog.
+      var _sus2=podijeljena?_ivSusjedi(s.id):null;
+      var _odS=_sus2?(obrnuto?_sus2.kraj:_sus2.pocetak):'';
+      // Za PRIKAZ se rastojanje mjeri od izabrane strane (0 na tom kraju),
+      // a ne od pocetka konture - inace bi kod obrnutog smjera prvi dio
+      // pisao "2500-3000" umjesto "0-500".
+      var _relOd=pocetak-x.d, _relDo=pocetak;
       res.push({id:s.id, baseLbl:s.lbl,
-        lbl:(s.fullLbl||s.lbl)+(podijeljena?(' – dio '+(xi+1)+'/'+dijelovi.length):''),
+        lbl:(s.fullLbl||s.lbl)
+          +(podijeljena?(' – od '+_odS+' '+fmtMm(_relOd)+'–'
+            +fmtMm(_relDo)+' mm'):''),
         profLbl:PLbl[x.prof]||x.prof, prof:x.prof, m:m, ic:price, uk:uk,
-        od:pocetakOvog, duz:x.d, ukupnaDuz:duz, dio:podijeljena?xi:null});
+        od:pocetakOvog, duz:x.d, ukupnaDuz:duz, dio:podijeljena?xi:null,
+        zadnji:(xi===dijelovi.length-1)});
     });
   });
   return res;
@@ -8478,6 +8527,63 @@ function drawK(ctx,W,H){
           ax=_nax; ay=_nay; bx=_nbx; by=_nby;
         }
         drawIv(ctx,ax*sc,ay*sc,bx*sc,by*sc,iv.prof);
+        // ── PODIJELJENA STRANA: kota + simbol obrade za SVAKI dio ──
+        if(iv.dio!=null&&si===0){
+          var _x1=ax*sc, _y1=ay*sc, _x2=bx*sc, _y2=by*sc;
+          var _dx=_x2-_x1, _dy=_y2-_y1, _dl=Math.hypot(_dx,_dy)||1;
+          // Normala prema VAN ploce (dalje od sredista)
+          var _cx=(A*sc)/2, _cy=(B*sc)/2;
+          var _sx=(_x1+_x2)/2, _sy=(_y1+_y2)/2;
+          var _nx=-_dy/_dl, _ny=_dx/_dl;
+          if((_sx-_cx)*_nx+(_sy-_cy)*_ny<0){ _nx=-_nx; _ny=-_ny; }
+          var _od=26;   // koliko je kota odmaknuta od ivice
+          // Kota duzine ovog dijela
+          kota(ctx,_x1+_nx*_od,_y1+_ny*_od,_x2+_nx*_od,_y2+_ny*_od,
+               fmtMm(iv.duz)+' mm');
+          // Granicna crtica na pocetku dijela
+          ctx.save();
+          ctx.strokeStyle='#b8860b'; ctx.lineWidth=1.4; ctx.setLineDash([3,2]);
+          ctx.beginPath();
+          ctx.moveTo(_x1-_nx*5,_y1-_ny*5);
+          ctx.lineTo(_x1+_nx*(_od+5),_y1+_ny*(_od+5));
+          ctx.stroke();
+          if(iv.zadnji){
+            ctx.beginPath();
+            ctx.moveTo(_x2-_nx*5,_y2-_ny*5);
+            ctx.lineTo(_x2+_nx*(_od+5),_y2+_ny*(_od+5));
+            ctx.stroke();
+          }
+          ctx.setLineDash([]);
+          // Simbol obrade na sredini dijela, van ploce
+          var _tx=_sx+_nx*(_od+13), _ty=_sy+_ny*(_od+13);
+          ctx.font='bold 12px Segoe UI,Arial';
+          ctx.textAlign='center'; ctx.textBaseline='middle';
+          ctx.fillStyle='#fff';
+          ctx.beginPath(); ctx.arc(_tx,_ty,9,0,Math.PI*2); ctx.fill();
+          ctx.strokeStyle='#1a5fa8'; ctx.lineWidth=1.2; ctx.stroke();
+          ctx.fillStyle='#1a5fa8';
+          ctx.fillText(PSym[iv.prof]||'?',_tx,_ty+0.5);
+          // Redni broj dijela u malom krugu uz simbol
+          ctx.font='bold 8px Segoe UI,Arial';
+          ctx.fillStyle='#fff';
+          ctx.beginPath(); ctx.arc(_tx+11,_ty-8,6,0,Math.PI*2); ctx.fill();
+          ctx.strokeStyle='#b8860b'; ctx.lineWidth=1; ctx.stroke();
+          ctx.fillStyle='#b8860b';
+          ctx.fillText(String(iv.dio+1),_tx+11,_ty-7.5);
+          ctx.restore();
+        }
+        // Oznaka odakle se mjeri (nulta tacka)
+        if(iv.dio===0&&si===0){
+          ctx.save();
+          var _zx=ax*sc, _zy=ay*sc;
+          ctx.beginPath(); ctx.arc(_zx,_zy,5.5,0,Math.PI*2);
+          ctx.fillStyle='#fff'; ctx.fill();
+          ctx.strokeStyle='#b8860b'; ctx.lineWidth=1.5; ctx.stroke();
+          ctx.fillStyle='#b8860b'; ctx.font='bold 8px Segoe UI,Arial';
+          ctx.textAlign='center'; ctx.textBaseline='middle';
+          ctx.fillText('0',_zx,_zy+0.5);
+          ctx.restore();
+        }
       });
     });
     // Klikabilne zone za SVE ivice (i one bez obrade - korisnik treba moći
