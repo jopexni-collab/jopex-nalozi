@@ -2061,6 +2061,7 @@ function loadItemInputs(){
   }
   var _sn=ge('stavka-naziv');
   if(_sn) _sn.value=(_a&&_a.naziv)?_a.naziv:'';
+  try{ _osPrimijeniNaslove(); }catch(e){}
   var _wkl=ge('kl-poz-wrap'); if(_wkl) _wkl.style.display=(tip==='kl')?'':'none';
   var _wst=ge('st-poz-wrap'); if(_wst) _wst.style.display=gc('cb-st-poz')?'':'none';
 }
@@ -2927,9 +2928,9 @@ var OS_NASLOVI=[
   {sel:'lbl-cb-plo',   k:'Otvor – ploča za kuvanje',o:'Otvor 2'}
 ];
 function _osPrimijeniNaslove(){
-  // Naslovi prate AKTIVNU STAVKU kad je ona "Ostalo"; inace tab.
+  // Naslovi prate AKTIVNU STAVKU: ako je ona "Ostalo", natpisi su neutralni.
   var a=items[activeIdx];
-  var je=(a&&a.ostalo)?true:((uiTip==='os')&&(!a||a.tip==='k'&&a.ostalo));
+  var je=!!(a&&a.ostalo);
   OS_NASLOVI.forEach(function(x){
     var el=ge(x.sel); if(el) el.textContent=je?x.o:x.k;
   });
@@ -6997,6 +6998,7 @@ function refresh(){
   if(ge('b-usl')) ge('b-usl').textContent=fmtBroj(_allUsl,2)+' KM';
   if(ge('b-rez')) ge('b-rez').textContent=fmtBroj(_allRez,2)+' KM';
   try{ prikaziLagerInfo(); }catch(e){}
+  try{ _osPrimijeniNaslove(); }catch(e){}
   try{ buildPozNav(); }catch(e){}
   drawCanvas(); // uvijek osvjezi crtez
   // Veliki prozor slobodnog oblika mora pratiti SVAKU promjenu (dodat otvor,
