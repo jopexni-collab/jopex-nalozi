@@ -2772,8 +2772,10 @@ function itemLabel(it,i){
     return n+'. '+tipLbl;
   }
   if(it.tip==='sto'){
-    var stoLbl={okrugao:'Okrugao',jajasto:'Elipsa',oblutak:'Oblutak',radijus:'Sa radijusom',
-      bure:'Bure',fbure:'Full bure',skica:'slobodan oblik'}[it.shape]||it.shape;
+    var stoLbl=jeOstalo(it)
+      ? (OS_OBLIK_LBL[it.shape]||it.shape)
+      : ({okrugao:'Okrugao',jajasto:'Elipsa',oblutak:'Oblutak',radijus:'Sa radijusom',
+          bure:'Bure',fbure:'Full bure',skica:'slobodan oblik'}[it.shape]||it.shape);
     return n+'. '+(jeOstalo(it)?osNaziv(it):'Stol')+' – '+stoLbl;
   }
   // Kuhinja (ili "Ostalo" sa svojim nazivom): pokazuje oblik
@@ -5176,19 +5178,26 @@ function buildShapeGrid(){
     var razd=document.createElement('div');
     razd.style.cssText='grid-column:1/-1;font-size:10px;color:#8a93a3;font-weight:700;'
       +'letter-spacing:.5px;padding:6px 2px 2px;border-top:1px dashed #dde2ea;margin-top:4px';
-    razd.textContent='OBLICI STOLOVA';
+    razd.textContent='OSTALI OBLICI';
     g.appendChild(razd);
     TABLE_SHAPES.forEach(function(s){
       var b=document.createElement('button');
       b.className='shp-btn'+(s.id===shape?' on':'');
       b.id='sb-'+s.id;
       b.innerHTML='<svg viewBox="0 0 100 50" width="72" height="36">'
-        +(TBL_PREV[s.id]||'')+'</svg><span class="sl">'+s.lbl+'</span>';
+        +(TBL_PREV[s.id]||'')+'</svg><span class="sl">'+(OS_OBLIK_LBL[s.id]||s.lbl)+'</span>';
       b.onclick=function(){ osIzaberiOblik(s.id); };
       g.appendChild(b);
     });
   }
 }
+// Nazivi oblika u mrezi "Ostalo" - bez rijeci "sto", jer stavka moze biti
+// polica, obloga, uzglavlje...
+var OS_OBLIK_LBL={
+  okrugao:'Krug', jajasto:'Elipsa', oblutak:'Oblutak',
+  radijus:'Zaobljeni uglovi', bure:'Bure', fbure:'Full bure',
+  skica:'Slobodan oblik'
+};
 // Sitne ikonice za oblike stolova u mrezi "Ostalo"
 var TBL_PREV={
   okrugao:'<circle cx="50" cy="25" r="20" fill="none" stroke="#1a5fa8" stroke-width="2"/>',
@@ -5369,7 +5378,7 @@ function drawStoSkica(ctx,W,H){
   ctx.save(); ctx.setTransform(1,0,0,1,0,0);
   ctx.fillStyle='#333'; ctx.font='bold 14px Segoe UI,Arial';
   ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText('Sto \u2014 slobodan oblik'+(gs('sto-n')?(' \u00b7 '+gs('sto-n')):''),12,10);
+  ctx.fillText((jeOstalo()?(osNaziv()+' \u2014 slobodan oblik'):'Sto \u2014 slobodan oblik')+(gs('sto-n')?(' \u00b7 '+gs('sto-n')):''),12,10);
   ctx.font='11.5px Segoe UI,Arial'; ctx.fillStyle='#6b7a8d';
   ctx.fillText(Math.round(bb.w)+' \u00d7 '+Math.round(bb.h)+' mm \u00b7 '+t.length+' strana \u00b7 '
     +getMatV()+(gs('mat-naziv')?(' \u2013 '+gs('mat-naziv')):'')+' \u00b7 '+getMatD()+' mm',12,29);
@@ -6730,9 +6739,12 @@ function calcItemCost(){
     var holesUk2=(tableHoles||[]).reduce(function(s,h){return s+(parseFloat(h.cost)||0);},0)*stoBr2;
     usl=gi('sto-ugr')*stoBr2+gi('sto-mer')+holesUk2;
     uk=mat+iv+usl;
-    var stoShLbl={okrugao:'Okrugao',jajasto:'Elipsa',oblutak:'Oblutak',radijus:'Sa radijusom',bure:'Bure',fbure:'Full bure'}[shape]||shape;
+    var stoShLbl=jeOstalo()
+      ? (OS_OBLIK_LBL[shape]||shape)
+      : ({okrugao:'Okrugao',jajasto:'Elipsa',oblutak:'Oblutak',radijus:'Sa radijusom',
+          bure:'Bure',fbure:'Full bure'}[shape]||shape);
     var stonap=gs('sto-n')?(' ('+gs('sto-n')+')'):'';
-    var stoDimTxt=(shape==='skica')?('slobodan oblik '+Math.round(stoA2)+'×'+Math.round(stoB2)+' mm'):(shape==='okrugao'?('ø'+stoA2+' mm'):(stoA2+'×'+stoB2+' mm'));
+    var stoDimTxt=(shape==='skica')?((jeOstalo()?'':'slobodan oblik ')+Math.round(stoA2)+'×'+Math.round(stoB2)+' mm'):(shape==='okrugao'?('ø'+stoA2+' mm'):(stoA2+'×'+stoB2+' mm'));
     rows+=trow((jeOstalo()?osNaziv():'Stol')+' – '+stoShLbl+stonap+' '+stoDimTxt+' ('+ms+')',stoBr2+' kom ('+m3o.toFixed(4)+' m²)',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
     ivdSto2.forEach(function(iv2){rows+=trow('Ivica '+iv2.lbl+' – '+iv2.profLbl+' (×'+stoBr2+')',fmtBroj(iv2.m,2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-sto-',iv2.prof]),f(iv2.uk*stoBr2));});
     var _rzSto=_rezRedovi(stoBr2); rows+=_rzSto.rows; rez=_rzSto.uk; uk+=rez;
