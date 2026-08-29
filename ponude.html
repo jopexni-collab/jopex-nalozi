@@ -2045,6 +2045,13 @@ function loadItemInputs(){
       if(_pt==='zidna'){ pozicije[0].zid=0; pozicije[0].kt='sam'; }
     }
   }
+  // Ako je aktivna stavka "Ostalo", panel prati njen tip (kuhinja ili sto)
+  if(_a&&_a.ostalo&&uiTip==='os'){
+    var _bz=(_a.tip==='sto')?'sto':'k';
+    ['k','kl','st','sto'].forEach(function(x){
+      var bl=ge('blok-'+x); if(bl) bl.className='blok'+(x===_bz?' on':'');
+    });
+  }
   var _wkl=ge('kl-poz-wrap'); if(_wkl) _wkl.style.display=(tip==='kl')?'':'none';
   var _wst=ge('st-poz-wrap'); if(_wst) _wst.style.display=gc('cb-st-poz')?'':'none';
 }
@@ -2765,17 +2772,19 @@ function itemLabel(it,i){
     return n+'. '+tipLbl;
   }
   if(it.tip==='sto'){
-    var stoLbl={okrugao:'Okrugao',jajasto:'Elipsa',oblutak:'Oblutak',radijus:'Sa radijusom',bure:'Bure',fbure:'Full bure'}[it.shape]||it.shape;
-    return n+'. Stol – '+stoLbl;
+    var stoLbl={okrugao:'Okrugao',jajasto:'Elipsa',oblutak:'Oblutak',radijus:'Sa radijusom',
+      bure:'Bure',fbure:'Full bure',skica:'slobodan oblik'}[it.shape]||it.shape;
+    return n+'. '+(jeOstalo(it)?osNaziv(it):'Stol')+' – '+stoLbl;
   }
-  // Kuhinja: pokazuje oblik
+  // Kuhinja (ili "Ostalo" sa svojim nazivom): pokazuje oblik
   var sh=SHAPES.find(function(x){return x.id===it.shape;});
   var shLbl=sh?sh.lbl:it.shape;
+  var osnov=jeOstalo(it)?osNaziv(it):'Kuhinja';
   if(it.shape==='SK'){
     var _n=((it.dims&&it.dims._tj)||[]).length;
-    return n+'. Kuhinja – slobodan oblik'+(_n?(' ('+_n+' strana)'):'');
+    return n+'. '+osnov+' – slobodan oblik'+(_n?(' ('+_n+' strana)'):'');
   }
-  return n+'. Kuhinja – '+shLbl;
+  return n+'. '+osnov+' – '+shLbl;
 }
 
 function buildAll(){
@@ -2793,7 +2802,10 @@ function setTip(t){
   uiTip=t;
   // "Ostalo" koristi ISTI panel kao kuhinja (isti oblici, obrade, otvori),
   // razlikuje se samo po nazivu stavke i dodatnoj opisnoj usluzi.
-  var blokZa=(t==='os')?'k':t;
+  // Kod "Ostalo" panel prati TIP AKTIVNE STAVKE - ako je izabran stolni
+  // oblik, treba prikazati polja stola, ne kuhinje.
+  var _a=items[activeIdx];
+  var blokZa=(t==='os')?((_a&&_a.ostalo&&_a.tip==='sto')?'sto':'k'):t;
   ['k','kl','st','sto'].forEach(function(x){
     var bl=ge('blok-'+x); if(bl) bl.className='blok'+(x===blokZa?' on':'');
   });
@@ -2823,10 +2835,12 @@ function setTip(t){
 // ── "OSTALO": kuhinjski panel sa slobodnim nazivom i dodatnom uslugom ──
 // Stavka je iznutra tipa 'k' (svi oblici, obrade i otvori rade isto), a
 // razlikuje je polje it.ostalo = {naziv, usl:[{naziv,cijena}]}.
+// Vraca podatke SAMO ako je stavka stvarno tipa "Ostalo". NE SMIJE ih
+// stvarati usput - inace bi prelazak na postojecu kuhinjsku stavku dok je
+// otvoren tab "Ostalo" tu stavku pretvorio u "Ostalo".
 function _osPodaci(){
   var a=items[activeIdx];
-  if(!a) return null;
-  if(!a.ostalo) a.ostalo={naziv:'Ostalo', usl:[]};
+  if(!a||!a.ostalo) return null;
   if(!a.ostalo.usl) a.ostalo.usl=[];
   return a.ostalo;
 }
@@ -2887,7 +2901,9 @@ var OS_NASLOVI=[
   {sel:'lbl-cb-plo',   k:'Otvor – ploča za kuvanje',o:'Otvor 2'}
 ];
 function _osPrimijeniNaslove(){
-  var je=(uiTip==='os');
+  // Naslovi prate AKTIVNU STAVKU kad je ona "Ostalo"; inace tab.
+  var a=items[activeIdx];
+  var je=(a&&a.ostalo)?true:((uiTip==='os')&&(!a||a.tip==='k'&&a.ostalo));
   OS_NASLOVI.forEach(function(x){
     var el=ge(x.sel); if(el) el.textContent=je?x.o:x.k;
   });
@@ -2898,7 +2914,15 @@ function buildOstaloPanel(){
   if(uiTip!=='os'){ con.style.display='none'; return; }
   con.style.display='';
   var o=_osPodaci();
-  if(!o){ con.innerHTML=''; return; }
+  if(!o){
+    // Otvoren je tab "Ostalo", ali aktivna stavka je obicna kuhinja
+    var a=items[activeIdx];
+    var kakva=a?({'k':'kuhinja','kl':'klupica','st':'stepenice','sto':'sto'}[a.tip]||'stavka'):'stavka';
+    con.innerHTML='<div class="sec"><div style="font-size:11.5px;color:#8a93a3;padding:6px 2px">'
+      +'Aktivna stavka je <b>'+kakva+'</b>, ne „Ostalo“.<br>'
+      +'Klikni <b>+ Nova stavka</b> da dodas stavku tipa „Ostalo“.</div></div>';
+    return;
+  }
   var h='<div class="sec"><div class="sec-hd">Naziv stavke</div>'
     +'<div class="hint">Kako \u0107e se zvati u ponudi \u2014 npr. Polica, Uzglavlje, Obloga</div>'
     +'<div class="fg"><input type="text" id="os-naziv" value="'
@@ -5142,9 +5166,62 @@ function buildShapeGrid(){
     b.className='shp-btn'+(s.id===shape?' on':'');
     b.id='sb-'+s.id;
     b.innerHTML='<svg viewBox="0 0 100 50" width="72" height="36">'+(PREV[s.id]||'')+'</svg><span class="sl">'+s.lbl+'</span>';
-    b.onclick=function(){setShape(s.id);};
+    b.onclick=function(){ jeOstalo()?osIzaberiOblik(s.id):setShape(s.id); };
     g.appendChild(b);
   });
+  // Stavka "Ostalo" nudi I oblike stolova - polica moze biti okrugla,
+  // elipsasta, oblutak... Klik prebacuje stavku na crtanje stola, ali
+  // ona ostaje "Ostalo" (naziv i dodatne usluge se cuvaju).
+  if(jeOstalo()){
+    var razd=document.createElement('div');
+    razd.style.cssText='grid-column:1/-1;font-size:10px;color:#8a93a3;font-weight:700;'
+      +'letter-spacing:.5px;padding:6px 2px 2px;border-top:1px dashed #dde2ea;margin-top:4px';
+    razd.textContent='OBLICI STOLOVA';
+    g.appendChild(razd);
+    TABLE_SHAPES.forEach(function(s){
+      var b=document.createElement('button');
+      b.className='shp-btn'+(s.id===shape?' on':'');
+      b.id='sb-'+s.id;
+      b.innerHTML='<svg viewBox="0 0 100 50" width="72" height="36">'
+        +(TBL_PREV[s.id]||'')+'</svg><span class="sl">'+s.lbl+'</span>';
+      b.onclick=function(){ osIzaberiOblik(s.id); };
+      g.appendChild(b);
+    });
+  }
+}
+// Sitne ikonice za oblike stolova u mrezi "Ostalo"
+var TBL_PREV={
+  okrugao:'<circle cx="50" cy="25" r="20" fill="none" stroke="#1a5fa8" stroke-width="2"/>',
+  jajasto:'<ellipse cx="50" cy="25" rx="30" ry="17" fill="none" stroke="#1a5fa8" stroke-width="2"/>',
+  oblutak:'<rect x="20" y="8" width="60" height="34" rx="17" fill="none" stroke="#1a5fa8" stroke-width="2"/>',
+  radijus:'<rect x="20" y="8" width="60" height="34" rx="8" fill="none" stroke="#1a5fa8" stroke-width="2"/>',
+  bure:'<path d="M25,8 Q50,2 75,8 L75,42 Q50,48 25,42 Z" fill="none" stroke="#1a5fa8" stroke-width="2"/>',
+  fbure:'<path d="M25,8 Q50,0 75,8 Q82,25 75,42 Q50,50 25,42 Q18,25 25,8 Z" fill="none" stroke="#1a5fa8" stroke-width="2"/>',
+  skica:'<path d="M14,40 L26,12 L58,8 L84,26 L74,44 L40,46 Z" fill="none" stroke="#1a5fa8" stroke-width="2" stroke-linejoin="round"/>'
+};
+// Prebacivanje stavke "Ostalo" izmedju kuhinjskih i stolnih oblika
+function osIzaberiOblik(sid){
+  var a=items[activeIdx]; if(!a) return;
+  var jeStolni=TABLE_SHAPES.some(function(x){return x.id===sid;});
+  if(jeStolni&&a.tip!=='sto'){
+    _saveUndo();
+    a.tip='sto'; tip='sto';
+    // Prenesi osnovne mjere da se ne izgubi ono sto je vec uneseno
+    if(ge('sto-a')&&!gi('sto-a')) ge('sto-a').value=dims.A||1600;
+    if(ge('sto-b')&&!gi('sto-b')) ge('sto-b').value=dims.B||900;
+    setTableShape(sid);
+    buildShapeGrid();
+    return;
+  }
+  if(!jeStolni&&a.tip!=='k'){
+    _saveUndo();
+    a.tip='k'; tip='k';
+    setShape(sid);
+    buildShapeGrid();
+    return;
+  }
+  if(jeStolni) setTableShape(sid); else setShape(sid);
+  buildShapeGrid();
 }
 
 var TABLE_SHAPES=[
@@ -6656,7 +6733,7 @@ function calcItemCost(){
     var stoShLbl={okrugao:'Okrugao',jajasto:'Elipsa',oblutak:'Oblutak',radijus:'Sa radijusom',bure:'Bure',fbure:'Full bure'}[shape]||shape;
     var stonap=gs('sto-n')?(' ('+gs('sto-n')+')'):'';
     var stoDimTxt=(shape==='skica')?('slobodan oblik '+Math.round(stoA2)+'×'+Math.round(stoB2)+' mm'):(shape==='okrugao'?('ø'+stoA2+' mm'):(stoA2+'×'+stoB2+' mm'));
-    rows+=trow('Stol – '+stoShLbl+stonap+' '+stoDimTxt+' ('+ms+')',stoBr2+' kom ('+m3o.toFixed(4)+' m²)',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
+    rows+=trow((jeOstalo()?osNaziv():'Stol')+' – '+stoShLbl+stonap+' '+stoDimTxt+' ('+ms+')',stoBr2+' kom ('+m3o.toFixed(4)+' m²)',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
     ivdSto2.forEach(function(iv2){rows+=trow('Ivica '+iv2.lbl+' – '+iv2.profLbl+' (×'+stoBr2+')',fmtBroj(iv2.m,2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-sto-',iv2.prof]),f(iv2.uk*stoBr2));});
     var _rzSto=_rezRedovi(stoBr2); rows+=_rzSto.rows; rez=_rzSto.uk; uk+=rez;
     (tableHoles||[]).forEach(function(h,hi){
@@ -10480,7 +10557,7 @@ function genDXF(){
     // Naslovna linija za svaku stavku
     tx(0,yOff-10,5,'Stavka '+(iIdx+1)+': '
       +((tip==='kl')?((_klPodtip()==='zidna')?'Zidna klupica':'Prozorska klupica')
-        :({'k':'Kuhinja','st':'Stepenica','sto':'Stol'}[tip]||tip)),'TEKST');
+        :(jeOstalo()?osNaziv():({'k':'Kuhinja','st':'Stepenica','sto':'Stol'}[tip]||tip))),'TEKST');
     tx(0,yOff-18,3,getMatV()+(gs('mat-naziv')?' '+gs('mat-naziv'):'')+' '+getMatD()+'mm  Klijent: '+(gs('kl-ime')||'-'),'TEKST');
 
     // Pomocne funkcije sa y offsetom
