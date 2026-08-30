@@ -752,6 +752,33 @@ async function pripremaProvjeri(){
   }
 }
 
+
+/* Otvara restlove sa SVIM pozicijama naloga odjednom. Adresa bi sa 10 pozicija bila
+   predugacka (a poligoni jos duzi), pa se spisak predaje kroz sessionStorage — restlovi
+   ga procitaju i mogu planirati raspored za cijeli nalog. */
+function otvoriSvePozicijeURestlovima(){
+  if(!pozStavke.length){ alert('Nalog nema pozicija.'); return; }
+  const paket = {
+    nalog_r_br: pozNalogRbr,
+    kreirano: Date.now(),
+    pozicije: pozStavke.map(p=>({
+      id: p.id, redni_broj: p.redni_broj, naziv: p.naziv,
+      sirina: p.sirina, visina: p.visina, kolicina: p.kolicina,
+      roba_id: p.roba_id || null,
+      materijal: p.roba_naziv || null,        // samo prepoznat artikal, ne opisni tekst
+      debljina_cm: p.debljina_cm ?? null,
+      poligon: (Array.isArray(p.poligon) && p.poligon.length >= 3) ? p.poligon : null,
+    })),
+  };
+  try{
+    sessionStorage.setItem('jopex_pozicije_naloga', JSON.stringify(paket));
+  }catch(e){
+    alert('Ne mogu proslijediti pozicije: ' + e.message);
+    return;
+  }
+  window.open(`restlovi.html?nalog=${pozNalogRbr}&sve=1`, '_blank');
+}
+
 function renderPriprema(d){
   const cont = document.getElementById('poz-priprema');
   const s = d.sazetak || {};
@@ -767,6 +794,12 @@ function renderPriprema(d){
       ${s.restlova_u_planu ? `<span style="color:#6b7a8d;"> · ${s.restlova_u_planu} restlova u planu</span>` : ''}
       ${s.bez_dimenzija ? `<br><span style="color:var(--orange,#b8860b);">⚠ ${s.bez_dimenzija} pozicija nema dimenzije table</span>` : ''}
       ${d.tacan === false ? `<br><span style="color:#8b96a5;font-size:11px;">Približan račun — broji restlove, ne komade.</span>` : ''}
+    </div>
+    <div style="margin-bottom:10px;">
+      <button onclick="otvoriSvePozicijeURestlovima()"
+        style="width:100%;padding:9px;border:1px solid #6b4fa0;background:#fff;color:#6b4fa0;border-radius:8px;font-weight:700;cursor:pointer;font-size:12.5px;">
+        🧩 Otvori SVE pozicije u Restlovima (${d.pozicije.length})
+      </button>
     </div>
     ${d.pozicije.map(p=>`
       <div style="border:1px solid var(--border,#ddd);border-radius:8px;padding:9px 12px;margin-bottom:7px;">
