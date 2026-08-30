@@ -404,8 +404,21 @@ router.post('/:r_br/iz-ponude', async (req, res) => {
       // Pozicija bez mjere nema svrhu — ne moze se ni traziti restl ni planirati rez
       if (sir <= 0 || vis <= 0) { preskoceno++; continue; }
 
+      /* MATERIJAL — ponuda ga cesto ima kao SLOBODAN OPIS ("Tasto 20mm obradjen na
+         meru"), sto je tamo namjerno: ponudjac ostavlja opisno da bi kasnije birao
+         najbolji materijal po iskoristenju. Takav tekst ne postoji u sifrarniku i samo
+         zaglavi filter, pa se NE PRENOSI u polje materijal.
+         Prenosi se samo ako je jednoznacno prepoznat artikal iz lagera; original se
+         cuva u napomeni da se podatak ne izgubi. */
       const robaId = s.roba_id || await nadjiArtikal(s.materijal);
       if (robaId) povezano++;
+
+      const opisMaterijala = String(s.materijal || '').trim();
+      const materijalZaUpis = robaId ? opisMaterijala : null;
+      const napomenaSaOpisom = [
+        s.napomena || null,
+        (!robaId && opisMaterijala) ? `Iz ponude: ${opisMaterijala}` : null,
+      ].filter(Boolean).join(' · ') || null;
 
       await client.query(
         `INSERT INTO nalog_stavke
@@ -413,10 +426,10 @@ router.post('/:r_br/iz-ponude', async (req, res) => {
             sirina, visina, kolicina, oblik, obrada_ivica, napomena, poligon, izvor)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'ponuda')`,
         [req.params.r_br, i + 1, s.naziv || s.nap || s.opis || null, robaId,
-         s.materijal || null, s.debljina_cm ? broj(s.debljina_cm) : null,
+         materijalZaUpis, s.debljina_cm ? broj(s.debljina_cm) : null,
          sir, vis, parseInt(s.kom ?? s.kolicina) || 1,
          poligonPozicije ? 'poligon' : (s.shape || s.oblik || 'pravougaonik'),
-         s.obrada_ivica || null, s.napomena || null,
+         s.obrada_ivica || null, napomenaSaOpisom,
          poligonPozicije ? JSON.stringify(poligonPozicije) : null]
       );
       upisano++;

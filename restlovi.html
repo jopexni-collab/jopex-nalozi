@@ -2455,6 +2455,133 @@ async function primiIzNaloga() {
   if (typeof trazi === 'function') trazi();
 }
 
+/* ── SVE POZICIJE NALOGA ODJEDNOM ─────────────────────────────────────────────
+   Spisak se ne prenosi kroz adresu nego kroz sessionStorage, jer bi sa deset pozicija
+   i poligonima adresa bila predugačka. Rezultat je PLAN za cijeli nalog: koliko komada
+   izlazi iz restlova, koliko ostaje za cijele table, i koji restl pokriva šta. */
+const KLJUC_POZICIJA = 'jopex_pozicije_naloga';
+
+async function primiSvePozicije() {
+  const p = new URLSearchParams(location.search);
+  if (p.get('sve') !== '1') return false;
+
+  let paket = null;
+  try { paket = JSON.parse(sessionStorage.getItem(KLJUC_POZICIJA) || 'null'); } catch (e) {}
+
+  // sessionStorage može sadržati STARI paket iz prethodnog naloga — zato se poredi
+  // broj naloga prije upotrebe, umjesto da se slijepo vjeruje sadržaju.
+  if (!paket || String(paket.nalog_r_br) !== String(p.get('nalog'))) {
+    poruka('Pozicije nisu prenesene iz naloga — vrati se na nalog i pokušaj ponovo.', 'greska');
+    return true;
+  }
+  if (!Array.isArray(paket.pozicije) || !paket.pozicije.length) {
+    poruka('Nalog nema pozicija sa mjerama.', 'greska');
+    return true;
+  }
+
+  NALOG_IZ_URL = String(paket.nalog_r_br);
+  prikaziPlanNaloga(paket);
+  return true;
+}
+
+function prikaziPlanNaloga(paket) {
+  const cilj = document.getElementById('rezultat_trazi');
+  const gore = document.getElementById('p-trazi');
+  if (gore) {
+    const traka = document.createElement('div');
+    traka.className = 'msg';
+    traka.style.cssText = 'background:#eef4fc;color:#134a85;display:flex;justify-content:space-between;' +
+      'align-items:center;gap:10px;flex-wrap:wrap';
+    traka.innerHTML = '<span>📋 Plan za <b>radni nalog #' + NALOG_IZ_URL + '</b> · ' +
+      paket.pozicije.length + ' pozicija</span>' +
+      '<a href="lista.html" style="color:#1a5fa8;font-weight:700;text-decoration:none">← Nazad na naloge</a>';
+    gore.prepend(traka);
+  }
+  cilj.innerHTML = '<div class="empty-msg">Računam plan rezanja za cijeli nalog…</div>';
+  planZaNalog(paket);
+}
+
+async function planZaNalog(paket) {
+  const cilj = document.getElementById('rezultat_trazi');
+  try {
+    const d = await api('/nesting/za-nalog', { method: 'POST', body: JSON.stringify({
+      pozicije: paket.pozicije.map(z => ({
+        id: z.id, naziv: z.naziv || ('poz. ' + (z.redni_broj || '')),
+        sirina: z.sirina, visina: z.visina, kolicina: z.kolicina || 1,
+        // roba_id je pouzdan, materijal je pomoćni — kad ga nema, traži se po mjerama
+        roba_id: z.roba_id || null,
+        materijal: z.roba_id ? null : (z.materijal || null),
+        debljina_cm: z.debljina_cm ?? null,
+        bez_okretanja: !!z.bez_okretanja,
+      })),
+      rez: 5,
+    }) });
+
+    const s = d.sazetak;
+    let html =
+      '<div class="kartice">' +
+      '<div class="kartica"><div class="v">' + s.ukupno_komada + '</div><div class="n">komada u nalogu</div></div>' +
+      '<div class="kartica" style="border-left-color:#1f8a4c"><div class="v">' + s.iz_restlova +
+        '</div><div class="n">izlazi iz restlova</div></div>' +
+      '<div class="kartica" style="border-left-color:#e67e22"><div class="v">' + s.treba_tabla +
+        '</div><div class="n">treba cijela tabla</div></div>' +
+      '<div class="kartica"><div class="v">' + s.restlova_u_planu + '</div><div class="n">restlova u planu</div></div>' +
+      '</div>';
+
+    html += '<div class="xl-wrap"><table class="xl"><thead><tr>' +
+      '<th>Pozicija</th><th style="text-align:right">Mjere</th><th style="text-align:right">Kom</th>' +
+      '<th style="text-align:right">Iz restlova</th><th style="text-align:right">Na tablu</th>' +
+      '<th>Plan po restlovima</th></tr></thead><tbody>';
+
+    html += d.pozicije.map(z => {
+      const sve = z.iz_restlova >= z.kolicina;
+      return '<tr style="background:' + (sve ? '#eefaf1' : (z.iz_restlova ? '#fff8f0' : '')) + '">' +
+        '<td><b>' + (z.naziv || '') + '</b>' + (z.greska ? ' <span style="color:#c0392b">' + z.greska + '</span>' : '') + '</td>' +
+        '<td class="num">' + Math.round(z.sirina) + '×' + Math.round(z.visina) + '</td>' +
+        '<td class="num">' + z.kolicina + '</td>' +
+        '<td class="num"><b style="color:#1f8a4c">' + z.iz_restlova + '</b></td>' +
+        '<td class="num">' + (z.treba_tabla ? '<b style="color:#e67e22">' + z.treba_tabla + '</b>' : '—') + '</td>' +
+        '<td>' + (z.restlovi.length
+          ? z.restlovi.map(r =>
+              '<div style="display:flex;gap:6px;align-items:center;margin-bottom:3px">' +
+              crtezPlana(r, 70, 50) +
+              '<span><b>' + r.oznaka + '</b> — ' + r.komada + ' kom · ' + fmt(r.procenat) + '% · ' +
+              (r.objekt_naziv || '') + '</span>' +
+              '<button class="btn mali" onclick="uzmiIzPlana(' + r.restl_id + ')">Uzmi</button></div>').join('')
+          : '<span class="hint">nema restla — ide na cijelu tablu</span>') + '</td></tr>';
+    }).join('');
+    html += '</tbody></table></div>';
+
+    if (s.treba_tabla) {
+      html += '<div class="msg" style="background:#fff3e0;color:#8a5200;margin-top:12px">' +
+        '<b>' + s.treba_tabla + ' komada</b> nema odakle iz restlova — za njih treba cijela tabla.</div>';
+    } else {
+      html += '<div class="msg ok" style="margin-top:12px">Cijeli nalog se može izrezati iz postojećih restlova.</div>';
+    }
+    cilj.innerHTML = html;
+  } catch (e) {
+    cilj.innerHTML = '<div class="msg err">Plan nije izračunat: ' + e.message + '</div>';
+  }
+}
+
+// Mali crtež rasporeda — restl u sivom, raspoređeni komadi u plavom
+function crtezPlana(r, w, hh) {
+  const A = Number(r.dim_a) || 0, B = Number(r.dim_b) || 0;
+  if (!A || !B) return '';
+  const k = Math.min((w - 4) / A, (hh - 4) / B);
+  const px = x => (w - A * k) / 2 + x * k;
+  const py = y => (hh - B * k) / 2 + (B - y) * k;
+  let s = '<svg width="' + w + '" height="' + hh + '" style="vertical-align:middle;border:1px solid #d0d7de;border-radius:4px">' +
+    '<rect x="' + px(0) + '" y="' + py(B) + '" width="' + (A * k) + '" height="' + (B * k) + '" fill="#eef2f6" stroke="#8b96a5" stroke-width="0.8"/>';
+  for (const p of (r.postavljeni || [])) {
+    const put = p.tjemena.map((t, i) => (i ? 'L' : 'M') + px(t[0]).toFixed(1) + ' ' + py(t[1]).toFixed(1)).join(' ') + ' Z';
+    s += '<path d="' + put + '" fill="#1a5fa8" fill-opacity=".4" stroke="#1a5fa8" stroke-width="0.8"/>';
+  }
+  return s + '</svg>';
+}
+
+function uzmiIzPlana(restlId) { otvoriKoristi(restlId); }
+
 /* ═══════════════ UVOZ ═══════════════ */
 let UVOZ_STAVKE = null, UVOZ_LIST = '', UVOZ_FAJL = '';
 
@@ -2786,7 +2913,8 @@ async function stornirajUvoz(id) {
   // biti u meniju prije nego što korisnik bilo šta uradi. Ranije su stajali posljednji,
   // iza poziva koji mogu pući, pa se lako dešavalo da uopšte ne stignu na red.
   await ucitajFiltere();
-  primiIzNaloga();
+  // Plan za cijeli nalog ima prednost; ako ga nema, gleda se pojedinačna pozicija
+  if (!(await primiSvePozicije())) primiIzNaloga();
   ucitajPostavke();
   ucitajSume();
 
