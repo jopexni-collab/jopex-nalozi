@@ -699,7 +699,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <b style="font-size:12.5px;"><span id="lager-izbor-broj">0</span> izabrano</b>
       <span id="lager-izbor-info" style="font-size:11.5px;color:#6b7a8d;"></span>
       <button class="ce-tip-btn" style="font-size:11.5px;" onclick="otvoriDimenzijeZaIzabrane()">📐 Postavi dimenzije table</button>
-      <button class="ce-tip-btn" style="font-size:11.5px;" onclick="lagerOznaciSve(false)">Poništi izbor</button>
+      <button class="ce-tip-btn" style="font-size:11.5px;" onclick="lagerIzbor.clear();lagerOznaciSve(false)">Poništi izbor</button>
     </div>
     <div id="lager-lista-tabela-wrap" style="overflow:auto;margin-top:10px;max-height:calc(100vh - 190px);border:1px solid var(--border,#ddd);border-radius:8px;"></div>
     <div id="lager-total" style="display:none" class="dnevni-total"></div>
@@ -3582,7 +3582,7 @@ function renderLagerRedovi(){
   tbody.innerHTML=prikaz.map((s,i)=>`
     <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
       <td style="padding:1px 4px;text-align:center;">
-        <input type="checkbox" class="lager-izbor" value="${s.id}" data-grupa="${esc(s.grupa||'')}" data-ima-dim="${(s.std_sirina&&s.std_visina)?'1':'0'}" onchange="lagerOsvjeziIzbor()">
+        <input type="checkbox" class="lager-izbor" value="${s.id}" ${lagerIzbor.has(String(s.id))?'checked':''} data-grupa="${esc(s.grupa||'')}" data-ima-dim="${(s.std_sirina&&s.std_visina)?'1':'0'}" onchange="lagerOsvjeziIzbor()">
       </td>
       <td style="padding:1px 5px;font-weight:700;">${esc(s.sifra)}</td>
       <td style="padding:1px 5px;font-weight:700;">${esc(s.naziv)}</td>
@@ -3838,8 +3838,16 @@ let uvozIstPopunjenSelect=false;
 /* ── IZBOR REDOVA U LAGERU ──
    Grupa nije uvijek dovoljna: u istoj grupi mjere se znaju razlikovati, a one koje vec
    imaju dimenzije ne treba dirati. Zato se moze izabrati tacno ono sto treba. */
+/* Izbor se pamti u SKUPU, ne u samim kvadraticima. Tabela se ponovo iscrtava pri svakom
+   filtriranju i sortiranju — da se izbor cuva samo u HTML-u, gubio bi se cim suzis na
+   grupu, sto je upravo ono sto korisnik radi prije unosa dimenzija. */
+let lagerIzbor = new Set();
+
 function lagerOznaciSve(oznaceno){
-  document.querySelectorAll('.lager-izbor').forEach(i=>i.checked=oznaceno);
+  document.querySelectorAll('.lager-izbor').forEach(i=>{
+    i.checked = oznaceno;
+    if(oznaceno) lagerIzbor.add(i.value); else lagerIzbor.delete(i.value);
+  });
   lagerOsvjeziIzbor();
 }
 
@@ -3848,14 +3856,22 @@ function lagerIzabraniRedovi(){
 }
 
 function lagerOsvjeziIzbor(){
+  // Uskladi skup sa onim sto je trenutno prikazano
+  document.querySelectorAll('.lager-izbor').forEach(i=>{
+    if(i.checked) lagerIzbor.add(i.value); else lagerIzbor.delete(i.value);
+  });
   const izabrani = lagerIzabraniRedovi();
   const traka = document.getElementById('lager-izbor-traka');
   traka.style.display = izabrani.length ? 'flex' : 'none';
-  document.getElementById('lager-izbor-broj').textContent = izabrani.length;
+  const ukupnoIzabrano = lagerIzbor.size;
+  const skriveno = ukupnoIzabrano - izabrani.length;
+  document.getElementById('lager-izbor-broj').textContent = ukupnoIzabrano;
+  traka.style.display = ukupnoIzabrano ? 'flex' : 'none';
   // Koliko ih VEC ima dimenzije — da se odmah vidi sta ce se prepisati
   const saDim = izabrani.filter(i=>i.dataset.imaDim==='1').length;
   document.getElementById('lager-izbor-info').textContent =
-    saDim ? `· ${saDim} već ima dimenzije` : '· nijedan još nema dimenzije';
+    (saDim ? `· ${saDim} već ima dimenzije` : '· nijedan još nema dimenzije')
+    + (skriveno > 0 ? ` · ${skriveno} van trenutnog filtera` : '');
 }
 
 /* Prozorcic za IZABRANE — isti obrazac kao za pojedinacni artikal, samo se snima
@@ -3864,13 +3880,14 @@ let dimIzabraniIds = null;
 
 function otvoriDimenzijeZaIzabrane(){
   const izabrani = lagerIzabraniRedovi();
-  if(!izabrani.length){ alert('Nije izabran nijedan artikal.'); return; }
-  dimIzabraniIds = izabrani.map(i=>parseInt(i.value));
+  if(!lagerIzbor.size){ alert('Nije izabran nijedan artikal.'); return; }
+  // Uzimaju se SVI izabrani, i oni koje trenutni filter ne prikazuje
+  dimIzabraniIds = [...lagerIzbor].map(Number);
   dimArtikalId = null;
   dimGrupa = null;
 
   const saDim = izabrani.filter(i=>i.dataset.imaDim==='1').length;
-  document.getElementById('dim-artikal').textContent = `${izabrani.length} izabranih artikala`;
+  document.getElementById('dim-artikal').textContent = `${dimIzabraniIds.length} izabranih artikala`;
   document.getElementById('dim-sirina').value = '';
   document.getElementById('dim-visina').value = '';
   document.getElementById('dim-greska').style.display = 'none';
