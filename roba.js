@@ -801,6 +801,38 @@ router.patch('/akcije/:id/zavrsi', async (req, res) => {
 // Tasto, kvarc i keramika imaju istu mjeru table za cijelu grupu, pa je unos jedan po
 // jedan besmislen posao. Podrazumijevano se dira SAMO ono sto jos nema dimenzije —
 // da se rucno unesena, namjerno drugacija mjera ne pregazi slucajno.
+// PATCH /api/roba/dimenzije-vise — dimenzije za IZABRANE artikle
+// Grupa nije uvijek dovoljna: u istoj grupi mjere se znaju razlikovati, a one koje vec
+// imaju dimenzije ne treba dirati. Ovako se bira tacno ono sto treba.
+router.patch('/dimenzije-vise', async (req, res) => {
+  const u = req.session?.user;
+  if (u?.rola !== 'admin' && !u?.moze_roba_magacin && !u?.moze_cijene)
+    return res.status(403).json({ error: 'Nemate dozvolu.' });
+
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
+  const sirina = parseFloat(req.body?.std_sirina);
+  const visina = parseFloat(req.body?.std_visina);
+  const pregazi = req.body?.pregazi === true;
+
+  if (!ids.length) return res.status(400).json({ error: 'Nije izabran nijedan artikal.' });
+  if (!sirina || !visina || sirina < 50 || visina < 50 || sirina > 6000 || visina > 6000)
+    return res.status(400).json({
+      error: `Mjere se unose u MILIMETRIMA (npr. 3200 × 1600). Uneseno: ${sirina} × ${visina}.`,
+    });
+
+  try {
+    const uslov = pregazi ? '' : 'AND (std_sirina IS NULL OR std_visina IS NULL)';
+    const r = await pool.query(
+      `UPDATE roba SET std_sirina=$1, std_visina=$2, azurirano=now()
+       WHERE id = ANY($3::int[]) ${uslov} RETURNING id`,
+      [sirina, visina, ids]
+    );
+    res.json({ ok: true, izmijenjeno: r.rows.length, izabrano: ids.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.patch('/dimenzije-grupa', async (req, res) => {
   const u = req.session?.user;
   if (u?.rola !== 'admin' && !u?.moze_roba_magacin && !u?.moze_cijene)

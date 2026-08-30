@@ -689,6 +689,17 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <button class="ce-tip-btn" onclick="izvezLagerListu()">📥 Izvezi u XLSX</button>
       <button class="ce-tip-btn" style="color:var(--red);" id="btn-obrisi-lager" onclick="otvoriBrisanjeLagera()">🗑️ Obriši lager</button>
       <button class="ce-tip-btn" onclick="otvoriQrNalepnice()">🏷️ QR nalepnice (za štampu)</button>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap;"
+             title="Prikaži samo artikle kojima dimenzije table još nisu unesene">
+        <input type="checkbox" id="lager-samo-bez-dim" onchange="ucitajLager()"> ⚠ Samo bez dimenzija
+      </label>
+    </div>
+    <!-- Traka se pojavljuje SAMO kad je nesto izabrano — inace zauzima mjesto bez potrebe -->
+    <div id="lager-izbor-traka" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;background:#eef4fc;border:1px solid #b8d4f0;border-radius:8px;padding:8px 12px;margin-top:10px;">
+      <b style="font-size:12.5px;"><span id="lager-izbor-broj">0</span> izabrano</b>
+      <span id="lager-izbor-info" style="font-size:11.5px;color:#6b7a8d;"></span>
+      <button class="ce-tip-btn" style="font-size:11.5px;" onclick="otvoriDimenzijeZaIzabrane()">📐 Postavi dimenzije table</button>
+      <button class="ce-tip-btn" style="font-size:11.5px;" onclick="lagerOznaciSve(false)">Poništi izbor</button>
     </div>
     <div id="lager-lista-tabela-wrap" style="overflow:auto;margin-top:10px;max-height:calc(100vh - 190px);border:1px solid var(--border,#ddd);border-radius:8px;"></div>
     <div id="lager-total" style="display:none" class="dnevni-total"></div>
@@ -3316,6 +3327,9 @@ function renderLagerZaglavlje(){
     <table style="width:100%;border-collapse:collapse;font-size:10.5px;line-height:1.25;">
       <thead>
         <tr style="background:#1f3864;color:#fff;">
+          <th style="padding:4px 4px;width:26px;text-align:center;position:sticky;top:0;background:#1f3864;z-index:30;">
+            <input type="checkbox" onchange="lagerOznaciSve(this.checked)" title="Označi sve prikazane">
+          </th>
           ${LAGER_KOLONE.map(c=>`
             <th style="padding:3px 5px;text-align:${c.align};white-space:nowrap;font-size:10px;position:sticky;top:0;background:#1f3864;z-index:30;">
               <div style="display:flex;align-items:center;justify-content:${c.align==='right'?'flex-end':c.align==='center'?'center':'flex-start'};gap:2px;">
@@ -3561,9 +3575,15 @@ function renderLagerRedovi(){
   if(!tbody) return;
 
   const prikaz=lagerFiltrirajISortiraj();
+  // Filter: samo artikli kojima dimenzije table jos nisu unesene
+  if(document.getElementById('lager-samo-bez-dim')?.checked) prikaz = prikaz.filter(s=>!(s.std_sirina&&s.std_visina));
+
 
   tbody.innerHTML=prikaz.map((s,i)=>`
     <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
+      <td style="padding:1px 4px;text-align:center;">
+        <input type="checkbox" class="lager-izbor" value="${s.id}" data-grupa="${esc(s.grupa||'')}" data-ima-dim="${(s.std_sirina&&s.std_visina)?'1':'0'}" onchange="lagerOsvjeziIzbor()">
+      </td>
       <td style="padding:1px 5px;font-weight:700;">${esc(s.sifra)}</td>
       <td style="padding:1px 5px;font-weight:700;">${esc(s.naziv)}</td>
       <td style="padding:1px 5px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
@@ -3814,6 +3834,59 @@ let uvozIstPopunjenSelect=false;
 
 
 
+
+/* ── IZBOR REDOVA U LAGERU ──
+   Grupa nije uvijek dovoljna: u istoj grupi mjere se znaju razlikovati, a one koje vec
+   imaju dimenzije ne treba dirati. Zato se moze izabrati tacno ono sto treba. */
+function lagerOznaciSve(oznaceno){
+  document.querySelectorAll('.lager-izbor').forEach(i=>i.checked=oznaceno);
+  lagerOsvjeziIzbor();
+}
+
+function lagerIzabraniRedovi(){
+  return [...document.querySelectorAll('.lager-izbor:checked')];
+}
+
+function lagerOsvjeziIzbor(){
+  const izabrani = lagerIzabraniRedovi();
+  const traka = document.getElementById('lager-izbor-traka');
+  traka.style.display = izabrani.length ? 'flex' : 'none';
+  document.getElementById('lager-izbor-broj').textContent = izabrani.length;
+  // Koliko ih VEC ima dimenzije — da se odmah vidi sta ce se prepisati
+  const saDim = izabrani.filter(i=>i.dataset.imaDim==='1').length;
+  document.getElementById('lager-izbor-info').textContent =
+    saDim ? `· ${saDim} već ima dimenzije` : '· nijedan još nema dimenzije';
+}
+
+/* Prozorcic za IZABRANE — isti obrazac kao za pojedinacni artikal, samo se snima
+   na vise njih odjednom. */
+let dimIzabraniIds = null;
+
+function otvoriDimenzijeZaIzabrane(){
+  const izabrani = lagerIzabraniRedovi();
+  if(!izabrani.length){ alert('Nije izabran nijedan artikal.'); return; }
+  dimIzabraniIds = izabrani.map(i=>parseInt(i.value));
+  dimArtikalId = null;
+  dimGrupa = null;
+
+  const saDim = izabrani.filter(i=>i.dataset.imaDim==='1').length;
+  document.getElementById('dim-artikal').textContent = `${izabrani.length} izabranih artikala`;
+  document.getElementById('dim-sirina').value = '';
+  document.getElementById('dim-visina').value = '';
+  document.getElementById('dim-greska').style.display = 'none';
+  document.getElementById('dim-grupa-blok').style.display = saDim ? 'block' : 'none';
+  if(saDim){
+    document.getElementById('dim-grupa-naziv').textContent = '';
+    document.getElementById('dim-cijela-grupa').parentElement.style.display = 'none';
+    document.getElementById('dim-pregazi-red').style.display = 'flex';
+    document.getElementById('dim-pregazi').checked = false;
+    document.getElementById('dim-grupa-broj').textContent = '';
+  }
+  dimPregled();
+  document.getElementById('modal-dimenzije').style.display = 'flex';
+  setTimeout(()=>document.getElementById('dim-sirina').focus(), 50);
+}
+
 /* ═══ DIMENZIJE TABLE ═══════════════════════════════════════════════════════════
    Lager vodi samo kvadraturu i debljinu — sirina i visina table nigdje ne postoje,
    pa se rez ne moze planirati. Dimenzija se unosi JEDNOM po artiklu, u milimetrima. */
@@ -3825,8 +3898,10 @@ function otvoriDimenzije(id, naziv, sirina, visina, grupa){
   document.getElementById('dim-artikal').textContent = naziv;
   // Grupni unos ima smisla samo ako artikal pripada nekoj grupi
   const blok = document.getElementById('dim-grupa-blok');
+  dimIzabraniIds = null;
   if(dimGrupa){
     blok.style.display = 'block';
+    document.getElementById('dim-cijela-grupa').parentElement.style.display = 'flex';
     document.getElementById('dim-grupa-naziv').textContent = `„${dimGrupa}"`;
     document.getElementById('dim-cijela-grupa').checked = false;
     document.getElementById('dim-pregazi').checked = false;
@@ -3892,6 +3967,25 @@ async function sacuvajDimenzije(){
 
   const zaGrupu = dimGrupa && document.getElementById('dim-cijela-grupa').checked;
   const pregazi = document.getElementById('dim-pregazi').checked;
+  const zaIzabrane = Array.isArray(dimIzabraniIds) && dimIzabraniIds.length > 0;
+
+  if(zaIzabrane){
+    if(!confirm(`Postaviti ${Math.round(s)}×${Math.round(v)} mm za ${dimIzabraniIds.length} izabranih artikala?`
+        + (pregazi ? '\n\nPREPISAĆE i one koje već imaju dimenzije.' : '\n\nDiraju se samo oni bez dimenzija.'))) return;
+    try{
+      const r = await fetch(`${API}/api/roba/dimenzije-vise`,{
+        method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ids:dimIzabraniIds, std_sirina:s, std_visina:v, pregazi}),
+      });
+      const d = await r.json();
+      if(!r.ok) throw new Error(d.error||'Greška.');
+      document.getElementById('modal-dimenzije').style.display='none';
+      alert(`✓ Postavljeno za ${d.izmijenjeno} od ${d.izabrano} izabranih.`);
+      dimIzabraniIds = null;
+      if(typeof ucitajLager==='function') ucitajLager();
+    }catch(e){ greska.style.display='block'; greska.textContent='✗ '+e.message; }
+    return;
+  }
   if(zaGrupu){
     const tekst = document.getElementById('dim-grupa-broj').textContent.trim();
     if(!confirm(`Postaviti ${Math.round(s)}×${Math.round(v)} mm za grupu „${dimGrupa}"${tekst}?`
