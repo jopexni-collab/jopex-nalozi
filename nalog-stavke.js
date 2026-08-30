@@ -143,6 +143,103 @@ router.delete('/stavka/:id', async (req, res) => {
   }
 });
 
+/* ── GET /api/nalog-stavke/:r_br/priprema — PROVJERA RESTLOVA ZA CIJELI NALOG ────
+   Za svaku poziciju se pita modul restlova moze li se izrezati iz nekog ostatka.
+   Koristi POSTOJECU logiku (restlovi/trazi) — ne pise se nova geometrija.
+
+   Odgovor po poziciji:
+     ima_restl  — postoji ostatak iz kojeg komad staje
+     kandidati  — koji tacno (sifra, mjera, koliko komada pokriva)
+     treba_tabla— koliko komada mora iz cijele table
+   Tako operater odmah vidi sta moze iz ostataka, a za sta mora nova tabla. */
+router.get('/:r_br/priprema', async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  const objektId = parseInt(req.query.objekt_id) || null;
+
+  try {
+    const st = await pool.query(
+      `SELECT ns.*, ro.sifra AS roba_sifra, ro.naziv AS roba_naziv,
+              ro.std_sirina, ro.std_visina, ro.grupa
+       FROM nalog_stavke ns
+       LEFT JOIN roba ro ON ro.id = ns.roba_id
+       WHERE ns.nalog_r_br = $1
+       ORDER BY ns.redni_broj, ns.id`,
+      [req.params.r_br]
+    );
+    if (!st.rows.length) return res.json({ pozicije: [], poruka: 'Nalog nema pozicija.' });
+
+    const geo = require('./geometrija');
+    // Svi slobodni restlovi — jednom, pa se u JS-u poredi sa svakom pozicijom.
+    // Bolje nego upit po poziciji: nalog zna imati 15 pozicija, a restlova je par stotina.
+    const rest = await pool.query(
+      `SELECT r.id, r.sifra, r.materijal, r.debljina_cm, r.dim_a, r.dim_b, r.poligon,
+              r.oblik, r.objekt_id, po.naziv AS objekt_naziv
+       FROM restlovi r
+       LEFT JOIN prodajni_objekti po ON po.id = r.objekt_id
+       WHERE COALESCE(r.status,'slobodan') = 'slobodan'
+         ${objektId ? 'AND r.objekt_id = $1' : ''}`,
+      objektId ? [objektId] : []
+    );
+
+    const REZ = 5;   // rezerva za sjecivo (mm) — isto kao u modulu restlova
+    const pozicije = st.rows.map(p => {
+      const sir = parseFloat(p.sirina) || 0;
+      const vis = parseFloat(p.visina) || 0;
+      const kom = parseInt(p.kolicina) || 1;
+
+      // Odgovaraju samo restlovi ISTOG materijala i debljine
+      const odgovarajuci = rest.rows.filter(r => {
+        if (p.debljina_cm != null && r.debljina_cm != null
+            && Math.abs(parseFloat(r.debljina_cm) - parseFloat(p.debljina_cm)) > 0.01) return false;
+        const mp = String(p.materijal || p.roba_naziv || '').toLowerCase().trim();
+        const mr = String(r.materijal || '').toLowerCase().trim();
+        return !mp || !mr || mr.includes(mp) || mp.includes(mr);
+      });
+
+      const kandidati = [];
+      for (const r of odgovarajuci) {
+        try {
+          const t = Array.isArray(r.poligon) && r.poligon.length >= 3
+            ? r.poligon
+            : geo.tjemenaOdMjera('pravougaonik', parseFloat(r.dim_a), parseFloat(r.dim_b));
+          if (geo.komadStaje(t, sir, vis, REZ)) {
+            kandidati.push({
+              id: r.id, sifra: r.sifra,
+              dim_a: parseFloat(r.dim_a), dim_b: parseFloat(r.dim_b),
+              objekt_naziv: r.objekt_naziv,
+            });
+          }
+        } catch (e) { /* neispravan poligon — restl se preskace */ }
+        if (kandidati.length >= kom) break;   // dovoljno za sve komade
+      }
+
+      return {
+        id: p.id, redni_broj: p.redni_broj, naziv: p.naziv,
+        materijal: p.roba_naziv || p.materijal,
+        sirina: sir, visina: vis, kolicina: kom,
+        ima_restl: kandidati.length > 0,
+        kandidati,
+        treba_tabla: Math.max(0, kom - kandidati.length),
+        // Bez dimenzija table rez se ne moze planirati
+        tabla_poznata: p.std_sirina != null && p.std_visina != null,
+        std_sirina: p.std_sirina, std_visina: p.std_visina,
+      };
+    });
+
+    res.json({
+      pozicije,
+      sazetak: {
+        ukupno_komada: pozicije.reduce((s, p) => s + p.kolicina, 0),
+        iz_restlova:   pozicije.reduce((s, p) => s + Math.min(p.kolicina, p.kandidati.length), 0),
+        treba_tabla:   pozicije.reduce((s, p) => s + p.treba_tabla, 0),
+        bez_dimenzija: pozicije.filter(p => !p.tabla_poznata).length,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /* ── POST /api/nalog-stavke/:r_br/iz-ponude — prepis pozicija iz ponude ──────────
    Ponude se ne cuvaju po stavkama u bazi — cijela ponuda je JSON na spoljnom
    skladistu, a u tabeli stoji samo link. Zato frontend procita taj JSON i posalje

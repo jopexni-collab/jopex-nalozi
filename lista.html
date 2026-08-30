@@ -476,6 +476,8 @@ function renderPozicije(){
   // Prepis se nudi SAMO ako nalog jos nema pozicija — inace bi se udvostrucile
   document.getElementById('poz-prepis').style.display =
     (!pozStavke.length && pozLinkPonude) ? 'block' : 'none';
+  document.getElementById('poz-priprema-dugme').style.display = pozStavke.length ? 'block' : 'none';
+  if(!pozStavke.length) document.getElementById('poz-priprema').style.display='none';
   if(!pozStavke.length){
     cont.innerHTML = '<div style="padding:14px;color:#8b96a5;font-size:12.5px;text-align:center;background:#f7f8fa;border-radius:8px;">Nalog još nije razložen na pozicije.<br><span style="font-size:11.5px;">Bez mjera se ne može tražiti restl ni planirati rez.</span></div>';
     return;
@@ -551,6 +553,58 @@ function pozIzaberiArtikal(id, naziv, sifra, debljina){
 /* Prepis pozicija IZ PONUDE — mjere vec postoje u ponudi, samo se do sada nisu prenosile
    u nalog (prenosila se samo opisna recenica). Ponuda je JSON na spoljnom skladistu, pa
    se ovdje procita i posalje serveru. */
+
+/* ═══ PRIPREMA — provjera restlova ═══════════════════════════════════════════════
+   Za svaku poziciju se pita moze li se izrezati iz nekog ostatka. Koristi POSTOJECU
+   geometriju iz modula restlova — ne racuna se nista iznova. */
+async function pripremaProvjeri(){
+  const cont = document.getElementById('poz-priprema');
+  cont.style.display='block';
+  cont.innerHTML = '<div style="padding:12px;color:#8b96a5;font-size:12.5px;">Tražim po restlovima...</div>';
+  try{
+    const r = await fetch(`${API}/api/nalog-stavke/${pozNalogRbr}/priprema`);
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
+    renderPriprema(d);
+  }catch(e){
+    cont.innerHTML = `<div style="padding:12px;color:var(--red,#c0392b);font-size:12.5px;">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+function renderPriprema(d){
+  const cont = document.getElementById('poz-priprema');
+  const s = d.sazetak || {};
+  if(!d.pozicije || !d.pozicije.length){
+    cont.innerHTML = '<div style="padding:12px;color:#8b96a5;font-size:12.5px;">Nema pozicija.</div>';
+    return;
+  }
+  cont.innerHTML = `
+    <div style="background:#f3f0f8;border:1px solid #d6cce8;border-radius:8px;padding:10px 13px;margin-bottom:10px;font-size:12.5px;">
+      <b>${s.ukupno_komada} komada ukupno</b>
+      · <span style="color:var(--green,#1f8a4c);font-weight:700;">${s.iz_restlova} iz restlova</span>
+      · <span style="color:var(--blue,#1a5fa8);font-weight:700;">${s.treba_tabla} traži tablu</span>
+      ${s.bez_dimenzija ? `<br><span style="color:var(--orange,#b8860b);">⚠ ${s.bez_dimenzija} ${s.bez_dimenzija===1?'pozicija nema':'pozicija nema'} dimenzije table — rez se ne može planirati</span>` : ''}
+    </div>
+    ${d.pozicije.map(p=>`
+      <div style="border:1px solid var(--border,#ddd);border-radius:8px;padding:9px 12px;margin-bottom:7px;">
+        <div style="font-size:12.5px;font-weight:700;margin-bottom:3px;">
+          ${p.redni_broj}. ${esc(p.naziv||'—')}
+          <span style="font-weight:400;color:#6b7a8d;">· ${esc(p.materijal||'')} · ${Math.round(p.sirina)}×${Math.round(p.visina)} · ${p.kolicina} kom</span>
+        </div>
+        ${p.kandidati.length ? p.kandidati.map(k=>`
+          <div style="font-size:11.5px;color:var(--green,#1f8a4c);padding-left:14px;">
+            ✅ <b>${esc(k.sifra||('R-'+k.id))}</b> ${Math.round(k.dim_a)}×${Math.round(k.dim_b)}
+            ${k.objekt_naziv?`<span style="color:#8b96a5;"> · ${esc(k.objekt_naziv)}</span>`:''}
+          </div>`).join('') : ''}
+        ${p.treba_tabla ? `
+          <div style="font-size:11.5px;color:var(--blue,#1a5fa8);padding-left:14px;">
+            ⬜ ${p.treba_tabla} ${p.treba_tabla===1?'komad':'komada'} → treba tabla
+            ${p.tabla_poznata ? `<span style="color:#8b96a5;"> (tabla ${Math.round(p.std_sirina)}×${Math.round(p.std_visina)})</span>`
+                              : '<span style="color:var(--orange,#b8860b);"> ⚠ dimenzija table nije unesena</span>'}
+          </div>` : ''}
+      </div>`).join('')}`;
+}
+
 async function prepisiIzPonude(){
   if(!pozLinkPonude){ alert('Nalog nema vezanu ponudu.'); return; }
   const greska = document.getElementById('poz-greska');
@@ -2309,6 +2363,14 @@ checkAuth();
     </div>
 
     <div id="poz-lista"></div>
+
+    <!-- PRIPREMA: za svaku poziciju se pita mogu li se izrezati iz restlova -->
+    <div id="poz-priprema-dugme" style="display:none;margin-top:10px;">
+      <button onclick="pripremaProvjeri()" style="width:100%;padding:10px;border:none;background:#6b4fa0;color:#fff;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">
+        🧩 Provjeri restlove za sve pozicije
+      </button>
+    </div>
+    <div id="poz-priprema" style="display:none;margin-top:12px;"></div>
 
     <!-- Unos nove pozicije -->
     <div style="border-top:1px solid #eee;margin-top:12px;padding-top:12px;">

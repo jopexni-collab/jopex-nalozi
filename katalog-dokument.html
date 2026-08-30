@@ -34,19 +34,23 @@
   /* Kartice su oblikovane kao CIGLA iz JoPeX loga — odnos 2:1, zaobljenje 16% visine
      (izmjereno iz originalnog vektora). Svaki artikal = jedna ciglica. */
   .mreza{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:18px;}
+  /* container-type omogucava da se font mjeri prema SIRINI KARTICE (cqw), a ne prema
+     ekranu. Zato izgled ostaje isti i na ekranu i u PDF-u, iako je kartica na papiru
+     manja (~63mm) nego na ekranu (~290px). */
   .mreza .stavka{position:relative;aspect-ratio:2 / 1;border-radius:24px;overflow:hidden;
-                 background:#d8dce1;box-shadow:0 3px 10px rgba(51,0,102,.13);break-inside:avoid;}
+                 background:#d8dce1;box-shadow:0 3px 10px rgba(51,0,102,.13);break-inside:avoid;
+                 container-type:inline-size;}
   .mreza .poz{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
   .mreza .sjena{position:absolute;inset:0;
                 background:linear-gradient(to top,rgba(0,0,0,.72) 0%,rgba(0,0,0,.25) 45%,rgba(0,0,0,.05) 100%);}
-  .mreza .znacka{position:absolute;top:11px;left:11px;background:#fff;color:var(--ljubicasta);
-                 font-size:10.5px;font-weight:800;padding:3px 10px;border-radius:12px;
-                 text-transform:uppercase;letter-spacing:.3px;}
+  .mreza .znacka{position:absolute;top:9px;left:9px;background:#fff;color:var(--ljubicasta);
+                 font-size:8px;font-size:2.76cqw;font-weight:800;padding:2px 8px;border-radius:11px;
+                 text-transform:uppercase;letter-spacing:.2px;}
   .mreza .dno{position:absolute;left:14px;right:14px;bottom:12px;color:#fff;}
-  .mreza .naziv{font-size:13.5px;font-weight:600;line-height:1.25;margin-bottom:4px;
+  .mreza .naziv{font-size:11.5px;font-size:3.97cqw;font-weight:600;line-height:1.25;margin-bottom:3px;
                 text-shadow:0 1px 3px rgba(0,0,0,.5);}
-  .mreza .cijena{font-size:19px;font-weight:800;text-shadow:0 1px 3px rgba(0,0,0,.5);}
-  .mreza .jm{font-size:11px;font-weight:500;opacity:.9;}
+  .mreza .cijena{font-size:13px;font-size:4.48cqw;font-weight:800;text-shadow:0 1px 3px rgba(0,0,0,.5);}
+  .mreza .jm{font-size:7.5px;font-size:2.59cqw;font-weight:500;opacity:.9;}
 
   /* LINIJSKI prikaz — kompaktno, za duge spiskove */
   .lista .stavka{background:#fff;border-radius:10px;margin-bottom:7px;padding:9px 13px;

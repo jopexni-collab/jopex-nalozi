@@ -765,6 +765,34 @@ router.post('/potvrdi', async (req, res) => {
     let iznosPlaceno = +(iznosIzAvansa + iznosSada).toFixed(2);
     const statusPlacanja = iznosPlaceno >= ukupanIznos ? 'placeno' : (iznosPlaceno > 0 ? 'djelimicno' : 'duguje');
 
+    /* ZASTITA OD DVOSTRUKE POTVRDE
+       Dupli klik na "Potvrdi", osvjezavanje stranice ili spor odgovor servera pravili su
+       DVIJE identicne otpremnice — roba se dvaput skidala sa lagera i dvaput knjizila.
+       Ovdje se provjerava da li je ISTI komercijalista, u ISTOM objektu, za ISTOG kupca i
+       na ISTI iznos vec potvrdio otpremnicu u zadnja 2 minuta. Ako jeste, vraca se ta
+       postojeca umjesto pravljenja nove — pa dupli klik nema posljedica. */
+    const nedavna = await client.query(
+      `SELECT id, broj, javni_token FROM otpremnice
+       WHERE komercijalista_id = $1 AND objekt_id = $2
+         AND LOWER(TRIM(COALESCE(kupac_naziv,''))) = LOWER(TRIM($3))
+         AND ABS(COALESCE(ukupan_iznos,0) - $4) < 0.005
+         AND status = 'potvrdjena'
+         AND datum > now() - interval '2 minutes'
+       ORDER BY id DESC LIMIT 1`,
+      [user.id, objektId, String(kupac_naziv || '').trim(), ukupanIznos]
+    );
+    if (nedavna.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(200).json({
+        ok: true,
+        duplikat_sprijecen: true,
+        id: nedavna.rows[0].id,
+        broj: nedavna.rows[0].broj,
+        javni_token: nedavna.rows[0].javni_token,
+        poruka: 'Ova otpremnica je već potvrđena prije manje od 2 minuta — nije napravljena nova.',
+      });
+    }
+
     const broj = await noviBroj(client);
     const h = await client.query(
       `INSERT INTO otpremnice
