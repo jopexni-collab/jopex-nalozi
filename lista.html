@@ -428,6 +428,167 @@ function fd(d){
   return `${dd}.${m}.${y.slice(2)}`;
 }
 function fm(n){return(broj(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});}
+
+/* ═══ POZICIJE NALOGA ═══════════════════════════════════════════════════════════════
+   Zadatak je opisna recenica, iz koje se ne moze traziti restl ni planirati rez.
+   Pozicije su ta ista recenica razlozena na redove sa MJERAMA (u milimetrima).
+   Popunjavaju se prepisom iz ponude pri usvajanju, ili rucno za male naloge. */
+let pozNalogRbr = null, pozStavke = [], pozIzabraniArtikal = null, pozTajmer = null;
+
+async function otvoriPozicije(rBr, ev){
+  if(ev) ev.stopPropagation();
+  pozNalogRbr = rBr;
+  pozIzabraniArtikal = null;
+  const red = (typeof rows!=='undefined' ? rows : []).find(x=>x.r_br===rBr);
+  document.getElementById('poz-nalog').textContent = '#'+rBr;
+  document.getElementById('poz-zadatak').textContent =
+    red ? [red.zadatak, red.materijal, red.narucilac].filter(Boolean).join(' · ') : '';
+  document.getElementById('poz-naziv').value='';
+  document.getElementById('poz-materijal').value='';
+  document.getElementById('poz-sirina').value='';
+  document.getElementById('poz-visina').value='';
+  document.getElementById('poz-kolicina').value='1';
+  document.getElementById('poz-greska').style.display='none';
+  document.getElementById('modal-pozicije').style.display='flex';
+  await ucitajPozicije();
+}
+
+async function ucitajPozicije(){
+  const cont = document.getElementById('poz-lista');
+  cont.innerHTML = '<div style="padding:12px;color:#8b96a5;font-size:12.5px;">Učitavanje...</div>';
+  try{
+    const r = await fetch(`${API}/api/nalog-stavke/${pozNalogRbr}`);
+    if(!r.ok){
+      const d = await r.json().catch(()=>({}));
+      throw new Error(d.error || `Server je vratio ${r.status}`);
+    }
+    pozStavke = await r.json();
+    renderPozicije();
+  }catch(e){
+    cont.innerHTML = `<div style="padding:12px;color:var(--red,#c0392b);font-size:12.5px;">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+function renderPozicije(){
+  const cont = document.getElementById('poz-lista');
+  if(!pozStavke.length){
+    cont.innerHTML = '<div style="padding:14px;color:#8b96a5;font-size:12.5px;text-align:center;background:#f7f8fa;border-radius:8px;">Nalog još nije razložen na pozicije.<br><span style="font-size:11.5px;">Bez mjera se ne može tražiti restl ni planirati rez.</span></div>';
+    return;
+  }
+  const ukupno = pozStavke.reduce((s,x)=>s+(x.povrsina_m2||0),0);
+  cont.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#1f3864;color:#fff;">
+        <th style="padding:4px 6px;width:26px;">#</th>
+        <th style="padding:4px 6px;text-align:left;">Naziv</th>
+        <th style="padding:4px 6px;text-align:left;">Materijal</th>
+        <th style="padding:4px 6px;text-align:right;">Mjera (mm)</th>
+        <th style="padding:4px 6px;text-align:center;">Kom</th>
+        <th style="padding:4px 6px;text-align:right;">m²</th>
+        <th style="padding:4px 6px;width:30px;"></th>
+      </tr></thead>
+      <tbody>${pozStavke.map((s,i)=>`
+        <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
+          <td style="padding:3px 6px;text-align:center;color:#8b96a5;">${s.redni_broj}</td>
+          <td style="padding:3px 6px;font-weight:600;">${esc(s.naziv||'—')}</td>
+          <td style="padding:3px 6px;">
+            ${esc(s.roba_naziv || s.materijal || '—')}
+            ${s.roba_id && !s.moze_planirati ? '<span title="Artikal nema unesene dimenzije table — rez se ne može planirati" style="color:var(--orange,#b8860b);margin-left:3px;">⚠</span>' : ''}
+          </td>
+          <td style="padding:3px 6px;text-align:right;font-weight:700;">${Math.round(s.sirina)}×${Math.round(s.visina)}</td>
+          <td style="padding:3px 6px;text-align:center;font-weight:700;">${s.kolicina}</td>
+          <td style="padding:3px 6px;text-align:right;color:#6b7a8d;">${(s.povrsina_m2||0).toFixed(3)}</td>
+          <td style="padding:3px 6px;text-align:center;">
+            <button onclick="obrisiPoziciju(${s.id})" title="Obriši poziciju" style="background:none;border:none;cursor:pointer;font-size:12px;color:var(--red,#c0392b);">🗑</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      <tfoot><tr style="border-top:2px solid #1f3864;font-weight:800;">
+        <td colspan="5" style="padding:5px 6px;text-align:right;">UKUPNO</td>
+        <td style="padding:5px 6px;text-align:right;">${ukupno.toFixed(3)} m²</td>
+        <td></td>
+      </tr></tfoot>
+    </table>`;
+}
+
+/* Pretraga artikla iz lagera — pozicija se vezuje za sifru, pa se zna koje su
+   dimenzije table i moze se traziti restl istog materijala. */
+function pozTraziArtikal(){
+  clearTimeout(pozTajmer);
+  pozIzabraniArtikal = null;
+  const q = document.getElementById('poz-materijal').value.trim();
+  const rez = document.getElementById('poz-rezultati');
+  if(q.length < 2){ rez.style.display='none'; return; }
+  pozTajmer = setTimeout(async ()=>{
+    try{
+      const r = await fetch(`${API}/api/roba?q=${encodeURIComponent(q)}&limit=12`);
+      const d = await r.json();
+      const lista = Array.isArray(d) ? d : (d.stavke||[]);
+      if(!lista.length){ rez.style.display='none'; return; }
+      rez.innerHTML = lista.slice(0,12).map(a=>`
+        <div onclick="pozIzaberiArtikal(${a.id},'${esc(a.naziv).replace(/'/g,"&apos;")}','${esc(a.sifra)}',${a.debljina_cm??'null'})"
+             style="padding:5px 9px;cursor:pointer;font-size:12px;border-bottom:1px solid #f2f3f5;">
+          <span style="color:#999;">${esc(a.sifra)}</span> ${esc(a.naziv)}
+          ${(a.std_sirina&&a.std_visina) ? `<span style="color:#8b96a5;font-size:10.5px;"> · ${Math.round(a.std_sirina)}×${Math.round(a.std_visina)}</span>` : '<span style="color:var(--orange,#b8860b);font-size:10.5px;"> · ⚠ bez dimenzija</span>'}
+        </div>`).join('');
+      rez.style.display='block';
+    }catch(e){ rez.style.display='none'; }
+  }, 280);
+}
+
+function pozIzaberiArtikal(id, naziv, sifra, debljina){
+  pozIzabraniArtikal = { id, naziv, sifra, debljina_cm: debljina };
+  document.getElementById('poz-materijal').value = `${sifra} ${naziv}`;
+  document.getElementById('poz-rezultati').style.display='none';
+  document.getElementById('poz-sirina').focus();
+}
+
+async function dodajPoziciju(){
+  const greska = document.getElementById('poz-greska');
+  const sirina = broj(document.getElementById('poz-sirina').value);
+  const visina = broj(document.getElementById('poz-visina').value);
+  const kolicina = parseInt(document.getElementById('poz-kolicina').value) || 1;
+
+  if(!sirina || !visina){
+    greska.style.display='block'; greska.textContent='Unesi širinu i visinu (mm).'; return;
+  }
+  greska.style.display='none';
+  try{
+    const r = await fetch(`${API}/api/nalog-stavke/${pozNalogRbr}`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        naziv: document.getElementById('poz-naziv').value.trim() || null,
+        roba_id: pozIzabraniArtikal?.id || null,
+        materijal: pozIzabraniArtikal?.naziv || document.getElementById('poz-materijal').value.trim() || null,
+        debljina_cm: pozIzabraniArtikal?.debljina_cm ?? null,
+        sirina, visina, kolicina,
+      }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
+    document.getElementById('poz-naziv').value='';
+    document.getElementById('poz-materijal').value='';
+    document.getElementById('poz-sirina').value='';
+    document.getElementById('poz-visina').value='';
+    document.getElementById('poz-kolicina').value='1';
+    pozIzabraniArtikal = null;
+    await ucitajPozicije();
+    if(typeof load==='function') load();   // osvjezi brojac u listi
+  }catch(e){
+    greska.style.display='block'; greska.textContent='✗ '+e.message;
+  }
+}
+
+async function obrisiPoziciju(id){
+  if(!confirm('Obrisati ovu poziciju?')) return;
+  try{
+    const r = await fetch(`${API}/api/nalog-stavke/stavka/${id}`,{method:'DELETE'});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
+    await ucitajPozicije();
+    if(typeof load==='function') load();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+
 function esc(s){return s==null?'':String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 // Skraćuje puno ime na "Ime P." (ime + prvo slovo prezimena) — koristi se svuda gdje se
 // prikazuje ko je nešto uradio, radi kraćeg/diskretnijeg prikaza.
@@ -470,6 +631,16 @@ function getCols(){
     {k:'r_br',l:'R.Br.',w:50,filter:'text',render:r=>`<td class="num">${r.stornirano?'⛔ ':''}${r.r_br}${isAdmin?` <button onclick="event.stopPropagation();promijeniBrojNaloga(${r.r_br})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--blue);" title="Promijeni broj naloga">✎</button>`:''}</td>`,edit:null},
     {k:'zadatak',l:'Zadatak',w:130,filter:'sel',opts:ZADACI,render:r=>`<td>${r.izvor==='terenska_ponuda'?'<span title="Terenska ponuda" style="background:#fff3e0;color:#b8860b;font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:6px;margin-right:5px;">🚐 TEREN</span>':''}${esc(r.zadatak)}</td>`,edit:{type:'select',opts:ZADACI,field:'zadatak'}},
     {k:'materijal',l:'Materijal',w:100,filter:'sel',opts:MATERIJALI,render:r=>`<td>${esc(r.materijal)}</td>`,edit:{type:'select',opts:MATERIJALI,field:'materijal'}},
+    /* POZICIJE — zadatak je opisna recenica ("Rosa porino 2cm gazista flamed..."), iz
+       koje se ne moze traziti restl ni planirati rez. Ova kolona vodi na razlozene
+       pozicije sa mjerama. Oznaka pokazuje koliko ih ima; prazan kvadratic znaci da
+       nalog jos nije razlozen. */
+    {k:'_pozicije',l:'📐 Poz.',w:52,filter:null,render:r=>{
+      const n = parseInt(r.broj_pozicija||0);
+      return `<td class="center"><button onclick="otvoriPozicije(${r.r_br},event)" title="${n?n+' pozicija':'Nema pozicija — klikni za unos'}"
+        style="background:none;border:none;cursor:pointer;font-size:11px;font-weight:700;color:${n?'var(--blue,#1a5fa8)':'#c3c9d1'};">
+        ${n? '📐 '+n : '＋'}</button></td>`;
+    },edit:null},
     {k:'prioritet',l:'Prioritet',w:90,filter:'sel',opts:PRIORITETI,render:r=>`<td>${chipP(r.prioritet)}</td>`,edit:{type:'select',opts:PRIORITETI,field:'prioritet'}},
     {k:'ugovorio',l:'Ugovorio',w:110,filter:'text',render:r=>`<td>${esc(skratiIme(r.ugovorio))}</td>`,edit:{type:'ugovorio',field:'ugovorio_id',label:'Ugovorio'}},
     {k:'narucilac',l:'Naručilac',w:130,filter:'text',render:r=>`<td>${esc(r.narucilac)}</td>`,edit:{type:'text',field:'narucilac',label:'Naručilac'}},
@@ -2072,4 +2243,45 @@ checkAuth();
 </script>
 
 
+<div id="modal-pozicije" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:950;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:18px 20px;max-width:760px;width:95vw;max-height:90vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      <h3 style="margin:0;font-size:16px;">📐 Pozicije naloga <span id="poz-nalog"></span></h3>
+      <button onclick="document.getElementById('modal-pozicije').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+    </div>
+    <div id="poz-zadatak" style="font-size:12px;color:#6b7a8d;margin-bottom:12px;line-height:1.45;"></div>
+
+    <div id="poz-lista"></div>
+
+    <!-- Unos nove pozicije -->
+    <div style="border-top:1px solid #eee;margin-top:12px;padding-top:12px;">
+      <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:7px;">Dodaj poziciju</div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:end;">
+        <div style="flex:2;min-width:120px;">
+          <label style="font-size:10.5px;color:#6b7a8d;display:block;margin-bottom:3px;">Naziv</label>
+          <input type="text" id="poz-naziv" placeholder="gazište, čelo..." style="width:100%;font:inherit;font-size:12.5px;padding:6px 8px;border:1px solid #ccc;border-radius:5px;">
+        </div>
+        <div style="flex:2;min-width:150px;">
+          <label style="font-size:10.5px;color:#6b7a8d;display:block;margin-bottom:3px;">Materijal (iz lagera)</label>
+          <input type="text" id="poz-materijal" placeholder="traži po šifri ili nazivu..." oninput="pozTraziArtikal()" autocomplete="off" style="width:100%;font:inherit;font-size:12.5px;padding:6px 8px;border:1px solid #ccc;border-radius:5px;">
+          <div id="poz-rezultati" style="display:none;position:absolute;z-index:10;background:#fff;border:1px solid #ccc;border-radius:6px;max-height:170px;overflow-y:auto;box-shadow:0 3px 10px rgba(0,0,0,.15);margin-top:2px;min-width:260px;"></div>
+        </div>
+        <div style="width:78px;">
+          <label style="font-size:10.5px;color:#6b7a8d;display:block;margin-bottom:3px;">Širina mm</label>
+          <input type="text" inputmode="decimal" id="poz-sirina" placeholder="1200" style="width:100%;font:inherit;font-size:12.5px;padding:6px 8px;border:1px solid #ccc;border-radius:5px;">
+        </div>
+        <div style="width:78px;">
+          <label style="font-size:10.5px;color:#6b7a8d;display:block;margin-bottom:3px;">Visina mm</label>
+          <input type="text" inputmode="decimal" id="poz-visina" placeholder="600" style="width:100%;font:inherit;font-size:12.5px;padding:6px 8px;border:1px solid #ccc;border-radius:5px;">
+        </div>
+        <div style="width:58px;">
+          <label style="font-size:10.5px;color:#6b7a8d;display:block;margin-bottom:3px;">Kom</label>
+          <input type="text" inputmode="numeric" id="poz-kolicina" value="1" style="width:100%;font:inherit;font-size:12.5px;padding:6px 8px;border:1px solid #ccc;border-radius:5px;">
+        </div>
+        <button onclick="dodajPoziciju()" style="padding:7px 14px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:6px;font-weight:700;cursor:pointer;font-size:12.5px;">+ Dodaj</button>
+      </div>
+      <div id="poz-greska" style="display:none;color:var(--red,#c0392b);font-size:12px;margin-top:8px;"></div>
+    </div>
+  </div>
+</div>
 </body></html>

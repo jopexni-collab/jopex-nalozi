@@ -37,6 +37,7 @@ const BASE_COLS = `
   p.link_skica, p.link_ponuda, p.datum_kreiranja, p.nova_procjena,
   p.naplaceno, p.naplaceno_opis, COALESCE(p.stornirano,false) AS stornirano,
   COALESCE(p.izvor,'velika_ponuda') AS izvor,
+  (SELECT COUNT(*) FROM nalog_stavke ns WHERE ns.nalog_r_br=p.r_br) AS broj_pozicija,
   (SELECT COALESCE(thumb_url, url) FROM nalog_slike WHERE nalog_r_br=p.r_br AND glavna=true LIMIT 1) AS glavna_slika,
   (SELECT COUNT(*) FROM nalog_slike WHERE nalog_r_br=p.r_br) AS broj_slika
 `;
