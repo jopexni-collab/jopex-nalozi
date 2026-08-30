@@ -654,12 +654,61 @@ async function pripremaProvjeri(){
   const cont = document.getElementById('poz-priprema');
   cont.style.display='block';
   if(!pozStavke.length){ cont.innerHTML=''; return; }
-
   cont.innerHTML = '<div style="padding:12px;color:#8b96a5;font-size:12.5px;">Tražim po restlovima...</div>';
+
+  /* Prvo se pokusava ruta koja racuna raspored za CIJELI nalog odjednom. Ona zna koliko
+     KOMADA izlazi iz svakog restla i ne obecava isti restl dvaput.
+     Ako te rute jos nema, pada se na staru (jedan poziv po poziciji) — ta radi, ali
+     broji restlove umjesto komada, pa je broj "treba tabla" priblizan. */
   try{
-    /* Koristi se POSTOJECA, provjerena ruta modula restlova — ista koja radi kad se
-       trazi rucno. Ranije sam imao svoju kopiju logike u nalog-stavke.js; dvije verzije
-       istog racuna se prije ili kasnije raziđu, pa je bolje jedna. */
+    const r = await fetch(`${API}/api/restlovi/nesting/za-nalog`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        pozicije: pozStavke.map(p=>({
+          id: p.id, naziv: p.naziv,
+          sirina: p.sirina, visina: p.visina, kolicina: p.kolicina,
+          roba_id: p.roba_id || null,
+          materijal: p.roba_naziv || p.materijal || null,
+          debljina_cm: p.debljina_cm ?? null,
+          bez_okretanja: false,
+        })),
+        rez: 5, objekt_id: null,
+      }),
+    });
+    if(r.ok){
+      const d = await r.json();
+      // Dopuni podatke o dimenzijama table — njih zna nalog, ne modul restlova
+      const poMjeri = new Map(pozStavke.map(p=>[p.id, p]));
+      (d.pozicije||[]).forEach(p=>{
+        const izvorna = poMjeri.get(p.id);
+        p.moze_planirati = izvorna?.moze_planirati;
+        p.std_sirina = izvorna?.std_sirina;
+        p.std_visina = izvorna?.std_visina;
+        p.poligon = izvorna?.poligon;
+        p.roba_naziv = izvorna?.roba_naziv;
+        p.materijal = izvorna?.materijal;
+        p.debljina_cm = izvorna?.debljina_cm;
+        p.redni_broj = izvorna?.redni_broj;
+      });
+      d.sazetak = d.sazetak || {};
+      d.sazetak.bez_dimenzija = (d.pozicije||[]).filter(p=>!p.moze_planirati).length;
+      d.tacan = true;
+      renderPriprema(d);
+      return;
+    }
+    if(r.status !== 404) {
+      const dg = await r.json().catch(()=>({}));
+      if(dg.error) throw new Error(dg.error);
+    }
+  }catch(e){
+    if(e.message && !/404|Failed to fetch|NetworkError/i.test(e.message)){
+      cont.innerHTML = `<div style="padding:12px;color:var(--red,#c0392b);font-size:12.5px;">✗ ${esc(e.message)}</div>`;
+      return;
+    }
+  }
+
+  // ── Stara putanja: jedan poziv po poziciji ──
+  try{
     const rezultati = [];
     for(const p of pozStavke){
       let odgovor = null;
@@ -668,6 +717,7 @@ async function pripremaProvjeri(){
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
             sirina: p.sirina, visina: p.visina,
+            roba_id: p.roba_id || null,   // tacno po artiklu — bez pogadjanja po nazivu
             materijal: p.roba_naziv || p.materijal || null,
             debljina_cm: p.debljina_cm ?? null,
             poligon: Array.isArray(p.poligon) && p.poligon.length >= 3 ? p.poligon : null,
@@ -675,28 +725,24 @@ async function pripremaProvjeri(){
           }),
         });
         odgovor = r.ok ? await r.json() : null;
-      }catch(e){ /* ako pretraga padne, pozicija se prikazuje bez kandidata */ }
+      }catch(e){ /* pozicija se prikazuje bez kandidata */ }
 
       const kandidati = (odgovor && odgovor.ima && Array.isArray(odgovor.kandidati))
         ? odgovor.kandidati : [];
       rezultati.push({
-        ...p,
-        kandidati,
-        // Restl pokriva najvise onoliko komada koliko ima odgovarajucih ostataka
-        pokriveno: Math.min(p.kolicina, kandidati.length),
+        ...p, kandidati,
+        iz_restlova: Math.min(p.kolicina, kandidati.length),
         treba_tabla: Math.max(0, p.kolicina - kandidati.length),
-        // Kad nista ne staje, ruta vraca koliko FALI — korisno, cesto je par milimetara
-        // Kad nista ne staje, ruta vraca PRIBLIZNE — koliko milimetara fali.
-        // Cesto je to par milimetara, pa majstor sam odluci hoce li smanjiti rezervu.
         priblizni: (odgovor && !odgovor.ima && Array.isArray(odgovor.priblizni))
           ? odgovor.priblizni.slice(0, 2) : [],
       });
     }
     renderPriprema({
       pozicije: rezultati,
+      tacan: false,
       sazetak: {
         ukupno_komada: rezultati.reduce((s,p)=>s+p.kolicina,0),
-        iz_restlova:   rezultati.reduce((s,p)=>s+p.pokriveno,0),
+        iz_restlova:   rezultati.reduce((s,p)=>s+p.iz_restlova,0),
         treba_tabla:   rezultati.reduce((s,p)=>s+p.treba_tabla,0),
         bez_dimenzija: rezultati.filter(p=>!p.moze_planirati).length,
       },
@@ -718,72 +764,60 @@ function renderPriprema(d){
       <b>${s.ukupno_komada} komada ukupno</b>
       · <span style="color:var(--green,#1f8a4c);font-weight:700;">${s.iz_restlova} iz restlova</span>
       · <span style="color:var(--blue,#1a5fa8);font-weight:700;">${s.treba_tabla} traži tablu</span>
-      ${s.bez_dimenzija ? `<br><span style="color:var(--orange,#b8860b);">⚠ ${s.bez_dimenzija} ${s.bez_dimenzija===1?'pozicija nema':'pozicija nema'} dimenzije table — rez se ne može planirati</span>` : ''}
+      ${s.restlova_u_planu ? `<span style="color:#6b7a8d;"> · ${s.restlova_u_planu} restlova u planu</span>` : ''}
+      ${s.bez_dimenzija ? `<br><span style="color:var(--orange,#b8860b);">⚠ ${s.bez_dimenzija} pozicija nema dimenzije table</span>` : ''}
+      ${d.tacan === false ? `<br><span style="color:#8b96a5;font-size:11px;">Približan račun — broji restlove, ne komade.</span>` : ''}
     </div>
     ${d.pozicije.map(p=>`
       <div style="border:1px solid var(--border,#ddd);border-radius:8px;padding:9px 12px;margin-bottom:7px;">
         <div style="font-size:12.5px;font-weight:700;margin-bottom:3px;">
           ${p.redni_broj}. ${esc(p.naziv||'—')}
-          ${(Array.isArray(p.poligon)&&p.poligon.length>=3) ? '<span title="Nepravilan oblik — poređen je stvarni oblik, ne okvir" style="background:#f3f0f8;color:#6b4fa0;font-size:9.5px;font-weight:800;padding:1px 5px;border-radius:5px;margin-left:3px;">⬡ OBLIK</span>' : ''}
-          <span style="font-weight:400;color:#6b7a8d;">· ${esc(p.materijal||'')} · ${Math.round(p.sirina)}×${Math.round(p.visina)}${p.komad_nepravilan?' (okvir)':''} · ${p.kolicina} kom</span>
+          ${(Array.isArray(p.poligon)&&p.poligon.length>=3) ? '<span title="Nepravilan oblik" style="background:#f3f0f8;color:#6b4fa0;font-size:9.5px;font-weight:800;padding:1px 5px;border-radius:5px;margin-left:3px;">⬡ OBLIK</span>' : ''}
+          <span style="font-weight:400;color:#6b7a8d;">· ${esc(p.roba_naziv||p.materijal||'')} · ${Math.round(p.sirina)}×${Math.round(p.visina)} · ${p.kolicina} kom</span>
         </div>
-        ${p.kandidati.length ? p.kandidati.map(k=>`
+
+        ${/* Raspored po restlovima — koliko komada iz BAS TOG restla */''}
+        ${(p.restlovi||[]).map(r=>`
+          <div style="font-size:11.5px;color:var(--green,#1f8a4c);padding-left:14px;">
+            ✅ <b>${r.komada} kom</b> iz <b>${esc(r.oznaka||('R-'+r.restl_id))}</b>
+            ${r.dim_a?`${Math.round(r.dim_a)}×${Math.round(r.dim_b)}`:''}
+            ${r.procenat!=null?`<span style="color:#8b96a5;"> · iskorišteno ${Math.round(r.procenat)}%</span>`:''}
+            ${r.ostatak_m2!=null?`<span style="color:#8b96a5;"> · ostatak ${(+r.ostatak_m2).toFixed(2)} m²</span>`:''}
+            ${r.objekt_naziv?`<span style="color:#8b96a5;"> · ${esc(r.objekt_naziv)}</span>`:''}
+          </div>`).join('')}
+
+        ${/* Stara putanja — kandidati bez podatka koliko komada iz kojeg */''}
+        ${!p.restlovi && (p.kandidati||[]).length ? p.kandidati.slice(0,4).map(k=>`
           <div style="font-size:11.5px;color:var(--green,#1f8a4c);padding-left:14px;">
             ✅ <b>${esc(k.oznaka||('R-'+k.id))}</b> ${Math.round(k.dim_a)}×${Math.round(k.dim_b)}
-            ${k.otpad_m2!=null?`<span style="color:#8b96a5;" title="Koliko ostaje neiskorišteno"> · otpad ${(+k.otpad_m2).toFixed(2)} m²</span>`:''}
-            ${k.lokacija?`<span style="color:#8b96a5;" title="Gdje se restl nalazi"> 📍 ${esc(k.lokacija)}</span>`:''}
-            ${k.restl_nepravilan?'<span title="Restl je nepravilnog oblika" style="color:#6b4fa0;">⬡</span>':''}
-            ${k.polozaj?.okret ? `<span style="color:#8b96a5;" title="Komad se okreće za ovaj ugao">↻ ${k.polozaj.okret}°</span>` : ''}
-            ${k.objekt_naziv?`<span style="color:#8b96a5;"> · ${esc(k.objekt_naziv)}</span>`:''}
+            ${k.otpad_m2!=null?`<span style="color:#8b96a5;"> · otpad ${(+k.otpad_m2).toFixed(2)} m²</span>`:''}
+            ${k.polozaj?.okret ? `<span style="color:#8b96a5;">↻ ${k.polozaj.okret}°</span>` : ''}
+            ${k.lokacija?`<span style="color:#8b96a5;"> 📍 ${esc(k.lokacija)}</span>`:''}
           </div>`).join('') : ''}
-        ${(!p.kandidati.length && p.priblizni.length) ? p.priblizni.map(b=>`
+
+        ${(p.priblizni||[]).length ? p.priblizni.map(b=>`
           <div style="font-size:11.5px;color:#8b6914;padding-left:14px;">
             📏 Blizu: <b>${esc(b.oznaka||('R-'+b.id))}</b> ${Math.round(b.dim_a)}×${Math.round(b.dim_b)}
             — fali ${Math.round(b.fali||0)} mm
           </div>`).join('') : ''}
+
+        <div style="padding-left:14px;margin-top:3px;">
+          <a href="restlovi.html?sirina=${Math.round(p.sirina)}&visina=${Math.round(p.visina)}&materijal=${encodeURIComponent(p.roba_naziv||p.materijal||'')}&debljina=${p.debljina_cm??''}&nalog=${pozNalogRbr}&poz=${p.redni_broj}"
+             target="_blank" rel="noopener"
+             style="font-size:11px;color:#6b4fa0;text-decoration:none;font-weight:700;">
+            🧩 Otvori u Restlovima →
+          </a>
+        </div>
+
         ${p.treba_tabla ? `
           <div style="font-size:11.5px;color:var(--blue,#1a5fa8);padding-left:14px;">
             ⬜ ${p.treba_tabla} ${p.treba_tabla===1?'komad':'komada'} → treba tabla
-            ${p.tabla_poznata ? `<span style="color:#8b96a5;"> (tabla ${Math.round(p.std_sirina)}×${Math.round(p.std_visina)})</span>`
-                              : '<span style="color:var(--orange,#b8860b);"> ⚠ dimenzija table nije unesena</span>'}
+            ${p.moze_planirati ? `<span style="color:#8b96a5;"> (tabla ${Math.round(p.std_sirina)}×${Math.round(p.std_visina)})</span>`
+                               : '<span style="color:var(--orange,#b8860b);"> ⚠ dimenzija table nije unesena</span>'}
           </div>` : ''}
       </div>`).join('')}`;
 }
 
-
-/* Spisak ponuda za rucno povezivanje. Nalog ne pamti iz koje je ponude nastao
-   (nema ponuda_id, a link vodi na HTML radnog naloga, ne na JSON sa pozicijama),
-   pa se ponuda bira iz spiska. */
-async function ucitajSpisakPonuda(){
-  const sel = document.getElementById('poz-izbor-ponude');
-  if(!sel) return;
-  try{
-    const r = await fetch(`${API}/api/ponude`);
-    if(!r.ok) throw new Error('Ne mogu učitati ponude.');
-    const lista = await r.json();
-    const saJsonom = (lista||[]).filter(p=>p.link_json);
-    if(!saJsonom.length){
-      sel.innerHTML = '<option value="">— nema ponuda sa podacima —</option>';
-      return;
-    }
-    // Najskorije prve — nalog je obicno nastao iz nedavne ponude
-    sel.innerHTML = '<option value="">— izaberi ponudu —</option>' + saJsonom.map(p=>{
-      const d = p.datum || p.kreirano;
-      const kad = d ? new Date(d).toLocaleDateString('bs-BA') : '';
-      return `<option value="${esc(p.link_json)}">${esc(p.kupac||p.naziv||'bez naziva')} · ${kad}</option>`;
-    }).join('');
-  }catch(e){
-    sel.innerHTML = `<option value="">— ${esc(e.message)} —</option>`;
-  }
-}
-
-async function prepisiIzIzabranePonude(){
-  const sel = document.getElementById('poz-izbor-ponude');
-  const link = sel?.value;
-  if(!link){ alert('Izaberi ponudu iz spiska.'); return; }
-  pozLinkPonude = link;
-  await prepisiIzPonude();
-}
 
 async function prepisiIzPonude(){
   if(!pozLinkPonude){ alert('Nalog nema vezanu ponudu.'); return; }
