@@ -653,12 +653,54 @@ async function poveziMaterijal(){
 async function pripremaProvjeri(){
   const cont = document.getElementById('poz-priprema');
   cont.style.display='block';
+  if(!pozStavke.length){ cont.innerHTML=''; return; }
+
   cont.innerHTML = '<div style="padding:12px;color:#8b96a5;font-size:12.5px;">Tražim po restlovima...</div>';
   try{
-    const r = await fetch(`${API}/api/nalog-stavke/${pozNalogRbr}/priprema`);
-    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
-    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
-    renderPriprema(d);
+    /* Koristi se POSTOJECA, provjerena ruta modula restlova — ista koja radi kad se
+       trazi rucno. Ranije sam imao svoju kopiju logike u nalog-stavke.js; dvije verzije
+       istog racuna se prije ili kasnije raziđu, pa je bolje jedna. */
+    const rezultati = [];
+    for(const p of pozStavke){
+      let odgovor = null;
+      try{
+        const r = await fetch(`${API}/api/restlovi/trazi`,{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            sirina: p.sirina, visina: p.visina,
+            materijal: p.roba_naziv || p.materijal || null,
+            debljina_cm: p.debljina_cm ?? null,
+            poligon: Array.isArray(p.poligon) && p.poligon.length >= 3 ? p.poligon : null,
+            rez: 5,
+          }),
+        });
+        odgovor = r.ok ? await r.json() : null;
+      }catch(e){ /* ako pretraga padne, pozicija se prikazuje bez kandidata */ }
+
+      const kandidati = (odgovor && odgovor.ima && Array.isArray(odgovor.kandidati))
+        ? odgovor.kandidati : [];
+      rezultati.push({
+        ...p,
+        kandidati,
+        // Restl pokriva najvise onoliko komada koliko ima odgovarajucih ostataka
+        pokriveno: Math.min(p.kolicina, kandidati.length),
+        treba_tabla: Math.max(0, p.kolicina - kandidati.length),
+        // Kad nista ne staje, ruta vraca koliko FALI — korisno, cesto je par milimetara
+        // Kad nista ne staje, ruta vraca PRIBLIZNE — koliko milimetara fali.
+        // Cesto je to par milimetara, pa majstor sam odluci hoce li smanjiti rezervu.
+        priblizni: (odgovor && !odgovor.ima && Array.isArray(odgovor.priblizni))
+          ? odgovor.priblizni.slice(0, 2) : [],
+      });
+    }
+    renderPriprema({
+      pozicije: rezultati,
+      sazetak: {
+        ukupno_komada: rezultati.reduce((s,p)=>s+p.kolicina,0),
+        iz_restlova:   rezultati.reduce((s,p)=>s+p.pokriveno,0),
+        treba_tabla:   rezultati.reduce((s,p)=>s+p.treba_tabla,0),
+        bez_dimenzija: rezultati.filter(p=>!p.moze_planirati).length,
+      },
+    });
   }catch(e){
     cont.innerHTML = `<div style="padding:12px;color:var(--red,#c0392b);font-size:12.5px;">✗ ${esc(e.message)}</div>`;
   }
@@ -682,16 +724,22 @@ function renderPriprema(d){
       <div style="border:1px solid var(--border,#ddd);border-radius:8px;padding:9px 12px;margin-bottom:7px;">
         <div style="font-size:12.5px;font-weight:700;margin-bottom:3px;">
           ${p.redni_broj}. ${esc(p.naziv||'—')}
-          ${p.komad_nepravilan ? '<span title="Nepravilan oblik — poređen je stvarni oblik, ne okvir" style="background:#f3f0f8;color:#6b4fa0;font-size:9.5px;font-weight:800;padding:1px 5px;border-radius:5px;margin-left:3px;">⬡ OBLIK</span>' : ''}
+          ${(Array.isArray(p.poligon)&&p.poligon.length>=3) ? '<span title="Nepravilan oblik — poređen je stvarni oblik, ne okvir" style="background:#f3f0f8;color:#6b4fa0;font-size:9.5px;font-weight:800;padding:1px 5px;border-radius:5px;margin-left:3px;">⬡ OBLIK</span>' : ''}
           <span style="font-weight:400;color:#6b7a8d;">· ${esc(p.materijal||'')} · ${Math.round(p.sirina)}×${Math.round(p.visina)}${p.komad_nepravilan?' (okvir)':''} · ${p.kolicina} kom</span>
         </div>
         ${p.kandidati.length ? p.kandidati.map(k=>`
           <div style="font-size:11.5px;color:var(--green,#1f8a4c);padding-left:14px;">
             ✅ <b>${esc(k.oznaka||('R-'+k.id))}</b> ${Math.round(k.dim_a)}×${Math.round(k.dim_b)}
+            ${k.otpad_m2!=null?`<span style="color:#8b96a5;" title="Koliko ostaje neiskorišteno"> · otpad ${(+k.otpad_m2).toFixed(2)} m²</span>`:''}
             ${k.lokacija?`<span style="color:#8b96a5;" title="Gdje se restl nalazi"> 📍 ${esc(k.lokacija)}</span>`:''}
             ${k.restl_nepravilan?'<span title="Restl je nepravilnog oblika" style="color:#6b4fa0;">⬡</span>':''}
-            ${k.okret ? `<span style="color:#8b96a5;" title="Komad se okreće za ovaj ugao">↻ ${k.okret}°</span>` : ''}
+            ${k.polozaj?.okret ? `<span style="color:#8b96a5;" title="Komad se okreće za ovaj ugao">↻ ${k.polozaj.okret}°</span>` : ''}
             ${k.objekt_naziv?`<span style="color:#8b96a5;"> · ${esc(k.objekt_naziv)}</span>`:''}
+          </div>`).join('') : ''}
+        ${(!p.kandidati.length && p.priblizni.length) ? p.priblizni.map(b=>`
+          <div style="font-size:11.5px;color:#8b6914;padding-left:14px;">
+            📏 Blizu: <b>${esc(b.oznaka||('R-'+b.id))}</b> ${Math.round(b.dim_a)}×${Math.round(b.dim_b)}
+            — fali ${Math.round(b.fali||0)} mm
           </div>`).join('') : ''}
         ${p.treba_tabla ? `
           <div style="font-size:11.5px;color:var(--blue,#1a5fa8);padding-left:14px;">
