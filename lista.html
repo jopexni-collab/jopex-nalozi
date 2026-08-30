@@ -706,6 +706,18 @@ async function prepisiIzPonude(){
 
     await ucitajPozicije();
     if(typeof load==='function') load();
+
+    if(d.upisano === 0 && d.preskoceno > 0){
+      /* Nijedna pozicija nije prosla — znaci mjere stoje pod DRUGIM nazivima nego sto
+         ruta ocekuje. Umjesto "0 upisano" bez objasnjenja, pokazuje se sta je stvarno
+         stiglo, pa se odmah vidi koja polja treba dodati. */
+      const prva = stavke[0] || {};
+      const polja = Object.keys(prva).map(k=>`${k}: ${JSON.stringify(prva[k])}`).slice(0,14).join('\n  ');
+      alert(`Nijedna pozicija nije prepisana — mjere nisu prepoznate.\n\n`
+        + `Prva pozicija iz ponude sadrži:\n  ${polja}\n\n`
+        + `Pošalji ovo i dodaću ta polja u prepis.`);
+      return;
+    }
     alert(`✓ Prepisano ${d.upisano} pozicija.`
       + (d.preskoceno ? `\n${d.preskoceno} preskočeno (bez mjere).` : ''));
   }catch(e){
