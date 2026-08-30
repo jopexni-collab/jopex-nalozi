@@ -172,8 +172,10 @@ router.get('/:r_br/priprema', async (req, res) => {
     // Svi slobodni restlovi — jednom, pa se u JS-u poredi sa svakom pozicijom.
     // Bolje nego upit po poziciji: nalog zna imati 15 pozicija, a restlova je par stotina.
     const rest = await pool.query(
-      `SELECT r.id, r.sifra, r.materijal, r.debljina_cm, r.dim_a, r.dim_b, r.poligon,
-              r.oblik, r.objekt_id, po.naziv AS objekt_naziv
+      /* Kolona se zove OZNAKA (ne sifra) — restl nije artikal iz sifrarnika nego
+         konkretan komad. Uz to se uzima i lokacija, da operater zna gdje da ga trazi. */
+      `SELECT r.id, r.oznaka, r.materijal, r.debljina_cm, r.dim_a, r.dim_b, r.poligon,
+              r.oblik, r.objekt_id, r.lokacija, r.povrsina, po.naziv AS objekt_naziv
        FROM restlovi r
        LEFT JOIN prodajni_objekti po ON po.id = r.objekt_id
        WHERE COALESCE(r.status,'slobodan') = 'slobodan'
@@ -218,8 +220,10 @@ router.get('/:r_br/priprema', async (req, res) => {
 
           if (stane) {
             kandidati.push({
-              id: r.id, sifra: r.sifra,
+              id: r.id, oznaka: r.oznaka,
               dim_a: parseFloat(r.dim_a), dim_b: parseFloat(r.dim_b),
+              povrsina: r.povrsina != null ? +parseFloat(r.povrsina).toFixed(3) : null,
+              lokacija: r.lokacija || null,
               objekt_naziv: r.objekt_naziv,
               okret: stane.okret ?? 0,
               // Restl koji je i sam nacrtan — korisno da operater zna da nije obican pravougaonik
