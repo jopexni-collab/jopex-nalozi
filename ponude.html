@@ -8790,7 +8790,18 @@ function drawK(ctx,W,H){
         drawIv(ctx,ax*sc,ay*sc,bx*sc,by*sc,iv.prof);
         // ── PODIJELJENA STRANA: kota + simbol obrade za SVAKI dio ──
         if(iv.dio!=null&&si===0){
-          var _x1=ax*sc, _y1=ay*sc, _x2=bx*sc, _y2=by*sc;
+          // VAZNO: kota mora pokrivati PUNU duzinu dijela, ne skracenu za
+          // radijus ugla. Linija obrade (drawIv) se uvlaci da ne ide preko
+          // zaobljenja, ali kota bi tako pokazivala manje nego sto pise -
+          // sto zbunjuje. Zato se racuna iz NEUVUCENIH tacaka.
+          var _kax=p1[0], _kay=p1[1], _kbx=p2[0], _kby=p2[1];
+          if(_fOd>0||_fDo<1){
+            var _kdx=_kbx-_kax, _kdy=_kby-_kay;
+            var _t1x=_kax+_kdx*_fOd, _t1y=_kay+_kdy*_fOd;
+            var _t2x=_kax+_kdx*_fDo, _t2y=_kay+_kdy*_fDo;
+            _kax=_t1x; _kay=_t1y; _kbx=_t2x; _kby=_t2y;
+          }
+          var _x1=_kax*sc, _y1=_kay*sc, _x2=_kbx*sc, _y2=_kby*sc;
           var _dx=_x2-_x1, _dy=_y2-_y1, _dl=Math.hypot(_dx,_dy)||1;
           // Normala prema VAN ploce (dalje od sredista)
           var _cx=(A*sc)/2, _cy=(B*sc)/2;
@@ -11843,6 +11854,80 @@ function novaPonuda(){
   refresh();
 }
 
+// ── POPIS KOMADA ZA RADNI NALOG ──────────────────────────────────
+// Salje se na POST /api/nalog-stavke/:r_br/iz-ponude poslije usvajanja.
+// Bez ovoga proizvodnja ne moze traziti restl ni planirati rez, jer nalog
+// zna samo tekst "materijal", a ne i konkretne komade.
+// Mjere ostaju u MILIMETRIMA - i ponuda i tabela nalog_stavke su u mm.
+function _stavkeZaNalog(){
+  var out=[];
+  (items||[]).forEach(function(it,idx){
+    // Materijal i debljina su po STAVCI (spremljeni u it.inputs)
+    var inp=it.inputs||{};
+    var matNaziv=inp['mat-naziv']||'';
+    var matGrupa=inp['mat-v-sel']||'';
+    var pun=(matGrupa&&matNaziv)?(matGrupa+' '+matNaziv):(matNaziv||matGrupa||'');
+    var debMm=_broj(inp['mat-d-sel']==='custom'?inp['mat-d-inp']:inp['mat-d-sel'])||20;
+    var debCm=Math.round(debMm/10*100)/100;
+    var robaId=(it.matLager&&it.matLager.id)||null;
+    var osnov=nazivStavke(it,({'k':'Kuhinjska plo\u010da','kl':'Klupica',
+      'st':'Gazi\u0161te','sto':'Sto'}[it.tip]||'Stavka'));
+
+    function dodaj(a,b,kom,nap){
+      a=Math.round(_broj(a)); b=Math.round(_broj(b));
+      if(!(a>0&&b>0)) return;              // ruta preskace pozicije bez mjere
+      out.push({a:a, b:b, kom:Math.max(1,Math.round(_broj(kom)||1)),
+                nap:nap||osnov, materijal:pun||null,
+                debljina_cm:debCm||null, roba_id:robaId});
+    }
+    // Klupice i stepenice: tabela pozicija je vec popis komada
+    var poz=it.pozicije||[];
+    if((it.tip==='kl'||it.tip==='st')&&poz.length){
+      poz.forEach(function(pz,pi){
+        var opis=osnov+' '+(pi+1);
+        if(pz.zid!=null) opis=osnov+' zid '+(pz.zid+1)+'.'+(pi+1);
+        if(pz.nap) opis+=' \u2013 '+pz.nap;
+        dodaj(pz.a,pz.b,pz.kom,opis);
+      });
+      return;
+    }
+    // Ostali tipovi: jedan komad po bounding boxu (materijal se ionako
+    // naplacuje bruto, pa je to i mjera table koja treba)
+    var d=it.dims||{};
+    if(it.tip==='sto'){
+      var sa,sb;
+      if(it.shape==='skica'){
+        var bb=_bbPolyTj(d._tj||[]); sa=bb.w; sb=bb.h;
+      } else { sa=d.A||0; sb=(it.shape==='okrugao')?sa:(d.B||0); }
+      var br=Math.max(1,_broj(inp['sto-br'])||1);
+      dodaj(sa,sb,br,osnov+(it.shape?(' \u2013 '+it.shape):''));
+      return;
+    }
+    // Kuhinja i "Ostalo": bounding box oblika
+    var bb2=null;
+    try{ bb2=_bbMM(it.shape,d,it.vOrient||0); }catch(e){}
+    if(bb2&&bb2.w>0&&bb2.h>0) dodaj(bb2.w,bb2.h,1,osnov+' \u2013 '+(it.shape||''));
+  });
+  return out;
+}
+// Upis popisa u nalog. Ruta dozvoljava SAMO JEDNOM po nalogu - kod izmjene
+// (v2) vraca gresku, sto se ne smatra neuspjehom usvajanja.
+async function _upisiStavkeNaloga(rBr){
+  var stavke=_stavkeZaNalog();
+  if(!stavke.length) return {ok:false, razlog:'nema pozicija sa mjerama'};
+  try{
+    var r=await fetch(API_URL+'/api/nalog-stavke/'+rBr+'/iz-ponude',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({stavke:stavke})
+    });
+    var d=await r.json().catch(function(){return null;});
+    if(!r.ok) return {ok:false, razlog:(d&&d.error)||('HTTP '+r.status), vec:(r.status===409)};
+    return {ok:true, upisano:(d&&d.upisano)||0, preskoceno:(d&&d.preskoceno)||0};
+  }catch(e){
+    return {ok:false, razlog:e.message};
+  }
+}
+
 // ── LAGER: izbor materijala iz zaliha ────────────────────────────
 // Cijena se povlaci iz lagera i MNOZI koeficijentom (podrazumijevano 3), sto
 // se jasno prikazuje i moze promijeniti. Materijal koji nije na lageru se i
@@ -12510,6 +12595,11 @@ async function usvojiPonudu(){
       if(!r.ok) throw new Error(d.error||'Greška');
     }
 
+    // Popis komada za proizvodnju - da operater moze traziti restl ili
+    // povuci tablu sa lagera. Ruta dozvoljava upis SAMO JEDNOM po nalogu,
+    // pa kod izmjene (v2) vraca gresku - to nije neuspjeh usvajanja.
+    var _stRez=await _upisiStavkeNaloga(d.r_br);
+
     // Zapamti vezu ponuda -> nalog, da svako sljedece usvajanje bude izmjena.
     _nalogInfo={r_br:d.r_br, verzija:_novaVerzija, naziv_ponude:_sacuvanoKao||(_nalogInfo&&_nalogInfo.naziv_ponude)||null};
 
@@ -12541,6 +12631,12 @@ async function usvojiPonudu(){
         ? '✓ Izmjena v'+_novaVerzija+' upisana na nalog #'+d.r_br+' — ceka potvrdu.'
         : '✓ Nalog #'+d.r_br+' upisan!')
       +' DXF i Radni nalog uploadovani.'
+      +(_stRez.ok
+        ? (' Pozicija za proizvodnju: '+_stRez.upisano
+           +(_stRez.preskoceno?(' ('+_stRez.preskoceno+' bez mjere presko\u010deno)'):'')+'.')
+        : (_jeIzmjena
+           ? ' \u2139 Pozicije za proizvodnju nisu prepisane (nalog ih ve\u0107 ima).'
+           : ' \u26a0 Pozicije za proizvodnju NISU upisane: '+_stRez.razlog))
       +(_sacuvanoGdje?' Ponuda sačuvana ('+_sacuvanoGdje+'): '+_sacuvanoKao:'')
       +(_vezaOK?'' : ' \u26a0 Veza sa nalogom nije sa\u010duvana na oblak \u2014 '
         +'ako ponovo u\u010dita\u0161 ovu ponudu, provjeri nalog #'+d.r_br+' prije usvajanja.'),true);
