@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proizvodnja — JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--bg:#f3f5f8;--border:#dde3ea;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);}
+header{background:var(--blue);color:#fff;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;}
+header h1{margin:0;font-size:16px;}
+header nav a{color:#fff;text-decoration:none;font-size:12px;opacity:.9;border:1px solid rgba(255,255,255,.4);padding:5px 10px;border-radius:6px;}
+main{max-width:640px;margin:30px auto;padding:0 16px;}
+.card{display:block;background:#fff;border:1px solid var(--border);border-radius:12px;padding:22px;margin-bottom:14px;text-decoration:none;color:inherit;box-shadow:0 1px 3px rgba(0,0,0,.05);transition:box-shadow .15s;}
+.card:hover{box-shadow:0 4px 14px rgba(0,0,0,.1);}
+.card-icon{font-size:26px;margin-bottom:8px;}
+.card-title{font-size:16px;font-weight:800;color:var(--dark);margin-bottom:4px;}
+.card-desc{font-size:13px;color:#6b7a8d;line-height:1.5;}
+.hidden{display:none;}
+.prazno{background:#fff;border:1px dashed var(--border);border-radius:12px;padding:20px;text-align:center;color:#8b96a5;font-size:13px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>🏭 Proizvodnja</h1>
+  <nav><a href="home.html">← Početna</a></nav>
+</header>
+<main>
+  <a href="lista.html" class="card hidden" id="card-nalozi">
+    <div class="card-icon">📋</div>
+    <div class="card-title">Radni nalozi</div>
+    <div class="card-desc">Pregled i upravljanje nalozima. Status, rokovi, naplata, isporuka.</div>
+  </a>
+
+  <a href="restlovi.html" class="card hidden" id="card-restlovi">
+    <div class="card-icon">🧩</div>
+    <div class="card-title">Restlovi</div>
+    <div class="card-desc">Ostaci ploča — pretraga po mjeri, uzimanje za nalog, prenos između objekata.</div>
+  </a>
+
+  <div class="prazno" id="nema-prava" style="display:none;">
+    Nemate dozvolu ni za jedan dio proizvodnje.<br>Obratite se administratoru.
+  </div>
+</main>
+
+<script>
+/* Prava su ISTA kao na pocetnoj strani — kartica se ovdje samo premjesta, ne mijenja
+   se ko sta smije. Ako korisnik nema nijednu, kaze mu se umjesto praznog ekrana. */
+fetch('/api/auth/me').then(r=>{
+  if(!r.ok){ location.href='login.html'; return null; }
+  return r.json();
+}).then(u=>{
+  if(!u) return;
+  const admin = u.rola === 'admin';
+  let ima = false;
+
+  if(admin || u.unos_naloga || u.izmjena_statusa || u.izmjena_naloga || u.moze_ugovarati){
+    document.getElementById('card-nalozi').classList.remove('hidden');
+    ima = true;
+  }
+  if(admin || u.moze_restlovi || u.moze_restlovi_unos){
+    document.getElementById('card-restlovi').classList.remove('hidden');
+    ima = true;
+  }
+  if(!ima) document.getElementById('nema-prava').style.display = 'block';
+}).catch(()=>location.href='login.html');
+</script>
+</body>
+</html>
