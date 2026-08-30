@@ -170,8 +170,11 @@ router.post('/:r_br/iz-ponude', async (req, res) => {
     let upisano = 0, preskoceno = 0;
     for (let i = 0; i < stavke.length; i++) {
       const s = stavke[i];
-      const sir = broj(s.sirina ?? s.duzina ?? s.w);
-      const vis = broj(s.visina ?? s.sir ?? s.h);
+      /* Ponuda cuva poziciju kao {a, b, kom, nap} — 'a' i 'b' su mjere u MILIMETRIMA
+         (npr. a:2000, b:250), isto kao kod nas, pa nema pretvaranja. Prihvataju se i
+         drugi nazivi radi sigurnosti ako se struktura negdje razlikuje. */
+      const sir = broj(s.a ?? s.sirina ?? s.duzina ?? s.w);
+      const vis = broj(s.b ?? s.visina ?? s.sir ?? s.h);
       // Pozicija bez mjere nema svrhu — ne moze se ni traziti restl ni planirati rez
       if (sir <= 0 || vis <= 0) { preskoceno++; continue; }
 
@@ -180,9 +183,9 @@ router.post('/:r_br/iz-ponude', async (req, res) => {
            (nalog_r_br, redni_broj, naziv, roba_id, materijal, debljina_cm,
             sirina, visina, kolicina, oblik, obrada_ivica, napomena, izvor)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'ponuda')`,
-        [req.params.r_br, i + 1, s.naziv || s.opis || null, s.roba_id || null,
+        [req.params.r_br, i + 1, s.naziv || s.nap || s.opis || null, s.roba_id || null,
          s.materijal || null, s.debljina_cm ? broj(s.debljina_cm) : null,
-         sir, vis, parseInt(s.kolicina || s.kom) || 1,
+         sir, vis, parseInt(s.kom ?? s.kolicina) || 1,
          s.oblik || 'pravougaonik', s.obrada_ivica || null, s.napomena || null]
       );
       upisano++;

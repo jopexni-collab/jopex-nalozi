@@ -433,7 +433,7 @@ function fm(n){return(broj(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDi
    Zadatak je opisna recenica, iz koje se ne moze traziti restl ni planirati rez.
    Pozicije su ta ista recenica razlozena na redove sa MJERAMA (u milimetrima).
    Popunjavaju se prepisom iz ponude pri usvajanju, ili rucno za male naloge. */
-let pozNalogRbr = null, pozStavke = [], pozIzabraniArtikal = null, pozTajmer = null;
+let pozNalogRbr = null, pozStavke = [], pozIzabraniArtikal = null, pozTajmer = null, pozLinkPonude = null;
 
 async function otvoriPozicije(rBr, ev){
   if(ev) ev.stopPropagation();
@@ -449,6 +449,8 @@ async function otvoriPozicije(rBr, ev){
   document.getElementById('poz-visina').value='';
   document.getElementById('poz-kolicina').value='1';
   document.getElementById('poz-greska').style.display='none';
+  // Dugme za prepis ima smisla samo ako nalog ima vezanu ponudu
+  pozLinkPonude = red?.link_ponuda || null;
   document.getElementById('modal-pozicije').style.display='flex';
   await ucitajPozicije();
 }
@@ -471,6 +473,9 @@ async function ucitajPozicije(){
 
 function renderPozicije(){
   const cont = document.getElementById('poz-lista');
+  // Prepis se nudi SAMO ako nalog jos nema pozicija — inace bi se udvostrucile
+  document.getElementById('poz-prepis').style.display =
+    (!pozStavke.length && pozLinkPonude) ? 'block' : 'none';
   if(!pozStavke.length){
     cont.innerHTML = '<div style="padding:14px;color:#8b96a5;font-size:12.5px;text-align:center;background:#f7f8fa;border-radius:8px;">Nalog još nije razložen na pozicije.<br><span style="font-size:11.5px;">Bez mjera se ne može tražiti restl ni planirati rez.</span></div>';
     return;
@@ -540,6 +545,50 @@ function pozIzaberiArtikal(id, naziv, sifra, debljina){
   document.getElementById('poz-materijal').value = `${sifra} ${naziv}`;
   document.getElementById('poz-rezultati').style.display='none';
   document.getElementById('poz-sirina').focus();
+}
+
+
+/* Prepis pozicija IZ PONUDE — mjere vec postoje u ponudi, samo se do sada nisu prenosile
+   u nalog (prenosila se samo opisna recenica). Ponuda je JSON na spoljnom skladistu, pa
+   se ovdje procita i posalje serveru. */
+async function prepisiIzPonude(){
+  if(!pozLinkPonude){ alert('Nalog nema vezanu ponudu.'); return; }
+  const greska = document.getElementById('poz-greska');
+  greska.style.display='none';
+  try{
+    const rp = await fetch(pozLinkPonude);
+    if(!rp.ok) throw new Error(`Ponuda nije dostupna (${rp.status}).`);
+    const ponuda = await rp.json();
+
+    // Ponuda cuva pozicije kao {a, b, kom, nap} — mjere u milimetrima
+    const pozicije = ponuda.pozicije || ponuda.stavke || ponuda.items || [];
+    if(!Array.isArray(pozicije) || !pozicije.length)
+      throw new Error('Ponuda nema pozicija za prepis.');
+
+    // Materijal je zajednicki za cijelu ponudu — dodaje se svakoj poziciji
+    const mat = ponuda.materijal || {};
+    const stavke = pozicije.map(p => ({
+      ...p,
+      materijal: p.materijal || mat.naziv || null,
+      debljina_cm: p.debljina_cm ?? (mat.debljina ? broj(mat.debljina)/10 : null),
+    }));
+
+    const r = await fetch(`${API}/api/nalog-stavke/${pozNalogRbr}/iz-ponude`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ stavke }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
+
+    await ucitajPozicije();
+    if(typeof load==='function') load();
+    alert(`✓ Prepisano ${d.upisano} pozicija.`
+      + (d.preskoceno ? `\n${d.preskoceno} preskočeno (bez mjere).` : ''));
+  }catch(e){
+    greska.style.display='block';
+    greska.textContent = '✗ ' + e.message;
+    alert('✗ Prepis nije uspio:\n\n' + e.message);
+  }
 }
 
 async function dodajPoziciju(){
@@ -2250,6 +2299,14 @@ checkAuth();
       <button onclick="document.getElementById('modal-pozicije').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
     </div>
     <div id="poz-zadatak" style="font-size:12px;color:#6b7a8d;margin-bottom:12px;line-height:1.45;"></div>
+
+    <div id="poz-prepis" style="display:none;background:#eef4fc;border:1px solid #b8d4f0;border-radius:8px;padding:11px 13px;margin-bottom:12px;">
+      <div style="font-size:12.5px;margin-bottom:8px;line-height:1.45;">
+        Ovaj nalog ima <b>vezanu ponudu</b> — pozicije se mogu prepisati automatski,
+        umjesto ručnog unosa.
+      </div>
+      <button onclick="prepisiIzPonude()" style="padding:8px 15px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:7px;font-weight:700;cursor:pointer;font-size:12.5px;">📥 Povuci pozicije iz ponude</button>
+    </div>
 
     <div id="poz-lista"></div>
 
