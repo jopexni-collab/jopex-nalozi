@@ -10,6 +10,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('./db');
 const geo = require('./geometrija');
+const nest = require('./nesting');
 const multer = require('multer');
 const uvoz = require('./restlovi-uvoz');
 
@@ -198,6 +199,151 @@ router.put('/postavke/lager', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+
+
+/* ─────────────────────────── NESTING ───────────────────────────
+   Raspoređivanje VIŠE komada u jednu ploču. Za razliku od /trazi, koja odgovara na
+   pitanje "staje li jedan komad", ova ruta kaže KOLIKO komada stvarno izlazi iz
+   restla i gdje tačno — pa se iz naloga dobija tačan broj umjesto procjene. */
+
+// POST /api/restlovi/nesting
+// body: { restl_id? | poligon? | sirina+visina?, komadi:[{sirina,visina,kolicina,naziv?,bez_okretanja?}], rez? }
+router.post('/nesting', smijeVidjeti, async (req, res) => {
+  try {
+    const { restl_id, komadi, rez, dozvoli_koso } = req.body;
+    if (!Array.isArray(komadi) || !komadi.length)
+      return res.status(400).json({ error: 'Nema komada za raspoređivanje.' });
+
+    // Ploča: postojeći restl, nacrtani oblik ili obične mjere
+    let ploca = null, restl = null;
+    if (restl_id) {
+      const r = await pool.query(
+        `SELECT r.*, ro.naziv AS artikal_naziv, ro.sifra AS artikal_sifra
+           FROM restlovi r LEFT JOIN roba ro ON ro.id = r.roba_id WHERE r.id = $1`, [restl_id]);
+      if (!r.rows.length) return res.status(404).json({ error: 'Restl nije pronađen.' });
+      restl = r.rows[0];
+      ploca = tjemenaRestla(restl);
+    } else if (Array.isArray(req.body.poligon) && req.body.poligon.length >= 3) {
+      const g = geo.provjeriTjemena(req.body.poligon);
+      if (g) return res.status(400).json({ error: 'Oblik ploče: ' + g });
+      ploca = req.body.poligon;
+    } else {
+      const A = Number(req.body.sirina) || 0, B = Number(req.body.visina) || 0;
+      if (!A || !B) return res.status(400).json({ error: 'Zadaj restl_id, poligon ili mjere ploče.' });
+      ploca = [[0,0],[A,0],[A,B],[0,B]];
+    }
+
+    for (const k of komadi) {
+      if (!Number(k.sirina) || !Number(k.visina))
+        return res.status(400).json({ error: 'Svaki komad mora imati širinu i visinu.' });
+    }
+
+    const r = nest.rasporedi(ploca, komadi, { rez: Number(rez) || 0, dozvoli_koso: !!dozvoli_koso });
+
+    // Rezultat se provjerava PRIJE slanja — raspored sa preklapanjem ne smije izaći
+    const greske = nest.provjeriRaspored(ploca, r);
+    if (greske.length) {
+      return res.status(500).json({ error: 'Raspored nije ispravan: ' + greske.join('; ') });
+    }
+
+    res.json({
+      ...r,
+      ploca,
+      restl: restl ? {
+        id: restl.id, oznaka: restl.oznaka, materijal: restl.materijal,
+        artikal_naziv: restl.artikal_naziv, artikal_sifra: restl.artikal_sifra,
+        dim_a: restl.dim_a, dim_b: restl.dim_b, cijena_m2: restl.cijena_m2,
+      } : null,
+      vrijednost_iskoristeno: restl ? Math.round(r.iskoristeno * Number(restl.cijena_m2 || 0) * 100) / 100 : null,
+      vrijednost_ostatak: restl ? Math.round(r.ostatak * Number(restl.cijena_m2 || 0) * 100) / 100 : null,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/restlovi/nesting/za-nalog
+// Za cijelu listu pozicija odjednom: za svaku se probaju restlovi po redu i vrati se
+// koliko komada STVARNO izlazi iz restlova, a koliko ostaje za cijelu tablu.
+// body: { pozicije:[{id,sirina,visina,kolicina,roba_id?,materijal?,debljina_cm?}], rez?, objekt_id? }
+router.post('/nesting/za-nalog', smijeVidjeti, async (req, res) => {
+  try {
+    const { pozicije, rez, objekt_id } = req.body;
+    if (!Array.isArray(pozicije) || !pozicije.length)
+      return res.status(400).json({ error: 'Nema pozicija.' });
+
+    const rezMm = Number(rez) || 5;
+    const iskorisceni = new Set();       // restl se ne smije dvaput obećati
+    const izlaz = [];
+
+    for (const p of pozicije) {
+      const sir = Number(p.sirina) || 0, vis = Number(p.visina) || 0;
+      const kom = Math.max(1, Math.round(Number(p.kolicina) || 1));
+      if (!sir || !vis) {
+        izlaz.push({ ...p, greska: 'nema mjere', iz_restlova: 0, treba_tabla: kom, restlovi: [] });
+        continue;
+      }
+
+      // Kandidati istog artikla, od najmanjeg prema većem — da se veliki restl
+      // ne potroši na mali komad ako postoji prikladniji
+      const uslovi = [`r.status = 'dostupan'`];
+      const vals = [];
+      let i = 1;
+      if (p.roba_id)      { uslovi.push(`r.roba_id = $${i++}`); vals.push(p.roba_id); }
+      else if (p.materijal) { uslovi.push(`(r.materijal ILIKE $${i} OR ro.naziv ILIKE $${i})`); vals.push(`%${p.materijal}%`); i++; }
+      if (p.debljina_cm)  { uslovi.push(`COALESCE(r.debljina_cm, ro.debljina_cm) = $${i++}`); vals.push(p.debljina_cm); }
+      if (objekt_id)      { uslovi.push(`r.objekt_id = $${i++}`); vals.push(objekt_id); }
+      uslovi.push(`GREATEST(r.dim_a, r.dim_b) >= $${i++}`); vals.push(Math.max(sir, vis));
+      uslovi.push(`LEAST(r.dim_a, r.dim_b) >= $${i++}`);    vals.push(Math.min(sir, vis));
+
+      const q = await pool.query(
+        `SELECT r.*, po.naziv AS objekt_naziv, ro.naziv AS artikal_naziv
+           FROM restlovi r
+           LEFT JOIN prodajni_objekti po ON po.id = r.objekt_id
+           LEFT JOIN roba ro ON ro.id = r.roba_id
+          WHERE ${uslovi.join(' AND ')}
+          ORDER BY r.povrsina ASC LIMIT 40`, vals);
+
+      let preostalo = kom;
+      const upotrijebljeni = [];
+      for (const restl of q.rows) {
+        if (!preostalo) break;
+        if (iskorisceni.has(restl.id)) continue;
+        const raspored = nest.rasporedi(tjemenaRestla(restl),
+          [{ id: p.id, naziv: p.naziv || 'pozicija', sirina: sir, visina: vis,
+             kolicina: preostalo, bez_okretanja: !!p.bez_okretanja }],
+          { rez: rezMm });
+        if (!raspored.uklopljeno) continue;
+        iskorisceni.add(restl.id);
+        preostalo -= raspored.uklopljeno;
+        upotrijebljeni.push({
+          restl_id: restl.id, oznaka: restl.oznaka,
+          objekt_naziv: restl.objekt_naziv,
+          dim_a: restl.dim_a, dim_b: restl.dim_b,
+          komada: raspored.uklopljeno,
+          procenat: raspored.procenat,
+          ostatak_m2: raspored.ostatak,
+          postavljeni: raspored.postavljeni,
+        });
+      }
+
+      izlaz.push({
+        id: p.id, naziv: p.naziv, sirina: sir, visina: vis, kolicina: kom,
+        iz_restlova: kom - preostalo,
+        treba_tabla: preostalo,
+        restlovi: upotrijebljeni,
+      });
+    }
+
+    res.json({
+      pozicije: izlaz,
+      sazetak: {
+        ukupno_komada: izlaz.reduce((z, p) => z + p.kolicina, 0),
+        iz_restlova:   izlaz.reduce((z, p) => z + p.iz_restlova, 0),
+        treba_tabla:   izlaz.reduce((z, p) => z + p.treba_tabla, 0),
+        restlova_u_planu: iskorisceni.size,
+      },
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 /* ─────────────────────────── UVOZ IZ XLSX ───────────────────────────
    Dva koraka. Prvi je PROBNI — fajl se pročita i provjeri, vrati se sažetak i
