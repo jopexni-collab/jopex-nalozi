@@ -802,7 +802,18 @@ function renderPriprema(d){
           </div>`).join('') : ''}
 
         <div style="padding-left:14px;margin-top:3px;">
-          <a href="restlovi.html?sirina=${Math.round(p.sirina)}&visina=${Math.round(p.visina)}&materijal=${encodeURIComponent(p.roba_naziv||p.materijal||'')}&debljina=${p.debljina_cm??''}&nalog=${pozNalogRbr}&poz=${p.redni_broj}"
+          <a href="restlovi.html?${new URLSearchParams(Object.entries({
+               sirina: Math.round(p.sirina),
+               visina: Math.round(p.visina),
+               roba_id: p.roba_id || '',          // najtacnije — veza na artikal
+               materijal: p.roba_naziv || p.materijal || '',
+               debljina: p.debljina_cm ?? '',
+               grupa: p.grupa || '',
+               nalog: pozNalogRbr,
+               poz: p.redni_broj,
+               // Nacrtan oblik ide kao poligon — restl se trazi po STVARNOM obliku
+               poligon: (Array.isArray(p.poligon) && p.poligon.length >= 3) ? JSON.stringify(p.poligon) : '',
+             }).filter(([,v]) => v !== '' && v != null))}"
              target="_blank" rel="noopener"
              style="font-size:11px;color:#6b4fa0;text-decoration:none;font-weight:700;">
             🧩 Otvori u Restlovima →
