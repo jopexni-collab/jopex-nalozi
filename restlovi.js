@@ -379,6 +379,9 @@ router.post('/nesting/za-nalog', smijeVidjeti, async (req, res) => {
             if (!c.nadjeno_po) c.nadjeno_po = krug.kako;
             c.restlovi.push({
               restl_id: restl.id, oznaka: restl.oznaka,
+              // roba_id ide uz rezultat da frontend može provjeriti je li to
+              // BAŠ onaj materijal koji je operater izabrao
+              roba_id: restl.roba_id,
               objekt_naziv: restl.objekt_naziv,
               artikal_naziv: restl.artikal_naziv, artikal_sifra: restl.artikal_sifra,
               materijal: restl.materijal,
@@ -1116,6 +1119,9 @@ router.post('/:id/koristi', smijeUnositi, async (req, res) => {
   const client = await pool.connect();
   try {
     const { nalog_r_br, uzeto_a, uzeto_b, potrosen_do_kraja, ostatak, napomena } = req.body;
+    // Kad se iz plana uzima više komada odjednom, uzeta površina je zbir svih —
+    // inače bi se sa lagera skinuo samo jedan komad iako je izrezano više.
+    const komada = Math.max(1, Math.round(Number(req.body.komada) || 1));
 
     await client.query('BEGIN');
     const cur = await client.query('SELECT * FROM restlovi WHERE id=$1 FOR UPDATE', [req.params.id]);
@@ -1163,7 +1169,7 @@ router.post('/:id/koristi', smijeUnositi, async (req, res) => {
     );
     await upisiLog(client, r.id, 'status', r.status, 'potrosen', user);
 
-    const uzetoPov = (Number(uzeto_a) || 0) * (Number(uzeto_b) || 0) / 1000000;
+    const uzetoPov = (Number(uzeto_a) || 0) * (Number(uzeto_b) || 0) * komada / 1000000;
 
     // Sa lagera odlazi SVE što je prestalo da bude zaliha: isječeni komad + otpad.
     // To je tačno (površina roditelja − površina ostatka), pa se otpad ne mora unositi
@@ -1186,11 +1192,12 @@ router.post('/:id/koristi', smijeUnositi, async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
       [r.id, nalog_r_br || null, uzeto_a || null, uzeto_b || null, uzetoPov, otpad,
        lager.primijenjeno ? skinuto : 0, noviId, !!potrosen_do_kraja || !noviId,
-       user.id, user.ime_prezime, napomena || null]
+       user.id, user.ime_prezime,
+       [napomena, komada > 1 ? komada + ' kom' : null].filter(Boolean).join(' · ') || null]
     );
 
     await client.query('COMMIT');
-    res.json({ ok: true, novi_restl_id: noviId, lager });
+    res.json({ ok: true, novi_restl_id: noviId, komada, lager });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ error: err.message });
