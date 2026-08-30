@@ -433,7 +433,7 @@ function fm(n){return(broj(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDi
    Zadatak je opisna recenica, iz koje se ne moze traziti restl ni planirati rez.
    Pozicije su ta ista recenica razlozena na redove sa MJERAMA (u milimetrima).
    Popunjavaju se prepisom iz ponude pri usvajanju, ili rucno za male naloge. */
-let pozNalogRbr = null, pozStavke = [], pozIzabraniArtikal = null, pozTajmer = null, pozLinkPonude = null;
+let pozNalogRbr = null, pozStavke = [], pozIzabraniArtikal = null, pozTajmer = null, pozLinkPonude = null, pozRazlogBezPrepisa = null;
 
 async function otvoriPozicije(rBr, ev){
   if(ev) ev.stopPropagation();
@@ -449,8 +449,15 @@ async function otvoriPozicije(rBr, ev){
   document.getElementById('poz-visina').value='';
   document.getElementById('poz-kolicina').value='1';
   document.getElementById('poz-greska').style.display='none';
-  // Dugme za prepis ima smisla samo ako nalog ima vezanu ponudu
-  pozLinkPonude = red?.link_ponuda || null;
+  /* Prepis je moguc SAMO iz velike ponude — ona se cuva kao JSON sa pozicijama.
+     Male ponude se cuvaju kao SLIKA (.jpg/.png), iz koje se mjere ne mogu procitati,
+     pa se dugme tu i ne prikazuje (nalog 380 je bio takav slucaj). */
+  const lp = red?.link_ponuda || '';
+  const jeJson = lp && !/\.(jpg|jpeg|png|gif|webp|pdf|heic)(\?|$)/i.test(lp);
+  pozLinkPonude = jeJson ? lp : null;
+  pozRazlogBezPrepisa = (lp && !jeJson)
+    ? 'Ponuda je sačuvana kao slika — mjere se moraju unijeti ručno.'
+    : (!lp ? 'Nalog nema vezanu ponudu.' : null);
   document.getElementById('modal-pozicije').style.display='flex';
   await ucitajPozicije();
 }
@@ -474,8 +481,31 @@ async function ucitajPozicije(){
 function renderPozicije(){
   const cont = document.getElementById('poz-lista');
   // Prepis se nudi SAMO ako nalog jos nema pozicija — inace bi se udvostrucile
-  document.getElementById('poz-prepis').style.display =
-    (!pozStavke.length && pozLinkPonude) ? 'block' : 'none';
+  const prepis = document.getElementById('poz-prepis');
+  if(!pozStavke.length && pozLinkPonude){
+    prepis.style.display = 'block';
+  } else if(!pozStavke.length){
+    /* Nalog cuva link na HTML radnog naloga, a pozicije su u ZASEBNOM JSON-u ponude —
+       veze medju njima nema (nalog nema ponuda_id). Zato se ponuda bira RUCNO iz spiska,
+       jednom; posle toga se pozicije povuku. */
+    prepis.style.display = 'block';
+    prepis.style.background = '#f7f8fa';
+    prepis.style.borderColor = 'var(--border,#ddd)';
+    prepis.innerHTML = `
+      <div style="font-size:12.5px;color:#6b7a8d;line-height:1.45;margin-bottom:9px;">
+        ${esc(pozRazlogBezPrepisa || 'Nalog nema vezanu ponudu.')}
+        Izaberi ponudu iz koje se povlače pozicije:
+      </div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">
+        <select id="poz-izbor-ponude" style="flex:1;min-width:200px;font:inherit;font-size:12.5px;padding:6px 8px;border:1px solid #ccc;border-radius:5px;">
+          <option value="">— učitavanje ponuda —</option>
+        </select>
+        <button onclick="prepisiIzIzabranePonude()" style="padding:7px 14px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:6px;font-weight:700;cursor:pointer;font-size:12.5px;">📥 Povuci</button>
+      </div>`;
+    ucitajSpisakPonuda();
+  } else {
+    prepis.style.display = 'none';
+  }
   document.getElementById('poz-priprema-dugme').style.display = pozStavke.length ? 'block' : 'none';
   if(!pozStavke.length) document.getElementById('poz-priprema').style.display='none';
   if(!pozStavke.length){
@@ -605,13 +635,53 @@ function renderPriprema(d){
       </div>`).join('')}`;
 }
 
+
+/* Spisak ponuda za rucno povezivanje. Nalog ne pamti iz koje je ponude nastao
+   (nema ponuda_id, a link vodi na HTML radnog naloga, ne na JSON sa pozicijama),
+   pa se ponuda bira iz spiska. */
+async function ucitajSpisakPonuda(){
+  const sel = document.getElementById('poz-izbor-ponude');
+  if(!sel) return;
+  try{
+    const r = await fetch(`${API}/api/ponude`);
+    if(!r.ok) throw new Error('Ne mogu učitati ponude.');
+    const lista = await r.json();
+    const saJsonom = (lista||[]).filter(p=>p.link_json);
+    if(!saJsonom.length){
+      sel.innerHTML = '<option value="">— nema ponuda sa podacima —</option>';
+      return;
+    }
+    // Najskorije prve — nalog je obicno nastao iz nedavne ponude
+    sel.innerHTML = '<option value="">— izaberi ponudu —</option>' + saJsonom.map(p=>{
+      const d = p.datum || p.kreirano;
+      const kad = d ? new Date(d).toLocaleDateString('bs-BA') : '';
+      return `<option value="${esc(p.link_json)}">${esc(p.kupac||p.naziv||'bez naziva')} · ${kad}</option>`;
+    }).join('');
+  }catch(e){
+    sel.innerHTML = `<option value="">— ${esc(e.message)} —</option>`;
+  }
+}
+
+async function prepisiIzIzabranePonude(){
+  const sel = document.getElementById('poz-izbor-ponude');
+  const link = sel?.value;
+  if(!link){ alert('Izaberi ponudu iz spiska.'); return; }
+  pozLinkPonude = link;
+  await prepisiIzPonude();
+}
+
 async function prepisiIzPonude(){
   if(!pozLinkPonude){ alert('Nalog nema vezanu ponudu.'); return; }
   const greska = document.getElementById('poz-greska');
   greska.style.display='none';
   try{
-    const rp = await fetch(pozLinkPonude);
-    if(!rp.ok) throw new Error(`Ponuda nije dostupna (${rp.status}).`);
+    /* JSON se cita PREKO SERVERA (/api/ponude/ucitaj) — direktan poziv iz pregledaca
+       na R2 skladiste zna biti odbijen zbog pravila o pristupu sa drugog domena. */
+    const rp = await fetch(`${API}/api/ponude/ucitaj?link=${encodeURIComponent(pozLinkPonude)}`);
+    if(!rp.ok){
+      const dp = await rp.json().catch(()=>({}));
+      throw new Error(dp.error || `Ponuda nije dostupna (${rp.status}).`);
+    }
     const ponuda = await rp.json();
 
     // Ponuda cuva pozicije kao {a, b, kom, nap} — mjere u milimetrima
