@@ -196,17 +196,34 @@ router.get('/:r_br/priprema', async (req, res) => {
         return !mp || !mr || mr.includes(mp) || mp.includes(mr);
       });
 
+      /* Oblik KOMADA — ako je nacrtan (L, nepravilan), poredi se poligon sa poligonom.
+         Pravougaoni okvir bi tu davao pogresan odgovor: L-komad cesto STAJE u L-restl
+         iako mu okvir ne staje, i obrnuto — okvir moze "stati" a stvarni oblik ne. */
+      const komadPoligon = Array.isArray(p.poligon) && p.poligon.length >= 3 ? p.poligon : null;
+
       const kandidati = [];
       for (const r of odgovarajuci) {
         try {
-          const t = Array.isArray(r.poligon) && r.poligon.length >= 3
+          const restlT = Array.isArray(r.poligon) && r.poligon.length >= 3
             ? r.poligon
             : geo.tjemenaOdMjera('pravougaonik', parseFloat(r.dim_a), parseFloat(r.dim_b));
-          if (geo.komadStaje(t, sir, vis, REZ)) {
+
+          let stane = null;
+          if (komadPoligon) {
+            // Oblik u oblik — trazi se i polozaj i ugao pod kojim komad ulazi
+            stane = geo.poligonStaje(restlT, komadPoligon, REZ, { korakUgla: 15 });
+          } else {
+            stane = geo.komadStaje(restlT, sir, vis, REZ);
+          }
+
+          if (stane) {
             kandidati.push({
               id: r.id, sifra: r.sifra,
               dim_a: parseFloat(r.dim_a), dim_b: parseFloat(r.dim_b),
               objekt_naziv: r.objekt_naziv,
+              okret: stane.okret ?? 0,
+              // Restl koji je i sam nacrtan — korisno da operater zna da nije obican pravougaonik
+              restl_nepravilan: Array.isArray(r.poligon) && r.poligon.length >= 3,
             });
           }
         } catch (e) { /* neispravan poligon — restl se preskace */ }
@@ -217,6 +234,7 @@ router.get('/:r_br/priprema', async (req, res) => {
         id: p.id, redni_broj: p.redni_broj, naziv: p.naziv,
         materijal: p.roba_naziv || p.materijal,
         sirina: sir, visina: vis, kolicina: kom,
+        komad_nepravilan: !!komadPoligon,
         ima_restl: kandidati.length > 0,
         kandidati,
         treba_tabla: Math.max(0, kom - kandidati.length),
@@ -270,20 +288,55 @@ router.post('/:r_br/iz-ponude', async (req, res) => {
       /* Ponuda cuva poziciju kao {a, b, kom, nap} — 'a' i 'b' su mjere u MILIMETRIMA
          (npr. a:2000, b:250), isto kao kod nas, pa nema pretvaranja. Prihvataju se i
          drugi nazivi radi sigurnosti ako se struktura negdje razlikuje. */
-      const sir = broj(s.a ?? s.sirina ?? s.duzina ?? s.w);
-      const vis = broj(s.b ?? s.visina ?? s.sir ?? s.h);
+      /* MJERE — ponuda ih zna cuvati na vise nacina:
+           obicna pozicija:  {a: 2000, b: 250}
+           L-oblik i slicno: vise mjera (a,b,c,d) ili nacrtani POLIGON
+         Kod nepravilnog oblika uzima se OKVIR poligona (najmanji pravougaonik u koji
+         staje) — to je mjera po kojoj se trazi restl i planira rez. Sam poligon se
+         cuva uz poziciju, pa se tacan oblik ne gubi. */
+      let sir = broj(s.a ?? s.sirina ?? s.duzina ?? s.w ?? s.dim_a);
+      let vis = broj(s.b ?? s.visina ?? s.sir ?? s.h ?? s.dim_b);
+      let poligonPozicije = Array.isArray(s.poligon) ? s.poligon
+                          : (Array.isArray(s.tjemena) ? s.tjemena : null);
+
+      // Ako mjera nema, a ima nacrtan oblik — izvedi ih iz okvira
+      if ((sir <= 0 || vis <= 0) && poligonPozicije && poligonPozicije.length >= 3) {
+        try {
+          const geo = require('./geometrija');
+          const o = geo.okvir(poligonPozicije);
+          sir = broj(o.sirina); vis = broj(o.visina);
+        } catch (e) { /* neispravan poligon — pozicija se preskace nize */ }
+      }
+
+      // Ako i dalje nema, probaj iz mjera L-oblika (a,b,c,d)
+      if (sir <= 0 || vis <= 0) {
+        const a = broj(s.a ?? s.dim_a), b = broj(s.b ?? s.dim_b);
+        const d = broj(s.c ?? s.dim_c), e2 = broj(s.d ?? s.dim_d);
+        if (a > 0 && b > 0) {
+          try {
+            const geo = require('./geometrija');
+            const t = geo.tjemenaOdMjera(s.oblik || s.ob || 'L', a, b, d, e2);
+            const o = geo.okvir(t);
+            sir = broj(o.sirina); vis = broj(o.visina);
+            poligonPozicije = t;
+          } catch (e) { sir = a; vis = b; }
+        }
+      }
+
       // Pozicija bez mjere nema svrhu — ne moze se ni traziti restl ni planirati rez
       if (sir <= 0 || vis <= 0) { preskoceno++; continue; }
 
       await client.query(
         `INSERT INTO nalog_stavke
            (nalog_r_br, redni_broj, naziv, roba_id, materijal, debljina_cm,
-            sirina, visina, kolicina, oblik, obrada_ivica, napomena, izvor)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'ponuda')`,
+            sirina, visina, kolicina, oblik, obrada_ivica, napomena, poligon, izvor)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'ponuda')`,
         [req.params.r_br, i + 1, s.naziv || s.nap || s.opis || null, s.roba_id || null,
          s.materijal || null, s.debljina_cm ? broj(s.debljina_cm) : null,
          sir, vis, parseInt(s.kom ?? s.kolicina) || 1,
-         s.oblik || 'pravougaonik', s.obrada_ivica || null, s.napomena || null]
+         poligonPozicije ? 'poligon' : (s.oblik || 'pravougaonik'),
+         s.obrada_ivica || null, s.napomena || null,
+         poligonPozicije ? JSON.stringify(poligonPozicije) : null]
       );
       upisano++;
     }

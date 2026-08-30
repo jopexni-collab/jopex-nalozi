@@ -619,11 +619,14 @@ function renderPriprema(d){
       <div style="border:1px solid var(--border,#ddd);border-radius:8px;padding:9px 12px;margin-bottom:7px;">
         <div style="font-size:12.5px;font-weight:700;margin-bottom:3px;">
           ${p.redni_broj}. ${esc(p.naziv||'—')}
-          <span style="font-weight:400;color:#6b7a8d;">· ${esc(p.materijal||'')} · ${Math.round(p.sirina)}×${Math.round(p.visina)} · ${p.kolicina} kom</span>
+          ${p.komad_nepravilan ? '<span title="Nepravilan oblik — poređen je stvarni oblik, ne okvir" style="background:#f3f0f8;color:#6b4fa0;font-size:9.5px;font-weight:800;padding:1px 5px;border-radius:5px;margin-left:3px;">⬡ OBLIK</span>' : ''}
+          <span style="font-weight:400;color:#6b7a8d;">· ${esc(p.materijal||'')} · ${Math.round(p.sirina)}×${Math.round(p.visina)}${p.komad_nepravilan?' (okvir)':''} · ${p.kolicina} kom</span>
         </div>
         ${p.kandidati.length ? p.kandidati.map(k=>`
           <div style="font-size:11.5px;color:var(--green,#1f8a4c);padding-left:14px;">
             ✅ <b>${esc(k.sifra||('R-'+k.id))}</b> ${Math.round(k.dim_a)}×${Math.round(k.dim_b)}
+            ${k.restl_nepravilan?'<span title="Restl je nepravilnog oblika" style="color:#6b4fa0;">⬡</span>':''}
+            ${k.okret ? `<span style="color:#8b96a5;" title="Komad se okreće za ovaj ugao">↻ ${k.okret}°</span>` : ''}
             ${k.objekt_naziv?`<span style="color:#8b96a5;"> · ${esc(k.objekt_naziv)}</span>`:''}
           </div>`).join('') : ''}
         ${p.treba_tabla ? `
@@ -684,9 +687,31 @@ async function prepisiIzPonude(){
     }
     const ponuda = await rp.json();
 
-    // Ponuda cuva pozicije kao {a, b, kom, nap} — mjere u milimetrima
-    const pozicije = ponuda.pozicije || ponuda.stavke || ponuda.items || [];
-    if(!Array.isArray(pozicije) || !pozicije.length)
+    /* Ponuda moze cuvati pozicije na dva mjesta:
+         - na VRHU dokumenta (ponuda.pozicije), kad je jedna stavka
+         - UNUTAR svake stavke (ponuda.items[].pozicije), kad ih ima vise
+       Zato se skupljaju sa oba mjesta. Ako stavka nema svoje pozicije, ona SAMA je
+       jedna pozicija (njene mjere su u dims/a/b). */
+    let pozicije = [];
+    if(Array.isArray(ponuda.pozicije) && ponuda.pozicije.length){
+      pozicije = ponuda.pozicije.slice();
+    }
+    const stavkeP = ponuda.items || ponuda.stavke || [];
+    if(Array.isArray(stavkeP)){
+      for(const it of stavkeP){
+        if(Array.isArray(it.pozicije) && it.pozicije.length){
+          // Pozicije nasljedjuju opis i oblik svoje stavke
+          pozicije.push(...it.pozicije.map(p=>({
+            ...p,
+            naziv: p.nap || p.naziv || it.naziv || it.tip || null,
+            oblik: p.oblik || it.shape || it.tip || null,
+          })));
+        } else if(it.dims || it.a || it.sirina){
+          pozicije.push({ ...it, ...(it.dims||{}), naziv: it.naziv || it.tip || null });
+        }
+      }
+    }
+    if(!pozicije.length)
       throw new Error('Ponuda nema pozicija za prepis.');
 
     // Materijal je zajednicki za cijelu ponudu — dodaje se svakoj poziciji
@@ -713,9 +738,12 @@ async function prepisiIzPonude(){
          stiglo, pa se odmah vidi koja polja treba dodati. */
       const prva = stavke[0] || {};
       const polja = Object.keys(prva).map(k=>`${k}: ${JSON.stringify(prva[k])}`).slice(0,14).join('\n  ');
+      // Ispisuje se i u konzolu (F12) — iz iskacuceg prozora se ne moze kopirati
+      console.log('POZICIJE IZ PONUDE (prva):', prva);
+      console.log('SVE POZICIJE:', stavke);
       alert(`Nijedna pozicija nije prepisana — mjere nisu prepoznate.\n\n`
-        + `Prva pozicija iz ponude sadrži:\n  ${polja}\n\n`
-        + `Pošalji ovo i dodaću ta polja u prepis.`);
+        + `Prva pozicija sadrži:\n  ${polja}\n\n`
+        + `Puni ispis je u konzoli (F12 → Console), odatle se može kopirati.`);
       return;
     }
     alert(`✓ Prepisano ${d.upisano} pozicija.`
@@ -816,16 +844,6 @@ function getCols(){
     {k:'r_br',l:'R.Br.',w:50,filter:'text',render:r=>`<td class="num">${r.stornirano?'⛔ ':''}${r.r_br}${isAdmin?` <button onclick="event.stopPropagation();promijeniBrojNaloga(${r.r_br})" style="background:none;border:none;cursor:pointer;font-size:10px;color:var(--blue);" title="Promijeni broj naloga">✎</button>`:''}</td>`,edit:null},
     {k:'zadatak',l:'Zadatak',w:130,filter:'sel',opts:ZADACI,render:r=>`<td>${r.izvor==='terenska_ponuda'?'<span title="Terenska ponuda" style="background:#fff3e0;color:#b8860b;font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:6px;margin-right:5px;">🚐 TEREN</span>':''}${esc(r.zadatak)}</td>`,edit:{type:'select',opts:ZADACI,field:'zadatak'}},
     {k:'materijal',l:'Materijal',w:100,filter:'sel',opts:MATERIJALI,render:r=>`<td>${esc(r.materijal)}</td>`,edit:{type:'select',opts:MATERIJALI,field:'materijal'}},
-    /* POZICIJE — zadatak je opisna recenica ("Rosa porino 2cm gazista flamed..."), iz
-       koje se ne moze traziti restl ni planirati rez. Ova kolona vodi na razlozene
-       pozicije sa mjerama. Oznaka pokazuje koliko ih ima; prazan kvadratic znaci da
-       nalog jos nije razlozen. */
-    {k:'_pozicije',l:'📐 Poz.',w:52,filter:null,render:r=>{
-      const n = parseInt(r.broj_pozicija||0);
-      return `<td class="center"><button onclick="otvoriPozicije(${r.r_br},event)" title="${n?n+' pozicija':'Nema pozicija — klikni za unos'}"
-        style="background:none;border:none;cursor:pointer;font-size:11px;font-weight:700;color:${n?'var(--blue,#1a5fa8)':'#c3c9d1'};">
-        ${n? '📐 '+n : '＋'}</button></td>`;
-    },edit:null},
     {k:'prioritet',l:'Prioritet',w:90,filter:'sel',opts:PRIORITETI,render:r=>`<td>${chipP(r.prioritet)}</td>`,edit:{type:'select',opts:PRIORITETI,field:'prioritet'}},
     {k:'ugovorio',l:'Ugovorio',w:110,filter:'text',render:r=>`<td>${esc(skratiIme(r.ugovorio))}</td>`,edit:{type:'ugovorio',field:'ugovorio_id',label:'Ugovorio'}},
     {k:'narucilac',l:'Naručilac',w:130,filter:'text',render:r=>`<td>${esc(r.narucilac)}</td>`,edit:{type:'text',field:'narucilac',label:'Naručilac'}},
@@ -849,6 +867,16 @@ function getCols(){
       </div></td>`},
   ];
   const fin=[
+    /* POZICIJE — zadatak je opisna recenica ("Rosa porino 2cm gazista flamed..."), iz
+       koje se ne moze traziti restl ni planirati rez. Ova kolona vodi na razlozene
+       pozicije sa mjerama. Oznaka pokazuje koliko ih ima; prazan kvadratic znaci da
+       nalog jos nije razlozen. */
+    {k:'_pozicije',l:'📐 Poz.',w:52,filter:null,render:r=>{
+      const n = parseInt(r.broj_pozicija||0);
+      return `<td class="center"><button onclick="otvoriPozicije(${r.r_br},event)" title="${n?n+' pozicija':'Nema pozicija — klikni za unos'}"
+        style="background:none;border:none;cursor:pointer;font-size:11px;font-weight:700;color:${n?'var(--blue,#1a5fa8)':'#c3c9d1'};">
+        ${n? '📐 '+n : '＋'}</button></td>`;
+    },edit:null},
     {k:'ugovorena_suma',l:'Ugovoreno',w:90,filter:null,render:r=>mozeVidjetiFin(r)?`<td class="num">${fm(r.ugovorena_suma)}</td>`:'<td class="num">—</td>',edit:{type:'number',field:'ugovorena_suma',label:'Ugovorena suma (KM)'}},
     {k:'avans',l:'Avans',w:80,filter:null,render:r=>{
       if(!mozeVidjetiFin(r)) return '<td class="num">—</td>';
