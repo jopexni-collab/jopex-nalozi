@@ -2501,11 +2501,42 @@ function prikaziPlanNaloga(paket) {
   planZaNalog(paket);
 }
 
-async function planZaNalog(paket) {
+// Pozicije se pamte da se plan može preračunati kad se promijeni materijal
+let PLAN_POZICIJE = [];
+
+// Materijal jedne pozicije — plan se odmah preračunava
+function promijeniMaterijal(idx, robaId) {
+  const a = ARTIKLI.find(x => String(x.id) === String(robaId));
+  PLAN_POZICIJE[idx].roba_id = robaId || null;
+  PLAN_POZICIJE[idx].materijal = a ? a.naziv : null;
+  if (a && a.debljina_cm) PLAN_POZICIJE[idx].debljina_cm = Number(a.debljina_cm);
+  planZaNalog({ pozicije: PLAN_POZICIJE });
+}
+
+// Isti materijal za SVE pozicije — kod naloga se obično sve reže iz istog kamena
+function materijalZaSve(robaId) {
+  if (!robaId) return;
+  const a = ARTIKLI.find(x => String(x.id) === String(robaId));
+  if (!a) return;
+  if (!confirm('Postaviti "' + a.naziv + '" za SVE pozicije naloga?')) return;
+  PLAN_POZICIJE = PLAN_POZICIJE.map(z => ({
+    ...z, roba_id: a.id, materijal: a.naziv,
+    debljina_cm: a.debljina_cm ? Number(a.debljina_cm) : z.debljina_cm,
+  }));
+  planZaNalog({ pozicije: PLAN_POZICIJE });
+}
+
+function planZaNalog(paket) {
+  PLAN_POZICIJE = paket.pozicije.map((z, i) => ({ ...z, _i: i }));
+  return planIzracunaj();
+}
+
+async function planIzracunaj() {
   const cilj = document.getElementById('rezultat_trazi');
+  cilj.innerHTML = '<div class="empty-msg">Računam plan rezanja…</div>';
   try {
     const d = await api('/nesting/za-nalog', { method: 'POST', body: JSON.stringify({
-      pozicije: paket.pozicije.map(z => ({
+      pozicije: PLAN_POZICIJE.map(z => ({
         id: z.id, naziv: z.naziv || ('poz. ' + (z.redni_broj || '')),
         sirina: z.sirina, visina: z.visina, kolicina: z.kolicina || 1,
         // roba_id je pouzdan, materijal je pomoćni — kad ga nema, traži se po mjerama
@@ -2528,28 +2559,53 @@ async function planZaNalog(paket) {
       '<div class="kartica"><div class="v">' + s.restlova_u_planu + '</div><div class="n">restlova u planu</div></div>' +
       '</div>';
 
+    // Izbor materijala za sve odjednom — kod naloga se obično sve reže iz istog kamena
+    html += '<div class="xl-akcije"><b>Materijal za sve pozicije:</b>' +
+      '<select id="plan_sve_mat" style="width:300px" onchange="materijalZaSve(this.value)">' +
+      '<option value="">— izaberi artikal —</option>' +
+      ARTIKLI.map(a => '<option value="' + a.id + '">' + (a.sifra ? a.sifra + ' — ' : '') + a.naziv +
+        (a.debljina_cm ? ' · ' + fmt(a.debljina_cm) + ' cm' : '') +
+        ' (' + a.restlova + ' kom)</option>').join('') + '</select>' +
+      '<span class="hint" style="margin:0">Mijenja materijal svake pozicije i preračunava plan.</span></div>';
+
     html += '<div class="xl-wrap"><table class="xl"><thead><tr>' +
-      '<th>Pozicija</th><th style="text-align:right">Mjere</th><th style="text-align:right">Kom</th>' +
+      '<th>Pozicija</th><th style="min-width:260px">Materijal</th>' +
+      '<th style="text-align:right">Mjere</th><th style="text-align:right">Kom</th>' +
       '<th style="text-align:right">Iz restlova</th><th style="text-align:right">Na tablu</th>' +
       '<th>Plan po restlovima</th></tr></thead><tbody>';
 
-    html += d.pozicije.map(z => {
+    html += d.pozicije.map((z, i) => {
       const sve = z.iz_restlova >= z.kolicina;
       return '<tr style="background:' + (sve ? '#eefaf1' : (z.iz_restlova ? '#fff8f0' : '')) + '">' +
         '<td><b>' + (z.naziv || '') + '</b>' + (z.greska ? ' <span style="color:#c0392b">' + z.greska + '</span>' : '') + '</td>' +
+        '<td><select style="width:250px;font-size:11px" onchange="promijeniMaterijal(' + i + ',this.value)">' +
+          '<option value="">— bilo koji materijal —</option>' +
+          ARTIKLI.map(a => '<option value="' + a.id + '"' +
+            (String(a.id) === String(PLAN_POZICIJE[i] && PLAN_POZICIJE[i].roba_id) ? ' selected' : '') + '>' +
+            (a.sifra ? a.sifra + ' — ' : '') + a.naziv +
+            (a.debljina_cm ? ' · ' + fmt(a.debljina_cm) + ' cm' : '') + '</option>').join('') +
+          '</select>' +
+          (PLAN_POZICIJE[i] && !PLAN_POZICIJE[i].roba_id && PLAN_POZICIJE[i].materijal
+            ? '<div class="hint" style="margin:0">iz naloga: ' + PLAN_POZICIJE[i].materijal + '</div>' : '') + '</td>' +
         '<td class="num">' + Math.round(z.sirina) + '×' + Math.round(z.visina) + '</td>' +
         '<td class="num">' + z.kolicina + '</td>' +
         '<td class="num"><b style="color:#1f8a4c">' + z.iz_restlova + '</b></td>' +
         '<td class="num">' + (z.treba_tabla ? '<b style="color:#e67e22">' + z.treba_tabla + '</b>' : '—') + '</td>' +
-        '<td>' + (z.restlovi.length
-          ? (z.nadjeno_po && z.nadjeno_po !== 'artikal'
-              ? '<div class="hint" style="margin:0 0 3px"><b style="color:#e67e22">nađeno po: ' +
-                z.nadjeno_po + '</b> — pozicija nije vezana za artikal iz lagera</div>' : '') +
-            z.restlovi.map(r =>
+        '<td>' +
+        // Upozorenje stoji i kad restlova IMA i kad ih nema — u oba slučaja znači
+        // da veza na artikal fali, pa je rezultat manje pouzdan.
+        (z.nadjeno_po && z.nadjeno_po !== 'artikal'
+          ? '<div class="hint" style="margin:0 0 3px"><b style="color:#e67e22">nađeno po: ' +
+            z.nadjeno_po + '</b> — pozicija nije vezana za artikal, izaberi materijal lijevo</div>' : '') +
+        (z.restlovi.length
+          ? z.restlovi.map(r =>
               '<div style="display:flex;gap:6px;align-items:center;margin-bottom:3px">' +
               crtezPlana(r, 70, 50) +
-              '<span><b>' + r.oznaka + '</b> — ' + r.komada + ' kom · ' + fmt(r.procenat) + '% · ' +
-              (r.objekt_naziv || '') + '</span>' +
+              '<span><b>' + r.oznaka + '</b> — ' +
+                (r.artikal_naziv || r.materijal || '(bez naziva)') +
+                (r.artikal_sifra ? ' <span class="hint">' + r.artikal_sifra + '</span>' : '') +
+                '<br>' + Math.round(r.dim_a) + '×' + Math.round(r.dim_b) + ' mm · ' +
+                r.komada + ' kom · ' + fmt(r.procenat) + '% · ' + (r.objekt_naziv || '') + '</span>' +
               '<button class="btn mali" onclick="uzmiIzPlana(' + r.restl_id + ')">Uzmi</button></div>').join('')
           : '<span class="hint">nema restla — ide na cijelu tablu' +
             (z.pregledano_restlova === 0
