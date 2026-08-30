@@ -272,46 +272,75 @@ router.post('/nesting/za-nalog', smijeVidjeti, async (req, res) => {
 
     const rezMm = Number(rez) || 5;
     const iskorisceni = new Set();       // restl se ne smije dvaput obećati
-    const izlaz = [];
 
-    for (const p of pozicije) {
+    /* Pozicije se GRUPIŠU po materijalu i debljini, pa se u jedan restl pakuju SVE
+       pozicije iz iste grupe odjednom. Ranije je svaka pozicija tražila svoj restl,
+       pa se dvije male nisu spajale u isti komad iako bi obje stale — a upravo to je
+       glavna ušteda kod ostataka. */
+    const pripremljene = pozicije.map((p, i) => {
       const sir = Number(p.sirina) || 0, vis = Number(p.visina) || 0;
-      const kom = Math.max(1, Math.round(Number(p.kolicina) || 1));
-      if (!sir || !vis) {
-        izlaz.push({ ...p, greska: 'nema mjere', iz_restlova: 0, treba_tabla: kom, restlovi: [] });
-        continue;
-      }
-
-      // Debljina zna stići u milimetrima iz naloga, a restlovi je vode u centimetrima.
-      // Bez ovoga filter "debljina = 20" ne pogađa nijedan restl od 2 cm.
+      // Debljina zna stići u milimetrima iz naloga, a restlovi je vode u centimetrima
       let deb = p.debljina_cm != null ? Number(p.debljina_cm) : null;
       if (deb && deb > 10) deb = deb / 10;
+      return {
+        _i: i, id: p.id, naziv: p.naziv || ('poz. ' + (i + 1)),
+        sirina: sir, visina: vis,
+        kolicina: Math.max(1, Math.round(Number(p.kolicina) || 1)),
+        roba_id: p.roba_id || null, materijal: p.materijal || null,
+        // Kad je izabrano više artikala, pozicija se traži u SVIMA — plan onda uzme
+        // onaj restl u kojem komad najbolje leži, umjesto da se bira unaprijed.
+        kandidat_roba_ids: Array.isArray(p.kandidat_roba_ids) && p.kandidat_roba_ids.length
+          ? p.kandidat_roba_ids : null,
+        debljina_cm: deb, bez_okretanja: !!p.bez_okretanja,
+        preostalo: Math.max(1, Math.round(Number(p.kolicina) || 1)),
+        restlovi: [], nadjeno_po: null, pregledano: 0,
+        greska: (!sir || !vis) ? 'nema mjere' : null,
+      };
+    });
 
-      /* Traži se u tri kruga, od najuže ka najširem. Restlovi često još nisu vezani
-         za artikal, pa pretraga samo po roba_id vrati prazno iako komad postoji.
-         Zato se, ako uži krug ne da ništa, prelazi na sljedeći — a u odgovoru piše
-         PO ČEMU je nađeno, da se vidi kad veza na artikal nedostaje. */
+    const kljucGrupe = p => [
+      p.kandidat_roba_ids ? 'vise:' + p.kandidat_roba_ids.join(',')
+                          : (p.roba_id || ('naziv:' + (p.materijal || ''))),
+      p.debljina_cm || '',
+    ].join('|');
+    const grupe = new Map();
+    for (const p of pripremljene) {
+      if (p.greska) continue;
+      const k = kljucGrupe(p);
+      if (!grupe.has(k)) grupe.set(k, []);
+      grupe.get(k).push(p);
+    }
+
+    for (const [, clanovi] of grupe) {
+      const uzorak = clanovi[0];
+
+      /* Tri kruga, od najuže ka najširem: restlovi često još nisu vezani za artikal,
+         pa pretraga samo po roba_id vrati prazno iako komad postoji. */
       const krugovi = [];
-      if (p.roba_id) krugovi.push({ kako: 'artikal', roba_id: p.roba_id, deb });
-      if (p.materijal) krugovi.push({ kako: 'naziv', materijal: p.materijal, deb });
-      if (deb) krugovi.push({ kako: 'samo debljina', deb });
+      if (uzorak.kandidat_roba_ids)
+        krugovi.push({ kako: 'izabrani artikli', roba_ids: uzorak.kandidat_roba_ids, deb: uzorak.debljina_cm });
+      if (uzorak.roba_id)   krugovi.push({ kako: 'artikal', roba_id: uzorak.roba_id, deb: uzorak.debljina_cm });
+      if (uzorak.materijal) krugovi.push({ kako: 'naziv', materijal: uzorak.materijal, deb: uzorak.debljina_cm });
+      if (uzorak.debljina_cm) krugovi.push({ kako: 'samo debljina', deb: uzorak.debljina_cm });
       krugovi.push({ kako: 'samo mjere' });
 
-      let preostalo = kom;
-      const upotrijebljeni = [];
-      let kakoNadjeno = null, pregledano = 0;
+      // Najmanja mjera koju bilo koja pozicija u grupi traži — predfilter za bazu
+      const najmanjaSir = Math.min(...clanovi.map(c => Math.min(c.sirina, c.visina)));
+      const najmanjaVis = Math.min(...clanovi.map(c => Math.max(c.sirina, c.visina)));
 
       for (const krug of krugovi) {
-        if (!preostalo) break;
+        if (clanovi.every(c => !c.preostalo)) break;
+
         const uslovi = [`r.status = 'dostupan'`];
         const vals = [];
         let i = 1;
+        if (krug.roba_ids)  { uslovi.push(`r.roba_id = ANY($${i++}::int[])`); vals.push(krug.roba_ids); }
         if (krug.roba_id)   { uslovi.push(`r.roba_id = $${i++}`); vals.push(krug.roba_id); }
         if (krug.materijal) { uslovi.push(`(r.materijal ILIKE $${i} OR ro.naziv ILIKE $${i})`); vals.push(`%${krug.materijal}%`); i++; }
         if (krug.deb)       { uslovi.push(`COALESCE(r.debljina_cm, ro.debljina_cm) = $${i++}`); vals.push(krug.deb); }
         if (objekt_id)      { uslovi.push(`r.objekt_id = $${i++}`); vals.push(objekt_id); }
-        uslovi.push(`GREATEST(r.dim_a, r.dim_b) >= $${i++}`); vals.push(Math.max(sir, vis));
-        uslovi.push(`LEAST(r.dim_a, r.dim_b) >= $${i++}`);    vals.push(Math.min(sir, vis));
+        uslovi.push(`GREATEST(r.dim_a, r.dim_b) >= $${i++}`); vals.push(najmanjaVis);
+        uslovi.push(`LEAST(r.dim_a, r.dim_b) >= $${i++}`);    vals.push(najmanjaSir);
 
         const q = await pool.query(
           `SELECT r.*, po.naziv AS objekt_naziv, ro.naziv AS artikal_naziv, ro.sifra AS artikal_sifra
@@ -319,46 +348,63 @@ router.post('/nesting/za-nalog', smijeVidjeti, async (req, res) => {
              LEFT JOIN prodajni_objekti po ON po.id = r.objekt_id
              LEFT JOIN roba ro ON ro.id = r.roba_id
             WHERE ${uslovi.join(' AND ')}
-            ORDER BY r.povrsina ASC LIMIT 40`, vals);
-        pregledano += q.rows.length;
+            ORDER BY r.povrsina ASC LIMIT 60`, vals);
+        for (const c of clanovi) c.pregledano += q.rows.length;
 
+        // Od najmanjeg restla naviše — veliki se čuvaju za komade koji ih stvarno traže
         for (const restl of q.rows) {
-          if (!preostalo) break;
+          if (clanovi.every(c => !c.preostalo)) break;
           if (iskorisceni.has(restl.id)) continue;
-          const raspored = nest.rasporedi(tjemenaRestla(restl),
-            [{ id: p.id, naziv: p.naziv || 'pozicija', sirina: sir, visina: vis,
-               kolicina: preostalo, bez_okretanja: !!p.bez_okretanja }],
-            { rez: rezMm });
+
+          // SVE preostale pozicije grupe idu u isti restl odjednom
+          const komadi = clanovi.filter(c => c.preostalo).map(c => ({
+            id: c.id, naziv: c.naziv, sirina: c.sirina, visina: c.visina,
+            kolicina: c.preostalo, bez_okretanja: c.bez_okretanja,
+          }));
+          if (!komadi.length) break;
+
+          const raspored = nest.rasporedi(tjemenaRestla(restl), komadi, { rez: rezMm });
           if (!raspored.uklopljeno) continue;
+
+          // Koliko je od koje pozicije stalo u BAŠ TAJ restl
+          const poPoziciji = new Map();
+          for (const post of raspored.postavljeni) {
+            poPoziciji.set(post.id, (poPoziciji.get(post.id) || 0) + 1);
+          }
           iskorisceni.add(restl.id);
-          preostalo -= raspored.uklopljeno;
-          if (!kakoNadjeno) kakoNadjeno = krug.kako;
-          upotrijebljeni.push({
-            restl_id: restl.id, oznaka: restl.oznaka,
-            objekt_naziv: restl.objekt_naziv,
-            artikal_naziv: restl.artikal_naziv, artikal_sifra: restl.artikal_sifra,
-            materijal: restl.materijal,
-            dim_a: restl.dim_a, dim_b: restl.dim_b,
-            komada: raspored.uklopljeno,
-            procenat: raspored.procenat,
-            ostatak_m2: raspored.ostatak,
-            postavljeni: raspored.postavljeni,
-          });
+          for (const c of clanovi) {
+            const koliko = poPoziciji.get(c.id) || 0;
+            if (!koliko) continue;
+            c.preostalo -= koliko;
+            if (!c.nadjeno_po) c.nadjeno_po = krug.kako;
+            c.restlovi.push({
+              restl_id: restl.id, oznaka: restl.oznaka,
+              objekt_naziv: restl.objekt_naziv,
+              artikal_naziv: restl.artikal_naziv, artikal_sifra: restl.artikal_sifra,
+              materijal: restl.materijal,
+              dim_a: restl.dim_a, dim_b: restl.dim_b,
+              komada: koliko,
+              procenat: raspored.procenat,
+              ostatak_m2: raspored.ostatak,
+              // Kad u restlu ima više različitih pozicija, to je bitno vidjeti
+              dijeli_sa: [...poPoziciji.keys()].filter(k => k !== c.id).length,
+              postavljeni: raspored.postavljeni,
+            });
+          }
         }
       }
-
-      izlaz.push({
-        id: p.id, naziv: p.naziv, sirina: sir, visina: vis, kolicina: kom,
-        iz_restlova: kom - preostalo,
-        treba_tabla: preostalo,
-        restlovi: upotrijebljeni,
-        // Dijagnostika: po čemu je nađeno i koliko je restlova uopšte pregledano.
-        // Kad je "pregledano 0", filter je preuzak — obično veza na artikal fali.
-        nadjeno_po: kakoNadjeno,
-        pregledano_restlova: pregledano,
-        trazena_debljina: deb,
-      });
     }
+
+    const izlaz = pripremljene.map(p => ({
+      id: p.id, naziv: p.naziv, sirina: p.sirina, visina: p.visina, kolicina: p.kolicina,
+      iz_restlova: p.kolicina - p.preostalo,
+      treba_tabla: p.greska ? p.kolicina : p.preostalo,
+      restlovi: p.restlovi,
+      nadjeno_po: p.nadjeno_po,
+      pregledano_restlova: p.pregledano,
+      trazena_debljina: p.debljina_cm,
+      greska: p.greska,
+    }));
 
     res.json({
       pozicije: izlaz,

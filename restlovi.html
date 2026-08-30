@@ -2560,13 +2560,9 @@ async function planIzracunaj() {
       '</div>';
 
     // Izbor materijala za sve odjednom — kod naloga se obično sve reže iz istog kamena
-    html += '<div class="xl-akcije"><b>Materijal za sve pozicije:</b>' +
-      '<select id="plan_sve_mat" style="width:300px" onchange="materijalZaSve(this.value)">' +
-      '<option value="">— izaberi artikal —</option>' +
-      ARTIKLI.map(a => '<option value="' + a.id + '">' + (a.sifra ? a.sifra + ' — ' : '') + a.naziv +
-        (a.debljina_cm ? ' · ' + fmt(a.debljina_cm) + ' cm' : '') +
-        ' (' + a.restlova + ' kom)</option>').join('') + '</select>' +
-      '<span class="hint" style="margin:0">Mijenja materijal svake pozicije i preračunava plan.</span></div>';
+    html += '<div class="xl-akcije">' +
+      '<button class="btn mali" onclick="otvoriBirac(\'sve\')">🎨 Materijal za sve pozicije…</button>' +
+      '<span class="hint" style="margin:0">Bira se jedan ili više artikala; plan se odmah preračuna.</span></div>';
 
     html += '<div class="xl-wrap"><table class="xl"><thead><tr>' +
       '<th>Pozicija</th><th style="min-width:260px">Materijal</th>' +
@@ -2578,15 +2574,17 @@ async function planIzracunaj() {
       const sve = z.iz_restlova >= z.kolicina;
       return '<tr style="background:' + (sve ? '#eefaf1' : (z.iz_restlova ? '#fff8f0' : '')) + '">' +
         '<td><b>' + (z.naziv || '') + '</b>' + (z.greska ? ' <span style="color:#c0392b">' + z.greska + '</span>' : '') + '</td>' +
-        '<td><select style="width:250px;font-size:11px" onchange="promijeniMaterijal(' + i + ',this.value)">' +
-          '<option value="">— bilo koji materijal —</option>' +
-          ARTIKLI.map(a => '<option value="' + a.id + '"' +
-            (String(a.id) === String(PLAN_POZICIJE[i] && PLAN_POZICIJE[i].roba_id) ? ' selected' : '') + '>' +
-            (a.sifra ? a.sifra + ' — ' : '') + a.naziv +
-            (a.debljina_cm ? ' · ' + fmt(a.debljina_cm) + ' cm' : '') + '</option>').join('') +
-          '</select>' +
-          (PLAN_POZICIJE[i] && !PLAN_POZICIJE[i].roba_id && PLAN_POZICIJE[i].materijal
-            ? '<div class="hint" style="margin:0">iz naloga: ' + PLAN_POZICIJE[i].materijal + '</div>' : '') + '</td>' +
+        '<td>' +
+          '<button class="btn sec mali" style="max-width:250px;overflow:hidden;text-overflow:ellipsis" ' +
+            'onclick="otvoriBirac(' + i + ')">' +
+            (PLAN_POZICIJE[i] && PLAN_POZICIJE[i].materijal
+              ? '🎨 ' + PLAN_POZICIJE[i].materijal
+              : '🎨 izaberi materijal…') + '</button>' +
+          (PLAN_POZICIJE[i] && !PLAN_POZICIJE[i].roba_id && !PLAN_POZICIJE[i].kandidat_roba_ids && PLAN_POZICIJE[i].materijal
+            ? '<div class="hint" style="margin:0">iz naloga, nije vezano za šifrarnik</div>' : '') +
+          (PLAN_POZICIJE[i] && PLAN_POZICIJE[i].kandidat_roba_ids
+            ? '<div class="hint" style="margin:0">' + PLAN_POZICIJE[i].kandidat_roba_ids.length + ' artikala u izboru</div>' : '') +
+          '</td>' +
         '<td class="num">' + Math.round(z.sirina) + '×' + Math.round(z.visina) + '</td>' +
         '<td class="num">' + z.kolicina + '</td>' +
         '<td class="num"><b style="color:#1f8a4c">' + z.iz_restlova + '</b></td>' +
@@ -2605,7 +2603,12 @@ async function planIzracunaj() {
                 (r.artikal_naziv || r.materijal || '(bez naziva)') +
                 (r.artikal_sifra ? ' <span class="hint">' + r.artikal_sifra + '</span>' : '') +
                 '<br>' + Math.round(r.dim_a) + '×' + Math.round(r.dim_b) + ' mm · ' +
-                r.komada + ' kom · ' + fmt(r.procenat) + '% · ' + (r.objekt_naziv || '') + '</span>' +
+                r.komada + ' kom · ' + fmt(r.procenat) + '% · ' + (r.objekt_naziv || '') +
+                // Kad u istom restlu ima i drugih pozicija, to je bitno vidjeti —
+                // znači da se restl reže jednom za više stavki naloga
+                (r.dijeli_sa ? '<br><b style="color:#1f8a4c">+ još ' + r.dijeli_sa +
+                  ' pozicij' + (r.dijeli_sa === 1 ? 'a' : 'e') + ' iz istog restla</b>' : '') +
+                '</span>' +
               '<button class="btn mali" onclick="uzmiIzPlana(' + r.restl_id + ')">Uzmi</button></div>').join('')
           : '<span class="hint">nema restla — ide na cijelu tablu' +
             (z.pregledano_restlova === 0
@@ -2633,6 +2636,225 @@ async function planIzracunaj() {
   } catch (e) {
     cilj.innerHTML = '<div class="msg err">Plan nije izračunat: ' + e.message + '</div>';
   }
+}
+
+/* ── BIRAČ MATERIJALA ──
+   Isti obrazac kao lager lista u magacinu: tabela sa kvadratićima, filter po koloni
+   sa kaskadnim sužavanjem i pretraga. Bira se jedan artikal ili više njih odjednom;
+   kad ih je više, pozicija se traži u SVIMA i uzima onaj u kojem najbolje leži. */
+let BIRAC_ZA = null;            // indeks pozicije, ili 'sve'
+let BIRAC_IZABRANI = new Set();
+let BIRAC_FILTERI = {};
+let BIRAC_SORT = { k: 'naziv', smjer: 1 };
+let BIRAC_PRETRAGA = '';
+const BIRAC_KOLONE = [
+  { k: 'sifra',    lbl: 'Šifra',   align: 'left'  },
+  { k: 'naziv',    lbl: 'Naziv',   align: 'left'  },
+  { k: 'master',   lbl: 'Master',  align: 'left'  },
+  { k: 'grupa',    lbl: 'Grupa',   align: 'left'  },
+  { k: 'debljina', lbl: 'Deb. cm', align: 'right' },
+  { k: 'restlova', lbl: 'Restlova',align: 'right' },
+  { k: 'm2',       lbl: 'm²',      align: 'right' },
+];
+
+function biracVrijednost(a, k) {
+  switch (k) {
+    case 'sifra':    return a.sifra || '';
+    case 'naziv':    return a.naziv || '';
+    case 'master':   return a.master_grupa || '';
+    case 'grupa':    return a.grupa || '';
+    case 'debljina': return a.debljina_cm != null ? Number(a.debljina_cm) : '';
+    case 'restlova': return Number(a.restlova) || 0;
+    case 'm2':       return Number(a.m2) || 0;
+    default:         return '';
+  }
+}
+
+// Redovi koji prežive sve filtere OSIM jedne kolone — kaskadno sužavanje kao u Excelu
+function biracRedoviBez(izuzmi) {
+  const p = BIRAC_PRETRAGA.toLowerCase();
+  return ARTIKLI.filter(a => {
+    if (p && !((a.naziv || '') + ' ' + (a.sifra || '') + ' ' + (a.grupa || '')).toLowerCase().includes(p)) return false;
+    return BIRAC_KOLONE.every(c => {
+      if (c.k === izuzmi) return true;
+      const iskljucene = BIRAC_FILTERI[c.k];
+      if (!iskljucene || !iskljucene.size) return true;
+      const v = biracVrijednost(a, c.k);
+      return !iskljucene.has(v) && !(iskljucene.has('') && (v == null || v === ''));
+    });
+  });
+}
+
+function otvoriBirac(zaKoga) {
+  BIRAC_ZA = zaKoga;
+  BIRAC_IZABRANI = new Set();
+  BIRAC_FILTERI = {}; BIRAC_PRETRAGA = '';
+  if (zaKoga !== 'sve' && PLAN_POZICIJE[zaKoga] && PLAN_POZICIJE[zaKoga].roba_id) {
+    BIRAC_IZABRANI.add(String(PLAN_POZICIJE[zaKoga].roba_id));
+  }
+  modal('<h3>Izbor materijala' + (zaKoga === 'sve' ? ' — za SVE pozicije' :
+        ' — pozicija ' + (PLAN_POZICIJE[zaKoga] ? PLAN_POZICIJE[zaKoga].naziv : '')) + '</h3>' +
+    '<input type="text" id="birac_pretraga" placeholder="Pretraga po nazivu, šifri ili grupi…" ' +
+      'style="width:100%;margin-bottom:8px" oninput="biracPretraga(this.value)">' +
+    '<div id="birac_tijelo"></div>' +
+    '<div class="modal-btns"><button class="btn" onclick="primijeniBirac()">✓ Primijeni</button>' +
+    '<button class="btn sec" onclick="zatvoriModal()">Odustani</button></div>' +
+    '<div id="birac-panel" class="xl-panel" onclick="event.stopPropagation()"></div>');
+  crtajBirac();
+}
+
+let BIRAC_ODGODA = null;
+function biracPretraga(v) {
+  clearTimeout(BIRAC_ODGODA);
+  // Čeka se pauza u kucanju — inače se tabela iscrtava na svako slovo
+  BIRAC_ODGODA = setTimeout(() => { BIRAC_PRETRAGA = v; crtajBirac(); }, 250);
+}
+
+function crtajBirac() {
+  const cilj = document.getElementById('birac_tijelo');
+  if (!cilj) return;
+  let redovi = biracRedoviBez(null);
+  const s = BIRAC_SORT;
+  redovi = redovi.slice().sort((a, b) => {
+    const x = biracVrijednost(a, s.k), y = biracVrijednost(b, s.k);
+    if (typeof x === 'number' && typeof y === 'number') return (x - y) * s.smjer;
+    return String(x).localeCompare(String(y), 'sr-Latn-BA') * s.smjer;
+  });
+  const strelica = k => BIRAC_SORT.k === k ? (BIRAC_SORT.smjer > 0 ? ' ▲' : ' ▼') : '';
+  const sviCekirani = redovi.length && redovi.every(a => BIRAC_IZABRANI.has(String(a.id)));
+
+  cilj.innerHTML =
+    '<div class="hint" style="margin-bottom:6px">' + redovi.length + ' od ' + ARTIKLI.length +
+      ' artikala · <b>' + BIRAC_IZABRANI.size + ' izabrano</b>' +
+      (Object.values(BIRAC_FILTERI).some(f => f && f.size)
+        ? ' · <a href="#" onclick="BIRAC_FILTERI={};crtajBirac();return false">poništi filtere</a>' : '') +
+      '</div>' +
+    '<div class="xl-wrap" style="max-height:340px"><table class="xl"><thead><tr>' +
+    '<th style="width:26px;text-align:center"><input type="checkbox"' + (sviCekirani ? ' checked' : '') +
+      ' onchange="biracSviVidljivi(this.checked)"></th>' +
+    BIRAC_KOLONE.map(c => {
+      const aktivan = BIRAC_FILTERI[c.k] && BIRAC_FILTERI[c.k].size;
+      return '<th style="text-align:' + c.align + '"><div style="display:flex;align-items:center;gap:2px;' +
+        'justify-content:' + (c.align === 'right' ? 'flex-end' : 'flex-start') + '">' +
+        '<span class="naslov" onclick="biracSort(\'' + c.k + '\')">' + c.lbl + strelica(c.k) + '</span>' +
+        '<span class="fbtn' + (aktivan ? ' on' : '') + '" onclick="event.stopPropagation();biracOtvoriFilter(\'' + c.k + '\',this)">▼</span>' +
+        '</div></th>';
+    }).join('') + '</tr></thead><tbody>' +
+    redovi.map(a =>
+      '<tr class="' + (BIRAC_IZABRANI.has(String(a.id)) ? 'oznacen' : '') + '" ' +
+        'onclick="biracPrebaci(\'' + a.id + '\')" style="cursor:pointer">' +
+      '<td style="text-align:center"><input type="checkbox"' +
+        (BIRAC_IZABRANI.has(String(a.id)) ? ' checked' : '') + ' onclick="event.stopPropagation()" ' +
+        'onchange="biracPrebaci(\'' + a.id + '\')"></td>' +
+      '<td>' + (a.sifra || '') + '</td><td>' + a.naziv + '</td>' +
+      '<td>' + (a.master_grupa || '') + '</td><td>' + (a.grupa || '') + '</td>' +
+      '<td class="num">' + (a.debljina_cm != null ? fmt(a.debljina_cm) : '') + '</td>' +
+      '<td class="num">' + a.restlova + '</td><td class="num">' + fmt(a.m2) + '</td></tr>').join('') +
+    '</tbody></table></div>';
+}
+
+function biracSort(k) {
+  BIRAC_SORT = BIRAC_SORT.k === k ? { k, smjer: -BIRAC_SORT.smjer } : { k, smjer: 1 };
+  crtajBirac();
+}
+function biracPrebaci(id) {
+  const s = String(id);
+  if (BIRAC_IZABRANI.has(s)) BIRAC_IZABRANI.delete(s); else BIRAC_IZABRANI.add(s);
+  crtajBirac();
+}
+function biracSviVidljivi(ukljuci) {
+  const vidljivi = biracRedoviBez(null);
+  vidljivi.forEach(a => { if (ukljuci) BIRAC_IZABRANI.add(String(a.id)); else BIRAC_IZABRANI.delete(String(a.id)); });
+  crtajBirac();
+}
+
+let BIRAC_FP_KOLONA = null, BIRAC_FP_DRAFT = new Set(), BIRAC_FP_PRETRAGA = '';
+function biracOtvoriFilter(k, dugme) {
+  BIRAC_FP_KOLONA = k; BIRAC_FP_PRETRAGA = '';
+  BIRAC_FP_DRAFT = new Set(BIRAC_FILTERI[k] || []);
+  const panel = document.getElementById('birac-panel');
+  const r = dugme.getBoundingClientRect();
+  panel.style.top = (r.bottom + 4) + 'px';
+  panel.style.left = Math.min(r.left, window.innerWidth - 240) + 'px';
+  panel.style.display = 'flex';
+  panel.innerHTML =
+    '<div style="padding:8px;border-bottom:1px solid #eee">' +
+    '<input type="text" id="birac-fp-pretraga" placeholder="Pretraga…" style="width:100%;padding:5px 7px;font-size:11.5px;box-sizing:border-box"></div>' +
+    '<div id="birac-fp-lista" style="overflow-y:auto;flex:1;padding:6px 8px"></div>' +
+    '<div style="display:flex;gap:6px;padding:8px;border-top:1px solid #eee">' +
+    '<button class="btn sec mali" style="flex:1" onclick="biracZatvoriFilter()">Otkaži</button>' +
+    '<button class="btn sec mali" style="flex:1" onclick="biracFilterObrisi()">Obriši</button>' +
+    '<button class="btn mali" style="flex:1" onclick="biracFilterPrimijeni()">✓ OK</button></div>';
+  const inp = document.getElementById('birac-fp-pretraga');
+  let t = null;
+  inp.addEventListener('input', e => {
+    BIRAC_FP_PRETRAGA = e.target.value;
+    clearTimeout(t); t = setTimeout(biracCrtajListuFiltera, 250);
+  });
+  inp.focus();
+  biracCrtajListuFiltera();
+}
+function biracCrtajListuFiltera() {
+  const k = BIRAC_FP_KOLONA;
+  const izvor = biracRedoviBez(k).map(a => biracVrijednost(a, k));
+  const neprazne = [...new Set(izvor.filter(v => v !== '' && v != null))]
+    .sort((a, b) => typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b), 'sr-Latn-BA'));
+  const sve = izvor.some(v => v === '' || v == null) ? [...neprazne, ''] : neprazne;
+  const p = BIRAC_FP_PRETRAGA.toLowerCase();
+  const prikaz = sve.filter(v => String(v).toLowerCase().includes(p));
+  const sviOznaceni = prikaz.every(v => !BIRAC_FP_DRAFT.has(v));
+  document.getElementById('birac-fp-lista').innerHTML =
+    '<label style="display:flex;gap:6px;padding:3px 0;font-weight:700;cursor:pointer;border-bottom:1px solid #eee;margin-bottom:3px">' +
+    '<input type="checkbox"' + (sviOznaceni ? ' checked' : '') + ' onchange="biracFPSve(this.checked)"> (Izaberi sve)</label>' +
+    prikaz.map(v =>
+      '<label style="display:flex;gap:6px;padding:2px 0;font-size:11.5px;cursor:pointer">' +
+      '<input type="checkbox"' + (BIRAC_FP_DRAFT.has(v) ? '' : ' checked') +
+      ' onchange="biracFPPrebaci(' + JSON.stringify(String(v)) + ',this.checked)">' +
+      (v === '' ? '<i>(prazno)</i>' : (typeof v === 'number' ? fmt(v) : v)) + '</label>').join('');
+}
+function biracFPPrebaci(v, ukljucen) {
+  const stvarna = [...new Set(biracRedoviBez(BIRAC_FP_KOLONA).map(a => biracVrijednost(a, BIRAC_FP_KOLONA)))]
+    .find(x => String(x) === v);
+  const kljuc = stvarna !== undefined ? stvarna : v;
+  if (ukljucen) BIRAC_FP_DRAFT.delete(kljuc); else BIRAC_FP_DRAFT.add(kljuc);
+}
+function biracFPSve(ukljuci) {
+  const k = BIRAC_FP_KOLONA;
+  const p = BIRAC_FP_PRETRAGA.toLowerCase();
+  [...new Set(biracRedoviBez(k).map(a => biracVrijednost(a, k)))]
+    .filter(v => String(v).toLowerCase().includes(p))
+    .forEach(v => { if (ukljuci) BIRAC_FP_DRAFT.delete(v); else BIRAC_FP_DRAFT.add(v); });
+  biracCrtajListuFiltera();
+}
+function biracFilterPrimijeni() { BIRAC_FILTERI[BIRAC_FP_KOLONA] = new Set(BIRAC_FP_DRAFT); biracZatvoriFilter(); crtajBirac(); }
+function biracFilterObrisi() { delete BIRAC_FILTERI[BIRAC_FP_KOLONA]; biracZatvoriFilter(); crtajBirac(); }
+function biracZatvoriFilter() {
+  const p = document.getElementById('birac-panel');
+  if (p) p.style.display = 'none';
+  BIRAC_FP_KOLONA = null;
+}
+
+function primijeniBirac() {
+  const izbor = [...BIRAC_IZABRANI];
+  if (!izbor.length) { poruka('Nijedan artikal nije izabran.', 'greska'); return; }
+  const artikli = izbor.map(id => ARTIKLI.find(a => String(a.id) === String(id))).filter(Boolean);
+  const prvi = artikli[0];
+
+  // Kad je izabrano više artikala, pozicija se traži u SVIMA — u planu se onda
+  // uzima onaj restl u kojem komad najbolje leži.
+  const postavi = z => ({
+    ...z,
+    roba_id: artikli.length === 1 ? prvi.id : null,
+    kandidat_roba_ids: artikli.length > 1 ? artikli.map(a => a.id) : null,
+    materijal: artikli.length === 1 ? prvi.naziv : artikli.map(a => a.naziv).join(' / '),
+    debljina_cm: prvi.debljina_cm ? Number(prvi.debljina_cm) : z.debljina_cm,
+  });
+
+  if (BIRAC_ZA === 'sve') PLAN_POZICIJE = PLAN_POZICIJE.map(postavi);
+  else PLAN_POZICIJE[BIRAC_ZA] = postavi(PLAN_POZICIJE[BIRAC_ZA]);
+
+  zatvoriModal();
+  planIzracunaj();
 }
 
 // Mali crtež rasporeda — restl u sivom, raspoređeni komadi u plavom
