@@ -797,6 +797,57 @@ router.patch('/akcije/:id/zavrsi', async (req, res) => {
    Dimenzija se vodi na ARTIKLU (unese se jednom po sifri), u MILIMETRIMA. */
 
 // GET /api/roba/bez-dimenzija — artikli kojima dimenzije jos nisu unesene
+// PATCH /api/roba/dimenzije-grupa — dimenzije za CIJELU grupu odjednom
+// Tasto, kvarc i keramika imaju istu mjeru table za cijelu grupu, pa je unos jedan po
+// jedan besmislen posao. Podrazumijevano se dira SAMO ono sto jos nema dimenzije —
+// da se rucno unesena, namjerno drugacija mjera ne pregazi slucajno.
+router.patch('/dimenzije-grupa', async (req, res) => {
+  const u = req.session?.user;
+  if (u?.rola !== 'admin' && !u?.moze_roba_magacin && !u?.moze_cijene)
+    return res.status(403).json({ error: 'Nemate dozvolu.' });
+
+  const grupa = String(req.body?.grupa || '').trim();
+  const sirina = parseFloat(req.body?.std_sirina);
+  const visina = parseFloat(req.body?.std_visina);
+  const pregaziPostojece = req.body?.pregazi === true;
+
+  if (!grupa) return res.status(400).json({ error: 'Nedostaje grupa.' });
+  if (!sirina || !visina || sirina < 50 || visina < 50 || sirina > 6000 || visina > 6000)
+    return res.status(400).json({
+      error: `Mjere se unose u MILIMETRIMA (npr. 3200 × 1600). Uneseno: ${sirina} × ${visina}.`,
+    });
+
+  try {
+    const uslov = pregaziPostojece ? '' : 'AND (std_sirina IS NULL OR std_visina IS NULL)';
+    const r = await pool.query(
+      `UPDATE roba SET std_sirina=$1, std_visina=$2, azurirano=now()
+       WHERE aktivan = true AND grupa = $3 ${uslov}
+       RETURNING id`,
+      [sirina, visina, grupa]
+    );
+    res.json({ ok: true, izmijenjeno: r.rows.length, grupa });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/roba/dimenzije-grupa/broj?grupa=X — koliko artikala bi bilo pogodjeno
+router.get('/dimenzije-grupa/broj', zahtijevaRobaMagacin, async (req, res) => {
+  const grupa = String(req.query?.grupa || '').trim();
+  if (!grupa) return res.json({ ukupno: 0, bez_dimenzija: 0 });
+  try {
+    const r = await pool.query(
+      `SELECT COUNT(*)::int AS ukupno,
+              COUNT(*) FILTER (WHERE std_sirina IS NULL OR std_visina IS NULL)::int AS bez_dimenzija
+       FROM roba WHERE aktivan = true AND grupa = $1`,
+      [grupa]
+    );
+    res.json(r.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/bez-dimenzija', zahtijevaRobaMagacin, async (req, res) => {
   try {
     const r = await pool.query(

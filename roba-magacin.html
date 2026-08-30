@@ -3575,7 +3575,7 @@ function renderLagerRedovi(){
         (s.std_sirina&&s.std_visina)
           ? `<span style="color:#6b7a8d;">${Math.round(s.std_sirina)}×${Math.round(s.std_visina)}</span>`
           : `<span style="color:var(--orange,#b8860b);" title="Bez dimenzija se ne može planirati rez">⚠</span>`
-      }<button onclick="otvoriDimenzije(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.std_sirina??'null'},${s.std_visina??'null'})" title="Dimenzije table (mm)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button></td>
+      }<button onclick="otvoriDimenzije(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.std_sirina??'null'},${s.std_visina??'null'},'${esc(s.grupa||'').replace(/'/g,"&apos;")}')" title="Dimenzije table (mm)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button></td>
       <td style="padding:1px 5px;text-align:center;">
         ${esc(s.jed_mjera)}
         ${currentUser?.rola==='admin'?`<button onclick="otvoriIzmjenuJedinice(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}','${esc(s.jed_mjera)}')" title="Promijeni jedinicu mjere" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
@@ -3817,11 +3817,24 @@ let uvozIstPopunjenSelect=false;
 /* ═══ DIMENZIJE TABLE ═══════════════════════════════════════════════════════════
    Lager vodi samo kvadraturu i debljinu — sirina i visina table nigdje ne postoje,
    pa se rez ne moze planirati. Dimenzija se unosi JEDNOM po artiklu, u milimetrima. */
-let dimArtikalId = null;
+let dimArtikalId = null, dimGrupa = null;
 
-function otvoriDimenzije(id, naziv, sirina, visina){
+function otvoriDimenzije(id, naziv, sirina, visina, grupa){
   dimArtikalId = id;
+  dimGrupa = grupa || null;
   document.getElementById('dim-artikal').textContent = naziv;
+  // Grupni unos ima smisla samo ako artikal pripada nekoj grupi
+  const blok = document.getElementById('dim-grupa-blok');
+  if(dimGrupa){
+    blok.style.display = 'block';
+    document.getElementById('dim-grupa-naziv').textContent = `„${dimGrupa}"`;
+    document.getElementById('dim-cijela-grupa').checked = false;
+    document.getElementById('dim-pregazi').checked = false;
+    document.getElementById('dim-pregazi-red').style.display = 'none';
+    document.getElementById('dim-grupa-broj').textContent = '';
+  } else {
+    blok.style.display = 'none';
+  }
   document.getElementById('dim-sirina').value = sirina ? Math.round(sirina) : '';
   document.getElementById('dim-visina').value = visina ? Math.round(visina) : '';
   document.getElementById('dim-greska').style.display = 'none';
@@ -3846,20 +3859,59 @@ function dimPregled(){
   el.textContent = `= ${lagerFmMoney(m2).replace(' KM','')} m² po tabli`;
 }
 
+
+/* Grupni unos — kad se ukljuci, prikazuje se KOLIKO artikala ce biti pogodjeno.
+   Podrazumijevano se diraju samo oni BEZ dimenzija, da se rucno unesena, namjerno
+   drugacija mjera ne pregazi slucajno. */
+function dimGrupaPrekidac(){
+  const ukljuceno = document.getElementById('dim-cijela-grupa').checked;
+  document.getElementById('dim-pregazi-red').style.display = ukljuceno ? 'flex' : 'none';
+  if(!ukljuceno){ document.getElementById('dim-grupa-broj').textContent = ''; return; }
+  dimOsvjeziBroj();
+}
+
+async function dimOsvjeziBroj(){
+  const el = document.getElementById('dim-grupa-broj');
+  if(!dimGrupa){ el.textContent=''; return; }
+  try{
+    const r = await fetch(`${API}/api/roba/dimenzije-grupa/broj?grupa=${encodeURIComponent(dimGrupa)}`);
+    const d = await r.json();
+    const pregazi = document.getElementById('dim-pregazi').checked;
+    const n = pregazi ? d.ukupno : d.bez_dimenzija;
+    el.textContent = ` — ${n} ${n===1?'artikal':'artikala'}`
+      + (pregazi ? '' : ` (od ${d.ukupno} u grupi)`);
+  }catch(e){ el.textContent=''; }
+}
+
 async function sacuvajDimenzije(){
   const greska = document.getElementById('dim-greska');
   const s = broj(document.getElementById('dim-sirina').value);
   const v = broj(document.getElementById('dim-visina').value);
   if(!s || !v){ greska.style.display='block'; greska.textContent='Unesi obje mjere.'; return; }
   greska.style.display='none';
+
+  const zaGrupu = dimGrupa && document.getElementById('dim-cijela-grupa').checked;
+  const pregazi = document.getElementById('dim-pregazi').checked;
+  if(zaGrupu){
+    const tekst = document.getElementById('dim-grupa-broj').textContent.trim();
+    if(!confirm(`Postaviti ${Math.round(s)}×${Math.round(v)} mm za grupu „${dimGrupa}"${tekst}?`
+        + (pregazi ? '\n\nPREPISAĆE i one koje već imaju dimenzije.' : ''))) return;
+  }
+
   try{
-    const r = await fetch(`${API}/api/roba/${dimArtikalId}/dimenzije`,{
-      method:'PATCH', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({std_sirina:s, std_visina:v}),
-    });
+    const r = zaGrupu
+      ? await fetch(`${API}/api/roba/dimenzije-grupa`,{
+          method:'PATCH', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({grupa:dimGrupa, std_sirina:s, std_visina:v, pregazi}),
+        })
+      : await fetch(`${API}/api/roba/${dimArtikalId}/dimenzije`,{
+          method:'PATCH', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({std_sirina:s, std_visina:v}),
+        });
     const d = await r.json();
     if(!r.ok) throw new Error(d.error||'Greška.');
     document.getElementById('modal-dimenzije').style.display='none';
+    if(zaGrupu) alert(`✓ Postavljeno za ${d.izmijenjeno} ${d.izmijenjeno===1?'artikal':'artikala'} u grupi „${d.grupa}".`);
     if(typeof ucitajLager==='function') ucitajLager();
   }catch(e){
     greska.style.display='block'; greska.textContent='✗ '+e.message;
@@ -5260,6 +5312,21 @@ fetch(`${API}/api/auth/me`).then(r=>{
       </div>
     </div>
     <div id="dim-pregled" style="font-size:12.5px;color:#8b96a5;min-height:18px;margin-bottom:12px;"></div>
+
+    <!-- Grupni unos: tasto/kvarc/keramika imaju istu mjeru za cijelu grupu, pa je
+         unos jedan po jedan besmislen posao. -->
+    <div id="dim-grupa-blok" style="display:none;background:#f7f8fa;border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;cursor:pointer;">
+        <input type="checkbox" id="dim-cijela-grupa" onchange="dimGrupaPrekidac()" style="margin-top:2px;">
+        <span>Primijeni na <b>cijelu grupu</b> <span id="dim-grupa-naziv"></span>
+          <span id="dim-grupa-broj" style="color:#8b96a5;"></span></span>
+      </label>
+      <label id="dim-pregazi-red" style="display:none;align-items:flex-start;gap:8px;font-size:12px;cursor:pointer;margin-top:8px;padding-left:22px;color:#8b6914;">
+        <input type="checkbox" id="dim-pregazi" onchange="dimOsvjeziBroj()" style="margin-top:2px;">
+        <span>Prepiši i one koje <b>već imaju</b> dimenzije
+          <span style="color:#8b96a5;">(inače se diraju samo prazne)</span></span>
+      </label>
+    </div>
 
     <div id="dim-greska" style="display:none;color:var(--red,#c0392b);font-size:12.5px;margin-bottom:10px;"></div>
     <button onclick="sacuvajDimenzije()" style="width:100%;padding:11px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;">✓ Sačuvaj dimenzije</button>
