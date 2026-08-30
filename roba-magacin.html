@@ -3960,6 +3960,18 @@ async function dimOsvjeziBroj(){
 
 async function sacuvajDimenzije(){
   const greska = document.getElementById('dim-greska');
+  /* Sve unutar try — ranije je greska PRIJE mreznog poziva (npr. u citanju polja) rusila
+     funkciju tiho: dugme se pritisne, nista se ne desi, nema poruke. */
+  try {
+  return await _sacuvajDimenzije(greska);
+  } catch(e) {
+    greska.style.display = 'block';
+    greska.textContent = '✗ ' + (e && e.message ? e.message : e);
+    console.error('sacuvajDimenzije:', e);
+  }
+}
+
+async function _sacuvajDimenzije(greska){
   const s = broj(document.getElementById('dim-sirina').value);
   const v = broj(document.getElementById('dim-visina').value);
   if(!s || !v){ greska.style.display='block'; greska.textContent='Unesi obje mjere.'; return; }
@@ -3977,8 +3989,8 @@ async function sacuvajDimenzije(){
         method:'PATCH', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ids:dimIzabraniIds, std_sirina:s, std_visina:v, pregazi}),
       });
-      const d = await r.json();
-      if(!r.ok) throw new Error(d.error||'Greška.');
+      const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status} bez poruke.` }));
+      if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}.`);
       document.getElementById('modal-dimenzije').style.display='none';
       alert(`✓ Postavljeno za ${d.izmijenjeno} od ${d.izabrano} izabranih.`);
       dimIzabraniIds = null;
@@ -4002,8 +4014,8 @@ async function sacuvajDimenzije(){
           method:'PATCH', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({std_sirina:s, std_visina:v}),
         });
-    const d = await r.json();
-    if(!r.ok) throw new Error(d.error||'Greška.');
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status} bez poruke.` }));
+    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}.`);
     document.getElementById('modal-dimenzije').style.display='none';
     if(zaGrupu) alert(`✓ Postavljeno za ${d.izmijenjeno} ${d.izmijenjeno===1?'artikal':'artikala'} u grupi „${d.grupa}".`);
     if(typeof ucitajLager==='function') ucitajLager();
