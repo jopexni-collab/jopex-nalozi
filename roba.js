@@ -154,6 +154,7 @@ router.get('/lager', zahtijevaRobaMagacin, async (req, res) => {
 
     const r = await pool.query(
       `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
+              r.std_sirina, r.std_visina,
               (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS glavna_slika,
               r.model_3d_url,
               (SELECT COUNT(*) FROM roba_slike WHERE roba_id=r.id) AS broj_slika,

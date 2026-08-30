@@ -3965,8 +3965,13 @@ async function sacuvajDimenzije(){
   try {
   return await _sacuvajDimenzije(greska);
   } catch(e) {
+    /* Poruka ide i u ISKACUCI prozor, ne samo u traku ispod polja — prozorcic je izrastao
+       (grupa, prepisivanje), pa poruka na dnu moze ostati van vidljivog dijela ekrana i
+       korisniku izgleda kao da se "nista ne desava". */
+    const poruka = (e && e.message) ? e.message : String(e);
     greska.style.display = 'block';
-    greska.textContent = '✗ ' + (e && e.message ? e.message : e);
+    greska.textContent = '✗ ' + poruka;
+    alert('✗ Dimenzije nisu sačuvane:\n\n' + poruka);
     console.error('sacuvajDimenzije:', e);
   }
 }
@@ -3974,7 +3979,11 @@ async function sacuvajDimenzije(){
 async function _sacuvajDimenzije(greska){
   const s = broj(document.getElementById('dim-sirina').value);
   const v = broj(document.getElementById('dim-visina').value);
-  if(!s || !v){ greska.style.display='block'; greska.textContent='Unesi obje mjere.'; return; }
+  if(!s || !v){
+    greska.style.display='block'; greska.textContent='Unesi obje mjere.';
+    alert('Unesi obje mjere (širinu i visinu u mm).');
+    return;
+  }
   greska.style.display='none';
 
   const zaGrupu = dimGrupa && document.getElementById('dim-cijela-grupa').checked;
