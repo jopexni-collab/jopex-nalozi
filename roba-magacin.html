@@ -1151,6 +1151,7 @@ const LAGER_KOLONE=[
   {k:'naziv',lbl:'Naziv',align:'left',tip:'text'},
   {k:'grupa',lbl:'Grupa',align:'left',tip:'select'},
   {k:'debljina',lbl:'Deb. (cm)',align:'center',tip:'select-num'},
+  {k:'tabla',lbl:'Tabla (mm)',align:'center',tip:'text'},
   {k:'jm',lbl:'JM',align:'center',tip:'select'},
   {k:'stanje',lbl:'Stanje',align:'right',tip:'num'},
   {k:'cijena',lbl:'Cijena/JM',align:'right',tip:'num'},
@@ -3570,6 +3571,11 @@ function renderLagerRedovi(){
         ${s.debljina_cm??'—'}
         ${currentUser?.rola==='admin'?`<button onclick="otvoriIzmjenuDebljine(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.debljina_cm??'null'})" title="Promijeni debljinu" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
       </td>
+      <td style="padding:1px 5px;text-align:center;white-space:nowrap;">${
+        (s.std_sirina&&s.std_visina)
+          ? `<span style="color:#6b7a8d;">${Math.round(s.std_sirina)}×${Math.round(s.std_visina)}</span>`
+          : `<span style="color:var(--orange,#b8860b);" title="Bez dimenzija se ne može planirati rez">⚠</span>`
+      }<button onclick="otvoriDimenzije(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.std_sirina??'null'},${s.std_visina??'null'})" title="Dimenzije table (mm)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button></td>
       <td style="padding:1px 5px;text-align:center;">
         ${esc(s.jed_mjera)}
         ${currentUser?.rola==='admin'?`<button onclick="otvoriIzmjenuJedinice(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}','${esc(s.jed_mjera)}')" title="Promijeni jedinicu mjere" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
@@ -3610,6 +3616,8 @@ function renderLagerRedovi(){
 }
 
 function lagerVrijednostZaKolonu(s, k){
+  // Dimenzija table (mm) — potrebna za planiranje reza. Prazno = jos nije uneseno.
+  if(k==='tabla') return (s.std_sirina&&s.std_visina) ? `${Math.round(s.std_sirina)}×${Math.round(s.std_visina)}` : '';
   if(k==='debljina') return s.debljina_cm;
   if(k==='jm') return s.jed_mjera;
   return s[k];
@@ -3804,6 +3812,59 @@ let uvozIstPopunjenSelect=false;
   }
 })();
 
+
+
+/* ═══ DIMENZIJE TABLE ═══════════════════════════════════════════════════════════
+   Lager vodi samo kvadraturu i debljinu — sirina i visina table nigdje ne postoje,
+   pa se rez ne moze planirati. Dimenzija se unosi JEDNOM po artiklu, u milimetrima. */
+let dimArtikalId = null;
+
+function otvoriDimenzije(id, naziv, sirina, visina){
+  dimArtikalId = id;
+  document.getElementById('dim-artikal').textContent = naziv;
+  document.getElementById('dim-sirina').value = sirina ? Math.round(sirina) : '';
+  document.getElementById('dim-visina').value = visina ? Math.round(visina) : '';
+  document.getElementById('dim-greska').style.display = 'none';
+  dimPregled();
+  document.getElementById('modal-dimenzije').style.display = 'flex';
+  setTimeout(()=>document.getElementById('dim-sirina').focus(), 50);
+}
+
+// Ziva racunica povrsine — odmah se vidi ako je mjera unesena u centimetrima
+function dimPregled(){
+  const el = document.getElementById('dim-pregled');
+  const s = broj(document.getElementById('dim-sirina').value);
+  const v = broj(document.getElementById('dim-visina').value);
+  if(!s || !v){ el.textContent = ''; return; }
+  const m2 = (s * v) / 1000000;
+  if(s < 50 || v < 50){
+    el.style.color = 'var(--red,#c0392b)';
+    el.textContent = `⚠ Premalo — mjere su u MILIMETRIMA (3200, ne 320)`;
+    return;
+  }
+  el.style.color = '#8b96a5';
+  el.textContent = `= ${lagerFmMoney(m2).replace(' KM','')} m² po tabli`;
+}
+
+async function sacuvajDimenzije(){
+  const greska = document.getElementById('dim-greska');
+  const s = broj(document.getElementById('dim-sirina').value);
+  const v = broj(document.getElementById('dim-visina').value);
+  if(!s || !v){ greska.style.display='block'; greska.textContent='Unesi obje mjere.'; return; }
+  greska.style.display='none';
+  try{
+    const r = await fetch(`${API}/api/roba/${dimArtikalId}/dimenzije`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({std_sirina:s, std_visina:v}),
+    });
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    document.getElementById('modal-dimenzije').style.display='none';
+    if(typeof ucitajLager==='function') ucitajLager();
+  }catch(e){
+    greska.style.display='block'; greska.textContent='✗ '+e.message;
+  }
+}
 
 /* ═══ SPISAK KALKULACIJA ═══════════════════════════════════════════════════════════
    Do sada ga nije bilo — napravis kalkulaciju i nemas gdje provjeriti da li je stvarno
@@ -5173,6 +5234,35 @@ fetch(`${API}/api/auth/me`).then(r=>{
 
     <div id="ak-greska" style="display:none;color:var(--red,#c0392b);font-size:12.5px;margin-bottom:10px;"></div>
     <button onclick="sacuvajAkciju()" style="width:100%;padding:11px;border:none;background:var(--red,#c0392b);color:#fff;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;">🏷️ Pokreni akciju</button>
+  </div>
+</div>
+<div id="modal-dimenzije" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:900;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:20px;max-width:400px;width:93vw;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <h3 style="margin:0;font-size:16px;">📐 Dimenzije table</h3>
+      <button onclick="document.getElementById('modal-dimenzije').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+    </div>
+    <div id="dim-artikal" style="font-size:13.5px;font-weight:700;margin-bottom:3px;"></div>
+    <div style="font-size:12px;color:#8b96a5;margin-bottom:14px;line-height:1.45;">
+      Unosi se <b>jednom po artiklu</b>, u <b>milimetrima</b>. Bez toga se rez ne može planirati.
+      Kod granita ovo je polazna mjera — stvarna se može ispraviti pri izdavanju table.
+    </div>
+
+    <div style="display:flex;gap:10px;align-items:end;margin-bottom:6px;">
+      <div style="flex:1;">
+        <label style="font-size:11.5px;font-weight:700;color:#555;display:block;margin-bottom:4px;">Širina (mm)</label>
+        <input type="text" inputmode="decimal" id="dim-sirina" placeholder="3200" oninput="dimPregled()" style="width:100%;padding:9px 11px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:15px;font-weight:700;">
+      </div>
+      <div style="font-size:18px;color:#8b96a5;padding-bottom:9px;">×</div>
+      <div style="flex:1;">
+        <label style="font-size:11.5px;font-weight:700;color:#555;display:block;margin-bottom:4px;">Visina (mm)</label>
+        <input type="text" inputmode="decimal" id="dim-visina" placeholder="1600" oninput="dimPregled()" style="width:100%;padding:9px 11px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:15px;font-weight:700;">
+      </div>
+    </div>
+    <div id="dim-pregled" style="font-size:12.5px;color:#8b96a5;min-height:18px;margin-bottom:12px;"></div>
+
+    <div id="dim-greska" style="display:none;color:var(--red,#c0392b);font-size:12.5px;margin-bottom:10px;"></div>
+    <button onclick="sacuvajDimenzije()" style="width:100%;padding:11px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;">✓ Sačuvaj dimenzije</button>
   </div>
 </div>
 </body>

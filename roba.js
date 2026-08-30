@@ -51,6 +51,7 @@ router.get('/', zahtijevaProdaju, async (req, res) => {
       if (!term) {
         const r = await pool.query(
           `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, r.grupa, rp.cijena, rp.stanje,
+                  r.std_sirina, r.std_visina,
                   EXISTS(SELECT 1 FROM roba_slike WHERE roba_id=r.id) AS ima_sliku
            FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
            WHERE r.aktivan=true ORDER BY r.naziv LIMIT $2`,
@@ -62,6 +63,7 @@ router.get('/', zahtijevaProdaju, async (req, res) => {
       // grupi artikal pripada ("bengal") iako ne zna tačan naziv varijante.
       const r = await pool.query(
         `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, r.grupa, rp.cijena, rp.stanje,
+                  r.std_sirina, r.std_visina,
                 EXISTS(SELECT 1 FROM roba_slike WHERE roba_id=r.id) AS ima_sliku
          FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
          WHERE r.aktivan=true AND (r.sifra ILIKE $2 OR r.naziv ILIKE $3 OR r.grupa ILIKE $3)
@@ -383,6 +385,7 @@ router.get('/najprodavaniji', zahtijevaProdaju, async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, r.grupa, rp.cijena, rp.stanje,
+                  r.std_sirina, r.std_visina,
               COUNT(*) AS broj_prodaja
        FROM otpremnica_stavke os
        JOIN otpremnice o ON o.id = os.otpremnica_id
@@ -783,6 +786,56 @@ router.patch('/akcije/:id/zavrsi', async (req, res) => {
     );
     if (!r.rows.length) return res.status(404).json({ error: 'Akcija nije pronađena.' });
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ═══ DIMENZIJE TABLE ═══════════════════════════════════════════════════════════
+   Lager vodi samo ukupnu kvadraturu i debljinu — sirina i visina table nigdje ne
+   postoje. Bez njih se pozicije ne mogu uklopiti na tablu.
+   Dimenzija se vodi na ARTIKLU (unese se jednom po sifri), u MILIMETRIMA. */
+
+// GET /api/roba/bez-dimenzija — artikli kojima dimenzije jos nisu unesene
+router.get('/bez-dimenzija', zahtijevaRobaMagacin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT r.id, r.sifra, r.naziv, r.grupa, r.debljina_cm, r.jed_mjera
+       FROM roba r
+       WHERE r.aktivan = true AND (r.std_sirina IS NULL OR r.std_visina IS NULL)
+       ORDER BY r.grupa, r.naziv`
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/roba/:id/dimenzije — upis dimenzija table za artikal
+router.patch('/:id/dimenzije', preskociAkoNijeArtikal, async (req, res) => {
+  if (!smijeMijenjatiCijene(req) && req.session?.user?.rola !== 'admin'
+      && !req.session?.user?.moze_roba_magacin)
+    return res.status(403).json({ error: 'Nemate dozvolu.' });
+
+  const sirina = parseFloat(req.body?.std_sirina);
+  const visina = parseFloat(req.body?.std_visina);
+  if (!sirina || !visina || sirina <= 0 || visina <= 0)
+    return res.status(400).json({ error: 'Unesite ispravnu širinu i visinu (mm).' });
+  // Zdravorazumska granica — mjere su u MILIMETRIMA, pa je 50mm najmanje sto ima
+  // smisla, a 6000mm vise nego sto ijedna tabla jeste. Stiti od unosa u centimetrima.
+  if (sirina < 50 || visina < 50 || sirina > 6000 || visina > 6000)
+    return res.status(400).json({
+      error: `Mjere se unose u MILIMETRIMA (npr. 3200 × 1600). Uneseno: ${sirina} × ${visina}.`,
+    });
+
+  try {
+    const r = await pool.query(
+      `UPDATE roba SET std_sirina=$1, std_visina=$2, azurirano=now()
+       WHERE id=$3 RETURNING id, sifra, naziv, std_sirina, std_visina`,
+      [sirina, visina, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Artikal nije pronađen.' });
+    res.json({ ok: true, artikal: r.rows[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
