@@ -2093,6 +2093,10 @@ async function posaljiGrupniPrenos() {
 document.addEventListener('click', e => {
   const p = document.getElementById('xl-panel');
   if (p && p.style.display === 'flex' && !p.contains(e.target)) xlZatvoriFilter();
+  // Isto i za panel u biraču materijala — ako ostane otvoren preko dugmeta
+  // "Primijeni", klik pogodi njega umjesto dugmeta i izbor se ne primijeni.
+  const b = document.getElementById('birac-panel');
+  if (b && b.style.display === 'flex' && !b.contains(e.target)) biracZatvoriFilter();
 });
 
 /* ═══════════════ modali ═══════════════ */
@@ -2733,8 +2737,12 @@ function otvoriBirac(zaKoga) {
     '<input type="text" id="birac_pretraga" placeholder="Pretraga po nazivu, šifri ili grupi…" ' +
       'style="width:100%;margin-bottom:8px" oninput="biracPretraga(this.value)">' +
     '<div id="birac_tijelo"></div>' +
-    '<div class="modal-btns"><button class="btn" onclick="primijeniBirac()">✓ Primijeni</button>' +
-    '<button class="btn sec" onclick="zatvoriModal()">Odustani</button></div>' +
+    // Dugmad su UNUTAR modala i imaju stopPropagation — inače klik prvo zatvori
+    // filter panel iznad njih, pa se do samog dugmeta nikad ne dođe.
+    '<div class="modal-btns" onclick="event.stopPropagation()">' +
+    '<button type="button" class="btn" onclick="event.stopPropagation();primijeniBirac()">✓ Primijeni izbor</button>' +
+    '<button type="button" class="btn sec" onclick="zatvoriModal()">Odustani</button>' +
+    '<span id="birac_brojac" class="hint" style="margin:0 0 0 8px"></span></div>' +
     '<div id="birac-panel" class="xl-panel" onclick="event.stopPropagation()"></div>');
   crtajBirac();
 }
@@ -2790,6 +2798,11 @@ function crtajBirac() {
     '</tbody></table></div>' +
     '<div style="font-size:11px;color:#8b96a5;padding:6px;border-top:1px solid #eee">Prikazano ' +
       redovi.length + ' od ' + ARTIKLI.length + ' artikala</div>';
+
+  const br = document.getElementById('birac_brojac');
+  if (br) br.innerHTML = BIRAC_IZABRANI.size
+    ? '<b style="color:#1f8a4c">' + BIRAC_IZABRANI.size + ' izabrano</b>'
+    : '<b style="color:#c0392b">ništa nije izabrano</b>';
 }
 
 function biracSort(k) {
@@ -2875,7 +2888,11 @@ function biracZatvoriFilter() {
 
 function primijeniBirac() {
   const izbor = [...BIRAC_IZABRANI];
-  if (!izbor.length) { poruka('Nijedan artikal nije izabran.', 'greska'); return; }
+  if (!izbor.length) {
+    const br = document.getElementById('birac_brojac');
+    if (br) br.innerHTML = '<b style="color:#c0392b">Označi bar jedan artikal kvačicom, pa Primijeni.</b>';
+    return;
+  }
   const artikli = izbor.map(id => ARTIKLI.find(a => String(a.id) === String(id))).filter(Boolean);
   const prvi = artikli[0];
 
