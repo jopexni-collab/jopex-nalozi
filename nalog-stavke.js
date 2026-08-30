@@ -294,8 +294,29 @@ router.post('/:r_br/iz-ponude', async (req, res) => {
          Kod nepravilnog oblika uzima se OKVIR poligona (najmanji pravougaonik u koji
          staje) — to je mjera po kojoj se trazi restl i planira rez. Sam poligon se
          cuva uz poziciju, pa se tacan oblik ne gubi. */
-      let sir = broj(s.a ?? s.sirina ?? s.duzina ?? s.w ?? s.dim_a);
-      let vis = broj(s.b ?? s.visina ?? s.sir ?? s.h ?? s.dim_b);
+      /* Ponuda cuva mjere u objektu dims, pod VELIKIM slovima: {A: 2400, B: 600, ...}
+         Broj i znacenje mjera zavise od oblika (shape): 'I' je ravan komad, 'L' i 'U'
+         imaju vise mjera. Zato se prvo traze A i B, pa uobicajeni nazivi, pa kao zadnje
+         PRVE DVIJE brojcane vrijednosti iz dims — da se ne oslanjamo na tacan naziv. */
+      const dims = (s.dims && typeof s.dims === 'object') ? s.dims : {};
+      const izDims = (...kljucevi) => {
+        for (const k of kljucevi) {
+          const v = broj(dims[k] ?? s[k]);
+          if (v > 0) return v;
+        }
+        return 0;
+      };
+
+      /* Nazivi se NE SMIJU preklapati izmedju dvije mjere — ako 'sirina' stoji i u prvom
+         i u drugom spisku, isti broj se procita dvaput (bilo je 650×650 umjesto 1800×650). */
+      let sir = izDims('A', 'a', 'duzina', 'w', 'dim_a', 'sirina');
+      let vis = izDims('B', 'b', 'visina', 'h', 'dim_b', 'dubina');
+
+      // Ako nazivi nisu prepoznati — uzmi prve dvije brojcane mjere iz dims
+      if (sir <= 0 || vis <= 0) {
+        const brojevi = Object.values(dims).map(v => broj(v)).filter(v => v > 0);
+        if (brojevi.length >= 2) { sir = sir > 0 ? sir : brojevi[0]; vis = vis > 0 ? vis : brojevi[1]; }
+      }
       let poligonPozicije = Array.isArray(s.poligon) ? s.poligon
                           : (Array.isArray(s.tjemena) ? s.tjemena : null);
 
@@ -310,12 +331,12 @@ router.post('/:r_br/iz-ponude', async (req, res) => {
 
       // Ako i dalje nema, probaj iz mjera L-oblika (a,b,c,d)
       if (sir <= 0 || vis <= 0) {
-        const a = broj(s.a ?? s.dim_a), b = broj(s.b ?? s.dim_b);
-        const d = broj(s.c ?? s.dim_c), e2 = broj(s.d ?? s.dim_d);
+        const a = izDims('A', 'a', 'dim_a'), b = izDims('B', 'b', 'dim_b');
+        const d = izDims('C', 'c', 'dim_c'), e2 = izDims('D', 'd', 'dim_d');
         if (a > 0 && b > 0) {
           try {
             const geo = require('./geometrija');
-            const t = geo.tjemenaOdMjera(s.oblik || s.ob || 'L', a, b, d, e2);
+            const t = geo.tjemenaOdMjera(s.shape || s.oblik || 'L', a, b, d, e2);
             const o = geo.okvir(t);
             sir = broj(o.sirina); vis = broj(o.visina);
             poligonPozicije = t;
@@ -334,7 +355,7 @@ router.post('/:r_br/iz-ponude', async (req, res) => {
         [req.params.r_br, i + 1, s.naziv || s.nap || s.opis || null, s.roba_id || null,
          s.materijal || null, s.debljina_cm ? broj(s.debljina_cm) : null,
          sir, vis, parseInt(s.kom ?? s.kolicina) || 1,
-         poligonPozicije ? 'poligon' : (s.oblik || 'pravougaonik'),
+         poligonPozicije ? 'poligon' : (s.shape || s.oblik || 'pravougaonik'),
          s.obrada_ivica || null, s.napomena || null,
          poligonPozicije ? JSON.stringify(poligonPozicije) : null]
       );
