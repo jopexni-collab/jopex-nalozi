@@ -143,6 +143,40 @@ router.delete('/stavka/:id', async (req, res) => {
   }
 });
 
+/* ── PATCH /api/nalog-stavke/:r_br/materijal — poveži pozicije sa artiklom iz lagera ──
+   Ponuda daje materijal kao tekst, pa veza na sifru cesto fali. Bez nje se ne zna
+   dimenzija table. Ovo postavlja artikal za SVE pozicije naloga (ili samo one bez veze). */
+router.patch('/:r_br/materijal', async (req, res) => {
+  if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
+  const robaId = parseInt(req.body?.roba_id);
+  const samoNepovezane = req.body?.samo_nepovezane !== false;
+  if (!robaId) return res.status(400).json({ error: 'Nije izabran artikal.' });
+
+  try {
+    const a = await pool.query(
+      'SELECT id, naziv, debljina_cm, std_sirina, std_visina FROM roba WHERE id=$1', [robaId]
+    );
+    if (!a.rows.length) return res.status(404).json({ error: 'Artikal nije pronađen.' });
+    const art = a.rows[0];
+
+    const r = await pool.query(
+      `UPDATE nalog_stavke
+       SET roba_id = $1, materijal = $2,
+           debljina_cm = COALESCE(debljina_cm, $3)
+       WHERE nalog_r_br = $4 ${samoNepovezane ? 'AND roba_id IS NULL' : ''}
+       RETURNING id`,
+      [robaId, art.naziv, art.debljina_cm, req.params.r_br]
+    );
+    res.json({
+      ok: true, izmijenjeno: r.rows.length, artikal: art.naziv,
+      // Odmah se kaze i da li taj artikal uopste ima dimenzije table
+      ima_dimenzije: art.std_sirina != null && art.std_visina != null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /* ── GET /api/nalog-stavke/:r_br/priprema — PROVJERA RESTLOVA ZA CIJELI NALOG ────
    Za svaku poziciju se pita modul restlova moze li se izrezati iz nekog ostatka.
    Koristi POSTOJECU logiku (restlovi/trazi) — ne pise se nova geometrija.
@@ -286,7 +320,26 @@ router.post('/:r_br/iz-ponude', async (req, res) => {
       });
     }
 
-    let upisano = 0, preskoceno = 0;
+    /* Ponuda daje materijal kao TEKST ("Tasto Calacatta 12mm"), bez sifre iz lagera.
+       Bez veze na artikal ne znamo dimenziju table, pa se rez ne moze planirati.
+       Zato se pokusava naci artikal po nazivu — a ako ne uspije, pozicija se svejedno
+       upisuje i moze se povezati rucno. */
+    async function nadjiArtikal(naziv) {
+      const t = String(naziv || '').trim();
+      if (t.length < 3) return null;
+      // Prvo tacan naziv, pa sadrzavanje — bez toga bi "Tasto" pogodio bilo sta
+      for (const upit of [t, `%${t}%`]) {
+        const r = await client.query(
+          `SELECT id FROM roba WHERE aktivan = true AND naziv ILIKE $1
+           ORDER BY length(naziv) LIMIT 2`, [upit]
+        );
+        // Samo ako je pogodak JEDNOZNACAN — dvije mogucnosti znace da ne znamo koja
+        if (r.rows.length === 1) return r.rows[0].id;
+      }
+      return null;
+    }
+
+    let upisano = 0, preskoceno = 0, povezano = 0;
     for (let i = 0; i < stavke.length; i++) {
       const s = stavke[i];
       /* Ponuda cuva poziciju kao {a, b, kom, nap} — 'a' i 'b' su mjere u MILIMETRIMA
@@ -351,12 +404,15 @@ router.post('/:r_br/iz-ponude', async (req, res) => {
       // Pozicija bez mjere nema svrhu — ne moze se ni traziti restl ni planirati rez
       if (sir <= 0 || vis <= 0) { preskoceno++; continue; }
 
+      const robaId = s.roba_id || await nadjiArtikal(s.materijal);
+      if (robaId) povezano++;
+
       await client.query(
         `INSERT INTO nalog_stavke
            (nalog_r_br, redni_broj, naziv, roba_id, materijal, debljina_cm,
             sirina, visina, kolicina, oblik, obrada_ivica, napomena, poligon, izvor)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'ponuda')`,
-        [req.params.r_br, i + 1, s.naziv || s.nap || s.opis || null, s.roba_id || null,
+        [req.params.r_br, i + 1, s.naziv || s.nap || s.opis || null, robaId,
          s.materijal || null, s.debljina_cm ? broj(s.debljina_cm) : null,
          sir, vis, parseInt(s.kom ?? s.kolicina) || 1,
          poligonPozicije ? 'poligon' : (s.shape || s.oblik || 'pravougaonik'),
@@ -366,7 +422,7 @@ router.post('/:r_br/iz-ponude', async (req, res) => {
       upisano++;
     }
     await client.query('COMMIT');
-    res.status(201).json({ ok: true, upisano, preskoceno });
+    res.status(201).json({ ok: true, upisano, preskoceno, povezano });
   } catch (err) {
     await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });

@@ -507,6 +507,11 @@ function renderPozicije(){
     prepis.style.display = 'none';
   }
   document.getElementById('poz-priprema-dugme').style.display = pozStavke.length ? 'block' : 'none';
+  const nepovezanih = pozStavke.filter(s=>!s.roba_id).length;
+  const mt = document.getElementById('poz-materijal-traka');
+  mt.style.display = (pozStavke.length && nepovezanih) ? 'block' : 'none';
+  if(nepovezanih) document.getElementById('poz-mat-broj').textContent =
+    `${nepovezanih} ${nepovezanih===1?'pozicija':'pozicija'}`;
   if(!pozStavke.length) document.getElementById('poz-priprema').style.display='none';
   if(!pozStavke.length){
     cont.innerHTML = '<div style="padding:14px;color:#8b96a5;font-size:12.5px;text-align:center;background:#f7f8fa;border-radius:8px;">Nalog još nije razložen na pozicije.<br><span style="font-size:11.5px;">Bez mjera se ne može tražiti restl ni planirati rez.</span></div>';
@@ -583,6 +588,64 @@ function pozIzaberiArtikal(id, naziv, sifra, debljina){
 /* Prepis pozicija IZ PONUDE — mjere vec postoje u ponudi, samo se do sada nisu prenosile
    u nalog (prenosila se samo opisna recenica). Ponuda je JSON na spoljnom skladistu, pa
    se ovdje procita i posalje serveru. */
+
+
+/* Povezivanje pozicija sa artiklom iz lagera. Bez veze na sifru ne znamo dimenziju
+   table, pa provjera restlova kaze "dimenzija nije unesena" iako artikal ima mjeru. */
+let pozMatIzabran = null, pozMatTajmer = null;
+
+function pozMatTrazi(){
+  clearTimeout(pozMatTajmer);
+  pozMatIzabran = null;
+  const q = document.getElementById('poz-mat-pretraga').value.trim();
+  const rez = document.getElementById('poz-mat-rezultati');
+  if(q.length < 2){ rez.style.display='none'; return; }
+  pozMatTajmer = setTimeout(async ()=>{
+    try{
+      const r = await fetch(`${API}/api/roba?q=${encodeURIComponent(q)}&limit=12`);
+      const d = await r.json();
+      const lista = Array.isArray(d) ? d : (d.stavke||[]);
+      if(!lista.length){ rez.style.display='none'; return; }
+      rez.innerHTML = lista.slice(0,12).map(a=>`
+        <div onclick="pozMatIzaberi(${a.id},'${esc(a.naziv).replace(/'/g,"&apos;")}')"
+             style="padding:6px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid #f2f3f5;">
+          <span style="color:#999;">${esc(a.sifra)}</span> ${esc(a.naziv)}
+          ${(a.std_sirina&&a.std_visina)
+            ? `<span style="color:var(--green,#1f8a4c);font-size:10.5px;"> · ${Math.round(a.std_sirina)}×${Math.round(a.std_visina)}</span>`
+            : '<span style="color:var(--orange,#b8860b);font-size:10.5px;"> · ⚠ bez dimenzija table</span>'}
+        </div>`).join('');
+      rez.style.display='block';
+    }catch(e){ rez.style.display='none'; }
+  }, 280);
+}
+
+function pozMatIzaberi(id, naziv){
+  pozMatIzabran = { id, naziv };
+  document.getElementById('poz-mat-pretraga').value = naziv;
+  document.getElementById('poz-mat-rezultati').style.display='none';
+}
+
+async function poveziMaterijal(){
+  if(!pozMatIzabran){ alert('Izaberi artikal iz spiska.'); return; }
+  const nepovezanih = pozStavke.filter(s=>!s.roba_id).length;
+  const sve = nepovezanih === 0;
+  if(!confirm(sve
+      ? `Postaviti "${pozMatIzabran.naziv}" za SVE pozicije naloga?`
+      : `Postaviti "${pozMatIzabran.naziv}" za ${nepovezanih} nepovezanih pozicija?`)) return;
+  try{
+    const r = await fetch(`${API}/api/nalog-stavke/${pozNalogRbr}/materijal`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ roba_id: pozMatIzabran.id, samo_nepovezane: !sve }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
+    pozMatIzabran = null;
+    document.getElementById('poz-mat-pretraga').value='';
+    await ucitajPozicije();
+    alert(`✓ Povezano ${d.izmijenjeno} pozicija sa "${d.artikal}".`
+      + (d.ima_dimenzije ? '' : '\n\n⚠ Taj artikal još nema dimenzije table — unesi ih u Lageru.'));
+  }catch(e){ alert('✗ '+e.message); }
+}
 
 /* ═══ PRIPREMA — provjera restlova ═══════════════════════════════════════════════
    Za svaku poziciju se pita moze li se izrezati iz nekog ostatka. Koristi POSTOJECU
@@ -2471,6 +2534,20 @@ checkAuth();
         umjesto ručnog unosa.
       </div>
       <button onclick="prepisiIzPonude()" style="padding:8px 15px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:7px;font-weight:700;cursor:pointer;font-size:12.5px;">📥 Povuci pozicije iz ponude</button>
+    </div>
+
+    <!-- Ponuda daje materijal kao tekst, pa veza na sifru iz lagera cesto fali.
+         Bez nje se ne zna dimenzija table i rez se ne moze planirati. -->
+    <div id="poz-materijal-traka" style="display:none;background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:10px 13px;margin-bottom:10px;">
+      <div style="font-size:12.5px;color:#8b6914;margin-bottom:8px;line-height:1.45;">
+        ⚠️ <span id="poz-mat-broj"></span> nije povezano sa artiklom iz lagera —
+        zato se ne zna dimenzija table.
+      </div>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;position:relative;">
+        <input type="text" id="poz-mat-pretraga" placeholder="Traži artikal po šifri ili nazivu..." oninput="pozMatTrazi()" autocomplete="off" style="flex:1;min-width:200px;font:inherit;font-size:12.5px;padding:6px 9px;border:1px solid #ccc;border-radius:5px;">
+        <div id="poz-mat-rezultati" style="display:none;position:absolute;top:100%;left:0;z-index:20;background:#fff;border:1px solid #ccc;border-radius:6px;max-height:180px;overflow-y:auto;box-shadow:0 3px 10px rgba(0,0,0,.15);min-width:300px;"></div>
+        <button onclick="poveziMaterijal()" style="padding:7px 14px;border:none;background:#b8860b;color:#fff;border-radius:6px;font-weight:700;cursor:pointer;font-size:12.5px;">🔗 Poveži</button>
+      </div>
     </div>
 
     <div id="poz-lista"></div>
