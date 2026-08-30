@@ -282,47 +282,69 @@ router.post('/nesting/za-nalog', smijeVidjeti, async (req, res) => {
         continue;
       }
 
-      // Kandidati istog artikla, od najmanjeg prema većem — da se veliki restl
-      // ne potroši na mali komad ako postoji prikladniji
-      const uslovi = [`r.status = 'dostupan'`];
-      const vals = [];
-      let i = 1;
-      if (p.roba_id)      { uslovi.push(`r.roba_id = $${i++}`); vals.push(p.roba_id); }
-      else if (p.materijal) { uslovi.push(`(r.materijal ILIKE $${i} OR ro.naziv ILIKE $${i})`); vals.push(`%${p.materijal}%`); i++; }
-      if (p.debljina_cm)  { uslovi.push(`COALESCE(r.debljina_cm, ro.debljina_cm) = $${i++}`); vals.push(p.debljina_cm); }
-      if (objekt_id)      { uslovi.push(`r.objekt_id = $${i++}`); vals.push(objekt_id); }
-      uslovi.push(`GREATEST(r.dim_a, r.dim_b) >= $${i++}`); vals.push(Math.max(sir, vis));
-      uslovi.push(`LEAST(r.dim_a, r.dim_b) >= $${i++}`);    vals.push(Math.min(sir, vis));
+      // Debljina zna stići u milimetrima iz naloga, a restlovi je vode u centimetrima.
+      // Bez ovoga filter "debljina = 20" ne pogađa nijedan restl od 2 cm.
+      let deb = p.debljina_cm != null ? Number(p.debljina_cm) : null;
+      if (deb && deb > 10) deb = deb / 10;
 
-      const q = await pool.query(
-        `SELECT r.*, po.naziv AS objekt_naziv, ro.naziv AS artikal_naziv
-           FROM restlovi r
-           LEFT JOIN prodajni_objekti po ON po.id = r.objekt_id
-           LEFT JOIN roba ro ON ro.id = r.roba_id
-          WHERE ${uslovi.join(' AND ')}
-          ORDER BY r.povrsina ASC LIMIT 40`, vals);
+      /* Traži se u tri kruga, od najuže ka najširem. Restlovi često još nisu vezani
+         za artikal, pa pretraga samo po roba_id vrati prazno iako komad postoji.
+         Zato se, ako uži krug ne da ništa, prelazi na sljedeći — a u odgovoru piše
+         PO ČEMU je nađeno, da se vidi kad veza na artikal nedostaje. */
+      const krugovi = [];
+      if (p.roba_id) krugovi.push({ kako: 'artikal', roba_id: p.roba_id, deb });
+      if (p.materijal) krugovi.push({ kako: 'naziv', materijal: p.materijal, deb });
+      if (deb) krugovi.push({ kako: 'samo debljina', deb });
+      krugovi.push({ kako: 'samo mjere' });
 
       let preostalo = kom;
       const upotrijebljeni = [];
-      for (const restl of q.rows) {
+      let kakoNadjeno = null, pregledano = 0;
+
+      for (const krug of krugovi) {
         if (!preostalo) break;
-        if (iskorisceni.has(restl.id)) continue;
-        const raspored = nest.rasporedi(tjemenaRestla(restl),
-          [{ id: p.id, naziv: p.naziv || 'pozicija', sirina: sir, visina: vis,
-             kolicina: preostalo, bez_okretanja: !!p.bez_okretanja }],
-          { rez: rezMm });
-        if (!raspored.uklopljeno) continue;
-        iskorisceni.add(restl.id);
-        preostalo -= raspored.uklopljeno;
-        upotrijebljeni.push({
-          restl_id: restl.id, oznaka: restl.oznaka,
-          objekt_naziv: restl.objekt_naziv,
-          dim_a: restl.dim_a, dim_b: restl.dim_b,
-          komada: raspored.uklopljeno,
-          procenat: raspored.procenat,
-          ostatak_m2: raspored.ostatak,
-          postavljeni: raspored.postavljeni,
-        });
+        const uslovi = [`r.status = 'dostupan'`];
+        const vals = [];
+        let i = 1;
+        if (krug.roba_id)   { uslovi.push(`r.roba_id = $${i++}`); vals.push(krug.roba_id); }
+        if (krug.materijal) { uslovi.push(`(r.materijal ILIKE $${i} OR ro.naziv ILIKE $${i})`); vals.push(`%${krug.materijal}%`); i++; }
+        if (krug.deb)       { uslovi.push(`COALESCE(r.debljina_cm, ro.debljina_cm) = $${i++}`); vals.push(krug.deb); }
+        if (objekt_id)      { uslovi.push(`r.objekt_id = $${i++}`); vals.push(objekt_id); }
+        uslovi.push(`GREATEST(r.dim_a, r.dim_b) >= $${i++}`); vals.push(Math.max(sir, vis));
+        uslovi.push(`LEAST(r.dim_a, r.dim_b) >= $${i++}`);    vals.push(Math.min(sir, vis));
+
+        const q = await pool.query(
+          `SELECT r.*, po.naziv AS objekt_naziv, ro.naziv AS artikal_naziv, ro.sifra AS artikal_sifra
+             FROM restlovi r
+             LEFT JOIN prodajni_objekti po ON po.id = r.objekt_id
+             LEFT JOIN roba ro ON ro.id = r.roba_id
+            WHERE ${uslovi.join(' AND ')}
+            ORDER BY r.povrsina ASC LIMIT 40`, vals);
+        pregledano += q.rows.length;
+
+        for (const restl of q.rows) {
+          if (!preostalo) break;
+          if (iskorisceni.has(restl.id)) continue;
+          const raspored = nest.rasporedi(tjemenaRestla(restl),
+            [{ id: p.id, naziv: p.naziv || 'pozicija', sirina: sir, visina: vis,
+               kolicina: preostalo, bez_okretanja: !!p.bez_okretanja }],
+            { rez: rezMm });
+          if (!raspored.uklopljeno) continue;
+          iskorisceni.add(restl.id);
+          preostalo -= raspored.uklopljeno;
+          if (!kakoNadjeno) kakoNadjeno = krug.kako;
+          upotrijebljeni.push({
+            restl_id: restl.id, oznaka: restl.oznaka,
+            objekt_naziv: restl.objekt_naziv,
+            artikal_naziv: restl.artikal_naziv, artikal_sifra: restl.artikal_sifra,
+            materijal: restl.materijal,
+            dim_a: restl.dim_a, dim_b: restl.dim_b,
+            komada: raspored.uklopljeno,
+            procenat: raspored.procenat,
+            ostatak_m2: raspored.ostatak,
+            postavljeni: raspored.postavljeni,
+          });
+        }
       }
 
       izlaz.push({
@@ -330,6 +352,11 @@ router.post('/nesting/za-nalog', smijeVidjeti, async (req, res) => {
         iz_restlova: kom - preostalo,
         treba_tabla: preostalo,
         restlovi: upotrijebljeni,
+        // Dijagnostika: po čemu je nađeno i koliko je restlova uopšte pregledano.
+        // Kad je "pregledano 0", filter je preuzak — obično veza na artikal fali.
+        nadjeno_po: kakoNadjeno,
+        pregledano_restlova: pregledano,
+        trazena_debljina: deb,
       });
     }
 

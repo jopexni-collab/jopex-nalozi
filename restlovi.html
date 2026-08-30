@@ -2542,17 +2542,32 @@ async function planZaNalog(paket) {
         '<td class="num"><b style="color:#1f8a4c">' + z.iz_restlova + '</b></td>' +
         '<td class="num">' + (z.treba_tabla ? '<b style="color:#e67e22">' + z.treba_tabla + '</b>' : '—') + '</td>' +
         '<td>' + (z.restlovi.length
-          ? z.restlovi.map(r =>
+          ? (z.nadjeno_po && z.nadjeno_po !== 'artikal'
+              ? '<div class="hint" style="margin:0 0 3px"><b style="color:#e67e22">nađeno po: ' +
+                z.nadjeno_po + '</b> — pozicija nije vezana za artikal iz lagera</div>' : '') +
+            z.restlovi.map(r =>
               '<div style="display:flex;gap:6px;align-items:center;margin-bottom:3px">' +
               crtezPlana(r, 70, 50) +
               '<span><b>' + r.oznaka + '</b> — ' + r.komada + ' kom · ' + fmt(r.procenat) + '% · ' +
               (r.objekt_naziv || '') + '</span>' +
               '<button class="btn mali" onclick="uzmiIzPlana(' + r.restl_id + ')">Uzmi</button></div>').join('')
-          : '<span class="hint">nema restla — ide na cijelu tablu</span>') + '</td></tr>';
+          : '<span class="hint">nema restla — ide na cijelu tablu' +
+            (z.pregledano_restlova === 0
+              ? '<br><b style="color:#c0392b">Nijedan restl nije ni pregledan.</b> ' +
+                'Filter je preuzak: ' +
+                (z.trazena_debljina ? 'tražena debljina ' + fmt(z.trazena_debljina) + ' cm' : 'bez debljine') +
+                '. Provjeri da restlovi imaju tu debljinu i vezu na artikal.'
+              : '<br>Pregledano ' + z.pregledano_restlova + ' restlova — nijedan nije dovoljno velik.') +
+            '</span>') + '</td></tr>';
     }).join('');
     html += '</tbody></table></div>';
 
-    if (s.treba_tabla) {
+    const nijedanPregledan = d.pozicije.every(z => z.pregledano_restlova === 0);
+    if (nijedanPregledan && d.pozicije.length) {
+      html += '<div class="msg err" style="margin-top:12px"><b>Nijedan restl nije ni pregledan.</b> ' +
+        'To skoro uvijek znači jedno od dvoje: restlovi nisu vezani za artikle iz lagera ' +
+        '(vidi „Usaglašavanje" u tabu Uvoz), ili tražena debljina ne postoji ni na jednom restlu.</div>';
+    } else if (s.treba_tabla) {
       html += '<div class="msg" style="background:#fff3e0;color:#8a5200;margin-top:12px">' +
         '<b>' + s.treba_tabla + ' komada</b> nema odakle iz restlova — za njih treba cijela tabla.</div>';
     } else {
