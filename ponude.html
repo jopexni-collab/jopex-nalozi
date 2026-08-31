@@ -5,8 +5,16 @@
 <title>JoPeX – Generator Ponuda</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:"Segoe UI",Tahoma,sans-serif;background:#f0f2f5;color:#1a2332;font-size:13px;}
-header{background:#1a5fa8;color:#fff;height:48px;padding:0 12px 0 10px;display:flex;align-items:center;justify-content:space-between;overflow:hidden;}
+html{height:100%;}
+body{
+  font-family:"Segoe UI",Tahoma,sans-serif;background:#f0f2f5;color:#1a2332;font-size:13px;
+  height:100%;
+  height:100dvh;            /* dvh postuje traku pregledaca na telefonu */
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+header{background:#1a5fa8;color:#fff;height:48px;flex-shrink:0;padding:0 12px 0 10px;display:flex;align-items:center;justify-content:space-between;overflow:hidden;}
 .hdr-btns{display:flex;gap:3px;flex-shrink:0;}
 .hdr-btn{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);
   color:#fff;border-radius:4px;padding:4px 10px;font-size:11px;font-weight:600;
@@ -17,7 +25,16 @@ header{background:#1a5fa8;color:#fff;height:48px;padding:0 12px 0 10px;display:f
 .logo{font-size:17px;font-weight:700;letter-spacing:1px;}
 .logo em{font-style:normal;font-weight:300;font-size:12px;opacity:.7;margin-left:6px;}
 .hinfo{font-size:10px;opacity:.75;text-align:right;line-height:1.7;}
-.app{display:flex;height:calc(100vh - 48px);overflow:hidden;}
+.app{
+  display:flex;
+  /* Visina se NE racuna od 100vh: na telefonu i tabletu 100vh ukljucuje i
+     traku pregledaca, pa dno panela zavrsi ispod ekrana i do njega se ne
+     moze doci. Umjesto toga body je flex kolona pune visine, a .app uzima
+     ono sto ostane poslije zaglavlja. */
+  flex:1;
+  min-height:0;
+  overflow:hidden;
+}
 .left{width:400px;flex-shrink:0;background:#fff;border-right:1px solid #dde2ea;display:flex;flex-direction:column;overflow:hidden;}
 .right{
   flex:1;
@@ -214,9 +231,33 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
 }
 
 /* ── MULTI-ITEM LIST ─────────────────────────────────── */
-.item-list-wrap{background:#f0f4fa;border-bottom:1px solid var(--border);padding:8px 10px;}
-.item-list-title{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.8px;text-transform:uppercase;margin-bottom:6px;}
-#item-list{display:flex;flex-direction:column;gap:3px;}
+.item-list-wrap{
+  background:#f0f4fa;
+  border-bottom:1px solid var(--border);
+  padding:8px 10px;
+  /* Popis stavki stoji IZNAD skrolujuceg dijela. Kod ponude sa 15+ stavki
+     bi bez ogranicenja pojeo cijeli panel i do ostatka se ne bi moglo doci,
+     pa se ogranicava na 40% visine i sam dobija traku za pomjeranje. */
+  flex-shrink:0;
+  max-height:34%;   /* udio VISINE PANELA, ne ekrana */
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+#item-list{
+  display:flex;
+  flex-direction:column;
+  gap:3px;
+  overflow-y:auto;
+  min-height:0;
+  -webkit-overflow-scrolling:touch;
+}
+.item-list-title{
+  font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.8px;
+  text-transform:uppercase;margin-bottom:6px;
+  flex-shrink:0;   /* naslov ostaje vidljiv dok popis skroluje */
+}
+
 .item-row{display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-radius:5px;cursor:pointer;background:#fff;border:1px solid var(--border);font-size:12px;transition:background .15s;}
 .item-row:hover{background:#e8eef8;}
 .item-row.active{background:#1a5fa8;color:#fff;border-color:#1a5fa8;font-weight:600;}
@@ -279,7 +320,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
   <div class="item-list-wrap">
     <div class="item-list-title">Stavke narudžbe</div>
     <div id="item-list"></div>
-    <div style="margin-top:6px">
+    <div style="margin-top:6px;flex-shrink:0">
       <label style="font-size:10px;color:#8a93a3;display:block;margin-bottom:2px">
         Naziv u ponudi (ostavi prazno za podrazumijevani)</label>
       <input type="text" id="stavka-naziv" placeholder="npr. Polica iznad sudopere"
