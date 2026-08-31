@@ -2885,6 +2885,18 @@ function osNaziv(it){
   var a=it||items[activeIdx];
   return (a&&a.ostalo&&a.ostalo.naziv)||'Ostalo';
 }
+// Broj komada stavke "Ostalo" - kuhinja ga nema, jer je radna ploca jedna,
+// ali polica ili obloga se cesto rade u vise istih komada.
+function _osKom(it){
+  var a=it||items[activeIdx];
+  var k=(a&&a.ostalo&&a.ostalo.kom);
+  return Math.max(1,Math.round(_broj(k)||1));
+}
+function osPostaviKom(v){
+  var o=_osPodaci(); if(!o) return;
+  o.kom=Math.max(1,Math.round(_broj(v)||1));
+  buildItemList(); refresh();
+}
 function osPostaviNaziv(v){
   var o=_osPodaci(); if(!o) return;
   o.naziv=String(v||'').trim()||'Ostalo';
@@ -2950,11 +2962,14 @@ function buildOstaloPanel(){
       +'Klikni <b>+ Nova stavka</b> da dodas stavku tipa „Ostalo“.</div></div>';
     return;
   }
-  var h='<div class="sec"><div class="sec-hd">Naziv stavke</div>'
+  var h='<div class="sec"><div class="sec-hd">Naziv i koli\u010dina</div>'
     +'<div class="hint">Kako \u0107e se zvati u ponudi \u2014 npr. Polica, Uzglavlje, Obloga</div>'
     +'<div class="fg"><input type="text" id="os-naziv" value="'
     +String(o.naziv||'').replace(/"/g,'&quot;')+'" placeholder="Ostalo" '
-    +'oninput="osPostaviNaziv(this.value)"></div></div>';
+    +'oninput="osPostaviNaziv(this.value)"></div>'
+    +'<div class="fg"><label>Broj komada</label>'
+    +'<input type="text" inputmode="decimal" id="os-kom" value="'+_osKom()+'" '
+    +'oninput="fixComma(this);osPostaviKom(this.value)"></div></div>';
   h+='<div class="sec"><div class="sec-hd">Dodatne usluge</div>'
     +'<div class="hint">Uz mjerenje i ugradnju \u2014 npr. Ugradnja drveta, Demonta\u017ea starog</div>';
   if(!o.usl.length){
@@ -6734,14 +6749,19 @@ function calcItemCost(){
     var otv=(gc('cb-sud')?gi('sud-c'):0)+(gc('cb-plo')?gi('plo-c'):0)
       +(customOtvori||[]).reduce(function(s,c){return s+(parseFloat(c.cost)||0);},0);
     var slav=(slavine||[]).reduce(function(s,x){return s+(parseFloat(x.cost)||0);},0);
-    mat=Math.round(m*gi('mat-c')*100)/100;
-    iv=ivT;
+    // Kod "Ostalo" se materijal, obrada i otvori mnoze brojem komada.
+    // Kuhinja ima _osKom()=1, pa se za nju nista ne mijenja.
+    var _kom=_osKom();
+    mat=Math.round(m*gi('mat-c')*_kom*100)/100;
+    iv=Math.round(ivT*_kom*100)/100;
+    otv=Math.round(otv*_kom*100)/100;
+    slav=Math.round(slav*_kom*100)/100;
     usl=gi('k-ugr')+gi('k-mer')+_osUsluge();
     uk=mat+iv+otv+slav+usl;
     var shLbl=(shape==='SK')
       ? ('slobodan oblik, '+(((dims._tj)||[]).length)+' strana')
       : (shape+(vOrient===1?' (zrcaljeno)':''));
-    rows+=trow(nazivStavke(null,'Kuhinjska radna ploča')+' – '+shLbl+' ('+ms+')',fmtBroj(m,4)+' m²',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
+    rows+=trow(nazivStavke(null,'Kuhinjska radna ploča')+' – '+shLbl+' ('+ms+')',(_osKom()>1?(_osKom()+' kom × '):'')+fmtBroj(m,4)+' m²',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
     (slavine||[]).forEach(function(s,si){
       rows+=trow('Bušenje slavine #'+(si+1)+' fi'+(s.fi||35)+' mm','1 kom',_editableUnitPrice(parseFloat(s.cost)||0,'','setSlavinaCost',[activeIdx,si]),f(parseFloat(s.cost)||0));
     });
@@ -6918,9 +6938,13 @@ function refresh(){
     iv=ivd.reduce(function(s,i){return s+i.uk;},0);
     var otv=(gc('cb-sud')?gi('sud-c'):0)+(gc('cb-plo')?gi('plo-c'):0)
       +(customOtvori||[]).reduce(function(s,c){return s+(parseFloat(c.cost)||0);},0);
-    mat=Math.round(m*gi('mat-c')*100)/100;
     var slav=(slavine||[]).reduce(function(s,x){return s+(parseFloat(x.cost)||0);},0);
-    usl=gi('k-ugr')+gi('k-mer')+otv+slav;
+    // Kod "Ostalo" se materijal, obrada i otvori mnoze brojem komada
+    var _kom2=_osKom();
+    mat=Math.round(m*gi('mat-c')*_kom2*100)/100;
+    iv=Math.round(iv*_kom2*100)/100;
+    otv=Math.round(otv*_kom2*100)/100;
+    slav=Math.round(slav*_kom2*100)/100;
     usl=gi('k-ugr')+gi('k-mer')+otv+slav+_osUsluge();
     var extUk=0;
     var segsR=getIvSegs(shape,dims);
@@ -9027,6 +9051,30 @@ function drawK(ctx,W,H){
 
     ctx.restore();
   });
+  // Broj komada kod stavke "Ostalo" - desno od ploce, klikom se mijenja.
+  // Isti obrazac kao kod stepenica (× br), jer se polica cesto radi u vise
+  // istih komada.
+  if(jeOstalo()){
+    var _okom=_osKom();
+    var _bbK=null;
+    try{ _bbK=_bbMM(shape,dims,vOrient); }catch(e){}
+    if(_bbK&&_bbK.w>0){
+      var _kx=_bbK.w*sc+34, _ky=_bbK.h*sc/2;
+      ctx.save();
+      ctx.fillStyle='#1a5fa8'; ctx.font='bold 22px Segoe UI,Arial';
+      ctx.textAlign='left'; ctx.textBaseline='middle';
+      ctx.fillText('\u00d7'+_okom,_kx,_ky);
+      ctx.font='10px Segoe UI,Arial'; ctx.fillStyle='#8a93a3';
+      ctx.fillText('kom',_kx,_ky+17);
+      ctx.restore();
+      _kotaPrepreka(_kx+14,_ky,26);
+      _regClickRect(_kx-6,_ky-20,66,42,'#os-kom',
+        {kind:'number',label:nazivStavke(null,'Stavka')+' \u2014 broj komada',
+         unit:'kom',min:1,step:1,
+         get:function(){ return _osKom(); },
+         set:function(v){ osPostaviKom(v); }});
+    }
+  }
   drawLegenda(ctx,W,H);
   _flushKotes();
   ctx.restore();
@@ -11900,13 +11948,15 @@ function _stavkeZaNalog(){
         var bb=_bbPolyTj(d._tj||[]); sa=bb.w; sb=bb.h;
       } else { sa=d.A||0; sb=(it.shape==='okrugao')?sa:(d.B||0); }
       var br=Math.max(1,_broj(inp['sto-br'])||1);
+      if(it.ostalo&&it.ostalo.kom) br=Math.max(1,Math.round(_broj(it.ostalo.kom)));
       dodaj(sa,sb,br,osnov+(it.shape?(' \u2013 '+it.shape):''));
       return;
     }
     // Kuhinja i "Ostalo": bounding box oblika
     var bb2=null;
     try{ bb2=_bbMM(it.shape,d,it.vOrient||0); }catch(e){}
-    if(bb2&&bb2.w>0&&bb2.h>0) dodaj(bb2.w,bb2.h,1,osnov+' \u2013 '+(it.shape||''));
+    if(bb2&&bb2.w>0&&bb2.h>0)
+      dodaj(bb2.w,bb2.h,(it.ostalo&&it.ostalo.kom)||1,osnov+' \u2013 '+(it.shape||''));
   });
   return out;
 }
