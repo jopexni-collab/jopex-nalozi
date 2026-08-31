@@ -19,11 +19,28 @@ header{background:#1a5fa8;color:#fff;height:48px;padding:0 12px 0 10px;display:f
 .hinfo{font-size:10px;opacity:.75;text-align:right;line-height:1.7;}
 .app{display:flex;height:calc(100vh - 48px);overflow:hidden;}
 .left{width:400px;flex-shrink:0;background:#fff;border-right:1px solid #dde2ea;display:flex;flex-direction:column;overflow:hidden;}
-.right{flex:1;overflow-y:auto;background:#f0f2f5;padding:16px;}
+.right{
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  background:#f0f2f5;
+  padding:16px 16px 40px;
+}
 .tip-tabs{display:flex;border-bottom:1px solid #dde2ea;flex-shrink:0;}
 .tip-tab{flex:1;padding:6px 4px;border:none;background:none;font-family:inherit;font-size:11px;font-weight:600;color:#6b7a8d;cursor:pointer;border-radius:0;margin-bottom:-1px;}
 .tip-tab.on{background:#1a5fa8;color:#fff;border-radius:0;}
-.lbody{flex:1;overflow-y:auto;padding:14px;}
+.lbody{
+  flex:1;
+  /* min-height:0 je OBAVEZAN u flex koloni - bez njega flex stavka ne moze
+     biti niza od svog sadrzaja, pa naraste preko .left (koji ima
+     overflow:hidden) i dno panela postane nedostupno, bez trake za pomjeranje. */
+  min-height:0;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+  padding:14px 14px 40px;   /* prostor na dnu, da zadnja sekcija ne bude uz ivicu */
+}
 .sec{margin-bottom:14px;}
 .sec-hd{font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#1a5fa8;font-weight:700;border-bottom:1px solid #dde2ea;padding-bottom:4px;margin-bottom:9px;}
 .fg{margin-bottom:7px;}
