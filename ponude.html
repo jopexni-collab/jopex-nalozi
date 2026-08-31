@@ -777,6 +777,12 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
     </div>
   </div>
 
+    <div class="sec">
+      <div class="sec-hd">Dodatni rad</div>
+      <div class="hint">Dodaje se na kraj ponude — npr. prevoz, demontaža, silikoniranje</div>
+      <div id="dodatni-rad-con"></div>
+    </div>
+
     <div style="margin:0 0 8px;background:#c0392b;border-radius:8px;padding:10px 14px">
     <div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#fff;font-weight:700;margin-bottom:8px">Gotovinski popust</div>
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -2062,6 +2068,7 @@ function loadItemInputs(){
   var _sn=ge('stavka-naziv');
   if(_sn) _sn.value=(_a&&_a.naziv)?_a.naziv:'';
   try{ _osPrimijeniNaslove(); }catch(e){}
+  try{ buildDodatniRad(); }catch(e){}
   var _wkl=ge('kl-poz-wrap'); if(_wkl) _wkl.style.display=(tip==='kl')?'':'none';
   var _wst=ge('st-poz-wrap'); if(_wst) _wst.style.display=gc('cb-st-poz')?'':'none';
 }
@@ -10577,7 +10584,22 @@ function genPon(currency){
   // Vrati aktivnu stavku
   activeIdx=savedIdxG; syncFromActive(); loadItemInputs();
 
-  var uk=_totalUk;
+  // Dodatni rad na nivou ponude - poseban blok na kraju, prije zbira
+  var _drUk=_dodatniRadUk();
+  if(_drUk>0){
+    allSections+='<div class="p-item-hd">Dodatni rad</div>'
+      +'<table class="p-tbl"><thead><tr><th>Opis</th><th>Kol.</th>'
+      +'<th>Cijena</th><th>Iznos</th></tr></thead><tbody>'
+      +(_dodatniRad||[]).map(function(x,i){
+        var c=_broj(x.cijena)||0;
+        if(!String(x.naziv||'').trim()&&!c) return '';
+        return '<tr><td>'+(x.naziv||'Dodatni rad')+'</td><td>1</td>'
+          +'<td>'+_editableUnitPrice(c,'','setDodatniRadCijena',[i])+'</td>'
+          +'<td style="text-align:right">'+f(c)+'</td></tr>';
+      }).join('')
+      +'</tbody></table>';
+  }
+  var uk=_totalUk+_drUk;
   var pdvStopa=(currency==='RSD')?0.20:0.17;
   var pdv=Math.round(uk*pdvStopa*100)/100;
   var ukSaPdv=Math.round((uk+pdv)*100)/100;
@@ -11402,6 +11424,9 @@ var _ponudaInfo=null;
 // Trag svake izmjene: ko, kada, koji iznos. Cuva se UZ PONUDU (u JSON-u), pa
 // se ne gubi ni kad sljedeca izmjena pregazi napomenu u nalogu.
 var _istorijaIzmjena=[];
+// Dodatni rad na NIVOU PONUDE (ne po stavci) - prikazuje se na kraju, prije
+// zbira. Npr. prevoz, demontaza, silikoniranje, izlazak na teren.
+var _dodatniRad=[];   // [{naziv, cijena}]
 // Ko je NAPRAVIO ponudu. Postavlja se pri prvom cuvanju i ostaje isti i kad
 // je kasnije otvori i mijenja neko drugi - inace bi se autorstvo prepisalo
 // na svakog ko je otvori sa oblaka.
@@ -11801,6 +11826,8 @@ async function _ucitajPonudu(linkJson, naziv, ponudaId){
     _nalogInfo = p.nalog || null;   // ako ponuda vec ima nalog, sljedece usvajanje je IZMJENA
     _istorijaIzmjena = p.istorija || [];
     _autorPonude = p.autor || null;
+    _dodatniRad = p.dodatniRad || [];
+    try{ buildDodatniRad(); }catch(e){}
     // Zapamti KOJI red smo ucitali - da ga sljedece cuvanje pregazi umjesto
     // da napravi jos jednu stavku u listi.
     _ponudaInfo = { id: (ponudaId!=null?ponudaId:((p.ponuda&&p.ponuda.id)||null)),
@@ -11894,7 +11921,7 @@ function novaPonuda(){
   if(!confirm('Početi NOVU ponudu?'+vez+'\n\nSve stavke se brisu, a veza sa gornjim se prekida\n(postojeci zapis na serveru OSTAJE netaknut).')) return;
   _saveUndo();
   items=[]; activeIdx=0;
-  _ponudaInfo=null; _nalogInfo=null; _istorijaIzmjena=[]; _autorPonude=null;
+  _ponudaInfo=null; _nalogInfo=null; _istorijaIzmjena=[]; _autorPonude=null; _dodatniRad=[];
   ['kl-ime','kl-tel','kl-adr','pon-popust'].forEach(function(id){ var e=ge(id); if(e) e.value=''; });
   var pd=ge('pon-doc');
   if(pd) pd.innerHTML='<div style="text-align:center;padding:60px 0;color:#6b7a8d">Popunite podatke i kliknite <strong>Generiši ponudu</strong></div>';
@@ -12339,9 +12366,62 @@ function _vratiOstalo(o){
   });
 }
 // Ukupan iznos u trenutku cuvanja - sluzi kao kontrola pri ucitavanju.
+function _dodatniRadUk(){
+  return (_dodatniRad||[]).reduce(function(z,x){ return z+(_broj(x.cijena)||0); },0);
+}
+function setDodatniRadCijena(i,v){
+  if(!_dodatniRad[i]) return;
+  _dodatniRad[i].cijena=_broj(v);
+  buildDodatniRad(); refresh();
+}
+function drDodaj(){
+  _dodatniRad.push({naziv:'', cijena:0});
+  buildDodatniRad(); refresh();
+}
+function drUkloni(i){
+  _dodatniRad.splice(i,1);
+  buildDodatniRad(); refresh();
+}
+function drPolje(i,polje,v){
+  if(!_dodatniRad[i]) return;
+  _dodatniRad[i][polje]=(polje==='cijena')?_broj(v):String(v||'');
+  if(polje==='cijena') refresh();
+}
+function buildDodatniRad(){
+  var con=ge('dodatni-rad-con'); if(!con) return;
+  var h='';
+  if(!_dodatniRad.length){
+    h+='<div style="font-size:11px;color:#8a93a3;padding:3px 0">'
+      +'Nema dodatnog rada.</div>';
+  } else {
+    _dodatniRad.forEach(function(x,i){
+      h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:5px">'
+        +'<input type="text" value="'+String(x.naziv||'').replace(/"/g,'&quot;')+'" '
+        +'placeholder="npr. Prevoz, Demonta\u017ea starog, Silikoniranje" '
+        +'style="flex:1;font:inherit;font-size:12px;padding:5px 7px;border:1px solid #dde2ea;'
+        +'border-radius:4px" oninput="drPolje('+i+',\'naziv\',this.value)">'
+        +'<input type="text" inputmode="decimal" value="'+(x.cijena||0)+'" '
+        +'style="width:88px;font:inherit;font-size:12px;padding:5px 7px;border:1px solid #dde2ea;'
+        +'border-radius:4px;text-align:right" '
+        +'oninput="fixComma(this);drPolje('+i+',\'cijena\',this.value)">'
+        +'<span style="font-size:10px;color:#8a93a3">KM</span>'
+        +'<button type="button" onclick="drUkloni('+i+')" style="background:none;border:none;'
+        +'color:#c0392b;cursor:pointer;font-size:14px;padding:0 3px">\u2715</button></div>';
+    });
+    var uk=_dodatniRadUk();
+    if(uk>0) h+='<div style="text-align:right;font-size:11px;color:#1a5fa8;font-weight:700;'
+      +'padding:2px 30px 4px 0">Ukupno: '+fmtBroj(uk,2)+' KM</div>';
+  }
+  h+='<button type="button" onclick="drDodaj()" style="width:100%;padding:6px;background:none;'
+    +'border:1px dashed #1a5fa8;color:#1a5fa8;border-radius:5px;cursor:pointer;font:inherit;'
+    +'font-size:12px">+ Dodaj stavku</button>';
+  con.innerHTML=h;
+}
 function _ukupnoSvihStavki(){
+  // ukljucuje i dodatni rad
   try{
-    return Math.round(calcAllItems().reduce(function(a,r){return a+(r.uk||0);},0)*100)/100;
+    var z=calcAllItems().reduce(function(a,r){return a+(r.uk||0);},0)+_dodatniRadUk();
+    return Math.round(z*100)/100;
   }catch(e){ return null; }
 }
 
@@ -12365,6 +12445,7 @@ function _getProjectData(){
       ponuda: _ponudaInfo, // red u tabeli ponuda (da se pregazi, ne duplira)
       nalog: _nalogInfo,   // veza ponuda -> radni nalog (za revizije)
       istorija: _istorijaIzmjena,   // trag svih usvajanja/izmjena
+      dodatniRad: _dodatniRad,
       timestamp: new Date().toISOString(),
     };
   }catch(e){ return {version:1,items:[]}; }
@@ -12409,6 +12490,8 @@ async function usvojiPonudu(){
       if(matV&&matNazivi.indexOf(matV)<0)matNazivi.push(matV);
     });
   }
+
+  ukupno+=_dodatniRadUk();   // dodatni rad ulazi u ugovorenu sumu
 
   // Narucilac = Klijent (kl-ime)
   var narucilac=(ge('kl-ime')&&ge('kl-ime').value)||'';
