@@ -1347,7 +1347,7 @@ function azurirajValutaLabele(){
 // prebacuje na tab Otpremnice i otvara detalje te konkretne otpremnice.
 async function otvoriDeepLinkOtpremnicuAkoPostoji(){
   const params=new URLSearchParams(location.search);
-  const broj=params.get('otp');
+  const otpBroj=params.get('otp');   // NE zvati je 'broj' — to je naziv funkcije za čitanje brojeva sa zarezom
   const naplatiId=params.get('naplati_otpremnicu');
   if(naplatiId){
     try{
@@ -1386,15 +1386,15 @@ async function otvoriDeepLinkOtpremnicuAkoPostoji(){
     }
     return;
   }
-  if(!broj) return;
+  if(!otpBroj) return;
   try{
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     document.querySelector('.tab-btn[data-tab="admin"]').classList.add('active');
     document.getElementById('view-admin').classList.add('active');
-    await loadOtpremnice(broj);
-    const otp=Object.values(window.__otpDataById||{}).find(o=>o.broj===broj);
-    if(!otp){ alert('Otpremnica "'+broj+'" nije pronađena (ili nemate pristup njoj).'); return; }
+    await loadOtpremnice(otpBroj);
+    const otp=Object.values(window.__otpDataById||{}).find(o=>o.otpBroj===otpBroj);
+    if(!otp){ alert('Otpremnica "'+otpBroj+'" nije pronađena (ili nemate pristup njoj).'); return; }
     prikaziDetaljeOtpremnice(otp.id);
   }catch(e){
     alert('Greška pri otvaranju otpremnice.');
