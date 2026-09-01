@@ -10059,10 +10059,21 @@ function _editableUnitPrice(kmPrice,unitSuffix,onchangeFnName,onchangeArgs){
   if(_ponCurrency==='EUR') disp=kmPrice/FX_EUR;
   else if(_ponCurrency==='RSD') disp=kmPrice*FX_RSD;
   var argsStr=onchangeArgs.map(function(a){return typeof a==='number'?a:"'"+String(a).replace(/'/g,"\\'")+"'";}).join(',');
-  return '<input type="number" value="'+disp.toFixed(2)+'" '
-    +'onchange="'+onchangeFnName+'('+argsStr+',this.value,\''+_ponCurrency+'\')" '
-    +'style="width:54px;border:1px solid #cdd5e0;border-radius:3px;padding:3px 5px;'
-    +'text-align:right;font:inherit;font-size:12px;background:#fffceb"> '+_curSymbol()+unitSuffix;
+  // Sirina je bila 54px, pa je cetvorocifreni iznos (1.250,75) bio odsjecen.
+  // Sada se racuna prema duzini broja. Polje je type=text jer <input
+  // type="number"> odbija zarez, a mi ga koristimo kao decimalni razdvajac.
+  var _txt=fmtBroj(disp,2);
+  // Sirina prema STVARNOJ duzini teksta: cifra ~6.7px, tacka/zarez ~3.4px
+  // na 12px Segoe UI, plus 30px za padding, okvir i rezervu.
+  var _cif=(_txt.match(/\d/g)||[]).length;
+  var _zn=_txt.length-_cif;
+  var _w=Math.max(66,Math.min(130,Math.ceil(_cif*6.7+_zn*3.4)+30));
+  return '<input type="text" inputmode="decimal" value="'+_txt+'" '
+    +'onchange="fixComma(this);'+onchangeFnName+'('+argsStr+',this.value,\''+_ponCurrency+'\')" '
+    +'onfocus="this.select()" '
+    +'style="width:'+_w+'px;border:1px solid #cdd5e0;border-radius:3px;padding:3px 6px;'
+    +'text-align:right;font:inherit;font-size:12px;background:#fffceb;'
+    +'box-sizing:content-box"> '+_curSymbol()+unitSuffix;
 }
 // Pretvara prikazani (u trenutnoj valuti) broj nazad u KM - interno se SVE
 // uvijek čuva u KM, prikaz/unos je samo "prevod" za oči.
@@ -10651,8 +10662,14 @@ function genPon(currency){
       '</tr></thead><tbody>'+res.rows+'</tbody></table>'+
       (i===0?_tragIzmjena(false):'')+
       (res.prilog||'')+
-      '<div style="text-align:right;padding:6px 0;font-size:12px;color:#1a5fa8;font-weight:700;border-top:1px solid #e2e8f0;margin-bottom:16px">'+
-        'Stavka '+(i+1)+': <strong>'+f(res.uk)+'</strong></div>';
+      // Zbir stavke: naziv LIJEVO, iznos DESNO. Ranije su stajali jedan uz
+      // drugi pa je broj stavke izgledao kao prva cifra iznosa
+      // ("Stavka 1: 816,25" se citalo kao 1816,25).
+      '<div style="display:flex;justify-content:space-between;align-items:baseline;'
+      +'padding:6px 10px;font-size:12px;color:#1a5fa8;font-weight:700;'
+      +'border-top:1px solid #e2e8f0;margin-bottom:16px">'
+      +'<span>Stavka '+(i+1)+'</span>'
+      +'<strong style="font-size:13px">'+f(res.uk)+'</strong></div>';
   });
   // Vrati aktivnu stavku
   activeIdx=savedIdxG; syncFromActive(); loadItemInputs();
@@ -10660,17 +10677,33 @@ function genPon(currency){
   // Dodatni rad na nivou ponude - poseban blok na kraju, prije zbira
   var _drUk=_dodatniRadUk();
   if(_drUk>0){
+    // ISTI stilovi kao tabele stavki, da se kolone poklope po vertikali
+    var _thS='padding:8px 10px;border-bottom:2px solid #1a3f7a;color:#1a3f7a;font-weight:700;';
+    var _tdS='padding:7px 10px;border-bottom:1px solid #eef1f5;';
     allSections+='<div class="p-item-hd">Dodatni rad</div>'
-      +'<table class="p-tbl"><thead><tr><th>Opis</th><th>Kol.</th>'
-      +'<th>Cijena</th><th>Iznos</th></tr></thead><tbody>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:13px;margin:8px 0;">'
+      +'<thead><tr>'
+      +'<th style="'+_thS+'text-align:left">Opis</th>'
+      +'<th style="'+_thS+'text-align:center">Koli\u010dina</th>'
+      +'<th style="'+_thS+'text-align:center">Jed. cijena</th>'
+      +'<th style="'+_thS+'text-align:right">Iznos</th>'
+      +'</tr></thead><tbody>'
       +(_dodatniRad||[]).map(function(x,i){
         var c=_broj(x.cijena)||0;
         if(!String(x.naziv||'').trim()&&!c) return '';
-        return '<tr><td>'+(x.naziv||'Dodatni rad')+'</td><td>1</td>'
-          +'<td>'+_editableUnitPrice(c,'','setDodatniRadCijena',[i])+'</td>'
-          +'<td style="text-align:right">'+f(c)+'</td></tr>';
+        return '<tr>'
+          +'<td style="'+_tdS+'text-align:left">'+(x.naziv||'Dodatni rad')+'</td>'
+          +'<td style="'+_tdS+'text-align:center">1 usluga</td>'
+          +'<td style="'+_tdS+'text-align:center">'
+            +_editableUnitPrice(c,'','setDodatniRadCijena',[i])+'</td>'
+          +'<td style="'+_tdS+'text-align:right;font-weight:600">'+f(c)+'</td></tr>';
       }).join('')
-      +'</tbody></table>';
+      +'</tbody></table>'
+      +'<div style="display:flex;justify-content:space-between;align-items:baseline;'
+      +'padding:6px 10px;font-size:12px;color:#1a5fa8;font-weight:700;'
+      +'border-top:1px solid #e2e8f0;margin-bottom:16px">'
+      +'<span>Dodatni rad</span>'
+      +'<strong style="font-size:13px">'+f(_drUk)+'</strong></div>';
   }
   var uk=_totalUk+_drUk;
   var pdvStopa=(currency==='RSD')?0.20:0.17;
