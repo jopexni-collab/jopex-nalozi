@@ -6647,11 +6647,14 @@ function getIvData(){
       // Kad se mjeri OD DRUGOG KRAJA, dio se racuna unazad
       var pocetakOvog=obrnuto?(duz-pocetak-x.d):pocetak;
       pocetak+=x.d;
-      if(!x.prof||x.prof==='none') return;
+      // Neobradjeni dio podijeljene strane SE UKLJUCUJE, uz naplativo=false -
+      // da dobije svoju kotu i simbol na crtezu, ali ne i red u ponudi.
+      var _nema=(!x.prof||x.prof==='none');
+      if(_nema&&!podijeljena) return;
       var m=Math.max(0,x.d)/1000;
       if(m<=0) return;
-      var price=getIvPrice(x.prof);
-      var uk=Math.round(m*price*100)/100;
+      var price=_nema?0:getIvPrice(x.prof);
+      var uk=_nema?0:Math.round(m*price*100)/100;
       // baseLbl je ORIGINALNO slovo strane - crtanje ga koristi za spajanje
       // sa geometrijom. lbl je opisni naziv za ponudu i nalog.
       var _sus2=podijeljena?_ivSusjedi(s.id):null;
@@ -6660,7 +6663,7 @@ function getIvData(){
       // a ne od pocetka konture - inace bi kod obrnutog smjera prvi dio
       // pisao "2500-3000" umjesto "0-500".
       var _relOd=pocetak-x.d, _relDo=pocetak;
-      res.push({id:s.id, baseLbl:s.lbl,
+      res.push({id:s.id, baseLbl:s.lbl, naplativo:!_nema,
         lbl:(s.fullLbl||s.lbl)
           +(podijeljena?(' – od '+_odS+' '+fmtMm(_relOd)+'–'
             +fmtMm(_relDo)+' mm'):''),
@@ -6863,7 +6866,8 @@ function calcItemCost(){
         :c.vrsta==='polirano'?', Polirano':', Bez obrade';
       rows+=trow((c.name||'Dodatni otvor')+' '+dimTxt+obrTxt,'1 kom',_editableUnitPrice(parseFloat(c.cost)||0,'','setCustomOtvorCostPon',[activeIdx,ci]),f(parseFloat(c.cost)||0));
     });
-    ivd.forEach(function(iv2){rows+=trow('Obrada ivice – '+iv2.profLbl+' ('+iv2.lbl+')',fmtBroj(iv2.m,2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-',iv2.prof]),f(iv2.uk));});
+    ivd.forEach(function(iv2){ if(iv2.naplativo===false) return;
+      rows+=trow('Obrada ivice – '+iv2.profLbl+' ('+iv2.lbl+')',fmtBroj(iv2.m,2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-',iv2.prof]),f(iv2.uk));});
     var _rzK=_rezRedovi(1); rows+=_rzK.rows; rez=_rzK.uk; uk+=rez;
     segsE=getIvSegs(shape,dims);
     getFreeEndSides(shape).forEach(function(end){
@@ -6923,7 +6927,8 @@ function calcItemCost(){
     uk=mat+iv+usl;
     var klnap=gs('kl-n')?(' ('+gs('kl-n')+')'):'';
     rows+=trow(nazivKlupice()+klnap+' '+gi('kl-a')+'×'+gi('kl-b')+' mm ('+ms+')',kk+' kom',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
-    ivdKl.forEach(function(iv2){rows+=trow('Ivica '+iv2.lbl+' – '+iv2.profLbl,fmtBroj(iv2.m,2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-kl-',iv2.prof]),f(iv2.uk));});
+    ivdKl.forEach(function(iv2){ if(iv2.naplativo===false) return;
+      rows+=trow('Ivica '+iv2.lbl+' – '+iv2.profLbl,fmtBroj(iv2.m,2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-kl-',iv2.prof]),f(iv2.uk));});
     var _rzKl=_rezRedovi(kk); rows+=_rzKl.rows; rez=_rzKl.uk; uk+=rez;
     rows+=trow('Ugradnja',kk+' kom',_editableUnitPrice(gi('kl-u'),'','setItemFieldPrice',[activeIdx,'kl-u']),f(gi('kl-u')*kk));
     rows+=trow('Mjerenje','1',_editableUnitPrice(gi('kl-m'),'','setItemFieldPrice',[activeIdx,'kl-m']),f(gi('kl-m')));
@@ -6946,7 +6951,7 @@ function calcItemCost(){
     var stonap=gs('sto-n')?(' ('+gs('sto-n')+')'):'';
     var stoDimTxt=(shape==='skica')?((jeOstalo()?'':'slobodan oblik ')+Math.round(stoA2)+'×'+Math.round(stoB2)+' mm'):(shape==='okrugao'?('ø'+stoA2+' mm'):(stoA2+'×'+stoB2+' mm'));
     rows+=trow(nazivStavke(null,'Stol')+' – '+stoShLbl+stonap+' '+stoDimTxt+' ('+ms+')',stoBr2+' kom ('+m3o.toFixed(4)+' m²)',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
-    ivdSto2.forEach(function(iv2){rows+=trow('Ivica '+iv2.lbl+' – '+iv2.profLbl+' (×'+stoBr2+')',fmtBroj(iv2.m,2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-sto-',iv2.prof]),f(iv2.uk*stoBr2));});
+    ivdSto2.forEach(function(iv2){ if(iv2.naplativo===false) return;rows+=trow('Ivica '+iv2.lbl+' – '+iv2.profLbl+' (×'+stoBr2+')',fmtBroj(iv2.m,2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-sto-',iv2.prof]),f(iv2.uk*stoBr2));});
     var _rzSto=_rezRedovi(stoBr2); rows+=_rzSto.rows; rez=_rzSto.uk; uk+=rez;
     (tableHoles||[]).forEach(function(h,hi){
       var hDim=(h.shape==='round')?('ø'+(h.fi||35)+' mm'):((h.w||0)+'×'+(h.h||0)+' mm');
@@ -6981,7 +6986,7 @@ function calcItemCost(){
     uk=mat+iv+usl;
     var stnap=gs('st-n')?(' ('+gs('st-n')+')'):'';
     rows+=trow('Gazište stepenica'+stnap+' '+gi('st-a')+'×'+gi('st-b')+' mm ('+ms+')',fmtBroj(gm,4)+' m²',_editableUnitPrice(gi('mat-c'),'/m²','setItemMatPrice',[activeIdx]),f(mat));
-    ivdSt.forEach(function(iv2){rows+=trow('Ivica '+iv2.lbl+' – '+iv2.profLbl,fmtBroj(iv2.m,2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-st-',iv2.prof]),f(iv2.uk));});
+    ivdSt.forEach(function(iv2){ if(iv2.naplativo===false) return;rows+=trow('Ivica '+iv2.lbl+' – '+iv2.profLbl,fmtBroj(iv2.m,2)+' m',_editableUnitPrice(iv2.ic,'/m','setIvPrice',['ivp-st-',iv2.prof]),f(iv2.uk));});
     var _rzSt=_rezRedovi(br); rows+=_rzSt.rows; rez=_rzSt.uk; uk+=rez;
     if(gc('cb-cel')){
       var cm=gi('cel-a')*gi('cel-b')/1e6*br,celm=Math.round(cm*gi('cel-c')*100)/100;
@@ -8884,6 +8889,8 @@ function drawK(ctx,W,H){
         var insB=(si===segs.length-1)?Math.max(0,Math.min(rEnd,segLen/2-0.01)):0;
         var ax=p1[0]+ux*insA, ay=p1[1]+uy*insA;
         var bx=p2[0]-ux*insB, by=p2[1]-uy*insB;
+        // Neobradjeni dio nema liniju obrade, ali IMA kotu i simbol
+        var _bezObr=(!iv.prof||iv.prof==='none');
         // Suzi na dio strane koji ova obrada pokriva
         if(_fOd>0||_fDo<1){
           var _dx=bx-ax, _dy=by-ay;
@@ -8891,7 +8898,7 @@ function drawK(ctx,W,H){
           var _nbx=ax+_dx*_fDo, _nby=ay+_dy*_fDo;
           ax=_nax; ay=_nay; bx=_nbx; by=_nby;
         }
-        drawIv(ctx,ax*sc,ay*sc,bx*sc,by*sc,iv.prof);
+        if(!_bezObr) drawIv(ctx,ax*sc,ay*sc,bx*sc,by*sc,iv.prof);
         // ── PODIJELJENA STRANA: kota + simbol obrade za SVAKI dio ──
         if(iv.dio!=null&&si===0){
           // VAZNO: kota mora pokrivati PUNU duzinu dijela, ne skracenu za
@@ -9458,20 +9465,43 @@ function _crtajStranuPozicija(ctx,W,lista,m,strIdx,brStr,svi){
         ly=Math.min(g[1],g[3])+uvuci; lh=Math.max(10,Math.abs(g[3]-g[1])-uvuci*2);
       }
       _regClickRect(lx,ly,lw,lh,'.poz-red[data-pi="'+i+'"]',_pozIvEditDesc(i,sd.id));
-      // Slovo strane + simbol obrade, uvuceno ka centru
+      // Slovo strane + simbol obrade. Uvlaci se KA CENTRU samo ako ima
+      // mjesta; kod uskih pozicija (npr. klupica 1200x120) bi se gornja i
+      // donja oznaka preklopile, pa se tada izbacuju VAN ploce.
       var mxs=(g[0]+g[2])/2, mys=(g[1]+g[3])/2;
       var dxs=A/2-mxs, dys=B/2-mys, dls=Math.hypot(dxs,dys)||1;
-      var tx2=mxs+dxs/dls*13, ty2=mys+dys/dls*13;
+      var vodoravna=(sd.id==='A-zad'||sd.id==='D-pred');
+      // Koliko prostora ima UNUTAR ploce upravno na ovu stranu
+      var prostor=vodoravna?B:A;
+      // Dvije oznake (gornja i donja) trebaju po ~26 px svaka
+      var unutra=(prostor>=58);
+      var pomak=unutra?13:-15;   // negativno = van ploce
+      var tx2=mxs+dxs/dls*pomak, ty2=mys+dys/dls*pomak;
       ctx.save();
       ctx.font='bold 9.5px Segoe UI,Arial';
       ctx.textAlign='center'; ctx.textBaseline='middle';
+      if(!unutra){
+        // Van ploce - bijela podloga da se ne stopi sa kotom ispod
+        var _tw=ctx.measureText(sd.lbl+' '+(PSym[pr]||'')).width+6;
+        ctx.fillStyle='rgba(255,255,255,0.9)';
+        ctx.fillRect(tx2-_tw/2,ty2-7,_tw,14);
+      }
       ctx.fillStyle=(pr&&pr!=='none')?'#1a5fa8':'#c8d2dd';
       ctx.fillText(sd.lbl+((pr&&pr!=='none')?(' '+PSym[pr]):''),tx2,ty2);
-      _kotaPrepreka(tx2,ty2,12);
+      _kotaPrepreka(tx2,ty2,unutra?12:15);
       if(dj){
-        ctx.font='bold 8.5px Segoe UI,Arial'; ctx.fillStyle='#8a6d3b';
-        ctx.fillText(d+'mm',tx2,ty2+10);
-        _regClickRect(tx2-18,ty2+4,36,13,null,_pozBdEditDesc(i,sd.id));
+        // Djelimicna obrada: mm oznaka ide na stranu suprotnu od oznake,
+        // da se ne poklopi ni sa slovom ni sa kotom
+        var _my=unutra?(ty2+10):(ty2-11);
+        ctx.font='bold 8.5px Segoe UI,Arial';
+        if(!unutra){
+          ctx.fillStyle='rgba(255,255,255,0.9)';
+          ctx.fillRect(tx2-19,_my-6,38,12);
+        }
+        ctx.fillStyle='#8a6d3b';
+        ctx.fillText(d+'mm',tx2,_my);
+        _regClickRect(tx2-19,_my-6,38,12,null,_pozBdEditDesc(i,sd.id));
+        _kotaPrepreka(tx2,_my,12);
       }
       ctx.restore();
     });
