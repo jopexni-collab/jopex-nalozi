@@ -926,6 +926,21 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
 
 </div><!-- /app -->
 <script>
+// ── GLOBALNE VARIJABLE KOJE MORAJU POSTOJATI OD POCETKA ──────────
+// uiTip je tab otvoren u lijevom panelu. Ranije je nastajao tek prvom
+// dodjelom, pa je citanje prije toga (npr. pri ucitavanju stare ponude)
+// padalo na "uiTip is not defined".
+var uiTip = 'k';
+// Iste vrste: nastajale su tek prvom dodjelom, pa bi citanje prije toga
+// srusilo ucitavanje. Vrijednosti su iste kakve dobiju pri prvom crtanju.
+var shape = 'I';
+var dims = {};
+var extState = {};
+var wallSides = {};
+var wallCfgIdx = 0;
+var SK_IZABRANA_STRANA = null;
+var _sacuvanoGdje = '';
+
 
 
 
