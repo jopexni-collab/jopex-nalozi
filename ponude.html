@@ -166,8 +166,39 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
 .p-foot{margin-top:18px;padding-top:10px;border-top:1px solid #eee;font-size:10px;color:#6b7a8d;text-align:center;}
 @media print{
   header,.left,.vtabs{display:none!important;}
-  .app{display:block!important;height:auto!important;}
-  .right{padding:0!important;background:#fff!important;}
+  /* Za ekran su html/body/.app/.right fiksne visine sa overflow:hidden, da
+     paneli imaju svoje trake za pomjeranje. Pri STAMPI to mora nestati -
+     inace pregledac odstampa samo prvi ekran i stane. */
+  html,body{
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow:visible!important;
+    display:block!important;
+  }
+  .app{
+    display:block!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow:visible!important;
+    flex:none!important;
+  }
+  .right{
+    padding:0!important;
+    background:#fff!important;
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow:visible!important;
+    flex:none!important;
+    display:block!important;
+  }
+  .vw,#vw-pon{
+    height:auto!important;
+    max-height:none!important;
+    overflow:visible!important;
+  }
   .vw{display:none!important;}
   #vw-pon{display:block!important;}
   .pon{box-shadow:none!important;border-radius:0!important;max-width:100%!important;}
