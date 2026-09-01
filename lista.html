@@ -863,6 +863,40 @@ function renderPriprema(d){
 }
 
 
+
+/* Spisak ponuda za rucno povezivanje. Nalog ne pamti iz koje je ponude nastao
+   (nema ponuda_id, a link vodi na HTML radnog naloga, ne na JSON sa pozicijama),
+   pa se ponuda bira iz spiska. */
+async function ucitajSpisakPonuda(){
+  const sel = document.getElementById('poz-izbor-ponude');
+  if(!sel) return;
+  try{
+    const r = await fetch(`${API}/api/ponude`);
+    if(!r.ok) throw new Error('Ne mogu učitati ponude.');
+    const lista = await r.json();
+    const saJsonom = (lista||[]).filter(p=>p.link_json);
+    if(!saJsonom.length){
+      sel.innerHTML = '<option value="">— nema ponuda sa podacima —</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">— izaberi ponudu —</option>' + saJsonom.map(p=>{
+      const d = p.datum || p.kreirano;
+      const kad = d ? new Date(d).toLocaleDateString('bs-BA') : '';
+      return `<option value="${esc(p.link_json)}">${esc(p.kupac||p.naziv||'bez naziva')} · ${kad}</option>`;
+    }).join('');
+  }catch(e){
+    sel.innerHTML = `<option value="">— ${esc(e.message)} —</option>`;
+  }
+}
+
+async function prepisiIzIzabranePonude(){
+  const sel = document.getElementById('poz-izbor-ponude');
+  const link = sel?.value;
+  if(!link){ alert('Izaberi ponudu iz spiska.'); return; }
+  pozLinkPonude = link;
+  await prepisiIzPonude();
+}
+
 async function prepisiIzPonude(){
   if(!pozLinkPonude){ alert('Nalog nema vezanu ponudu.'); return; }
   const greska = document.getElementById('poz-greska');
