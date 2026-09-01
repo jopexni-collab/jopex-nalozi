@@ -1286,7 +1286,7 @@ async function potvrdiLozinkuIIzaberi(){
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({password:lozinka}),
     });
-    const data=await r.json();
+    const data = await r.json().catch(()=>({ error:`Server je vratio ${r.status} bez poruke.` }));
     if(!r.ok) throw new Error(data.error||'Neispravna lozinka.');
     // Lozinka je tačna — sad ide DRUGO, eksplicitno pitanje potvrde (ne odmah ulazak).
     document.getElementById('objekat-korak2').style.display='none';
@@ -1352,17 +1352,35 @@ async function otvoriDeepLinkOtpremnicuAkoPostoji(){
   if(naplatiId){
     try{
       const r=await fetch(`${API}/api/otpremnice/${naplatiId}`);
-      if(!r.ok){ alert('Otpremnica nije pronađena ili nemate pristup.'); return; }
+      if(!r.ok){
+        const d=await r.json().catch(()=>({}));
+        alert('Otpremnica nije dostupna:\n\n' + (d.error || `Server je vratio ${r.status}`)
+          + '\n\nAko otpremnica pripada drugom prodajnom objektu, prvo se prebaci na taj PJ.');
+        return;
+      }
       const otp=await r.json();
       otp.duguje=+(broj(otp.ukupan_iznos)-broj(otp.iznos_placeno)).toFixed(2);
       if(otp.duguje<=0){ alert('Ova otpremnica je već u potpunosti plaćena.'); return; }
+
+      /* Prebacivanje na tab "Dugovanja". Ako ga korisnik NEMA (pravo, druga uloga),
+         querySelector vraca null i cijela funkcija puca — a poruka je bila samo
+         "Greška pri otvaranju naplate duga", bez razloga. */
+      const tabDugme = document.querySelector('.tab-btn[data-tab="dugovanja"]');
+      const tabPogled = document.getElementById('view-dugovanja');
+      if(!tabDugme || !tabPogled){
+        alert('Nemate pristup dijelu "Dugovanja" u maloprodaji.\n\n'
+          + 'Naplatu duga može uraditi neko sa pravom za taj prodajni objekat.');
+        return;
+      }
       document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
       document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-      document.querySelector('.tab-btn[data-tab="dugovanja"]').classList.add('active');
-      document.getElementById('view-dugovanja').classList.add('active');
+      tabDugme.classList.add('active');
+      tabPogled.classList.add('active');
       otvoriNaplatuDuga(otp);
     }catch(e){
-      alert('Greška pri otvaranju naplate duga.');
+      // Prava greska umjesto opste recenice
+      alert('Greška pri otvaranju naplate duga:\n\n' + (e && e.message ? e.message : e));
+      console.error('naplati_otpremnicu:', e);
     }finally{
       history.replaceState(null, '', location.pathname);
     }
@@ -2593,7 +2611,9 @@ async function potvrdiNaplatuDuga(){
       body:JSON.stringify({iznos, izvor, nacin_banka: izvor==='banka'?nacinBanka:undefined}),
     });
     const data=await r.json();
-    if(!r.ok) throw new Error(data.error||'Greška pri naplati.');
+    /* Ranije je poruka bila samo "Greška pri naplati" — prava greska sa servera se
+       gubila, pa se nije znalo sta je. Sad se prikazuje sto je server stvarno rekao. */
+    if(!r.ok) throw new Error(data.error || `Server je vratio ${r.status}${data.detalj?' — '+data.detalj:''}`);
     document.getElementById('ov-naplata-duga').classList.remove('on');
     let poruka=`✓ Naplaćeno ${fmMoney(data.naplaceno_sada)} za ${data.broj}.`;
     if(data.visak_u_avans>0) poruka+=` Višak od ${fmMoney(data.visak_u_avans)} je postao avans.`;
