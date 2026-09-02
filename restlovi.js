@@ -267,6 +267,13 @@ router.post('/nesting', smijeVidjeti, async (req, res) => {
 router.post('/nesting/za-nalog', smijeVidjeti, async (req, res) => {
   try {
     const { pozicije, rez, objekt_id } = req.body;
+    /* STRATEGIJA — "najbolje" zavisi od toga šta je u tom trenutku važnije:
+       'najmanje_restlova'  → otvori što manje komada, i kad ostatak bude veći
+       'najbolje_iskoristenje' → najmanje otpada po restlu, i ako treba više njih
+       'cuvaj_velike'       → uzmi najmanji restl koji posao završava, veliki ostaju cijeli
+       Sve tri daju ISPRAVAN plan; razlikuju se po tome šta žrtvuju. */
+    const strategija = ['najmanje_restlova', 'najbolje_iskoristenje', 'cuvaj_velike']
+      .includes(req.body.strategija) ? req.body.strategija : 'najmanje_restlova';
     if (!Array.isArray(pozicije) || !pozicije.length)
       return res.status(400).json({ error: 'Nema pozicija.' });
 
@@ -369,13 +376,28 @@ router.post('/nesting/za-nalog', smijeVidjeti, async (req, res) => {
             if (iskorisceni.has(restl.id)) continue;
             const raspored = nest.rasporedi(tjemenaRestla(restl), komadi, { rez: rezMm });
             if (!raspored.uklopljeno) continue;
-            const bolji = !najbolji ||
-              raspored.uklopljeno > najbolji.raspored.uklopljeno ||
-              (raspored.uklopljeno === najbolji.raspored.uklopljeno &&
-               raspored.ostatak < najbolji.raspored.ostatak);
+            let bolji;
+            if (!najbolji) bolji = true;
+            else if (strategija === 'najbolje_iskoristenje') {
+              // Najmanje otpada — i po cijenu toga da se otvori više restlova
+              bolji = raspored.procenat > najbolji.raspored.procenat ||
+                (raspored.procenat === najbolji.raspored.procenat &&
+                 raspored.uklopljeno > najbolji.raspored.uklopljeno);
+            } else if (strategija === 'cuvaj_velike') {
+              // Najmanji restl koji primi isto toliko komada — veliki ostaju cijeli
+              const povNovi = geo.povrsinaPoligona(tjemenaRestla(restl)) / 1e6;
+              const povStari = geo.povrsinaPoligona(tjemenaRestla(najbolji.restl)) / 1e6;
+              bolji = raspored.uklopljeno > najbolji.raspored.uklopljeno ||
+                (raspored.uklopljeno === najbolji.raspored.uklopljeno && povNovi < povStari);
+            } else {
+              // Najviše komada u isti restl, pa manji ostatak
+              bolji = raspored.uklopljeno > najbolji.raspored.uklopljeno ||
+                (raspored.uklopljeno === najbolji.raspored.uklopljeno &&
+                 raspored.ostatak < najbolji.raspored.ostatak);
+            }
             if (bolji) najbolji = { restl, raspored };
-            // Restl koji primi SVE i ne ostavlja mnogo — nema smisla tražiti dalje
-            if (raspored.uklopljeno === komadi.reduce((z, k) => z + k.kolicina, 0) &&
+            if (strategija === 'najmanje_restlova' &&
+                raspored.uklopljeno === komadi.reduce((z, k) => z + k.kolicina, 0) &&
                 raspored.procenat >= 60) break;
           }
           if (!najbolji) break;
@@ -441,11 +463,15 @@ router.post('/nesting/za-nalog', smijeVidjeti, async (req, res) => {
 
     res.json({
       pozicije: izlaz,
+      strategija,
       sazetak: {
         ukupno_komada: izlaz.reduce((z, p) => z + p.kolicina, 0),
         iz_restlova:   izlaz.reduce((z, p) => z + p.iz_restlova, 0),
         treba_tabla:   izlaz.reduce((z, p) => z + p.treba_tabla, 0),
         restlova_u_planu: iskorisceni.size,
+        // Ukupan ostatak koji plan ostavlja — mjerilo po kojem se opcije porede
+        ostatak_m2: Math.round(izlaz.reduce((z, p) =>
+          z + p.restlovi.reduce((y, r) => y + (Number(r.ostatak_m2) || 0), 0), 0) * 10000) / 10000,
       },
     });
   } catch (err) { res.status(500).json({ error: err.message }); }

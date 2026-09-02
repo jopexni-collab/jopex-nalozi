@@ -2517,6 +2517,29 @@ function prikaziPlanNaloga(paket) {
 
 // Pozicije se pamte da se plan može preračunati kad se promijeni materijal
 let PLAN_POZICIJE = [];
+let PLAN_STRATEGIJA = 'najmanje_restlova';
+let PLAN_OPCIJE = {};        // zapamćeni rezultati, radi poređenja
+
+const STRATEGIJE = [
+  { k: 'najmanje_restlova',    lbl: 'Najmanje restlova',
+    opis: 'Pakuje što više komada u isti restl — otvara najmanji broj komada.' },
+  { k: 'najbolje_iskoristenje', lbl: 'Najmanje otpada',
+    opis: 'Bira restl u kojem ostaje najmanje neiskorišćeno, i kad treba otvoriti više njih.' },
+  { k: 'cuvaj_velike',         lbl: 'Čuvaj velike restlove',
+    opis: 'Uzima najmanji restl koji posao završava — velike ostavlja cijele za buduće naloge.' },
+];
+
+function drugaOpcija() {
+  const i = STRATEGIJE.findIndex(s => s.k === PLAN_STRATEGIJA);
+  PLAN_STRATEGIJA = STRATEGIJE[(i + 1) % STRATEGIJE.length].k;
+  planIzracunaj();
+}
+
+function postaviStrategiju(k) {
+  if (PLAN_STRATEGIJA === k) return;
+  PLAN_STRATEGIJA = k;
+  planIzracunaj();
+}
 
 // Materijal jedne pozicije — plan se odmah preračunava
 function promijeniMaterijal(idx, robaId) {
@@ -2560,7 +2583,16 @@ async function planIzracunaj() {
         bez_okretanja: !!z.bez_okretanja,
       })),
       rez: 5,
+      strategija: PLAN_STRATEGIJA,
     }) });
+
+    // Rezultat se pamti da se opcije mogu porediti bez ponovnog računanja
+    PLAN_OPCIJE[PLAN_STRATEGIJA] = {
+      restlova: d.sazetak.restlova_u_planu,
+      iz_restlova: d.sazetak.iz_restlova,
+      treba_tabla: d.sazetak.treba_tabla,
+      ostatak: d.sazetak.ostatak_m2,
+    };
 
     const s = d.sazetak;
     let html =
@@ -2576,7 +2608,23 @@ async function planIzracunaj() {
     // Izbor materijala za sve odjednom — kod naloga se obično sve reže iz istog kamena
     html += '<div class="xl-akcije">' +
       '<button class="btn mali" onclick="otvoriBirac(\'sve\')">🎨 Materijal za sve pozicije…</button>' +
+      '<button class="btn mali" onclick="drugaOpcija()">↻ Daj drugu opciju</button>' +
       '<span class="hint" style="margin:0">Bira se jedan ili više artikala; plan se odmah preračuna.</span></div>';
+
+    // Izbor strategije — svaka daje ispravan plan, razlikuju se po tome šta žrtvuju
+    const tren = STRATEGIJE.find(x => x.k === PLAN_STRATEGIJA) || STRATEGIJE[0];
+    html += '<div class="xl-akcije" style="background:#f7f8fa">' +
+      '<b>Opcija:</b>' +
+      STRATEGIJE.map(x => {
+        const o = PLAN_OPCIJE[x.k];
+        return '<button class="btn ' + (x.k === PLAN_STRATEGIJA ? '' : 'sec ') + 'mali" ' +
+          'onclick="postaviStrategiju(\'' + x.k + '\')" title="' + x.opis + '">' + x.lbl +
+          (o ? ' <span style="opacity:.75">· ' + o.restlova + ' restl' +
+               (o.treba_tabla ? ', ' + o.treba_tabla + ' na tablu' : '') + '</span>' : '') +
+          '</button>';
+      }).join('') +
+      '<span class="hint" style="margin:0;flex-basis:100%">' + tren.opis +
+      ' Ukupan ostatak ovog plana: <b>' + fmt(s.ostatak_m2 || 0) + ' m²</b>.</span></div>';
 
     html += '<div class="xl-wrap"><table class="xl"><thead><tr>' +
       '<th>Pozicija</th><th style="min-width:260px">Materijal</th>' +
