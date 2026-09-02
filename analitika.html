@@ -92,6 +92,7 @@ tbody tr:nth-child(even){background:#f7f8fa;}
     </div>
 
     <div id="mj-sadrzaj"></div>
+    <div id="mj-grafikoni" style="margin-top:18px;"></div>
   </div>
 </div>
 
@@ -259,7 +260,8 @@ function renderMjesecni(){
     red.po_grupi[r.grupa] = (red.po_grupi[r.grupa] || 0) + v;
     red.ukupno += v;
   }
-  const redovi = [...mapa.values()].sort((a,b)=> b.mjesec.localeCompare(a.mjesec) || a.pj.localeCompare(b.pj));
+  // Najstariji prvi — tako zbir na dnu dolazi POSLIJE svih mjeseci, kako se i cita
+  const redovi = [...mapa.values()].sort((a,b)=> a.mjesec.localeCompare(b.mjesec) || a.pj.localeCompare(b.pj));
 
   // Proizvodnja po mjesecu — vodi se odvojeno
   const proiz = new Map((mjPodaci.proizvodnja||[]).map(p=>[p.mjesec, p]));
@@ -316,6 +318,116 @@ function renderMjesecni(){
       ${jeNovac ? 'Iznosi su promet po otpremnicama (bez obzira da li je naplaćeno).' : 'Količine su u jedinici mjere artikla — m² i komadi se ne sabiraju smisleno između grupa.'}
       ${jeNovac ? ' Kolona <b>Proizvodnja</b> je ugovorena vrijednost radnih naloga, u zagradi broj naloga.' : ''}
     </div>`;
+
+  crtajGrafikone(redovi, grupe, mjera, proiz);
+}
+
+
+/* ═══ GRAFIKONI ═══════════════════════════════════════════════════════════════════
+   Crtaju se kao SVG, bez ijedne dodatne biblioteke — stranica ostaje laka i radi
+   i kad nema interneta do CDN-a. */
+const MJ_BOJE = ['#1a5fa8','#1f8a4c','#c0392b','#b8860b','#6b4fa0','#0d7e8c','#d2691e','#8d6e63','#4a7c59','#7b5ea7'];
+
+function crtajGrafikone(redovi, grupe, mjera, proiz){
+  const cont = document.getElementById('mj-grafikoni');
+  const jeNovac = mjera === 'iznos';
+  const imeM = m => ['','jan','feb','mar','apr','maj','jun','jul','avg','sep','okt','nov','dec'][+m.split('-')[1]];
+
+  // Zbir po mjesecu (svi PJ zajedno) — za linijski
+  const poMjesecu = new Map();
+  for(const r of redovi){
+    poMjesecu.set(r.mjesec, (poMjesecu.get(r.mjesec)||0) + r.ukupno);
+  }
+  const mjeseci = [...poMjesecu.keys()].sort();
+  if(mjeseci.length < 2 && !grupe.length){ cont.innerHTML=''; return; }
+
+  // Zbir po grupi — za prstenasti
+  const zbirG = {};
+  for(const r of redovi) for(const g of grupe) zbirG[g] = (zbirG[g]||0) + (r.po_grupi[g]||0);
+  const grupeSorted = grupe.filter(g=>zbirG[g]>0).sort((a,b)=>zbirG[b]-zbirG[a]);
+  const ukupnoG = grupeSorted.reduce((s,g)=>s+zbirG[g],0);
+
+  const fmt = v => v.toLocaleString('sr-Latn-BA',{maximumFractionDigits: jeNovac?0:1});
+
+  cont.innerHTML = `
+    <div style="display:flex;gap:14px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:290px;background:#fff;border:1px solid var(--border,#ddd);border-radius:10px;padding:13px;">
+        <div style="font-size:13px;font-weight:800;margin-bottom:9px;">📈 Kretanje po mjesecima</div>
+        ${linijskiSVG(mjeseci, poMjesecu, proiz, jeNovac, imeM, fmt)}
+      </div>
+      <div style="flex:1;min-width:290px;background:#fff;border:1px solid var(--border,#ddd);border-radius:10px;padding:13px;">
+        <div style="font-size:13px;font-weight:800;margin-bottom:9px;">🍩 Udio grupa</div>
+        ${prstenSVG(grupeSorted, zbirG, ukupnoG, fmt)}
+      </div>
+    </div>`;
+}
+
+/* Linijski — promet po mjesecima, uz proizvodnju kao druga linija */
+function linijskiSVG(mjeseci, poMjesecu, proiz, jeNovac, imeM, fmt){
+  if(mjeseci.length < 2) return '<div style="color:#8b96a5;font-size:12px;">Premalo mjeseci za grafikon.</div>';
+  const W=440, H=200, L=52, R=12, T=12, B=28;
+  const px = W-L-R, py = H-T-B;
+
+  const prodaja = mjeseci.map(m => poMjesecu.get(m)||0);
+  const proizV = jeNovac ? mjeseci.map(m => (proiz.get(m)?.ugovoreno)||0) : [];
+  const maxV = Math.max(1, ...prodaja, ...proizV);
+
+  const X = i => L + (mjeseci.length===1 ? px/2 : (i/(mjeseci.length-1))*px);
+  const Y = v => T + py - (v/maxV)*py;
+  const putanja = niz => niz.map((v,i)=>`${i?'L':'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;overflow:visible;">
+    ${[0,.25,.5,.75,1].map(f=>`
+      <line x1="${L}" y1="${(T+py-f*py).toFixed(1)}" x2="${W-R}" y2="${(T+py-f*py).toFixed(1)}" stroke="#eef0f3" stroke-width="1"/>
+      <text x="${L-6}" y="${(T+py-f*py+3.5).toFixed(1)}" text-anchor="end" font-size="9" fill="#8b96a5">${fmt(maxV*f)}</text>
+    `).join('')}
+    <path d="${putanja(prodaja)}" fill="none" stroke="#1a5fa8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${prodaja.map((v,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="3.5" fill="#1a5fa8"><title>${imeM(mjeseci[i])}: ${fmt(v)}</title></circle>`).join('')}
+    ${proizV.length ? `<path d="${putanja(proizV)}" fill="none" stroke="#6b4fa0" stroke-width="2.5" stroke-dasharray="5 3" stroke-linejoin="round"/>
+      ${proizV.map((v,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="3" fill="#6b4fa0"><title>Proizvodnja ${imeM(mjeseci[i])}: ${fmt(v)}</title></circle>`).join('')}` : ''}
+    ${mjeseci.map((m,i)=>`<text x="${X(i).toFixed(1)}" y="${H-9}" text-anchor="middle" font-size="9" fill="#6b7a8d">${imeM(m)}</text>`).join('')}
+  </svg>
+  <div style="font-size:11px;color:#6b7a8d;margin-top:6px;">
+    <span style="color:#1a5fa8;font-weight:700;">— Maloprodaja</span>
+    ${proizV.length ? ' &nbsp; <span style="color:#6b4fa0;font-weight:700;">--- Proizvodnja</span>' : ''}
+  </div>`;
+}
+
+/* Prstenasti — udio grupa u ukupnom prometu */
+function prstenSVG(grupe, zbir, ukupno, fmt){
+  if(!grupe.length || !ukupno) return '<div style="color:#8b96a5;font-size:12px;">Nema podataka za prikaz.</div>';
+  const S=190, C=S/2, Rv=76, Ru=46;
+  let ugao = -Math.PI/2;   // krece od vrha
+  const luk = (od, do_) => {
+    const x1=C+Rv*Math.cos(od), y1=C+Rv*Math.sin(od), x2=C+Rv*Math.cos(do_), y2=C+Rv*Math.sin(do_);
+    const x3=C+Ru*Math.cos(do_), y3=C+Ru*Math.sin(do_), x4=C+Ru*Math.cos(od), y4=C+Ru*Math.sin(od);
+    const veliki = (do_-od) > Math.PI ? 1 : 0;
+    return `M${x1.toFixed(1)},${y1.toFixed(1)} A${Rv},${Rv} 0 ${veliki} 1 ${x2.toFixed(1)},${y2.toFixed(1)}`
+         + ` L${x3.toFixed(1)},${y3.toFixed(1)} A${Ru},${Ru} 0 ${veliki} 0 ${x4.toFixed(1)},${y4.toFixed(1)} Z`;
+  };
+  const isjecci = grupe.map((g,i)=>{
+    const dio = zbir[g]/ukupno;
+    const od = ugao, do_ = ugao + dio*2*Math.PI;
+    ugao = do_;
+    const posto = (dio*100).toFixed(1);
+    return { g, i, d: luk(od, Math.min(do_, od + 2*Math.PI - 0.0001)), posto, v: zbir[g] };
+  });
+
+  return `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+    <svg viewBox="0 0 ${S} ${S}" style="width:170px;height:170px;flex-shrink:0;">
+      ${isjecci.map(x=>`<path d="${x.d}" fill="${MJ_BOJE[x.i%MJ_BOJE.length]}" stroke="#fff" stroke-width="1.5"><title>${esc(x.g)}: ${fmt(x.v)} (${x.posto}%)</title></path>`).join('')}
+      <text x="${C}" y="${C-3}" text-anchor="middle" font-size="15" font-weight="800" fill="#1a2733">${fmt(ukupno)}</text>
+      <text x="${C}" y="${C+12}" text-anchor="middle" font-size="9" fill="#8b96a5">ukupno</text>
+    </svg>
+    <div style="flex:1;min-width:120px;font-size:11.5px;">
+      ${isjecci.slice(0,8).map(x=>`
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <span style="width:11px;height:11px;border-radius:3px;background:${MJ_BOJE[x.i%MJ_BOJE.length]};flex-shrink:0;"></span>
+          <span style="flex:1;">${esc(x.g)}</span>
+          <b>${x.posto}%</b>
+        </div>`).join('')}
+    </div>
+  </div>`;
 }
 
 function prebaciTab(tab){

@@ -38,22 +38,25 @@ router.get('/mjesecni-po-grupama', async (req, res) => {
          AND o.datum >= date_trunc('month', CURRENT_DATE) - ($1::int - 1) * interval '1 month'
          ${objektId ? 'AND o.objekt_id = $2' : ''}
        GROUP BY 1, 2, 3, 4
-       ORDER BY 1 DESC, 3, 4`,
+       ORDER BY 1, 3, 4`,
       objektId ? [odMjeseci, objektId] : [odMjeseci]
     );
 
     /* Proizvodnja se NE moze razbiti po grupama — radni nalog nema stavke po materijalu
        (nalog_stavke je novo i jos prazno za stare naloge). Zato ide kao zaseban zbir
        po mjesecu, da se vidi uz maloprodaju ali se s njom ne mijesa. */
+    /* DATUM: koristi se POCETAK (kad je posao stvarno ugovoren), ne datum_kreiranja.
+       datum_kreiranja je kad je red upisan u sistem — kad su se stari nalozi unosili
+       naknadno, svi bi pali u taj mjesec i pregled bi bio besmislen. */
     const p = await pool.query(
-      `SELECT to_char(date_trunc('month', datum_kreiranja), 'YYYY-MM') AS mjesec,
-              COUNT(*)::int                                            AS naloga,
-              SUM(COALESCE(ugovorena_suma, 0))                         AS ugovoreno,
-              SUM(COALESCE(avans, 0))                                  AS naplaceno
+      `SELECT to_char(date_trunc('month', COALESCE(pocetak, datum_kreiranja)), 'YYYY-MM') AS mjesec,
+              COUNT(*)::int                            AS naloga,
+              SUM(COALESCE(ugovorena_suma, 0))         AS ugovoreno,
+              SUM(COALESCE(avans, 0))                  AS naplaceno
        FROM proizvodnja_jopex
        WHERE COALESCE(stornirano, false) = false
-         AND datum_kreiranja >= date_trunc('month', CURRENT_DATE) - ($1::int - 1) * interval '1 month'
-       GROUP BY 1 ORDER BY 1 DESC`,
+         AND COALESCE(pocetak, datum_kreiranja) >= date_trunc('month', CURRENT_DATE) - ($1::int - 1) * interval '1 month'
+       GROUP BY 1 ORDER BY 1`,
       [odMjeseci]
     );
 
