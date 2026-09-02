@@ -76,7 +76,7 @@ tbody tr:nth-child(even){background:#f7f8fa;}
       </div>
       <div>
         <label style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Korak</label>
-        <select id="mj-granulacija" onchange="ucitajMjesecni()" style="font:inherit;font-size:12.5px;padding:6px 9px;border:1px solid #ccc;border-radius:5px;">
+        <select id="mj-granulacija" onchange="mjOznaciIzmjenu()" style="font:inherit;font-size:12.5px;padding:6px 9px;border:1px solid #ccc;border-radius:5px;">
           <option value="mjesec" selected>Po mjesecima</option>
           <option value="kvartal">Po kvartalima</option>
           <option value="godina">Po godinama</option>
@@ -93,12 +93,20 @@ tbody tr:nth-child(even){background:#f7f8fa;}
           <option value="od-do">od — do…</option>
         </select>
       </div>
+      <div>
+        <label style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">&nbsp;</label>
+        <button type="button" id="mj-prikazi" onclick="ucitajMjesecni()"
+                style="font:inherit;font-size:13px;font-weight:800;padding:7px 20px;border:none;
+                       background:var(--blue,#1a5fa8);color:#fff;border-radius:6px;cursor:pointer;">
+          ▶ Prikaži
+        </button>
+      </div>
       <div id="mj-oddo" style="display:none;">
         <label style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Od — do</label>
         <div style="display:flex;gap:5px;align-items:center;">
-          <input type="date" id="mj-od" onchange="ucitajMjesecni()" style="font:inherit;font-size:12px;padding:5px 7px;border:1px solid #ccc;border-radius:5px;">
+          <input type="date" id="mj-od" onchange="mjOznaciIzmjenu()" style="font:inherit;font-size:12px;padding:5px 7px;border:1px solid #ccc;border-radius:5px;">
           <span style="color:#8b96a5;">–</span>
-          <input type="date" id="mj-do" onchange="ucitajMjesecni()" style="font:inherit;font-size:12px;padding:5px 7px;border:1px solid #ccc;border-radius:5px;">
+          <input type="date" id="mj-do" onchange="mjOznaciIzmjenu()" style="font:inherit;font-size:12px;padding:5px 7px;border:1px solid #ccc;border-radius:5px;">
         </div>
       </div>
       <div>
@@ -108,19 +116,17 @@ tbody tr:nth-child(even){background:#f7f8fa;}
           <option value="kolicina">Količina (m²/kom)</option>
         </select>
       </div>
-      <div>
-        <label style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Redovi</label>
-        <select id="mj-nivo" onchange="renderMjesecni()" style="font:inherit;font-size:12.5px;padding:6px 9px;border:1px solid #ccc;border-radius:5px;">
-          <option value="grupa">Po grupama</option>
-          <option value="artikal">Po proizvodima</option>
-        </select>
-      </div>
       <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding-bottom:7px;">
         <input type="checkbox" id="mj-po-pj" onchange="renderMjesecni()"> Grupiši po PJ
       </label>
     </div>
 
-    <div id="mj-sadrzaj"></div>
+    <div id="mj-sadrzaj">
+      <div style="padding:26px 18px;text-align:center;color:#8b96a5;font-size:13px;line-height:1.7;background:#f7f8fa;border-radius:10px;">
+        Podesi <b>korak</b> i <b>period</b> gore, pa klikni <b style="color:var(--blue,#1a5fa8);">▶ Prikaži</b>.<br>
+        <span style="font-size:12px;">Objekte, prikaz i grafikon možeš mijenjati poslije — tabela se osvježi odmah.</span>
+      </div>
+    </div>
     <div style="margin-top:18px;display:flex;gap:7px;align-items:center;flex-wrap:wrap;">
       <span style="font-size:11.5px;color:#6b7a8d;font-weight:700;">Grafikon:</span>
       <button type="button" class="mj-gtip" data-g="linija" onclick="mjVrstaGrafikona('linija')">📈 Linija</button>
@@ -256,10 +262,33 @@ checkAuth();
 let mjObjektiUcitani = false, mjPodaci = null;
 
 
+
+/* Postavke koje traze NOVI POZIV SERVERU (korak, period, datumi) ne pale ucitavanje
+   same — inace se izvjestaj vuce pri svakom kliku dok se podesava. Dugme "Prikaži"
+   se naglasi cim se nesto promijeni, pa je jasno da izvjestaj nije osvjezen.
+   Prekidaci koji samo mijenjaju PRIKAZ (KM/m², po PJ, filteri) rade odmah. */
+let mjIzmijenjeno = false;
+
+function mjOznaciIzmjenu(){
+  mjIzmijenjeno = true;
+  const d = document.getElementById('mj-prikazi');
+  if(!d) return;
+  d.style.background = '#c0392b';
+  d.textContent = '▶ Prikaži (postavke izmijenjene)';
+}
+
+function mjVratiDugme(){
+  mjIzmijenjeno = false;
+  const d = document.getElementById('mj-prikazi');
+  if(!d) return;
+  d.style.background = 'var(--blue,#1a5fa8)';
+  d.textContent = '▶ Prikaži';
+}
+
 function mjPeriodPromjena(){
   const p = document.getElementById('mj-period').value;
   document.getElementById('mj-oddo').style.display = p === 'od-do' ? 'block' : 'none';
-  if(p !== 'od-do') ucitajMjesecni();
+  mjOznaciIzmjenu();
 }
 
 async function ucitajMjesecni(){
@@ -292,6 +321,7 @@ async function ucitajMjesecni(){
     const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
     if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
     mjPodaci = d;
+    mjVratiDugme();
     renderMjesecni();
   }catch(e){
     cont.innerHTML = `<div style="padding:14px;color:var(--red,#c0392b);font-size:12.5px;">✗ ${esc(e.message)}</div>`;
@@ -331,11 +361,11 @@ function mjSviRedovi(){
 
 function mjMoguceVrijednosti(vrsta){
   if(!mjPodaci) return [];
-  const nivo = document.getElementById('mj-nivo').value;
+  const poPJ = document.getElementById('mj-po-pj').checked;
   const skup = new Set();
   for(const r of mjSviRedovi()){
     skup.add(vrsta === 'pj' ? (r.objekt_naziv || '—')
-                            : (nivo === 'grupa' ? r.grupa : (r.naziv || r.sifra)));
+                            : String(poPJ ? (r.objekt_naziv || '—') : r.grupa));
   }
   return [...skup].sort((a,b)=>String(a).localeCompare(String(b)));
 }
@@ -428,166 +458,203 @@ function nazivKoraka(n){
   return n === 1 ? 'mjesec' : 'mjeseci';
 }
 
+/* Otvoreni cvorovi stabla. Pamti se putanja ("tasto" ili "tasto|8373"), pa ostaje
+   otvoreno i kad se podaci ponovo iscrtaju. */
+const mjOtvoreni = new Set();
+
+function mjPrekidacCvora(putanja){
+  if(mjOtvoreni.has(putanja)) mjOtvoreni.delete(putanja); else mjOtvoreni.add(putanja);
+  renderMjesecni();
+}
+
 function renderMjesecni(){
   const cont = document.getElementById('mj-sadrzaj');
-  if(!mjPodaci){ cont.innerHTML=''; return; }
+  // Bez podataka nema sta da se iscrtava — uputstvo iz HTML-a ostaje
+  if(!mjPodaci) return;
   const mjera = document.getElementById('mj-mjera').value;     // iznos | kolicina
-  const nivo  = document.getElementById('mj-nivo').value;      // grupa | artikal
   const poPJ  = document.getElementById('mj-po-pj').checked;
   const jeNovac = mjera === 'iznos';
 
-  if(!mjPodaci.redovi.length){
+  const sviRedovi = mjSviRedovi();
+  if(!sviRedovi.length){
     cont.innerHTML = '<div style="padding:14px;color:#8b96a5;font-size:12.5px;">Nema prometa u izabranom periodu.</div>';
     document.getElementById('mj-grafikoni').innerHTML = '';
     return;
   }
 
   const mjeseci = (mjPodaci.mjeseci || []).slice().sort();
-  /* Naziv kolone zavisi od koraka: "avg '26", "Q3 '26" ili "2026" */
   const imeM = m => {
-    if(/^\d{4}$/.test(m)) return m;                                  // godina
+    if(/^\d{4}$/.test(m)) return m;
     const [g, dio] = m.split('-');
-    if(dio && dio.startsWith('Q')) return dio + " '" + g.slice(2);    // kvartal
+    if(dio && dio.startsWith('Q')) return dio + " '" + g.slice(2);
     return ['','jan','feb','mar','apr','maj','jun','jul','avg','sep','okt','nov','dec'][+dio] + " '" + g.slice(2);
   };
 
-  /* Redovi: kljuc je grupa ili artikal; ako je ukljuceno "grupisi po PJ", svaki PJ
-     dobija svoju sekciju. Sabiranje ide u prikazu, pa se prekidaci mijenjaju odmah. */
-  const sekcije = new Map();   // pj -> Map(kljuc -> {ime, opis, po_mjesecu, ukupno})
-  for(const r of mjSviRedovi()){
-    // Proizvodnja ima smisla samo u novcu — nalog nema kolicinu u m²
+  /* STABLO — tri nivoa, kao fascikle.
+     Bez "po PJ":  grupa → artikal → objekat
+     Sa "po PJ":   objekat → grupa → artikal
+     Svaki nivo se otvara plusicem; zbirovi se racunaju odozdo nagore. */
+  const nivoi = poPJ
+    ? [r => r.objekt_naziv || '—', r => r.grupa, r => r.naziv || r.sifra || '—']
+    : [r => r.grupa, r => r.naziv || r.sifra || '—', r => r.objekt_naziv || '—'];
+
+  const koren = new Map();
+  const prazanCvor = ime => ({ ime, po_mjesecu:{}, ukupno:0, djeca:new Map(), opis:'' });
+
+  for(const r of sviRedovi){
     if(r.je_proizvodnja && !jeNovac) continue;
-    // Filteri iz zaglavlja — prazan skup znaci "sve prolazi"
     const pjIme = r.objekt_naziv || '—';
     if(mjFilteri.pj.size && !mjFilteri.pj.has(pjIme)) continue;
-    const redIme = nivo === 'grupa' ? r.grupa : (r.naziv || r.sifra);
-    if(mjFilteri.red.size && !mjFilteri.red.has(String(redIme))) continue;
-    const pj = poPJ ? (r.objekt_naziv || '—') : '__sve__';
-    if(!sekcije.has(pj)) sekcije.set(pj, new Map());
-    const red = sekcije.get(pj);
-    const kljuc = nivo === 'grupa' ? r.grupa : (r.sifra || r.naziv);
-    if(!red.has(kljuc)){
-      red.set(kljuc, {
-        ime: nivo === 'grupa' ? r.grupa : (r.naziv || r.sifra),
-        opis: nivo === 'grupa' ? '' : `${r.sifra||''}${r.grupa?' · '+r.grupa:''}`,
-        po_mjesecu: {}, ukupno: 0,
-      });
-    }
-    const st = red.get(kljuc);
+    const korenIme = String(nivoi[0](r));
+    if(mjFilteri.red.size && !mjFilteri.red.has(korenIme)) continue;
+
     const v = r[mjera] || 0;
-    st.po_mjesecu[r.mjesec] = (st.po_mjesecu[r.mjesec] || 0) + v;
-    st.ukupno += v;
+    let mapa = koren;
+    for(let n=0; n<nivoi.length; n++){
+      const ime = String(nivoi[n](r) ?? '—');
+      if(!mapa.has(ime)) mapa.set(ime, prazanCvor(ime));
+      const cvor = mapa.get(ime);
+      cvor.po_mjesecu[r.mjesec] = (cvor.po_mjesecu[r.mjesec]||0) + v;
+      cvor.ukupno += v;
+      if(n===1 && !poPJ && r.sifra) cvor.opis = r.sifra;
+      mapa = cvor.djeca;
+    }
   }
 
-  // Zbir po mjesecu — ide i na VRH i na DNO, oba zaljepljena pri skrolovanju
   const zbirM = {};
   let zbirSve = 0;
-  for(const red of sekcije.values()) for(const st of red.values()){
-    for(const m of mjeseci) zbirM[m] = (zbirM[m]||0) + (st.po_mjesecu[m]||0);
-    zbirSve += st.ukupno;
+  for(const c of koren.values()){
+    for(const m of mjeseci) zbirM[m] = (zbirM[m]||0) + (c.po_mjesecu[m]||0);
+    zbirSve += c.ukupno;
   }
-  const proiz = new Map((mjPodaci.proizvodnja||[]).map(p=>[p.mjesec, p]));
 
   const fmt = v => v ? v.toLocaleString('sr-Latn-BA',
     { minimumFractionDigits: jeNovac?2:3, maximumFractionDigits: jeNovac?2:3 }) : '';
 
-  const redZbira = (naziv, boja) => `
-    <tr style="background:${boja};font-weight:800;">
-      <td style="padding:5px 8px;position:sticky;left:0;background:${boja};z-index:5;">${naziv}</td>
-      ${mjeseci.map(m=>`<td style="padding:5px 8px;text-align:right;">${fmt(zbirM[m]||0)}</td>`).join('')}
-      <td style="padding:5px 8px;text-align:right;background:#dde6f2;">${fmt(zbirSve)}</td>
-    </tr>`;
+  const UVLAKA = [0, 16, 30];
+  const BOJE_N = ['#fff', '#fafbfc', '#f5f7fa'];
 
-  const redoviSekcije = (pj, red) => {
-    const lista = [...red.values()].sort((a,b)=>b.ukupno-a.ukupno);   // najveci prvi
-    const jeProiz = pj === MJ_PROIZVODNJA;
-    const boja = jeProiz ? '#f3f0f8' : '#e8eef7';
-    const tekst = jeProiz ? '#6b4fa0' : '#1f3864';
+  function crtajCvor(cvor, nivo, putanja, izlaz){
+    const kljuc = putanja ? `${putanja}|${cvor.ime}` : cvor.ime;
+    const imaDjecu = cvor.djeca.size > 0 && nivo < 2;
+    const otvoren = mjOtvoreni.has(kljuc);
+    const jeProiz = cvor.ime === MJ_PROIZVODNJA;
+    const boja = jeProiz && nivo===0 ? '#f7f4fc' : BOJE_N[nivo];
 
-    // MEDJUZBIR sekcije — bez njega se pri vise PJ ne vidi koliko koji nosi
-    const zbirS = {};
-    let zbirSUk = 0;
-    for(const st of lista){
-      for(const m of mjeseci) zbirS[m] = (zbirS[m]||0) + (st.po_mjesecu[m]||0);
-      zbirSUk += st.ukupno;
+    izlaz.push(`
+      <tr style="background:${boja};border-bottom:1px solid #eef0f3;">
+        <td style="padding:${nivo?2:3}px 8px;padding-left:${8+UVLAKA[nivo]}px;position:sticky;left:0;background:${boja};z-index:4;">
+          ${imaDjecu
+            ? `<button type="button" onclick="mjPrekidacCvora('${kljuc.replace(/'/g,"\\'")}')"
+                 style="background:none;border:1px solid #c3c9d1;border-radius:3px;width:15px;height:15px;
+                        line-height:1;font-size:11px;cursor:pointer;color:#6b7a8d;margin-right:5px;padding:0;"
+                 title="${otvoren?'Skupi':'Raširi'}">${otvoren?'−':'+'}</button>`
+            : `<span style="display:inline-block;width:20px;"></span>`}
+          <span style="font-weight:${nivo===0?800:nivo===1?600:400};color:${jeProiz?'#6b4fa0':'inherit'};">
+            ${nivo===0&&jeProiz?'🏭 ':''}${esc(cvor.ime)}
+          </span>
+          ${cvor.opis?`<span style="color:#8b96a5;font-size:9.5px;"> · ${esc(cvor.opis)}</span>`:''}
+        </td>
+        ${mjeseci.map(m=>`<td style="padding:${nivo?2:3}px 8px;text-align:right;${cvor.po_mjesecu[m]?'':'color:#dfe3e8;'}">${fmt(cvor.po_mjesecu[m]||0) || '·'}</td>`).join('')}
+        <td style="padding:${nivo?2:3}px 8px;text-align:right;font-weight:${nivo===0?800:600};background:${nivo===0?'#eef2f8':'#f4f7fa'};">${fmt(cvor.ukupno)}</td>
+      </tr>`);
+
+    if(otvoren && imaDjecu){
+      [...cvor.djeca.values()].sort((a,b)=>b.ukupno-a.ukupno)
+        .forEach(d => crtajCvor(d, nivo+1, kljuc, izlaz));
     }
+  }
 
-    const zaglavljePJ = poPJ ? `
-      <tr style="background:${boja};">
-        <td colspan="${mjeseci.length+2}" style="padding:4px 8px;font-weight:800;font-size:11.5px;color:${tekst};position:sticky;left:0;background:${boja};">
-          ${jeProiz ? '🏭' : '📍'} ${esc(pj)}
-        </td>
-      </tr>` : '';
+  const izlaz = [];
+  [...koren.values()].sort((a,b)=>b.ukupno-a.ukupno).forEach(c=>crtajCvor(c, 0, '', izlaz));
 
-    const podzbir = poPJ ? `
-      <tr style="background:${boja};font-weight:800;color:${tekst};border-bottom:2px solid ${tekst};">
-        <td style="padding:4px 8px;position:sticky;left:0;background:${boja};z-index:4;">↳ zbir ${esc(pj)}</td>
-        ${mjeseci.map(m=>`<td style="padding:4px 8px;text-align:right;">${fmt(zbirS[m]||0)}</td>`).join('')}
-        <td style="padding:4px 8px;text-align:right;background:${jeProiz?'#e9e2f5':'#dde6f2'};">${fmt(zbirSUk)}</td>
-      </tr>` : '';
-
-    return zaglavljePJ + lista.map((st,i)=>`
-      <tr style="background:${i%2?'#f7f9fb':'#fff'};border-bottom:1px solid #eef0f3;">
-        <td style="padding:3px 8px;position:sticky;left:0;background:${i%2?'#f7f9fb':'#fff'};z-index:4;">
-          <b>${esc(st.ime)}</b>
-          ${st.opis?`<div style="font-size:9.5px;color:#8b96a5;">${esc(st.opis)}</div>`:''}
-        </td>
-        ${mjeseci.map(m=>`<td style="padding:3px 8px;text-align:right;${st.po_mjesecu[m]?'':'color:#dfe3e8;'}">${fmt(st.po_mjesecu[m]||0) || '·'}</td>`).join('')}
-        <td style="padding:3px 8px;text-align:right;font-weight:800;background:#eef2f8;">${fmt(st.ukupno)}</td>
-      </tr>`).join('') + podzbir;
-  };
-
-  const brojRedova = [...sekcije.values()].reduce((s,r)=>s+r.size,0);
+  const nazivKorena = poPJ ? 'Objekat' : 'Grupa';
+  const brojKorena = koren.size;
 
   cont.innerHTML = `
-    <div style="font-size:11.5px;color:#6b7a8d;margin-bottom:6px;">
-      ${brojRedova} ${nivo==='grupa'?'grupa':'proizvoda'} · ${mjeseci.length} ${nazivKoraka(mjeseci.length)}
-      ${poPJ?` · ${sekcije.size} objekata`:''}
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+      <div style="font-size:11.5px;color:#6b7a8d;">
+        ${brojKorena} ${poPJ?'objekata':'grupa'} · ${mjeseci.length} ${nazivKoraka(mjeseci.length)}
+        · klikni <b>+</b> da raširiš
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button type="button" onclick="mjSveOtvori()" style="font-size:11px;padding:3px 9px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;">Raširi sve</button>
+        <button type="button" onclick="mjOtvoreni.clear();renderMjesecni()" style="font-size:11px;padding:3px 9px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;">Skupi sve</button>
+      </div>
     </div>
     <div style="overflow:auto;max-height:min(70vh, 620px);border:1px solid var(--border,#ddd);border-radius:8px;">
       <table style="width:100%;border-collapse:separate;border-spacing:0;font-size:11px;line-height:1.3;white-space:nowrap;">
         <thead>
           <tr style="background:#1f3864;color:#fff;">
-            <th style="padding:6px 8px;text-align:left;position:sticky;left:0;top:0;background:#1f3864;z-index:8;min-width:150px;">
-              ${nivo==='grupa'?'Grupa':'Proizvod'}
-              <button type="button" onclick="mjOtvoriFilter('red', this)" title="Filtriraj redove"
+            <th style="padding:6px 8px;text-align:left;position:sticky;left:0;top:0;background:#1f3864;z-index:8;min-width:190px;">
+              ${nazivKorena}
+              <button type="button" onclick="mjOtvoriFilter('red', this)" title="Filtriraj"
                 style="background:${mjFilteri.red.size?'#4a90d9':'rgba(255,255,255,.15)'};border:none;color:#fff;cursor:pointer;font-size:9px;padding:1px 4px;border-radius:3px;margin-left:4px;">▼</button>
             </th>
             ${mjeseci.map(m=>`<th style="padding:6px 8px;text-align:right;position:sticky;top:0;background:#1f3864;z-index:7;">${imeM(m)}</th>`).join('')}
             <th style="padding:6px 8px;text-align:right;position:sticky;top:0;background:#2d4a7c;z-index:7;">UKUPNO${jeNovac?' (KM)':''}</th>
           </tr>
-          ${/* Zbir na VRHU — ostaje vidljiv dok se skroluje kroz redove */''}
           <tr style="position:sticky;top:29px;z-index:6;">
             <td style="padding:5px 8px;position:sticky;left:0;background:#dde6f2;z-index:7;font-weight:800;">UKUPNO</td>
             ${mjeseci.map(m=>`<td style="padding:5px 8px;text-align:right;background:#dde6f2;font-weight:800;">${fmt(zbirM[m]||0)}</td>`).join('')}
             <td style="padding:5px 8px;text-align:right;background:#cbd9ec;font-weight:800;">${fmt(zbirSve)}</td>
           </tr>
         </thead>
-        <tbody>
-          ${[...sekcije.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([pj,red])=>redoviSekcije(pj,red)).join('')}
-        </tbody>
+        <tbody>${izlaz.join('')}</tbody>
         <tfoot>
-          ${redZbira('UKUPNO', '#dde6f2')}
-
+          <tr style="background:#dde6f2;font-weight:800;">
+            <td style="padding:5px 8px;position:sticky;left:0;background:#dde6f2;z-index:5;">UKUPNO</td>
+            ${mjeseci.map(m=>`<td style="padding:5px 8px;text-align:right;">${fmt(zbirM[m]||0)}</td>`).join('')}
+            <td style="padding:5px 8px;text-align:right;background:#cbd9ec;">${fmt(zbirSve)}</td>
+          </tr>
         </tfoot>
       </table>
     </div>
     <div style="font-size:11px;color:#8b96a5;margin-top:7px;line-height:1.5;">
       ${jeNovac ? 'Promet po potvrđenim otpremnicama, bez obzira da li je naplaćeno.'
-                : 'Količine su u jedinici mjere artikla — m² i komadi se ne sabiraju smisleno između grupa.'}
-      ${(jeNovac && mjPodaci.ima_eur) ? '<br><b>Svi iznosi su u KM.</b> Promet iz PJ koje rade u EUR preračunat je po fiksnom kursu 1,95583 — inače bi zbir miješao dvije valute.' : ''}
-      Zbir stoji i na vrhu i na dnu, oba ostaju vidljiva pri skrolovanju.
+                : 'Količine su u jedinici mjere artikla — proizvodnja se ne prikazuje jer nalog nema količinu u m².'}
+      ${(jeNovac && mjPodaci.ima_eur) ? '<br><b>Svi iznosi su u KM.</b> Promet iz PJ koje rade u EUR preračunat je po fiksnom kursu 1,95583.' : ''}
+      <br>Redosled nivoa: ${poPJ ? 'objekat → grupa → proizvod' : 'grupa → proizvod → objekat'}.
     </div>`;
 
-  // Grafikoni rade nad istim podacima, ali uvijek po GRUPAMA — po proizvodima bi bilo neupotrebljivo
-  const zaGrafikon = [];
-  for(const r of mjPodaci.redovi){
-    zaGrafikon.push({ mjesec:r.mjesec, po_grupi:{[r.grupa]: r[mjera]||0}, ukupno:r[mjera]||0 });
-  }
   mjOsvjeziDugmeFiltera();
   document.querySelectorAll('.mj-gtip').forEach(b=>b.classList.toggle('aktivan', b.dataset.g===mjGrafikonVrsta));
+
+  const proiz = new Map((mjPodaci.proizvodnja||[]).map(p=>[p.mjesec, p]));
+  const zaGrafikon = sviRedovi.filter(r=>!r.je_proizvodnja)
+    .map(r=>({ mjesec:r.mjesec, po_grupi:{[r.grupa]: r[mjera]||0}, ukupno:r[mjera]||0 }));
   crtajGrafikone(zaGrafikon, mjPodaci.grupe||[], mjera, proiz);
 }
+
+/* Rasiri sve — otvara samo PRVI nivo. Otvaranje svega odjednom kod 300 proizvoda
+   dalo bi tabelu koja se ne moze pregledati. */
+function mjSveOtvori(){
+  const poPJ = document.getElementById('mj-po-pj').checked;
+  for(const r of mjSviRedovi()){
+    mjOtvoreni.add(String(poPJ ? (r.objekt_naziv||'—') : r.grupa));
+  }
+  renderMjesecni();
+}
+
+/* ═══ FILTERI SA KVADRATICIMA (kao u Excelu) ══════════════════════════════════════
+   Podaci se sa servera povlace SVI, pa se filtrira u prikazu — prekidaci rade odmah,
+   bez cekanja na mrezu. Prazan skup znaci "sve" (nista nije iskljuceno). */
+
+
+
+/* Proizvodnja se u prikazu tretira kao ZASEBAN "objekat". Tako se ukljucuje i iskljucuje
+   istim filterom kao PJ, ulazi u medjuzbirove i sortiranje — umjesto da visi kao poseban
+   red u podnozju koji nijedan filter ne dira.
+   Radni nalog nema razradu po materijalu, pa mu je "grupa" uvijek Proizvodnja. */
+
+
+
+
+
+
+
+
+
 
 /* ═══ GRAFIKONI ═══════════════════════════════════════════════════════════════════
    Crtaju se kao SVG, bez ijedne dodatne biblioteke — stranica ostaje laka i radi
@@ -753,7 +820,8 @@ function prebaciTab(tab){
   });
   // Objekti se vise ne ucitavaju zasebno — spisak PJ dolazi iz samih podataka,
   // pa filter nudi samo one koji STVARNO imaju prometa u izabranom periodu.
-  if(tab==='mjeseci' && !mjObjektiUcitani){ mjObjektiUcitani=true; ucitajMjesecni(); }
+  // Ne ucitava se samo — izvjestaj se pravi tek na "Prikaži", da se ne vuku podaci
+  // dok korisnik jos podesava period.
   if(tab==='usloizaslo' && !uiObjektiUcitani) ucitajObjekteZa('ui-objekat', ()=>{uiObjektiUcitani=true; ucitajUsloIzaslo();});
   if(tab==='kupci' && !kupciObjektiUcitani) ucitajObjekteZa('kupci-objekat', ()=>{kupciObjektiUcitani=true; ucitajTopKupci();});
   if(tab==='prodavano' && !prodObjektiUcitani) ucitajObjekteZa('prod-objekat', ()=>{prodObjektiUcitani=true; ucitajTopProdavano();});
