@@ -116,9 +116,18 @@ tbody tr:nth-child(even){background:#f7f8fa;}
           <option value="kolicina">Količina (m²/kom)</option>
         </select>
       </div>
-      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding-bottom:7px;">
-        <input type="checkbox" id="mj-po-pj" onchange="renderMjesecni()"> Grupiši po PJ
-      </label>
+      <div>
+        <label style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Grupiši</label>
+        <select id="mj-grupisanje" onchange="mjOtvoreni.clear();renderMjesecni()" style="font:inherit;font-size:12.5px;padding:6px 9px;border:1px solid #ccc;border-radius:5px;">
+          <option value="g-p-o" selected>Grupa → Proizvod → Objekat</option>
+          <option value="o-g-p">Objekat → Grupa → Proizvod</option>
+          <option value="g-o-p">Grupa → Objekat → Proizvod</option>
+          <option value="p-o">Proizvod → Objekat</option>
+          <option value="o-p">Objekat → Proizvod</option>
+          <option value="o">Samo objekti</option>
+          <option value="g">Samo grupe</option>
+        </select>
+      </div>
     </div>
 
     <div id="mj-sadrzaj">
@@ -381,11 +390,9 @@ function mjSviRedovi(){
 
 function mjMoguceVrijednosti(vrsta){
   if(!mjPodaci) return [];
-  const poPJ = document.getElementById('mj-po-pj').checked;
   const skup = new Set();
   for(const r of mjSviRedovi()){
-    skup.add(vrsta === 'pj' ? (r.objekt_naziv || '—')
-                            : String(poPJ ? (r.objekt_naziv || '—') : r.grupa));
+    skup.add(vrsta === 'pj' ? (r.objekt_naziv || '—') : String(mjKorenIme(r)));
   }
   return [...skup].sort((a,b)=>String(a).localeCompare(String(b)));
 }
@@ -511,7 +518,6 @@ function renderMjesecni(){
   // Bez podataka nema sta da se iscrtava — uputstvo iz HTML-a ostaje
   if(!mjPodaci) return;
   const mjera = document.getElementById('mj-mjera').value;     // iznos | kolicina
-  const poPJ  = document.getElementById('mj-po-pj').checked;
   const jeNovac = mjera === 'iznos';
 
   const sviRedovi = mjSviRedovi();
@@ -533,9 +539,17 @@ function renderMjesecni(){
      Bez "po PJ":  grupa → artikal → objekat
      Sa "po PJ":   objekat → grupa → artikal
      Svaki nivo se otvara plusicem; zbirovi se racunaju odozdo nagore. */
-  const nivoi = poPJ
-    ? [r => r.objekt_naziv || '—', r => r.grupa, r => r.naziv || r.sifra || '—']
-    : [r => r.grupa, r => r.naziv || r.sifra || '—', r => r.objekt_naziv || '—'];
+  /* Redosled nivoa bira korisnik. Mjeseci su uvijek KOLONE — ovdje se bira samo
+     kako se slazu REDOVI, kao fascikle. */
+  const IZVOR = {
+    o: r => r.objekt_naziv || '—',
+    g: r => r.grupa,
+    p: r => r.naziv || r.sifra || '—',
+  };
+  const IME = { o: 'Objekat', g: 'Grupa', p: 'Proizvod' };
+  const izbor = (document.getElementById('mj-grupisanje')?.value || 'g-p-o').split('-');
+  const nivoi = izbor.map(k => IZVOR[k]).filter(Boolean);
+  const poPJ = izbor[0] === 'o';
 
   const koren = new Map();
   const prazanCvor = ime => ({ ime, po_mjesecu:{}, ukupno:0, djeca:new Map(), opis:'' });
@@ -582,7 +596,7 @@ function renderMjesecni(){
 
   function crtajCvor(cvor, nivo, putanja, izlaz){
     const kljuc = putanja ? `${putanja}|${cvor.ime}` : cvor.ime;
-    const imaDjecu = cvor.djeca.size > 0 && nivo < 2;
+    const imaDjecu = cvor.djeca.size > 0 && nivo < nivoi.length - 1;
     const otvoren = mjOtvoreni.has(kljuc);
     const jeProiz = cvor.ime === MJ_PROIZVODNJA;
     const iskljucen = mjJeIskljucen(kljuc);
@@ -619,13 +633,14 @@ function renderMjesecni(){
   const izlaz = [];
   [...koren.values()].sort((a,b)=>b.ukupno-a.ukupno).forEach(c=>crtajCvor(c, 0, '', izlaz));
 
-  const nazivKorena = poPJ ? 'Objekat' : 'Grupa';
+  const nazivKorena = IME[izbor[0]] || 'Grupa';
   const brojKorena = koren.size;
+  const opisNivoa = izbor.map(k=>IME[k].toLowerCase()).join(' → ');
 
   cont.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
       <div style="font-size:11.5px;color:#6b7a8d;">
-        ${brojKorena} ${poPJ?'objekata':'grupa'} · ${mjeseci.length} ${nazivKoraka(mjeseci.length)}
+        ${brojKorena} ${(IME[izbor[0]]||'').toLowerCase()}${brojKorena===1?'':'a'} · ${mjeseci.length} ${nazivKoraka(mjeseci.length)}
         · klikni <b>+</b> da raširiš
       </div>
       <div style="display:flex;gap:6px;">
@@ -665,7 +680,7 @@ function renderMjesecni(){
       ${jeNovac ? 'Promet po potvrđenim otpremnicama, bez obzira da li je naplaćeno.'
                 : 'Količine su u jedinici mjere artikla — proizvodnja se ne prikazuje jer nalog nema količinu u m².'}
       ${(jeNovac && mjPodaci.ima_eur) ? '<br><b>Svi iznosi su u KM.</b> Promet iz PJ koje rade u EUR preračunat je po fiksnom kursu 1,95583.' : ''}
-      <br>Redosled nivoa: ${poPJ ? 'objekat → grupa → proizvod' : 'grupa → proizvod → objekat'}.
+      <br>Redosled nivoa: ${opisNivoa}. Mjeseci su uvijek kolone.
     </div>`;
 
   mjOsvjeziDugmeFiltera();
@@ -678,11 +693,17 @@ function renderMjesecni(){
 /* Rasiri sve — otvara samo PRVI nivo. Otvaranje svega odjednom kod 300 proizvoda
    dalo bi tabelu koja se ne moze pregledati. */
 function mjSveOtvori(){
-  const poPJ = document.getElementById('mj-po-pj').checked;
-  for(const r of mjSviRedovi()){
-    mjOtvoreni.add(String(poPJ ? (r.objekt_naziv||'—') : r.grupa));
-  }
+  for(const r of mjSviRedovi()) mjOtvoreni.add(String(mjKorenIme(r)));
   renderMjesecni();
+}
+
+/* Ime cvora PRVOG nivoa, po trenutno izabranom redosledu — koriste ga i filter i
+   "Raširi sve", da se ne racuna na dva mjesta razlicito. */
+function mjKorenIme(r){
+  const k = (document.getElementById('mj-grupisanje')?.value || 'g-p-o').split('-')[0];
+  return k === 'o' ? (r.objekt_naziv || '—')
+       : k === 'p' ? (r.naziv || r.sifra || '—')
+       : r.grupa;
 }
 
 /* ═══ FILTERI SA KVADRATICIMA (kao u Excelu) ══════════════════════════════════════
