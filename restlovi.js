@@ -351,27 +351,58 @@ router.post('/nesting/za-nalog', smijeVidjeti, async (req, res) => {
             ORDER BY r.povrsina ASC LIMIT 60`, vals);
         for (const c of clanovi) c.pregledano += q.rows.length;
 
-        // Od najmanjeg restla naviše — veliki se čuvaju za komade koji ih stvarno traže
-        for (const restl of q.rows) {
-          if (clanovi.every(c => !c.preostalo)) break;
-          if (iskorisceni.has(restl.id)) continue;
-
-          // SVE preostale pozicije grupe idu u isti restl odjednom
+        /* NAJBOLJI, ne prvi koji nešto primi.
+           Ranije se išlo redom od najmanjeg restla i uzimao se svaki koji primi bar
+           jedan komad — pa su dva komada koja bi stala u JEDAN restl završavala u dva,
+           i drugi restl bi ostao iskorišćen na 25%. Sad se za svaki restl izračuna
+           koliko komada prima, pa se bira onaj koji prima najviše; kad dva primaju
+           isto, uzima se onaj koji ostavlja manji ostatak. */
+        while (clanovi.some(c => c.preostalo)) {
           const komadi = clanovi.filter(c => c.preostalo).map(c => ({
             id: c.id, naziv: c.naziv, sirina: c.sirina, visina: c.visina,
             kolicina: c.preostalo, bez_okretanja: c.bez_okretanja,
           }));
           if (!komadi.length) break;
 
-          const raspored = nest.rasporedi(tjemenaRestla(restl), komadi, { rez: rezMm });
-          if (!raspored.uklopljeno) continue;
+          let najbolji = null;
+          for (const restl of q.rows) {
+            if (iskorisceni.has(restl.id)) continue;
+            const raspored = nest.rasporedi(tjemenaRestla(restl), komadi, { rez: rezMm });
+            if (!raspored.uklopljeno) continue;
+            const bolji = !najbolji ||
+              raspored.uklopljeno > najbolji.raspored.uklopljeno ||
+              (raspored.uklopljeno === najbolji.raspored.uklopljeno &&
+               raspored.ostatak < najbolji.raspored.ostatak);
+            if (bolji) najbolji = { restl, raspored };
+            // Restl koji primi SVE i ne ostavlja mnogo — nema smisla tražiti dalje
+            if (raspored.uklopljeno === komadi.reduce((z, k) => z + k.kolicina, 0) &&
+                raspored.procenat >= 60) break;
+          }
+          if (!najbolji) break;
 
-          // Koliko je od koje pozicije stalo u BAŠ TAJ restl
+          const { restl, raspored } = najbolji;
           const poPoziciji = new Map();
           for (const post of raspored.postavljeni) {
             poPoziciji.set(post.id, (poPoziciji.get(post.id) || 0) + 1);
           }
           iskorisceni.add(restl.id);
+
+          // Ostali restlovi koji bi TAKOĐE primili ove komade — druge mogućnosti
+          const alternative = q.rows
+            .filter(x => x.id !== restl.id && !iskorisceni.has(x.id))
+            .slice(0, 12)
+            .map(x => {
+              const alt = nest.rasporedi(tjemenaRestla(x), komadi, { rez: rezMm });
+              return alt.uklopljeno ? {
+                restl_id: x.id, oznaka: x.oznaka, dim_a: x.dim_a, dim_b: x.dim_b,
+                komada: alt.uklopljeno, procenat: alt.procenat, ostatak_m2: alt.ostatak,
+                objekt_naziv: x.objekt_naziv,
+              } : null;
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.komada - a.komada || a.ostatak_m2 - b.ostatak_m2)
+            .slice(0, 4);
+
           for (const c of clanovi) {
             const koliko = poPoziciji.get(c.id) || 0;
             if (!koliko) continue;
@@ -379,8 +410,6 @@ router.post('/nesting/za-nalog', smijeVidjeti, async (req, res) => {
             if (!c.nadjeno_po) c.nadjeno_po = krug.kako;
             c.restlovi.push({
               restl_id: restl.id, oznaka: restl.oznaka,
-              // roba_id ide uz rezultat da frontend može provjeriti je li to
-              // BAŠ onaj materijal koji je operater izabrao
               roba_id: restl.roba_id,
               objekt_naziv: restl.objekt_naziv,
               artikal_naziv: restl.artikal_naziv, artikal_sifra: restl.artikal_sifra,
@@ -389,8 +418,9 @@ router.post('/nesting/za-nalog', smijeVidjeti, async (req, res) => {
               komada: koliko,
               procenat: raspored.procenat,
               ostatak_m2: raspored.ostatak,
-              // Kad u restlu ima više različitih pozicija, to je bitno vidjeti
               dijeli_sa: [...poPoziciji.keys()].filter(k => k !== c.id).length,
+              ukupno_u_restlu: raspored.uklopljeno,
+              alternative,
               postavljeni: raspored.postavljeni,
             });
           }

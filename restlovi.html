@@ -2630,12 +2630,20 @@ async function planIzracunaj() {
                 // znači da se restl reže jednom za više stavki naloga
                 (r.dijeli_sa ? '<br><b style="color:#1f8a4c">+ još ' + r.dijeli_sa +
                   ' pozicij' + (r.dijeli_sa === 1 ? 'a' : 'e') + ' iz istog restla</b>' : '') +
+                (r.ukupno_u_restlu > 1 ? '' : '') +
                 (pogresan(r) ? '<br><b>NIJE izabrani materijal — provjeri prije rezanja</b>' : '') +
+                // Druge mogućnosti — operater vidi šta je softver odbacio i zašto
+                ((r.alternative || []).length
+                  ? '<br><a href="#" class="hint" onclick="prikaziAlternative(' + i + ',' +
+                    JSON.stringify(JSON.stringify(r.alternative)) + ');return false">' +
+                    'druge mogućnosti (' + r.alternative.length + ') ▾</a>'
+                  : '') +
                 '</span>' +
               '<button class="btn mali" onclick="uzmiIzPlana(' + r.restl_id + ',' + i + ',' +
                 JSON.stringify(JSON.stringify({ oznaka: r.oznaka, komada: r.komada,
                   artikal: r.artikal_naziv || r.materijal || '', procenat: r.procenat,
-                  ostatak: r.ostatak_m2, dim_a: r.dim_a, dim_b: r.dim_b })) + ')">Uzmi</button></div>').join('')
+                  ostatak: r.ostatak_m2, dim_a: r.dim_a, dim_b: r.dim_b,
+                  ukupno_u_restlu: r.ukupno_u_restlu })) + ')">Uzmi</button></div>').join('')
           : '<span class="hint">nema restla — ide na cijelu tablu' +
             (z.pregledano_restlova === 0
               ? '<br><b style="color:#c0392b">Nijedan restl nije ni pregledan.</b> ' +
@@ -2929,6 +2937,33 @@ function crtezPlana(r, w, hh) {
   return s + '</svg>';
 }
 
+// Spisak restlova koje je softver razmatrao a nije izabrao, sa razlogom.
+// Izbor je uvijek onaj koji primi najviše komada — ali procjena može biti pogrešna
+// (komad je oštećen, restl je na drugoj lokaciji), pa operater mora moći ručno birati.
+function prikaziAlternative(iPozicije, altJson) {
+  let alt = [];
+  try { alt = JSON.parse(altJson); } catch (e) {}
+  if (!alt.length) return;
+  const p = PLAN_POZICIJE[iPozicije] || {};
+  modal('<h3>Druge mogućnosti za: ' + (p.naziv || 'poziciju') + '</h3>' +
+    '<div class="hint" style="margin-bottom:8px">Softver bira restl koji prima NAJVIŠE komada. ' +
+    'Ako ti odgovara drugi — na primjer zbog lokacije ili stanja komada — izaberi ga ovdje.</div>' +
+    '<div class="xl-wrap"><table class="xl"><thead><tr><th>Oznaka</th><th>Mjere</th>' +
+    '<th style="text-align:right">Prima</th><th style="text-align:right">Iskorišćeno</th>' +
+    '<th style="text-align:right">Ostatak m²</th><th>PJ</th><th></th></tr></thead><tbody>' +
+    alt.map(a => '<tr><td><b>' + a.oznaka + '</b></td>' +
+      '<td>' + Math.round(a.dim_a) + '×' + Math.round(a.dim_b) + '</td>' +
+      '<td class="num">' + a.komada + ' kom</td>' +
+      '<td class="num">' + fmt(a.procenat) + '%</td>' +
+      '<td class="num">' + fmt(a.ostatak_m2) + '</td>' +
+      '<td>' + (a.objekt_naziv || '') + '</td>' +
+      '<td><button class="btn mali" onclick="zatvoriModal();uzmiIzPlana(' + a.restl_id + ',' + iPozicije + ',' +
+        JSON.stringify(JSON.stringify({ oznaka: a.oznaka, komada: a.komada, procenat: a.procenat,
+          ostatak: a.ostatak_m2, dim_a: a.dim_a, dim_b: a.dim_b })) + ')">Uzmi ovaj</button></td></tr>').join('') +
+    '</tbody></table></div>' +
+    '<div class="modal-btns"><button class="btn sec" onclick="zatvoriModal()">Zatvori</button></div>');
+}
+
 function uzmiIzPlana(restlId, iPozicije, podaciJson) {
   let d = {};
   try { d = JSON.parse(podaciJson); } catch (e) {}
@@ -2940,6 +2975,8 @@ function uzmiIzPlana(restlId, iPozicije, podaciJson) {
     komada: d.komada || 1,
     opis: 'Iz plana naloga: <b>' + (p.naziv || 'pozicija') + '</b> · ' +
           sir + '×' + vis + ' mm · <b>' + (d.komada || 1) + ' kom</b>' +
+          (d.ukupno_u_restlu > (d.komada || 1)
+            ? ' <span style="color:#1f8a4c">(iz ovog restla ide ukupno ' + d.ukupno_u_restlu + ' komada)</span>' : '') +
           (d.artikal ? ' · ' + d.artikal : '') +
           (d.procenat ? ' · iskorišćeno ' + fmt(d.procenat) + '%' : '') +
           (d.ostatak ? ' · ostatak ' + fmt(d.ostatak) + ' m²' : ''),
