@@ -21,60 +21,101 @@ router.use((req, res, next) => {
    Mjesec ide od PRVOG do ZADNJEG dana, po datumu otpremnice.                        */
 router.get('/mjesecni-po-grupama', async (req, res) => {
   try {
-    const odMjeseci = Math.min(36, Math.max(1, parseInt(req.query.mjeseci) || 12));
     const objektId = req.query.objekt_id || null;
 
+    /* GRANULACIJA — mjesec, kvartal ili godina. Ista tabela, samo se mijenja korak.
+       Nazivi kolona se prave u SQL-u da bi sortiranje po tekstu bilo ispravno
+       ("2026-Q1" < "2026-Q2" < "2027-Q1"). */
+    const gran = ['mjesec', 'kvartal', 'godina'].includes(req.query.granulacija)
+      ? req.query.granulacija : 'mjesec';
+    const korak = { mjesec: 'month', kvartal: 'quarter', godina: 'year' }[gran];
+    const oznaka = {
+      mjesec:  `to_char(date_trunc('month', %D), 'YYYY-MM')`,
+      kvartal: `to_char(date_trunc('quarter', %D), 'YYYY') || '-Q' || to_char(date_trunc('quarter', %D), 'Q')`,
+      godina:  `to_char(date_trunc('year', %D), 'YYYY')`,
+    }[gran];
+
+    /* PERIOD — ili izricito od/do, ili zadnjih N koraka. Kad je zadat samo "od",
+       "do" je danas; kad je zadat samo "do", uzima se godinu unazad. */
+    const od = /^\d{4}-\d{2}-\d{2}$/.test(req.query.od || '') ? req.query.od : null;
+    const doD = /^\d{4}-\d{2}-\d{2}$/.test(req.query.do || '') ? req.query.do : null;
+    const koliko = Math.min(60, Math.max(1, parseInt(req.query.koliko) || 12));
+
+    const vals = [];
+    let uslovO, uslovP;
+    if (od || doD) {
+      const o = od || '1900-01-01', d = doD || '2999-12-31';
+      vals.push(o, d);
+      uslovO = `o.datum >= $1::date AND o.datum <= $2::date`;
+      uslovP = `COALESCE(p.pocetak, p.datum_kreiranja) >= $1::date
+                AND COALESCE(p.pocetak, p.datum_kreiranja) <= $2::date`;
+    } else {
+      vals.push(koliko);
+      uslovO = `o.datum >= date_trunc('${korak}', CURRENT_DATE) - ($1::int - 1) * interval '1 ${korak}'`;
+      uslovP = `COALESCE(p.pocetak, p.datum_kreiranja) >= date_trunc('${korak}', CURRENT_DATE) - ($1::int - 1) * interval '1 ${korak}'`;
+    }
+    const pO = objektId ? (vals.push(objektId), `AND o.objekt_id = $${vals.length}`) : '';
+
     const r = await pool.query(
-      `SELECT to_char(date_trunc('month', o.datum), 'YYYY-MM')       AS mjesec,
-              o.objekt_id,
-              o.objekt_naziv,
-              COALESCE(NULLIF(TRIM(ro.grupa), ''), 'bez grupe')      AS grupa,
-              SUM(s.iznos)                                            AS iznos,
-              SUM(s.kolicina)                                         AS kolicina
+      `SELECT ${oznaka.replace(/%D/g, 'o.datum')}                      AS period,
+              o.objekt_id, o.objekt_naziv,
+              COALESCE(NULLIF(TRIM(ro.grupa), ''), 'bez grupe')        AS grupa,
+              s.sifra,
+              MIN(s.naziv)                                             AS naziv,
+              MIN(ro.jed_mjera)                                        AS jed_mjera,
+              /* PREVOD U KM. Iznosi na otpremnici su u valuti SVOG objekta — PJ Niš
+                 radi u EUR. Sabirati ih sa KM bez preračuna dalo bi besmislen zbir.
+                 Kurs EUR/KM je FIKSAN (1.95583), pa je pretvaranje tačno. */
+              SUM(s.iznos * CASE WHEN po.valuta = 'EUR' THEN 1.95583 ELSE 1 END) AS iznos,
+              SUM(s.iznos)                                             AS iznos_izvorni,
+              MIN(COALESCE(po.valuta, 'KM'))                           AS valuta,
+              SUM(s.kolicina)                                          AS kolicina
        FROM otpremnice o
        JOIN otpremnica_stavke s ON s.otpremnica_id = o.id
        LEFT JOIN roba ro ON ro.id = s.roba_id
-       WHERE o.status = 'potvrdjena'
-         AND o.datum >= date_trunc('month', CURRENT_DATE) - ($1::int - 1) * interval '1 month'
-         ${objektId ? 'AND o.objekt_id = $2' : ''}
-       GROUP BY 1, 2, 3, 4
+       LEFT JOIN prodajni_objekti po ON po.id = o.objekt_id
+       WHERE o.status = 'potvrdjena' AND ${uslovO} ${pO}
+       GROUP BY 1, 2, 3, 4, 5
        ORDER BY 1, 3, 4`,
-      objektId ? [odMjeseci, objektId] : [odMjeseci]
+      vals
     );
 
-    /* Proizvodnja se NE moze razbiti po grupama — radni nalog nema stavke po materijalu
-       (nalog_stavke je novo i jos prazno za stare naloge). Zato ide kao zaseban zbir
-       po mjesecu, da se vidi uz maloprodaju ali se s njom ne mijesa. */
-    /* DATUM: koristi se POCETAK (kad je posao stvarno ugovoren), ne datum_kreiranja.
-       datum_kreiranja je kad je red upisan u sistem — kad su se stari nalozi unosili
-       naknadno, svi bi pali u taj mjesec i pregled bi bio besmislen. */
+    /* Proizvodnja se NE moze razbiti po grupama — radni nalog nema stavke po materijalu.
+       Ide kao zaseban red po periodu.
+       DATUM: pocetak (kad je posao ugovoren), ne datum_kreiranja — kad su se stari
+       nalozi unosili naknadno, svi bi pali u mjesec unosa. */
     const p = await pool.query(
-      `SELECT to_char(date_trunc('month', COALESCE(pocetak, datum_kreiranja)), 'YYYY-MM') AS mjesec,
-              COUNT(*)::int                            AS naloga,
-              SUM(COALESCE(ugovorena_suma, 0))         AS ugovoreno,
-              SUM(COALESCE(avans, 0))                  AS naplaceno
-       FROM proizvodnja_jopex
-       WHERE COALESCE(stornirano, false) = false
-         AND COALESCE(pocetak, datum_kreiranja) >= date_trunc('month', CURRENT_DATE) - ($1::int - 1) * interval '1 month'
+      `SELECT ${oznaka.replace(/%D/g, 'COALESCE(p.pocetak, p.datum_kreiranja)')} AS period,
+              COUNT(*)::int                        AS naloga,
+              SUM(COALESCE(p.ugovorena_suma, 0))   AS ugovoreno,
+              SUM(COALESCE(p.avans, 0))            AS naplaceno
+       FROM proizvodnja_jopex p
+       WHERE COALESCE(p.stornirano, false) = false AND ${uslovP}
        GROUP BY 1 ORDER BY 1`,
-      [odMjeseci]
+      (od || doD) ? [vals[0], vals[1]] : [koliko]
     );
-
-    // Spisak grupa koje se STVARNO pojavljuju — prazne kolone samo smetaju
-    const grupe = [...new Set(r.rows.map(x => x.grupa))].sort();
 
     res.json({
+      granulacija: gran,
       redovi: r.rows.map(x => ({
-        mjesec: x.mjesec,
+        mjesec: x.period,
         objekt_id: x.objekt_id,
         objekt_naziv: x.objekt_naziv,
         grupa: x.grupa,
-        iznos: +parseFloat(x.iznos || 0).toFixed(2),
+        sifra: x.sifra,
+        naziv: x.naziv,
+        jed_mjera: x.jed_mjera,
+        iznos: +parseFloat(x.iznos || 0).toFixed(2),              // u KM
+        iznos_izvorni: +parseFloat(x.iznos_izvorni || 0).toFixed(2),
+        valuta: x.valuta || 'KM',
         kolicina: +parseFloat(x.kolicina || 0).toFixed(3),
       })),
-      grupe,
+      // Da prikaz moze upozoriti kad je bilo preračuna
+      ima_eur: r.rows.some(x => x.valuta === 'EUR'),
+      mjeseci: [...new Set(r.rows.map(x => x.period))].sort(),
+      grupe: [...new Set(r.rows.map(x => x.grupa))].sort(),
       proizvodnja: p.rows.map(x => ({
-        mjesec: x.mjesec,
+        mjesec: x.period,
         naloga: x.naloga,
         ugovoreno: +parseFloat(x.ugovoreno || 0).toFixed(2),
         naplaceno: +parseFloat(x.naplaceno || 0).toFixed(2),
