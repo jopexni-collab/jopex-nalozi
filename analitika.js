@@ -4,8 +4,14 @@ const pool = require('./db');
 
 // Sve rute ovdje su READ-ONLY (samo SELECT) — analitika ne piše ništa u bazu, bez obzira
 // šta se pošalje. Samo prijavljeni korisnici.
+/* Analitika pokazuje promet SVIH objekata, sve kupce i marže — zato je samo za admina.
+   Kartica na pocetnoj se i do sada prikazivala samo adminu, ali server je propustao
+   svakog prijavljenog: ko zna adresu, mogao je otvoriti stranicu direktno. */
 router.use((req, res, next) => {
-  if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  const u = req.session?.user;
+  if (!u) return res.status(401).json({ error: 'Niste prijavljeni.' });
+  if (u.rola !== 'admin')
+    return res.status(403).json({ error: 'Analitika je dostupna samo administratorima.' });
   next();
 });
 
