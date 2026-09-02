@@ -66,10 +66,11 @@ tbody tr:nth-child(even){background:#f7f8fa;}
 
     <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:end;margin-bottom:12px;">
       <div>
-        <label style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Objekat</label>
-        <select id="mj-objekat" onchange="ucitajMjesecni()" style="font:inherit;font-size:12.5px;padding:6px 9px;border:1px solid #ccc;border-radius:5px;">
-          <option value="">— svi PJ —</option>
-        </select>
+        <label style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Objekti</label>
+        <button type="button" id="mj-objekti-dugme" onclick="mjOtvoriFilter('pj', this)"
+                style="font:inherit;font-size:12.5px;padding:6px 11px;border:1px solid #ccc;background:#fff;border-radius:5px;cursor:pointer;min-width:150px;text-align:left;">
+          svi PJ ▾
+        </button>
       </div>
       <div>
         <label style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Korak</label>
@@ -255,12 +256,10 @@ function mjPeriodPromjena(){
 async function ucitajMjesecni(){
   const cont = document.getElementById('mj-sadrzaj');
   cont.innerHTML = '<div style="padding:14px;color:#8b96a5;font-size:12.5px;">Učitavanje...</div>';
-  const objektId = document.getElementById('mj-objekat').value;
   const gran = document.getElementById('mj-granulacija').value;
   const period = document.getElementById('mj-period').value;
   try{
     const q = new URLSearchParams({ granulacija: gran });
-    if(objektId) q.set('objekt_id', objektId);
 
     const danas = new Date();
     const G = danas.getFullYear();
@@ -290,6 +289,104 @@ async function ucitajMjesecni(){
   }
 }
 
+
+
+/* ═══ FILTERI SA KVADRATICIMA (kao u Excelu) ══════════════════════════════════════
+   Podaci se sa servera povlace SVI, pa se filtrira u prikazu — prekidaci rade odmah,
+   bez cekanja na mrezu. Prazan skup znaci "sve" (nista nije iskljuceno). */
+const mjFilteri = { pj: new Set(), red: new Set() };   // prazno = sve prolazi
+
+function mjMoguceVrijednosti(vrsta){
+  if(!mjPodaci) return [];
+  const nivo = document.getElementById('mj-nivo').value;
+  const skup = new Set();
+  for(const r of mjPodaci.redovi){
+    skup.add(vrsta === 'pj' ? (r.objekt_naziv || '—')
+                            : (nivo === 'grupa' ? r.grupa : (r.naziv || r.sifra)));
+  }
+  return [...skup].sort((a,b)=>String(a).localeCompare(String(b)));
+}
+
+function mjOtvoriFilter(vrsta, dugme){
+  document.querySelectorAll('.mj-filter-panel').forEach(p=>p.remove());
+  const vrijednosti = mjMoguceVrijednosti(vrsta);
+  if(!vrijednosti.length) return;
+  const izabrani = mjFilteri[vrsta];
+
+  const panel = document.createElement('div');
+  panel.className = 'mj-filter-panel';
+  const r = dugme.getBoundingClientRect();
+  // Ako nema mjesta dole, otvara se GORE — inace panel izlazi van ekrana
+  const dole = window.innerHeight - r.bottom;
+  panel.style.cssText = `position:fixed;z-index:600;background:#fff;border:1px solid #ccc;`
+    + `border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.18);padding:9px;min-width:210px;`
+    + `max-height:${Math.max(180, Math.min(330, dole > 240 ? dole - 16 : r.top - 16))}px;`
+    + `display:flex;flex-direction:column;left:${Math.min(r.left, window.innerWidth-230)}px;`
+    + (dole > 240 ? `top:${r.bottom+4}px;` : `bottom:${window.innerHeight - r.top + 4}px;`);
+
+  panel.innerHTML = `
+    <input type="text" placeholder="Traži..." oninput="mjFilterPretraga(this)"
+           style="font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ddd;border-radius:5px;margin-bottom:6px;">
+    <div style="display:flex;gap:6px;margin-bottom:6px;">
+      <button type="button" onclick="mjFilterSve('${vrsta}', true)" style="flex:1;font-size:11px;padding:4px;border:1px solid #ddd;background:#fff;border-radius:4px;cursor:pointer;">Sve</button>
+      <button type="button" onclick="mjFilterSve('${vrsta}', false)" style="flex:1;font-size:11px;padding:4px;border:1px solid #ddd;background:#fff;border-radius:4px;cursor:pointer;">Ništa</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;">
+      ${vrijednosti.map(v=>`
+        <label class="mj-f-red" data-tekst="${esc(String(v)).toLowerCase()}"
+               style="display:flex;align-items:center;gap:7px;padding:3px 2px;font-size:12px;cursor:pointer;">
+          <input type="checkbox" value="${esc(String(v))}" ${(!izabrani.size || izabrani.has(String(v)))?'checked':''}
+                 onchange="mjFilterPromjena('${vrsta}')">
+          <span>${esc(String(v))}</span>
+        </label>`).join('')}
+    </div>`;
+  document.body.appendChild(panel);
+  panel.querySelector('input[type=text]').focus();
+
+  setTimeout(()=>{
+    const zatvori = e => {
+      if(!panel.contains(e.target) && e.target !== dugme){
+        panel.remove(); document.removeEventListener('mousedown', zatvori);
+      }
+    };
+    document.addEventListener('mousedown', zatvori);
+  }, 10);
+}
+
+function mjFilterPretraga(polje){
+  const q = polje.value.toLowerCase().trim();
+  polje.closest('.mj-filter-panel').querySelectorAll('.mj-f-red').forEach(r=>{
+    r.style.display = (!q || r.dataset.tekst.includes(q)) ? 'flex' : 'none';
+  });
+}
+
+function mjFilterSve(vrsta, oznaceno){
+  const panel = document.querySelector('.mj-filter-panel');
+  // Dira SAMO ono sto je trenutno vidljivo (poslije pretrage) — kao u Excelu
+  panel.querySelectorAll('.mj-f-red').forEach(r=>{
+    if(r.style.display !== 'none') r.querySelector('input').checked = oznaceno;
+  });
+  mjFilterPromjena(vrsta);
+}
+
+function mjFilterPromjena(vrsta){
+  const panel = document.querySelector('.mj-filter-panel');
+  const sve = mjMoguceVrijednosti(vrsta).length;
+  const cekirani = [...panel.querySelectorAll('input[type=checkbox]:checked')].map(i=>i.value);
+  // Ako je sve cekirano — pamti se kao "bez filtera", da se ne gubi kad se podaci promijene
+  mjFilteri[vrsta] = cekirani.length === sve ? new Set() : new Set(cekirani);
+  renderMjesecni();
+}
+
+function mjOsvjeziDugmeFiltera(){
+  const d = document.getElementById('mj-objekti-dugme');
+  if(!d) return;
+  const n = mjFilteri.pj.size;
+  d.textContent = (n ? `${n} ${n===1?'objekat':'objekata'}` : 'svi PJ') + ' ▾';
+  d.style.borderColor = n ? 'var(--blue,#1a5fa8)' : '#ccc';
+  d.style.color = n ? 'var(--blue,#1a5fa8)' : 'inherit';
+  d.style.fontWeight = n ? '700' : '400';
+}
 
 function nazivKoraka(n){
   const g = document.getElementById('mj-granulacija')?.value || 'mjesec';
@@ -325,6 +422,11 @@ function renderMjesecni(){
      dobija svoju sekciju. Sabiranje ide u prikazu, pa se prekidaci mijenjaju odmah. */
   const sekcije = new Map();   // pj -> Map(kljuc -> {ime, opis, po_mjesecu, ukupno})
   for(const r of mjPodaci.redovi){
+    // Filteri iz zaglavlja — prazan skup znaci "sve prolazi"
+    const pjIme = r.objekt_naziv || '—';
+    if(mjFilteri.pj.size && !mjFilteri.pj.has(pjIme)) continue;
+    const redIme = nivo === 'grupa' ? r.grupa : (r.naziv || r.sifra);
+    if(mjFilteri.red.size && !mjFilteri.red.has(String(redIme))) continue;
     const pj = poPJ ? (r.objekt_naziv || '—') : '__sve__';
     if(!sekcije.has(pj)) sekcije.set(pj, new Map());
     const red = sekcije.get(pj);
@@ -393,6 +495,8 @@ function renderMjesecni(){
           <tr style="background:#1f3864;color:#fff;">
             <th style="padding:6px 8px;text-align:left;position:sticky;left:0;top:0;background:#1f3864;z-index:8;min-width:150px;">
               ${nivo==='grupa'?'Grupa':'Proizvod'}
+              <button type="button" onclick="mjOtvoriFilter('red', this)" title="Filtriraj redove"
+                style="background:${mjFilteri.red.size?'#4a90d9':'rgba(255,255,255,.15)'};border:none;color:#fff;cursor:pointer;font-size:9px;padding:1px 4px;border-radius:3px;margin-left:4px;">▼</button>
             </th>
             ${mjeseci.map(m=>`<th style="padding:6px 8px;text-align:right;position:sticky;top:0;background:#1f3864;z-index:7;">${imeM(m)}</th>`).join('')}
             <th style="padding:6px 8px;text-align:right;position:sticky;top:0;background:#2d4a7c;z-index:7;">UKUPNO${jeNovac?' (KM)':''}</th>
@@ -433,6 +537,7 @@ function renderMjesecni(){
   for(const r of mjPodaci.redovi){
     zaGrafikon.push({ mjesec:r.mjesec, po_grupi:{[r.grupa]: r[mjera]||0}, ukupno:r[mjera]||0 });
   }
+  mjOsvjeziDugmeFiltera();
   crtajGrafikone(zaGrafikon, mjPodaci.grupe||[], mjera, proiz);
 }
 
@@ -553,7 +658,9 @@ function prebaciTab(tab){
   ['mjeseci','protok','usloizaslo','kupci','prodavano','usluge'].forEach(t=>{
     document.getElementById('tab-'+t).style.display = t===tab ? 'block' : 'none';
   });
-  if(tab==='mjeseci' && !mjObjektiUcitani) ucitajObjekteZa('mj-objekat', ()=>{mjObjektiUcitani=true; ucitajMjesecni();});
+  // Objekti se vise ne ucitavaju zasebno — spisak PJ dolazi iz samih podataka,
+  // pa filter nudi samo one koji STVARNO imaju prometa u izabranom periodu.
+  if(tab==='mjeseci' && !mjObjektiUcitani){ mjObjektiUcitani=true; ucitajMjesecni(); }
   if(tab==='usloizaslo' && !uiObjektiUcitani) ucitajObjekteZa('ui-objekat', ()=>{uiObjektiUcitani=true; ucitajUsloIzaslo();});
   if(tab==='kupci' && !kupciObjektiUcitani) ucitajObjekteZa('kupci-objekat', ()=>{kupciObjektiUcitani=true; ucitajTopKupci();});
   if(tab==='prodavano' && !prodObjektiUcitani) ucitajObjekteZa('prod-objekat', ()=>{prodObjektiUcitani=true; ucitajTopProdavano();});

@@ -112,7 +112,38 @@ router.get('/mjesecni-po-grupama', async (req, res) => {
       })),
       // Da prikaz moze upozoriti kad je bilo preračuna
       ima_eur: r.rows.some(x => x.valuta === 'EUR'),
-      mjeseci: [...new Set(r.rows.map(x => x.period))].sort(),
+      /* Kolone se prave iz OBA izvora. Ranije su dolazile samo iz otpremnica, pa su
+         mjeseci u kojima je bilo samo proizvodnje (bez prodaje) potpuno ispadali —
+         izgledalo je kao da proizvodnja nije razbijena po mjesecima. */
+      /* Kolone pokrivaju CIJELI izabrani period, ne samo one u kojima ima podataka.
+         Ranije su dolazile samo iz otpremnica, pa su mjeseci sa samo proizvodnjom
+         ispadali; a mjesec bez ijednog prometa treba da se VIDI kao prazan, jer i to
+         je podatak. */
+      mjeseci: (() => {
+        const iz = new Set([...r.rows.map(x => x.period), ...p.rows.map(x => x.period)].filter(Boolean));
+        const sviU = [...iz].sort();
+        if (!sviU.length) return [];
+        const prvi = sviU[0], zadnji = sviU[sviU.length - 1];
+        const out = [];
+        if (gran === 'godina') {
+          for (let g = +prvi; g <= +zadnji; g++) out.push(String(g));
+        } else if (gran === 'kvartal') {
+          let [g, q] = [+prvi.slice(0, 4), +prvi.slice(6)];
+          const [gz, qz] = [+zadnji.slice(0, 4), +zadnji.slice(6)];
+          while (g < gz || (g === gz && q <= qz)) {
+            out.push(`${g}-Q${q}`);
+            if (++q > 4) { q = 1; g++; }
+          }
+        } else {
+          let [g, m] = [+prvi.slice(0, 4), +prvi.slice(5)];
+          const [gz, mz] = [+zadnji.slice(0, 4), +zadnji.slice(5)];
+          while (g < gz || (g === gz && m <= mz)) {
+            out.push(`${g}-${String(m).padStart(2, '0')}`);
+            if (++m > 12) { m = 1; g++; }
+          }
+        }
+        return out;
+      })(),
       grupe: [...new Set(r.rows.map(x => x.grupa))].sort(),
       proizvodnja: p.rows.map(x => ({
         mjesec: x.period,
