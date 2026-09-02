@@ -12,6 +12,76 @@ router.use((req, res, next) => {
 // GET /api/analitika/protok-robe?sifra=X&objekt_id=Y — hronologija JEDNOG artikla: sve
 // promjene stanja, bilo odakle dolaze (uvoz/korekcija/storno IZ roba_kretanja, PRODAJA iz
 // otpremnica_stavke — prodaja se NE upisuje u roba_kretanja, pa se ovdje ručno spaja).
+/* ── GET /api/analitika/mjesecni-po-grupama ────────────────────────────────────────
+   Mjesecni pregled prometa PO GRUPAMA materijala. Postojeci "protok robe" trazi jednu
+   sifru u jednoj PJ i daje hronoloski spisak — dobar za istragu jednog artikla, ali
+   neupotrebljiv za pregled poslovanja.
+   Ovdje: redovi = mjesec (+ PJ), kolone = grupe. Racuna se i novac i kolicina, pa se
+   u prikazu moze prebacivati bez novog poziva.
+   Mjesec ide od PRVOG do ZADNJEG dana, po datumu otpremnice.                        */
+router.get('/mjesecni-po-grupama', async (req, res) => {
+  try {
+    const odMjeseci = Math.min(36, Math.max(1, parseInt(req.query.mjeseci) || 12));
+    const objektId = req.query.objekt_id || null;
+
+    const r = await pool.query(
+      `SELECT to_char(date_trunc('month', o.datum), 'YYYY-MM')       AS mjesec,
+              o.objekt_id,
+              o.objekt_naziv,
+              COALESCE(NULLIF(TRIM(ro.grupa), ''), 'bez grupe')      AS grupa,
+              SUM(s.iznos)                                            AS iznos,
+              SUM(s.kolicina)                                         AS kolicina
+       FROM otpremnice o
+       JOIN otpremnica_stavke s ON s.otpremnica_id = o.id
+       LEFT JOIN roba ro ON ro.id = s.roba_id
+       WHERE o.status = 'potvrdjena'
+         AND o.datum >= date_trunc('month', CURRENT_DATE) - ($1::int - 1) * interval '1 month'
+         ${objektId ? 'AND o.objekt_id = $2' : ''}
+       GROUP BY 1, 2, 3, 4
+       ORDER BY 1 DESC, 3, 4`,
+      objektId ? [odMjeseci, objektId] : [odMjeseci]
+    );
+
+    /* Proizvodnja se NE moze razbiti po grupama — radni nalog nema stavke po materijalu
+       (nalog_stavke je novo i jos prazno za stare naloge). Zato ide kao zaseban zbir
+       po mjesecu, da se vidi uz maloprodaju ali se s njom ne mijesa. */
+    const p = await pool.query(
+      `SELECT to_char(date_trunc('month', datum_kreiranja), 'YYYY-MM') AS mjesec,
+              COUNT(*)::int                                            AS naloga,
+              SUM(COALESCE(ugovorena_suma, 0))                         AS ugovoreno,
+              SUM(COALESCE(avans, 0))                                  AS naplaceno
+       FROM proizvodnja_jopex
+       WHERE COALESCE(stornirano, false) = false
+         AND datum_kreiranja >= date_trunc('month', CURRENT_DATE) - ($1::int - 1) * interval '1 month'
+       GROUP BY 1 ORDER BY 1 DESC`,
+      [odMjeseci]
+    );
+
+    // Spisak grupa koje se STVARNO pojavljuju — prazne kolone samo smetaju
+    const grupe = [...new Set(r.rows.map(x => x.grupa))].sort();
+
+    res.json({
+      redovi: r.rows.map(x => ({
+        mjesec: x.mjesec,
+        objekt_id: x.objekt_id,
+        objekt_naziv: x.objekt_naziv,
+        grupa: x.grupa,
+        iznos: +parseFloat(x.iznos || 0).toFixed(2),
+        kolicina: +parseFloat(x.kolicina || 0).toFixed(3),
+      })),
+      grupe,
+      proizvodnja: p.rows.map(x => ({
+        mjesec: x.mjesec,
+        naloga: x.naloga,
+        ugovoreno: +parseFloat(x.ugovoreno || 0).toFixed(2),
+        naplaceno: +parseFloat(x.naplaceno || 0).toFixed(2),
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/protok-robe', async (req, res) => {
   try {
     const { sifra, objekt_id } = req.query;
