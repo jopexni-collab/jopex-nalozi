@@ -683,6 +683,8 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       </div>
       <div style="display:flex;gap:8px;margin-top:8px;">
         <button id="msa-btn-glavna" class="ce-tip-btn" style="flex:1;font-size:12px;" onclick="msaPostaviGlavnu()">★ Postavi kao glavnu</button>
+        <button id="msa-btn-gotov" class="ce-tip-btn" style="flex:1;font-size:12px;" onclick="msaPrekidacGotov()"
+                title="Slika gotovog proizvoda — ista slika može biti i glavna i gotov proizvod">🪑 Gotov proizvod</button>
         <button class="ce-tip-btn" style="flex:0 0 auto;font-size:12px;background:var(--red,#c0392b);color:#fff;" onclick="msaObrisiTrenutnu()">🗑 Obriši</button>
       </div>
     </div>
@@ -2123,6 +2125,18 @@ function msaPrikaziTrenutnu(){
   const btnGlavna=document.getElementById('msa-btn-glavna');
   if(s.glavna){ btnGlavna.textContent='★ Glavna slika'; btnGlavna.disabled=true; btnGlavna.style.opacity='.6'; }
   else{ btnGlavna.textContent='☆ Postavi kao glavnu'; btnGlavna.disabled=false; btnGlavna.style.opacity='1'; }
+
+  /* Gotov proizvod je ZASEBNA oznaka od glavne — ista slika moze biti i jedno i drugo. */
+  const btnGotov=document.getElementById('msa-btn-gotov');
+  if(btnGotov){
+    if(s.gotov_proizvod){
+      btnGotov.textContent='🪑 Gotov proizvod ✓';
+      btnGotov.style.background='var(--green,#1f8a4c)'; btnGotov.style.color='#fff';
+    } else {
+      btnGotov.textContent='🪑 Gotov proizvod';
+      btnGotov.style.background=''; btnGotov.style.color='';
+    }
+  }
 }
 /* ── PRIKAZ PREKO CELOG EKRANA ──
    Koristi se iz DVA mesta: iz karusela (Lager tab) i iz 👁 dugmeta u pretrazi. Zato niz
@@ -2179,6 +2193,23 @@ function msaPomjeri(smjer){
   msaTrenutniIndeks=(msaTrenutniIndeks+smjer+msaSlike.length)%msaSlike.length;
   msaPrikaziTrenutnu();
 }
+
+/* Oznaka "slika gotovog proizvoda" — vise slika moze biti oznaceno (razni uglovi). */
+async function msaPrekidacGotov(){
+  const s = msaSlike[msaTrenutniIndeks];
+  if(!s) return;
+  try{
+    const r = await fetch(`${API}/api/roba/${msaTrenutniRobaId}/slike/${s.id}/gotov`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ gotov: !s.gotov_proizvod }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    s.gotov_proizvod = d.gotov_proizvod;
+    msaPrikaziKarusel();
+  }catch(e){ alert('✗ ' + e.message); }
+}
+
 async function msaPostaviGlavnu(){
   const s=msaSlike[msaTrenutniIndeks];
   try{
