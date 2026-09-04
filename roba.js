@@ -129,7 +129,7 @@ router.get('/lager-prodaja', zahtijevaProdaju, async (req, res) => {
       `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
               rp.cijena, rp.stanje,
               (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS glavna_slika,
-              (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND gotov_proizvod=true ORDER BY redosled LIMIT 1) AS slika_gotov,
+              (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND gotov_proizvod=true LIMIT 1) AS slika_gotov,
               r.model_3d_url,
               (SELECT COUNT(*) FROM roba_slike WHERE roba_id=r.id) AS broj_slika
        FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
@@ -157,7 +157,7 @@ router.get('/lager', zahtijevaRobaMagacin, async (req, res) => {
       `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
               r.std_sirina, r.std_visina, r.naziv_gotov,
               (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS glavna_slika,
-              (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND gotov_proizvod=true ORDER BY redosled LIMIT 1) AS slika_gotov,
+              (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND gotov_proizvod=true LIMIT 1) AS slika_gotov,
               r.model_3d_url,
               (SELECT COUNT(*) FROM roba_slike WHERE roba_id=r.id) AS broj_slika,
               rp.cijena, rp.stanje,
@@ -2346,15 +2346,30 @@ router.get('/:id/slike', preskociAkoNijeArtikal, zahtijevaProdaju, async (req, r
    Za razliku od glavne, gotovih moze biti VISE (razni uglovi, razne postavke). */
 router.post('/:id/slike/:slikaId/gotov', preskociAkoNijeArtikal, zahtijevaProdaju, async (req, res) => {
   const ukljuci = req.body?.gotov !== false;
+  const client = await pool.connect();
   try {
-    const r = await pool.query(
+    await client.query('BEGIN');
+    /* SAMO JEDNA slika moze biti gotov proizvod — isto pravilo kao za glavnu.
+       Da ih je vise, katalog bi uzimao "prvu po redosledu", pa bi se prikaz mijenjao
+       kad god se slike premjeste, a da niko ne zna zasto. Ovako je uvijek jasno koja je. */
+    if (ukljuci) {
+      await client.query('UPDATE roba_slike SET gotov_proizvod=false WHERE roba_id=$1', [req.params.id]);
+    }
+    const r = await client.query(
       'UPDATE roba_slike SET gotov_proizvod=$1 WHERE id=$2 AND roba_id=$3 RETURNING id, gotov_proizvod',
       [ukljuci, req.params.slikaId, req.params.id]
     );
-    if (!r.rows.length) return res.status(404).json({ error: 'Slika nije pronađena.' });
+    if (!r.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Slika nije pronađena.' });
+    }
+    await client.query('COMMIT');
     res.json({ ok: true, gotov_proizvod: r.rows[0].gotov_proizvod });
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 

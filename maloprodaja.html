@@ -2205,6 +2205,9 @@ async function msaPrekidacGotov(){
     });
     const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
     if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    /* Samo JEDNA slika moze biti gotov proizvod — pa se ostale ovdje odmah gase,
+       da prikaz ne pokazuje dvije oznacene dok se ne osvjezi sa servera. */
+    if(d.gotov_proizvod) msaSlike.forEach(x=>{ x.gotov_proizvod = false; });
     s.gotov_proizvod = d.gotov_proizvod;
     msaPrikaziTrenutnu();
   }catch(e){ alert('✗ ' + e.message); }
