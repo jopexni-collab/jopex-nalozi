@@ -4130,8 +4130,11 @@ const gpgSastojci = {};   // gid -> spisak sastojaka, da stablo ne vuce pri svak
 
 
 async function gpgUcitaj(){
-  const cont = document.getElementById('gpg-spisak');
-  cont.innerHTML = '<div style="padding:14px;color:#8b96a5;font-size:12.5px;">Učitavanje...</div>';
+  /* Pise u STABLO — raniji kontejner "gpg-spisak" je uklonjen kad je spisak zamijenjen
+     stablom, pa je funkcija tiho pucala u prvom redu i stablo se nikad nije crtalo. */
+  const cont = document.getElementById('gpg-stablo');
+  if(!cont) return;
+  cont.innerHTML = '<div style="padding:14px;color:#8b96a5;font-size:12px;">Učitavanje...</div>';
   try{
     // Grupe artikala iz lagera — za izbor sta smije u sastojak
     if(!gpgGrupeArtikala.length){
@@ -4158,6 +4161,10 @@ async function gpgUcitaj(){
         }
       }
     }catch(e){ /* stablo radi i bez proizvoda */ }
+
+    /* Prva grupa se otvori sama — inace bi stablo izgledalo prazno iako grupe postoje,
+       pa bi se pokusalo praviti nesto sto vec ima. */
+    if(!gpgOtvorena && gpgSve.length) gpgOtvorena = gpgSve[0].id;
 
     gpgRender();
     if(gpgIzabranProizvod) gpgIzaberiProizvod(gpgOtvorena, gpgIzabranProizvod);
@@ -4458,21 +4465,6 @@ function gpgPrikaziSastojak(g, sid){
     </div>`;
 }
 
-async function gpgNova(){
-  const naziv = document.getElementById('gpg-naziv').value.trim();
-  if(!naziv){ alert('Upiši naziv grupe (npr. „Sto").'); return; }
-  try{
-    const r = await fetch(`${API}/api/gotovi-proizvodi/grupe`,{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ naziv, oblik: document.getElementById('gpg-oblik').value }),
-    });
-    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
-    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
-    document.getElementById('gpg-naziv').value = '';
-    gpgOtvorena = d.id;
-    await gpgUcitaj();
-  }catch(e){ alert('✗ '+e.message); }
-}
 
 async function gpgObrisi(id){
   const g = gpgSve.find(x=>x.id===id);
