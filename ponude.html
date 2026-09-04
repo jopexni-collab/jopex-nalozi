@@ -2,6 +2,8 @@
 <html lang="sr">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
 <title>JoPeX – Generator Ponuda</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -164,6 +166,62 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
 .p-tot-box .val{font-size:22px;font-weight:700;color:#e8a800;}
 .p-note{background:#fffbee;border-left:3px solid #e8a800;padding:8px 12px;font-size:11px;color:#7a6520;margin-top:12px;border-radius:0 4px 4px 0;}
 .p-foot{margin-top:18px;padding-top:10px;border-top:1px solid #eee;font-size:10px;color:#6b7a8d;text-align:center;}
+/* ═══ TELEFON I USKI EKRANI ═══════════════════════════════
+   Isti fajl, drugaciji raspored: paneli se ne dijele lijevo/desno nego
+   se prikazuje JEDAN preko cijelog ekrana, a prebacuje se trakom na dnu.
+   Prelaz je na 760px - ispod toga 400px lijevog panela ne ostavlja
+   dovoljno za crtez.                                                    */
+@media (max-width:760px){
+  .app{ position:relative; }
+  .left{
+    width:100%!important;
+    border-right:none;
+    /* Prikazuje se samo kad je izabran tab "Unos" */
+    display:none;
+  }
+  .right{ display:none; padding:10px 10px 70px!important; }
+  body.m-unos  .left { display:flex!important; }
+  body.m-crtez .right{ display:block!important; }
+  body.m-crtez .right .vw{ display:none; }
+  body.m-crtez .right #vw-crtez{ display:block!important; }
+  body.m-ponuda .right{ display:block!important; }
+  body.m-ponuda .right .vw{ display:none; }
+  body.m-ponuda .right #vw-pon{ display:block!important; }
+  /* Uspravne kartice desnog panela nisu potrebne - zamjenjuje ih donja traka */
+  .vtabs{ display:none!important; }
+
+  /* Donja traka za prebacivanje */
+  #m-nav{
+    display:flex!important;
+    position:fixed; left:0; right:0; bottom:0; z-index:900;
+    background:#fff; border-top:1px solid #dde2ea;
+    padding-bottom:env(safe-area-inset-bottom);
+    box-shadow:0 -2px 10px rgba(0,0,0,.08);
+  }
+  #m-nav button{
+    flex:1; border:none; background:none; padding:11px 4px 10px;
+    font:inherit; font-size:11px; font-weight:600; color:#8a93a3; cursor:pointer;
+    border-top:3px solid transparent;
+  }
+  #m-nav button.on{ color:#1a5fa8; border-top-color:#1a5fa8; background:#f4f8fd; }
+  #m-nav .ikona{ display:block; font-size:16px; margin-bottom:1px; }
+
+  /* Vece mete za prst */
+  .lbody{ padding:12px 12px 80px; }
+  input,select,button{ font-size:16px!important; }   /* 16px sprjecava zumiranje */
+  .fg input,.fg select{ min-height:40px; }
+  .tip-tab{ padding:11px 8px!important; font-size:12px!important; }
+  .sec{ padding:10px!important; }
+  header{ height:44px; }
+  .hdr-btn{ padding:6px 8px!important; font-size:11px!important; }
+  /* Zaglavlje sa popisom stavki - manji udio na malom ekranu */
+  .item-list-wrap{ max-height:38%!important; }
+  /* Sirine polja koje su racunate za desktop */
+  .p-tbl,table{ font-size:12px!important; }
+  canvas{ max-width:100%; height:auto; }
+}
+#m-nav{ display:none; }
+
 @media print{
   header,.left,.vtabs{display:none!important;}
   /* Za ekran su html/body/.app/.right fiksne visine sa overflow:hidden, da
@@ -307,6 +365,19 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
 }
 .click-highlight{animation:clickHighlightFlash 1.5s ease-in-out;border-radius:6px;}
 
+@media (max-width:760px){
+  /* Uredjivac na telefonu: siri, veca polja, dalje od ivice ekrana */
+  #inline-editor{
+    min-width:190px!important;
+    max-width:calc(100vw - 24px)!important;
+    padding:10px!important;
+  }
+  #inline-editor input,#inline-editor select{
+    font-size:16px!important;   /* ispod 16px Android zumira polje */
+    min-height:38px!important;
+  }
+  #inline-editor button{ min-height:36px!important; font-size:14px!important; }
+}
 #inline-editor{display:none;position:fixed;z-index:900;background:#fff;border:1px solid #1a5fa8;
   border-radius:7px;box-shadow:0 4px 16px rgba(0,0,0,.22);padding:8px 10px;font-family:'Segoe UI',Arial;}
 #inline-editor .inline-ed-label{font-size:11px;color:#6b7a8d;margin-bottom:4px;font-weight:600;}
@@ -955,13 +1026,54 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
   </div>
 </div><!-- /right -->
 
-</div><!-- /app -->
+</div>
+<!-- Donja traka za prebacivanje panela - vidljiva SAMO na uskim ekranima -->
+<nav id="m-nav">
+  <button id="mn-unos"   onclick="mPrikaz('unos')"><span class="ikona">&#9998;</span>Unos</button>
+  <button id="mn-crtez"  onclick="mPrikaz('crtez')"><span class="ikona">&#9635;</span>Crtež</button>
+  <button id="mn-ponuda" onclick="mPrikaz('ponuda')"><span class="ikona">&#9776;</span>Ponuda</button>
+</nav>
+<!-- /app -->
 <script>
 // ── GLOBALNE VARIJABLE KOJE MORAJU POSTOJATI OD POCETKA ──────────
 // uiTip je tab otvoren u lijevom panelu. Ranije je nastajao tek prvom
 // dodjelom, pa je citanje prije toga (npr. pri ucitavanju stare ponude)
 // padalo na "uiTip is not defined".
 var uiTip = 'k';
+
+// ── MOBILNI PRIKAZ ───────────────────────────────────────────────
+// Na uskim ekranima se ne prikazuju oba panela nego jedan, a bira se
+// donjom trakom. Na sirokim ekranima klase na <body> nemaju nikakav
+// efekat, pa desktop raspored ostaje netaknut.
+var _mPrikaz='unos';
+function mPrikaz(sta){
+  _mPrikaz=sta;
+  var b=document.body;
+  // classList.toggle sa drugim argumentom nije svuda podrzan (stariji
+  // Android WebView), pa se klase postavljaju rucno preko className.
+  var kl=(b.className||'').split(/\s+/).filter(function(c){
+    return c && c.indexOf('m-')!==0;
+  });
+  kl.push('m-'+sta);
+  b.className=kl.join(' ');
+  ['unos','crtez','ponuda'].forEach(function(x){
+    var el=document.getElementById('mn-'+x);
+    if(el) el.className=(x===sta)?'on':'';
+  });
+  // Kad se otvori crtez ili ponuda, osvjezi ih - mogli su se mijenjati
+  // dok je bio otvoren unos.
+  try{
+    if(sta==='crtez') drawCanvas();
+    if(sta==='ponuda') genPon(typeof _ponCurrency!=='undefined'?_ponCurrency:'KM');
+  }catch(e){}
+  try{ window.scrollTo(0,0); }catch(e){}
+}
+function _jeUzakEkran(){
+  try{ return window.matchMedia('(max-width:760px)').matches; }catch(e){ return false; }
+}
+// Prvo otvaranje: na telefonu kreni od unosa
+setTimeout(function(){ try{ mPrikaz('unos'); }catch(e){} },0);
+
 // Iste vrste: nastajale su tek prvom dodjelom, pa bi citanje prije toga
 // srusilo ucitavanje. Vrijednosti su iste kakve dobiju pri prvom crtanju.
 var shape = 'I';
@@ -11530,6 +11642,15 @@ window.addEventListener('resize',function(){drawCanvas();});
     }
     if(pendingClick&&_sameRegion(pendingClick.hit,hit)){
       clearTimeout(pendingClick.timer);
+      pendingClick=null;
+      _openInlineEditor(hit,e.clientX,e.clientY);
+      return;
+    }
+    // Na TELEFONU jedan dodir odmah otvara uredjivac - cekanje na drugi
+    // dodir i dupli klik prstom su nepouzdani. Na racunaru ostaje kako je
+    // bilo: prvi klik oznaci u panelu, drugi otvara uredjivac.
+    if(_jeUzakEkran()&&hit.edit){
+      if(pendingClick) clearTimeout(pendingClick.timer);
       pendingClick=null;
       _openInlineEditor(hit,e.clientX,e.clientY);
       return;
