@@ -78,12 +78,17 @@ router.get('/:id', async (req, res) => {
     const g = await pool.query('SELECT * FROM gotovi_proizvodi WHERE id=$1', [req.params.id]);
     if (!g.rows.length) return res.status(404).json({ error: 'Nije pronađeno.' });
 
+    /* Uz komponentu se vraca i STANJE i CIJENA iz lagera — komercijalista tako odmah
+       vidi ima li materijala i po kojoj cijeni, pa zna da li da ide sa nizom ili visom. */
+    const objektId = parseInt(req.query.objekt_id) || null;
     const s = await pool.query(
-      `SELECT st.*, ro.sifra, ro.naziv AS roba_naziv, ro.jed_mjera, ro.grupa
+      `SELECT st.*, ro.sifra, ro.naziv AS roba_naziv, ro.jed_mjera, ro.grupa,
+              rp.cijena AS cijena_lager, rp.stanje AS stanje_lager
        FROM gotov_stavke st
        LEFT JOIN roba ro ON ro.id = st.roba_id
+       LEFT JOIN roba_pj rp ON rp.roba_id = st.roba_id AND rp.objekt_id = $2
        WHERE st.gotov_id = $1 ORDER BY st.redosled, st.id`,
-      [req.params.id]
+      [req.params.id, objektId]
     );
     const d = await pool.query(
       'SELECT * FROM gotov_dimenzije WHERE gotov_id=$1 ORDER BY redosled, id',
@@ -205,13 +210,13 @@ router.post('/:id/stavke', async (req, res) => {
 
 router.patch('/stavka/:sid', async (req, res) => {
   if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
-  const DOZVOLJENA = ['roba_id', 'opis', 'tip_kolicine', 'kolicina', 'faktor', 'fiksna_cijena', 'redosled', 'grupa_izbora', 'podrazumijevana'];
+  const DOZVOLJENA = ['roba_id', 'opis', 'tip_kolicine', 'kolicina', 'faktor', 'fiksna_cijena', 'marza_posto', 'redosled', 'grupa_izbora', 'podrazumijevana'];
   const sets = [], vals = [];
   let i = 1;
   for (const k of DOZVOLJENA) {
     if (!(k in req.body)) continue;
     let v = req.body[k];
-    if (['kolicina', 'faktor', 'fiksna_cijena'].includes(k)) v = (v === '' || v == null) ? null : broj(v);
+    if (['kolicina', 'faktor', 'fiksna_cijena', 'marza_posto'].includes(k)) v = (v === '' || v == null) ? null : broj(v);
     sets.push(`${k}=$${i++}`);
     vals.push(v);
   }
@@ -288,8 +293,19 @@ router.get('/:id/cijena', async (req, res) => {
     /* Cijene se povlače SVJEŽE iz lagera — nikad se ne prepisuju u sastavnicu.
        Promjena cijene postolja odmah popravi sve stolove koji ga koriste. */
     const s = await pool.query(
+      /* Uz komponentu se povlaci i SLIKA — za vizuelni pregled dok se bira.
+         Prednost ima slika gotovog proizvoda; ako je nema, uzima se glavna slika
+         artikla (tekstura ploce, fotografija postolja). */
       `SELECT st.*, ro.sifra, ro.naziv AS roba_naziv, ro.jed_mjera,
-              rp.cijena AS cijena_lager, po.valuta
+              rp.cijena AS cijena_lager, po.valuta,
+              COALESCE(
+                (SELECT COALESCE(thumb_url, url) FROM roba_slike
+                 WHERE roba_id = ro.id AND gotov_proizvod = true LIMIT 1),
+                (SELECT COALESCE(thumb_url, url) FROM roba_slike
+                 WHERE roba_id = ro.id AND glavna = true LIMIT 1)
+              ) AS slika,
+              (SELECT COALESCE(thumb_url, url) FROM roba_slike
+               WHERE roba_id = ro.id AND gotov_proizvod = true LIMIT 1) AS slika_gotov
        FROM gotov_stavke st
        LEFT JOIN roba ro ON ro.id = st.roba_id
        LEFT JOIN roba_pj rp ON rp.roba_id = st.roba_id AND rp.objekt_id = $2
@@ -351,23 +367,38 @@ router.get('/:id/cijena', async (req, res) => {
         const cijena = st.fiksna_cijena != null
           ? parseFloat(st.fiksna_cijena)
           : (st.cijena_lager != null ? parseFloat(st.cijena_lager) : null);
-        if (cijena == null) nepotpuno = true;
+        if (cijena == null && st.fiksna_cijena == null) nepotpuno = true;
 
         const mnozilac = parseFloat(st.kolicina) || 1;
         const kol = st.tip_kolicine === 'povrsina' ? m2 * mnozilac
                   : st.tip_kolicine === 'duzina'   ? m1 * mnozilac
                   : mnozilac;
+        /* TRI nacina da se dodje do jedinicne cijene, po prioritetu:
+             1. FIKSNA cijena  — upisana rucno, ide direktno (bez faktora i marze)
+             2. faktor         — cijena iz lagera × faktor
+             3. marza %        — cijena iz lagera + marza
+           Faktor i marza se mogu i kombinovati (× faktor, pa + marza). */
         const faktor = parseFloat(st.faktor) || 1;
-        const iznos = (cijena || 0) * kol * faktor;
+        const marza = parseFloat(st.marza_posto) || 0;
+        const jeFiksna = st.fiksna_cijena != null;
+        const jedinicna = jeFiksna
+          ? parseFloat(st.fiksna_cijena)
+          : (cijena || 0) * faktor * (1 + marza / 100);
+        const iznos = jedinicna * kol;
         osnovica += iznos;
         razrada.push({
           stavka_id: st.id,
           grupa_izbora: st.grupa_izbora || null,
           naziv: st.roba_naziv || st.opis, sifra: st.sifra,
+          slika: st.slika || null,
           kolicina: +kol.toFixed(3),
           jedinica: st.tip_kolicine === 'povrsina' ? 'm²' : st.tip_kolicine === 'duzina' ? 'm¹' : (st.jed_mjera || 'kom'),
           cijena: cijena != null ? +cijena.toFixed(2) : null,
-          faktor, iznos: +iznos.toFixed(2), bez_cijene: cijena == null,
+          jedinicna: +jedinicna.toFixed(2),
+          faktor, marza_posto: marza, fiksna: jeFiksna,
+          iznos: +iznos.toFixed(2),
+          // Fiksna cijena ne treba lager — samo ostale prijavljuju da fali
+          bez_cijene: !jeFiksna && cijena == null,
         });
       }
 
@@ -383,7 +414,12 @@ router.get('/:id/cijena', async (req, res) => {
         izbor: izabrane.map(x => ({
           grupa: x.grupa_izbora, stavka_id: x.id,
           naziv: x.roba_naziv || x.opis, sifra: x.sifra,
+          slika: x.slika || null,
         })),
+        /* Za veliki pregled: slika gotovog proizvoda one komponente koja je ima.
+           Obicno je to ploca — njena slika pokazuje kako sto izgleda gotov. */
+        slika_pregled: [...izabrane, ...obavezne].find(x => x.slika_gotov)?.slika_gotov
+                    || [...izabrane].find(x => x.slika)?.slika || null,
         povrsina_m2: +m2.toFixed(3),
         cijena_cjenovnik: +osnovica.toFixed(2),
         popust_posto: popustPosto,
@@ -413,6 +449,7 @@ router.get('/:id/cijena', async (req, res) => {
         opcije: grupe[g].map(x => ({
           stavka_id: x.id, naziv: x.roba_naziv || x.opis, sifra: x.sifra,
           podrazumijevana: x.podrazumijevana,
+          slika: x.slika || null,
         })),
       })),
       broj_kombinacija: sveKombinacije.length * dimenzije.length,

@@ -4168,7 +4168,10 @@ async function gprUcitajDetalj(id){
   const el = document.getElementById('gpr-detalj-'+id);
   if(!el) return;
   try{
-    const r = await fetch(`${API}/api/gotovi-proizvodi/${id}`);
+    /* Objekat se prosljedjuje da bi uz svaku komponentu stiglo STANJE i CIJENA iz
+       njegovog lagera — bez toga te kolone ostaju prazne. */
+    const obj = document.getElementById('gpr-obj-'+id)?.value || '';
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${id}${obj?`?objekt_id=${obj}`:''}`);
     if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
     const g = await r.json();
     gprRenderDetalj(el, g);
@@ -4192,7 +4195,11 @@ function gprRenderDetalj(el, g){
           <th style="padding:4px 6px;text-align:left;">Komponenta</th>
           <th style="padding:4px 6px;text-align:left;">Mjeri se</th>
           <th style="padding:4px 6px;text-align:right;">Količina</th>
-          <th style="padding:4px 6px;text-align:right;">Faktor</th>
+          <th style="padding:4px 6px;text-align:right;" title="Raspoloživo u izabranom objektu">Na stanju</th>
+          <th style="padding:4px 6px;text-align:right;" title="Cijena iz lager liste">Lager</th>
+          <th style="padding:4px 6px;text-align:right;" title="Množilac cijene iz lagera">Faktor</th>
+          <th style="padding:4px 6px;text-align:right;" title="Dodatna marža u procentima">Marža %</th>
+          <th style="padding:4px 6px;text-align:right;" title="Direktna cijena — zaobilazi faktor i maržu">Fiksna</th>
           <th style="padding:4px 6px;"></th>
         </tr></thead>
         <tbody>${(g.stavke||[]).map((s,i)=>`
@@ -4214,15 +4221,34 @@ function gprRenderDetalj(el, g){
                      onchange="gprIzmjeniStavku(${s.id},'kolicina',this.value,${g.id})"
                      style="width:58px;text-align:right;font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
             </td>
+            <td style="padding:2px 6px;text-align:right;color:${(s.stanje_lager??0)>0?'#6b7a8d':'var(--red,#c0392b)'};" title="Raspoloživo u izabranom objektu">
+              ${s.roba_id ? (s.stanje_lager!=null ? uPolje(s.stanje_lager,2) : '—') : ''}
+            </td>
+            <td style="padding:2px 6px;text-align:right;color:#6b7a8d;">
+              ${s.roba_id ? (s.cijena_lager!=null ? uPolje(s.cijena_lager,2) : '<span style="color:var(--orange,#b8860b);">nema</span>') : ''}
+            </td>
             <td style="padding:2px 6px;text-align:right;">
               <input type="text" inputmode="decimal" value="${uPolje(s.faktor,2)}"
+                     ${s.fiksna_cijena!=null?'disabled title="Fiksna cijena zaobilazi faktor"':''}
                      onchange="gprIzmjeniStavku(${s.id},'faktor',this.value,${g.id})"
-                     style="width:52px;text-align:right;font:inherit;font-size:11px;font-weight:700;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
+                     style="width:48px;text-align:right;font:inherit;font-size:11px;font-weight:700;padding:3px 5px;border:1px solid #ddd;border-radius:4px;${s.fiksna_cijena!=null?'opacity:.4;':''}">
+            </td>
+            <td style="padding:2px 6px;text-align:right;">
+              <input type="text" inputmode="decimal" value="${s.marza_posto!=null?uPolje(s.marza_posto,1):''}" placeholder="—"
+                     ${s.fiksna_cijena!=null?'disabled':''}
+                     onchange="gprIzmjeniStavku(${s.id},'marza_posto',this.value,${g.id})"
+                     style="width:48px;text-align:right;font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;${s.fiksna_cijena!=null?'opacity:.4;':''}">
+            </td>
+            <td style="padding:2px 6px;text-align:right;">
+              <input type="text" inputmode="decimal" value="${s.fiksna_cijena!=null?uPolje(s.fiksna_cijena,2):''}" placeholder="—"
+                     onchange="gprIzmjeniStavku(${s.id},'fiksna_cijena',this.value,${g.id})"
+                     title="Upiši cijenu direktno — zaobilazi lager, faktor i maržu"
+                     style="width:60px;text-align:right;font:inherit;font-size:11px;padding:3px 5px;border:1px solid ${s.fiksna_cijena!=null?'var(--green,#1f8a4c)':'#ddd'};border-radius:4px;${s.fiksna_cijena!=null?'font-weight:700;color:var(--green,#1f8a4c);':''}">
             </td>
             <td style="padding:2px 6px;text-align:center;">
               <button onclick="gprObrisiStavku(${s.id},${g.id})" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--red,#c0392b);">🗑</button>
             </td>
-          </tr>`).join('') || '<tr><td colspan="6" style="padding:10px;text-align:center;color:#8b96a5;">Nema komponenti.</td></tr>'}</tbody>
+          </tr>`).join('') || '<tr><td colspan="10" style="padding:10px;text-align:center;color:#8b96a5;">Nema komponenti.</td></tr>'}</tbody>
       </table>
     </div>
 
@@ -4249,7 +4275,7 @@ function gprRenderDetalj(el, g){
 
     <div style="font-size:12px;font-weight:800;margin:14px 0 7px;">Cijene</div>
     <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:end;margin-bottom:9px;">
-      <select id="gpr-obj-${g.id}" style="font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ccc;border-radius:5px;"><option value="">— objekat —</option></select>
+      <select id="gpr-obj-${g.id}" onchange="gprUcitajDetalj(${g.id})" title="Čije cijene i stanje se prikazuju" style="font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ccc;border-radius:5px;"><option value="">— objekat —</option></select>
       <select id="gpr-tip-${g.id}" style="font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ccc;border-radius:5px;"><option value="">— bez popusta —</option></select>
       <button onclick="gprIzracunaj(${g.id})" style="padding:6px 15px;border:none;background:#6b4fa0;color:#fff;border-radius:5px;font-weight:700;cursor:pointer;font-size:12px;">▶ Izračunaj</button>
     </div>
@@ -4398,49 +4424,122 @@ async function gprIzracunaj(gid){
 
 function gprRenderCijene(cont, d){
   const fm = v => (v||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const imaIzbor = (d.grupe_izbora||[]).length > 0;
-  const redovi = [];
-
-  for(const c of d.cijene||[]){
-    const varijante = c.varijante || [c];
-    for(const v of varijante){
-      redovi.push({
-        dim: c.naziv,
-        izbor: (v.izbor||[]).map(x=>x.naziv).join(' + '),
-        osnovica: v.osnovica, popust: v.popust, popust_posto: v.popust_posto,
-        cijena: v.cijena, nepotpuno: v.nepotpuno,
-      });
-    }
-  }
+  const grupe = d.grupe_izbora || [];
+  const redovi = d.cijene || [];
   if(!redovi.length){ cont.innerHTML='<div style="color:#8b96a5;font-size:12px;">Nema komponenti ni dimenzija.</div>'; return; }
 
+  /* Ziv pregled: bira se po jedno iz svake grupe i dimenzija, pa se odmah vidi
+     slika i cijena. Ispod stoji i tabela SVIH kombinacija — za stampani katalog. */
+  const kljuc = r => (r.izbor||[]).map(x=>x.stavka_id).join('-') + '|' + (r.dimenzija_id||'');
+  if(!window.__gprIzbor) window.__gprIzbor = {};
+  const zapamceni = window.__gprIzbor[d.id];
+  let tekuci = redovi.find(r => kljuc(r) === zapamceni) || redovi[0];
+
+  window.gprIzaberi = (gid, k) => {
+    window.__gprIzbor[gid] = k;
+    gprRenderCijene(cont, d);
+  };
+
+  const dimenzije = [...new Set(redovi.map(r=>r.dimenzija_id))]
+    .map(id => redovi.find(r=>r.dimenzija_id===id))
+    .filter(Boolean);
+
+  // Kombinacija koja odgovara trenutnom izboru grupa + izabranoj dimenziji
+  const nadji = (izborIds, dimId) => redovi.find(r =>
+    String(r.dimenzija_id||'') === String(dimId||'') &&
+    (r.izbor||[]).every(x => izborIds.includes(x.stavka_id))
+  );
+
+  const tekuciIds = (tekuci.izbor||[]).map(x=>x.stavka_id);
   const imaNepotpunih = redovi.some(r=>r.nepotpuno);
+
   cont.innerHTML = `
-    ${imaNepotpunih?'<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:7px 10px;font-size:11.5px;color:#8b6914;margin-bottom:8px;">⚠ Neke komponente nemaju cijenu u ovom objektu — ti redovi su nepotpuni.</div>':''}
-    <div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
-        <thead><tr style="background:#6b4fa0;color:#fff;">
-          <th style="padding:4px 7px;text-align:left;">Dimenzija</th>
-          ${imaIzbor?'<th style="padding:4px 7px;text-align:left;">Izbor</th>':''}
-          <th style="padding:4px 7px;text-align:right;">Cjenovnik</th>
-          ${d.tip_kupca?`<th style="padding:4px 7px;text-align:right;">Popust</th>`:''}
-          <th style="padding:4px 7px;text-align:right;">Cijena</th>
-        </tr></thead>
-        <tbody>${redovi.map((r,i)=>`
-          <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;${r.nepotpuno?'opacity:.55;':''}">
-            <td style="padding:3px 7px;font-weight:700;">${esc(r.dim)}</td>
-            ${imaIzbor?`<td style="padding:3px 7px;">${esc(r.izbor||'—')}</td>`:''}
-            <td style="padding:3px 7px;text-align:right;color:#6b7a8d;">${fm(r.osnovica)}</td>
-            ${d.tip_kupca?`<td style="padding:3px 7px;text-align:right;color:var(--green,#1f8a4c);">−${fm(r.popust)}</td>`:''}
-            <td style="padding:3px 7px;text-align:right;font-weight:800;">${fm(r.cijena)} ${esc(d.valuta||'KM')}</td>
-          </tr>`).join('')}</tbody>
-      </table>
+    ${imaNepotpunih?'<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:7px 10px;font-size:11.5px;color:#8b6914;margin-bottom:9px;">⚠ Neke komponente nemaju cijenu u ovom objektu — ti redovi su nepotpuni.</div>':''}
+
+    <!-- ŽIVI PREGLED -->
+    <div style="display:flex;gap:14px;flex-wrap:wrap;background:#faf9fc;border:1px solid #e0d8ee;border-radius:10px;padding:13px;margin-bottom:12px;">
+      <div style="flex:0 0 190px;">
+        ${tekuci.slika_pregled
+          ? `<img src="${esc(tekuci.slika_pregled)}" style="width:190px;height:150px;object-fit:cover;border-radius:8px;border:1px solid #ddd;background:#fff;">`
+          : `<div style="width:190px;height:150px;border-radius:8px;border:1px dashed #ccc;display:flex;align-items:center;justify-content:center;color:#c3c9d1;font-size:11.5px;text-align:center;padding:10px;background:#fff;">
+               Nema slike<br><span style="font-size:10px;">označi sliku kao „Gotov proizvod" u lageru</span>
+             </div>`}
+      </div>
+
+      <div style="flex:1;min-width:230px;">
+        ${grupe.map(g=>`
+          <div style="margin-bottom:9px;">
+            <div style="font-size:10.5px;color:#6b7a8d;font-weight:700;margin-bottom:4px;">${esc(g.naziv).toUpperCase()}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              ${g.opcije.map(o=>{
+                const aktivna = tekuciIds.includes(o.stavka_id);
+                const noviIds = tekuciIds.filter(id => !g.opcije.some(x=>x.stavka_id===id)).concat(o.stavka_id);
+                const meta = nadji(noviIds, tekuci.dimenzija_id);
+                return `<button type="button" onclick="gprIzaberi(${d.id},'${meta?kljuc(meta):''}')"
+                  style="display:flex;align-items:center;gap:6px;padding:4px 9px 4px 4px;border-radius:7px;cursor:pointer;font-size:11.5px;
+                         border:2px solid ${aktivna?'#6b4fa0':'#ddd'};background:${aktivna?'#f3f0f8':'#fff'};font-weight:${aktivna?'700':'400'};">
+                  ${o.slika?`<img src="${esc(o.slika)}" style="width:26px;height:26px;object-fit:cover;border-radius:4px;">`
+                           :`<span style="width:26px;height:26px;border-radius:4px;background:#eef0f3;"></span>`}
+                  ${esc(o.naziv)}
+                </button>`;
+              }).join('')}
+            </div>
+          </div>`).join('')}
+
+        ${dimenzije.length>1?`
+          <div style="margin-bottom:9px;">
+            <div style="font-size:10.5px;color:#6b7a8d;font-weight:700;margin-bottom:4px;">DIMENZIJA</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              ${dimenzije.map(dv=>{
+                const aktivna = String(dv.dimenzija_id)===String(tekuci.dimenzija_id);
+                const meta = nadji(tekuciIds, dv.dimenzija_id);
+                return `<button type="button" onclick="gprIzaberi(${d.id},'${meta?kljuc(meta):''}')"
+                  style="padding:5px 11px;border-radius:7px;cursor:pointer;font-size:11.5px;
+                         border:2px solid ${aktivna?'#6b4fa0':'#ddd'};background:${aktivna?'#f3f0f8':'#fff'};font-weight:${aktivna?'700':'400'};">
+                  ${esc(dv.dimenzija||'—')}</button>`;
+              }).join('')}
+            </div>
+          </div>`:''}
+
+        <div style="border-top:1px solid #e0d8ee;padding-top:9px;margin-top:4px;">
+          ${tekuci.popust_posto>0?`
+            <div style="font-size:11.5px;color:#8b96a5;">Cjenovnik: <span style="text-decoration:line-through;">${fm(tekuci.cijena_cjenovnik)}</span></div>
+            <div style="font-size:11.5px;color:var(--green,#1f8a4c);">Popust ${tekuci.popust_posto}%: −${fm(tekuci.popust)}</div>`:''}
+          <div style="font-size:21px;font-weight:800;color:#6b4fa0;">${fm(tekuci.cijena)} ${esc(d.valuta||'KM')}</div>
+          <div style="font-size:10.5px;color:#8b96a5;">
+            ${tekuci.povrsina_m2?`${tekuci.povrsina_m2.toFixed(3)} m² · `:''}${(tekuci.izbor||[]).map(x=>esc(x.naziv)).join(' + ')}
+          </div>
+        </div>
+      </div>
     </div>
-    <div style="font-size:10.5px;color:#8b96a5;margin-top:6px;line-height:1.5;">
-      ${redovi.length} ${redovi.length===1?'cijena':'cijena'}${imaIzbor?` · ${d.grupe_izbora.map(g=>g.naziv+' ('+g.opcije.length+')').join(', ')}`:''}
-      ${d.tip_kupca?` · popust za: ${esc(d.tip_kupca)}`:''}
-      <br>Faktor pravi cjenovnik; popust dolazi povrh njega. Cijene se povlače svježe iz lagera.
-    </div>`;
+
+    <!-- SVE KOMBINACIJE -->
+    <details>
+      <summary style="cursor:pointer;font-size:12px;font-weight:700;color:#6b4fa0;margin-bottom:7px;">
+        📋 Sve kombinacije (${redovi.length}) — za štampani katalog
+      </summary>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+          <thead><tr style="background:#6b4fa0;color:#fff;">
+            ${grupe.map(g=>`<th style="padding:4px 7px;text-align:left;">${esc(g.naziv)}</th>`).join('')}
+            <th style="padding:4px 7px;text-align:left;">Dimenzija</th>
+            <th style="padding:4px 7px;text-align:right;">Cjenovnik</th>
+            ${redovi[0]?.popust_posto>0?'<th style="padding:4px 7px;text-align:right;">Plaća</th>':''}
+          </tr></thead>
+          <tbody>${redovi.map((r,i)=>`
+            <tr style="background:${kljuc(r)===kljuc(tekuci)?'#f3f0f8':(i%2?'#f7f9fb':'#fff')};cursor:pointer;border-bottom:1px solid #eee;"
+                onclick="gprIzaberi(${d.id},'${kljuc(r)}')">
+              ${grupe.map(g=>{
+                const iz = (r.izbor||[]).find(x=>x.grupa===g.naziv);
+                return `<td style="padding:3px 7px;">${esc(iz?.naziv||'—')}</td>`;
+              }).join('')}
+              <td style="padding:3px 7px;font-weight:700;">${esc(r.dimenzija||'—')}</td>
+              <td style="padding:3px 7px;text-align:right;${r.popust_posto>0?'color:#8b96a5;text-decoration:line-through;':'font-weight:700;'}">${fm(r.cijena_cjenovnik)}</td>
+              ${r.popust_posto>0?`<td style="padding:3px 7px;text-align:right;font-weight:800;">${fm(r.cijena)}</td>`:''}
+            </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </details>`;
 }
 
 
