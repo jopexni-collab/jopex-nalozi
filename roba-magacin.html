@@ -636,7 +636,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 <div id="tab-lager">
 
-<div id="msa-pun-ekran" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:900;align-items:center;justify-content:center;cursor:zoom-out;" onclick="msaZatvoriPuniEkran()">
+<div id="msa-pun-ekran" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:960;align-items:center;justify-content:center;cursor:zoom-out;" onclick="msaZatvoriPuniEkran()">
   <img id="msa-pun-ekran-img" style="max-width:96vw;max-height:92vh;object-fit:contain;">
   <button onclick="event.stopPropagation();msaZatvoriPuniEkran()" style="position:absolute;top:14px;right:18px;background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:50%;width:38px;height:38px;font-size:20px;cursor:pointer;">✕</button>
   <button onclick="event.stopPropagation();msaPomjeriPuniEkran(-1)" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:22px;cursor:pointer;">‹</button>
@@ -644,11 +644,11 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <div id="msa-pun-ekran-brojac" style="position:absolute;bottom:18px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#fff;font-size:13px;padding:4px 12px;border-radius:14px;"></div>
 </div>
 
-<div id="modal-slika-artikla" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:600;align-items:center;justify-content:center;">
+<div id="modal-slika-artikla" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:940;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:12px;padding:16px;max-width:420px;width:90vw;max-height:92vh;overflow-y:auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
       <h3 id="msa-naziv" style="margin:0;font-size:14.5px;"></h3>
-      <button onclick="document.getElementById('modal-slika-artikla').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+      <button onclick="msaZatvori()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
     </div>
 
     <!-- Karusel — vidljiv samo ako artikal VEĆ ima bar jednu sliku -->
@@ -2180,6 +2180,20 @@ async function m3dObrisi(){
     const stavka=lagerPodaci.find(s=>s.id===msaTrenutniRobaId);
     if(stavka) stavka.model_3d_url=null;
   }catch(e){ alert('✗ '+e.message); }
+}
+
+
+/* Zatvaranje karusela — ako je otvoren IZ IZBORNIKA, izbornik se osvjezi da nova
+   oznaka (glavna / gotov proizvod) odmah bude vidljiva. Bez toga bi stara slicica
+   ostala dok se izbornik ne otvori ponovo. */
+function msaZatvori(){
+  document.getElementById('modal-slika-artikla').style.display = 'none';
+  const izb = document.getElementById('modal-gpr-izbor');
+  if(izb && izb.style.display !== 'none' && giZaGrupu != null){
+    gprOtvoriIzbornik(giZaGrupu);
+  } else if(typeof gprOtvoren !== 'undefined' && gprOtvoren){
+    gprUcitajDetalj(gprOtvoren);   // osvjezi i kolonu Slike u sastavnici
+  }
 }
 
 async function otvoriKaruselSlika(robaId, naziv){
@@ -4495,10 +4509,14 @@ function giFiltriraj(){
           <td style="padding:1px 6px;text-align:center;color:#6b7a8d;">${esc(a.jed_mjera||'')}</td>
           <td style="padding:1px 6px;text-align:right;${(Number(a.stanje)||0)>0?'':'color:var(--red,#c0392b);font-weight:700;'}">${(Number(a.stanje)||0)<0?'⚠ ':''}${uPolje(a.stanje||0,2)}</td>
           <td style="padding:1px 6px;text-align:right;font-weight:700;">${uPolje(a.cijena||0,2)}</td>
-          <td style="padding:1px 6px;text-align:center;">${
-            a.glavna_slika ? `<img src="${esc(a.glavna_slika)}" style="width:24px;height:24px;object-fit:cover;border-radius:3px;">`
-                           : '<span style="color:#dfe3e8;">—</span>'
-          }</td>
+          <td style="padding:1px 6px;text-align:center;white-space:nowrap;"
+              onclick="event.stopPropagation();otvoriKaruselSlika(${a.id},'${esc(a.naziv).replace(/'/g,"&apos;")}')"
+              title="Otvori slike — označi glavnu i sliku gotovog proizvoda">
+            ${a.glavna_slika
+              ? `<img src="${esc(a.glavna_slika)}" style="width:24px;height:24px;object-fit:cover;border-radius:3px;border:2px solid #4a90d9;cursor:pointer;">`
+              : `<span style="display:inline-flex;width:24px;height:24px;border-radius:3px;border:1px dashed #c3c9d1;align-items:center;justify-content:center;font-size:9px;color:#c3c9d1;cursor:pointer;">★</span>`}
+            <span style="color:var(--blue);font-size:10px;cursor:pointer;">✎</span>
+          </td>
         </tr>`).join('')}</tbody>
     </table>
     ${prikaz.length>300?'<div style="padding:8px;text-align:center;color:#8b96a5;font-size:11px;">Prikazano prvih 300 — suzi filtere.</div>':''}`
@@ -6474,7 +6492,9 @@ fetch(`${API}/api/auth/me`).then(r=>{
       </label>
     </div>
 
-    <div id="gi-broj" style="font-size:11px;color:#8b96a5;margin-bottom:5px;"></div>
+    <div id="gi-broj" style="font-size:11px;color:#8b96a5;margin-bottom:5px;">
+      Klik na red dodaje artikal · klik na <b>sliku</b> otvara slike, gdje se označava glavna i slika gotovog proizvoda.
+    </div>
     <div id="gi-lista" style="flex:1;overflow-y:auto;border:1px solid var(--border,#ddd);border-radius:8px;"></div>
   </div>
 </div>
