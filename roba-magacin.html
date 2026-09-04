@@ -946,12 +946,17 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       Gotov proizvod se sastoji od artikala iz lagera. Cijena se <b>računa</b>:
       cijena artikla × količina × faktor. Kupac plaća <b>neto površinu</b> — otpad je pokriven faktorom.
       Faktor pravi <b>cjenovnik</b>; popust po tipu kupca dolazi povrh njega.
+      <br><b>Naziv se bira iz kolone „Gotov proizvod"</b> u lager listi — artikli označeni tim
+      nazivom postaju prve stavke sastavnice, a ostalo dodaješ ručno.
     </div>
 
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
-      <input type="text" id="gpr-naziv-novi" placeholder="Naziv novog proizvoda (npr. Sto Pandora)"
-             style="flex:1;min-width:200px;font:inherit;font-size:12.5px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;">
-      <button type="button" onclick="gprNovi()" style="padding:7px 15px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:6px;font-weight:700;cursor:pointer;font-size:12.5px;">+ Novi</button>
+      <!-- Naziv se bira IZ KOLONE "Gotov proizvod" u lageru. Artikli oznaceni tim
+           nazivom postaju prve stavke sastavnice; ostalo se dodaje rucno. -->
+      <select id="gpr-naziv-novi" style="flex:1;min-width:230px;font:inherit;font-size:12.5px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;">
+        <option value="">— učitavanje naziva iz lagera —</option>
+      </select>
+      <button type="button" onclick="gprNovi()" style="padding:7px 15px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:6px;font-weight:700;cursor:pointer;font-size:12.5px;">+ Napravi sastavnicu</button>
       <button type="button" class="ce-tip-btn" style="font-size:11.5px;" onclick="gprUcitaj()">↻ Osvježi</button>
     </div>
 
@@ -3646,7 +3651,7 @@ function renderLagerRedovi(){
         <input type="checkbox" class="lager-izbor" value="${s.id}" ${lagerIzbor.has(String(s.id))?'checked':''} data-grupa="${esc(s.grupa||'')}" data-ima-dim="${(s.std_sirina&&s.std_visina)?'1':'0'}" onchange="lagerOsvjeziIzbor()">
       </td>
       <td style="padding:1px 5px;font-weight:700;">${esc(s.sifra)}</td>
-      <td style="padding:1px 5px;font-weight:700;">${esc(s.naziv)}</td>
+      <td style="padding:1px 5px;font-weight:700;">${esc(s.naziv)}<button onclick="izmijeniNaziv(${s.id},'${esc(s.sifra)}','${esc(s.naziv).replace(/'/g,"&apos;")}',event)" title="Promijeni naziv (bilježi se ko i kada)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:3px;">✎</button></td>
       <td style="padding:1px 5px;">${
         s.naziv_gotov
           ? `<span style="color:#1f8a4c;">${esc(s.naziv_gotov)}</span>`
@@ -3855,7 +3860,7 @@ function prebaciGlavniTabRM(tab){
   document.getElementById('tab-uporedi').style.display = tab==='uporedi' ? 'block' : 'none';
   if(tab==='uporedi') upInit();
   document.getElementById('tab-gotovi').style.display = tab==='gotovi' ? 'block' : 'none';
-  if(tab==='gotovi') gprUcitaj();
+  if(tab==='gotovi'){ gprUcitaj(); gprUcitajNazive(); }
   document.getElementById('tab-akcije').style.display = tab==='akcije' ? 'block' : 'none';
   if(tab==='akcije') akUcitajSpisak();
   if(tab==='izvoz-log') izvozLogUcitaj();
@@ -4044,10 +4049,36 @@ function gprPrekidac(id){
   gprRender();
 }
 
+
+/* Nazivi iz kolone roba.naziv_gotov — sastavnica se pravi IZ njih.
+   Prikazuju se samo oni koji jos nemaju sastavnicu; oni koji je imaju se ne nude
+   dvaput, jer bi drugi pokusaj svejedno bio odbijen (naziv je jedinstven). */
+async function gprUcitajNazive(){
+  const sel = document.getElementById('gpr-naziv-novi');
+  if(!sel) return;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/nazivi`);
+    if(!r.ok) throw new Error('Ne mogu učitati nazive.');
+    const svi = await r.json();
+    const slobodni = svi.filter(x=>!x.ima_sastavnicu);
+    if(!slobodni.length){
+      sel.innerHTML = svi.length
+        ? '<option value="">— svi nazivi već imaju sastavnicu —</option>'
+        : '<option value="">— nijedan artikal nema upisan „Gotov proizvod" —</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">— izaberi naziv —</option>' + slobodni.map(x=>
+      `<option value="${esc(x.naziv)}">${esc(x.naziv)} (${x.broj_artikala} ${x.broj_artikala===1?'artikal':'artikala'})</option>`
+    ).join('');
+  }catch(e){
+    sel.innerHTML = `<option value="">— ${esc(e.message)} —</option>`;
+  }
+}
+
 async function gprNovi(naziv){
   const polje = document.getElementById('gpr-naziv-novi');
   const n = (naziv || polje.value).trim();
-  if(!n){ alert('Unesi naziv gotovog proizvoda.'); return; }
+  if(!n){ alert('Izaberi naziv iz spiska.\n\nAko spisak je prazan, prvo u lager listi upiši naziv u kolonu „Gotov proizvod" za postolje i ploču.'); return; }
   try{
     const r = await fetch(`${API}/api/gotovi-proizvodi`,{
       method:'POST', headers:{'Content-Type':'application/json'},
@@ -4058,6 +4089,7 @@ async function gprNovi(naziv){
     polje.value = '';
     gprOtvoren = d.id;
     await gprUcitaj();
+    await gprUcitajNazive();
     if(d.dodato_stavki) alert(`✓ Napravljeno. Iz lagera je preuzeto ${d.dodato_stavki} ${d.dodato_stavki===1?'artikal':'artikala'} — podesi faktore.`);
   }catch(e){ alert('✗ '+e.message); }
 }
@@ -4352,6 +4384,27 @@ function gprRenderCijene(cont, d){
       ${d.tip_kupca?` · popust za: ${esc(d.tip_kupca)}`:''}
       <br>Faktor pravi cjenovnik; popust dolazi povrh njega. Cijene se povlače svježe iz lagera.
     </div>`;
+}
+
+
+/* Izmjena naziva artikla. Sifra se NE dira — ona je jedini kljuc i mijenjala bi vezu
+   sa svim ranijim otpremnicama, kalkulacijama i nalozima.
+   Svaka izmjena se biljezi: ko, kada, sta je bilo prije. */
+async function izmijeniNaziv(id, sifra, stari, ev){
+  if(ev) ev.stopPropagation();
+  const novi = prompt(`Naziv artikla — šifra ${sifra}\n\nŠifra se ne mijenja (veza sa ranijim dokumentima).\nIzmjena se bilježi.`, stari);
+  if(novi === null) return;
+  if(!novi.trim()){ alert('Naziv ne može biti prazan.'); return; }
+  if(novi.trim() === stari) return;
+  try{
+    const r = await fetch(`${API}/api/roba/${id}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ naziv: novi.trim() }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    if(typeof ucitajLagerListu==='function') ucitajLagerListu();
+  }catch(e){ alert('✗ ' + e.message); }
 }
 
 /* ═══ GOTOV PROIZVOD ═══════════════════════════════════════════════════════════════

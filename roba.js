@@ -1343,8 +1343,12 @@ router.patch('/:id', preskociAkoNijeArtikal, async (req, res) => {
   /* Naziv gotovog proizvoda i prevodi NISU sifrarnik — to je opisni podatak za katalog,
      pa ga smije unositi i osoba sa pravom za robu i magacine (npr. Marija), bez
      punog admin pristupa. */
+  /* NAZIV artikla smije mijenjati i osoba sa pravom za robu i magacine — u praksi se
+     nazivi cesto doteruju, a cekati admina zaustavlja posao. Sifra se NE dira: ona je
+     jedini kljuc, i mijenjala bi vezu sa svim ranijim dokumentima.
+     Svaka izmjena naziva se BILJEZI (ko, kada, sta je bilo prije). */
   const samoOpisna = Object.keys(req.body || {}).length > 0 && Object.keys(req.body || {})
-    .every(k => ['naziv_gotov','naziv_en','naziv_it','naziv_gotov_en','naziv_gotov_it'].includes(k));
+    .every(k => ['naziv','naziv_gotov','naziv_en','naziv_it','naziv_gotov_en','naziv_gotov_it'].includes(k));
   const smijeCijene = smijeMijenjatiCijene(req);
   const smijeOpisna = req.session?.user?.moze_roba_magacin || smijeCijene;
   if (req.session?.user?.rola !== 'admin'
@@ -1354,6 +1358,29 @@ router.patch('/:id', preskociAkoNijeArtikal, async (req, res) => {
   try {
     const { naziv, jed_mjera, aktivan, cijena, stanje, objekt_id,
             naziv_gotov, naziv_en, naziv_it, naziv_gotov_en, naziv_gotov_it } = req.body;
+
+    /* Trag izmjene naziva — upisuje se PRIJE promjene, dok se stara vrijednost jos zna.
+       Sifra se ne mijenja nigdje u sistemu, pa se ovdje samo pamti radi lakseg trazenja. */
+    if (naziv !== undefined || naziv_gotov !== undefined) {
+      const staro = await pool.query('SELECT sifra, naziv, naziv_gotov FROM roba WHERE id=$1', [req.params.id]);
+      if (staro.rows.length) {
+        const s = staro.rows[0];
+        const u = req.session?.user;
+        for (const [polje, staraV, novaV] of [
+          ['naziv', s.naziv, naziv],
+          ['naziv_gotov', s.naziv_gotov, naziv_gotov],
+        ]) {
+          if (novaV === undefined) continue;
+          const nova = String(novaV || '').trim() || null;
+          if (String(staraV || '') === String(nova || '')) continue;   // nema promjene
+          await pool.query(
+            `INSERT INTO roba_naziv_log (roba_id, sifra, stari_naziv, novi_naziv, polje, korisnik_id, korisnik_ime)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [req.params.id, s.sifra, staraV, nova, polje, u?.id || null, u?.ime_prezime || null]
+          ).catch(e => console.error('roba_naziv_log:', e.message));
+        }
+      }
+    }
     /* Naziv gotovog proizvoda i prevodi — prazan tekst se cuva kao NULL, da se
        "nije uneseno" i "uneseno pa obrisano" ne razlikuju u prikazu. */
     const prazno = v => (v === undefined ? undefined : (String(v).trim() || null));
@@ -2325,6 +2352,20 @@ router.post('/:id/slika', preskociAkoNijeArtikal, zahtijevaProdaju, upload.field
 });
 
 // GET /api/roba/:id/slike — lista svih slika za jedan artikal, glavna prva.
+// GET /api/roba/:id/log-naziva — ko je i kada mijenjao naziv
+router.get('/:id/log-naziva', preskociAkoNijeArtikal, zahtijevaRobaMagacin, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT id, sifra, stari_naziv, novi_naziv, polje, korisnik_ime, kada
+       FROM roba_naziv_log WHERE roba_id=$1 ORDER BY kada DESC LIMIT 50`,
+      [req.params.id]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/:id/slike', preskociAkoNijeArtikal, zahtijevaProdaju, async (req, res) => {
   try {
     const r = await pool.query(
