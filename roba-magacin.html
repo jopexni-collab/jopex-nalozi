@@ -4213,7 +4213,7 @@ async function gprUcitajDetalj(id){
 }
 
 function gprRenderDetalj(el, g){
-  const TIP = { kom:'komad', povrsina:'m² (iz dimenzija)', duzina:'m¹ (obim)' };
+
   el.innerHTML = `
     <div style="font-size:12px;font-weight:800;margin-bottom:7px;">Komponente</div>
     <div style="font-size:11px;color:#8b96a5;margin-bottom:8px;line-height:1.45;">
@@ -4398,6 +4398,10 @@ let giSvi = [], giZaGrupu = null;
 
 
 /* Jedan red stavke — izdvojeno da se moze crtati unutar svake grupe zasebno. */
+/* Nacini mjerenja komponente. Globalno, jer ga koriste i gprRenderDetalj i
+   gprRedStavke — kad je stajao unutar jedne funkcije, druga ga nije vidjela. */
+const TIP = { kom:'komad', povrsina:'m² (iz dimenzija)', duzina:'m¹ (obim)' };
+
 function gprRedStavke(g, s, i){
   return `
           <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
