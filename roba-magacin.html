@@ -306,6 +306,63 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 #kretanje-tbody-omot th.lager-kol-aktivna,
 #up-tabela th.lager-kol-aktivna,
 #lager-lista-tabela-wrap th.lager-kol-aktivna{ background:#2d55a0 !important; }
+
+/* ═══ TELEFON ═══════════════════════════════════════════════════════════════════
+   Stranica ima 20 glavnih tabova i široke tabele. Na uskom ekranu su se tabovi
+   stiskali u nečitljivo, a tabele razvlačile cijelu stranicu.
+   Rješenje: tabovi se skroluju vodoravno (ne stiskaju), tabele imaju svoj skrol,
+   a dugmad dobijaju visinu koja se može pogoditi prstom. */
+@media (max-width: 760px) {
+  #roba-magacin-glavni-sadrzaj { padding: 8px !important; padding-bottom: 60px !important; }
+
+  /* Traka tabova — vodoravni skrol umjesto stiskanja */
+  .traka-tabova {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 4px;
+    margin-left: -8px; margin-right: -8px;
+    padding-left: 8px; padding-right: 8px;
+  }
+  .glavni-tab-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 10px 13px !important;
+    font-size: 12px !important;
+    min-height: 42px;
+  }
+
+  /* Tabele — svoj skrol, ne razvlače stranicu */
+  .import-box, .panel { padding: 10px !important; }
+  table { font-size: 11px !important; }
+  th, td { padding: 4px 5px !important; }
+
+  /* Polja i dugmad — dovoljno velika za prst */
+  input, select, button { min-height: 38px; font-size: 13px !important; }
+  input[type="checkbox"] { min-height: 0; width: 18px; height: 18px; }
+  .ce-tip-btn { min-height: 38px; padding: 8px 11px !important; }
+
+  /* Redovi polja se prelamaju umjesto da se stiskaju */
+  .ce-row { flex-wrap: wrap; }
+
+  /* Prozorčići — skoro cijeli ekran */
+  [id^="modal-"] > div { max-width: 96vw !important; width: 96vw !important;
+                          max-height: 92vh !important; padding: 14px !important; }
+}
+
+
+/* Svaka tabela unutar panela dobija SVOJ vodoravni skrol. Bez ovoga siroka tabela
+   razvlaci cijelu stranicu, pa se i zaglavlje i tabovi pomjeraju udesno. */
+@media (max-width: 760px) {
+  .import-box table, .panel table { display: block; overflow-x: auto; white-space: nowrap; }
+  .import-box table thead, .panel table thead { display: table-header-group; }
+}
+/* Vrlo uski telefoni */
+@media (max-width: 400px) {
+  .glavni-tab-btn { padding: 9px 10px !important; font-size: 11.5px !important; }
+  table { font-size: 10.5px !important; }
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -324,7 +381,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 <div id="roba-magacin-glavni-sadrzaj" style="padding:12px;padding-bottom:40px;">
 
-<div class="ce-row" style="margin-bottom:14px;">
+<div class="ce-row traka-tabova" style="margin-bottom:14px;">
   <button type="button" class="glavni-tab-btn active" data-tab="lager" onclick="prebaciGlavniTabRM('lager')">📋 Lager lista</button>
   <button type="button" class="glavni-tab-btn" data-tab="kalkulacija" onclick="prebaciGlavniTabRM('kalkulacija')">📦 Kalkulacija</button>
   <button type="button" class="glavni-tab-btn" data-tab="kalk-spisak" onclick="prebaciGlavniTabRM('kalk-spisak')">📋 Spisak kalkulacija</button>
