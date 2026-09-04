@@ -4329,8 +4329,17 @@ async function gprPopuniListe(id){
     if(r.ok){
       const o = await r.json();
       const sel = document.getElementById('gpr-obj-'+id);
-      if(sel && Array.isArray(o)) sel.innerHTML = '<option value="">— objekat —</option>' +
-        o.map(x=>`<option value="${x.id}">${esc(x.naziv)}</option>`).join('');
+      if(sel && Array.isArray(o)){
+        sel.innerHTML = '<option value="">— objekat —</option>' +
+          o.map(x=>`<option value="${x.id}">${esc(x.naziv)}</option>`).join('');
+        /* Bira se PRVI objekat sam — bez njega su kolone stanja i cijene prazne, a
+           izbor iz lagera javlja gresku. Korisnik ga svejedno moze promijeniti. */
+        if(o.length && !sel.value){
+          const podr = o.find(x=>/aleksandrovac/i.test(x.naziv)) || o[0];
+          sel.value = podr.id;
+          gprUcitajDetalj(id);
+        }
+      }
     }
   }catch(e){}
   try{
@@ -4382,7 +4391,15 @@ async function gprOtvoriIzbornik(gid){
   const lista = document.getElementById('gi-lista');
   lista.innerHTML = '<div style="padding:16px;text-align:center;color:#8b96a5;font-size:12.5px;">Učitavanje...</div>';
 
+  /* Lager je uvijek vezan za JEDAN objekat — bez njega ruta ne zna cije cijene i
+     stanje da vrati. Ako nije izabran, kaze se to jasno umjesto greske sa servera. */
   const obj = document.getElementById('gpr-obj-'+gid)?.value || '';
+  if(!obj){
+    lista.innerHTML = `<div style="padding:20px;text-align:center;color:var(--orange,#b8860b);font-size:12.5px;line-height:1.6;">
+      Prvo izaberi <b>prodajni objekat</b> iznad tabele.<br>
+      <span style="font-size:11px;color:#8b96a5;">Stanje i cijene zavise od objekta.</span></div>`;
+    return;
+  }
   try{
     /* Povlaci se CIJELI lager izabranog objekta, pa se filtrira u prikazu — tako su
        prekidaci trenutni, bez novog poziva pri svakoj promjeni. */
