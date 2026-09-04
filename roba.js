@@ -51,7 +51,7 @@ router.get('/', zahtijevaProdaju, async (req, res) => {
       if (!term) {
         const r = await pool.query(
           `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, r.grupa, rp.cijena, rp.stanje,
-                  r.std_sirina, r.std_visina,
+                  r.std_sirina, r.std_visina, r.naziv_gotov,
                   EXISTS(SELECT 1 FROM roba_slike WHERE roba_id=r.id) AS ima_sliku
            FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
            WHERE r.aktivan=true ORDER BY r.naziv LIMIT $2`,
@@ -63,7 +63,7 @@ router.get('/', zahtijevaProdaju, async (req, res) => {
       // grupi artikal pripada ("bengal") iako ne zna tačan naziv varijante.
       const r = await pool.query(
         `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, r.grupa, rp.cijena, rp.stanje,
-                  r.std_sirina, r.std_visina,
+                  r.std_sirina, r.std_visina, r.naziv_gotov,
                 EXISTS(SELECT 1 FROM roba_slike WHERE roba_id=r.id) AS ima_sliku
          FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
          WHERE r.aktivan=true AND (r.sifra ILIKE $2 OR r.naziv ILIKE $3 OR r.grupa ILIKE $3)
@@ -129,6 +129,7 @@ router.get('/lager-prodaja', zahtijevaProdaju, async (req, res) => {
       `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
               rp.cijena, rp.stanje,
               (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS glavna_slika,
+              (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND gotov_proizvod=true ORDER BY redosled LIMIT 1) AS slika_gotov,
               r.model_3d_url,
               (SELECT COUNT(*) FROM roba_slike WHERE roba_id=r.id) AS broj_slika
        FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
@@ -154,8 +155,9 @@ router.get('/lager', zahtijevaRobaMagacin, async (req, res) => {
 
     const r = await pool.query(
       `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.grupa, r.debljina_cm,
-              r.std_sirina, r.std_visina,
+              r.std_sirina, r.std_visina, r.naziv_gotov,
               (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS glavna_slika,
+              (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND gotov_proizvod=true ORDER BY redosled LIMIT 1) AS slika_gotov,
               r.model_3d_url,
               (SELECT COUNT(*) FROM roba_slike WHERE roba_id=r.id) AS broj_slika,
               rp.cijena, rp.stanje,
@@ -386,7 +388,7 @@ router.get('/najprodavaniji', zahtijevaProdaju, async (req, res) => {
   try {
     const r = await pool.query(
       `SELECT r.id, r.sifra, r.naziv, r.jed_mjera, r.aktivan, r.grupa, rp.cijena, rp.stanje,
-                  r.std_sirina, r.std_visina,
+                  r.std_sirina, r.std_visina, r.naziv_gotov,
               COUNT(*) AS broj_prodaja
        FROM otpremnica_stavke os
        JOIN otpremnice o ON o.id = os.otpremnica_id
@@ -1338,12 +1340,31 @@ router.patch('/:id', preskociAkoNijeArtikal, async (req, res) => {
   // pa se propusta ako se salje ISKLJUCIVO cijena/stanje za odredjeni objekat.
   const samoCijenaIliStanje = Object.keys(req.body || {})
     .every(k => ['cijena','stanje','objekt_id'].includes(k));
+  /* Naziv gotovog proizvoda i prevodi NISU sifrarnik — to je opisni podatak za katalog,
+     pa ga smije unositi i osoba sa pravom za robu i magacine (npr. Marija), bez
+     punog admin pristupa. */
+  const samoOpisna = Object.keys(req.body || {}).length > 0 && Object.keys(req.body || {})
+    .every(k => ['naziv_gotov','naziv_en','naziv_it','naziv_gotov_en','naziv_gotov_it'].includes(k));
   const smijeCijene = smijeMijenjatiCijene(req);
-  if (req.session?.user?.rola !== 'admin' && !(samoCijenaIliStanje && smijeCijene))
+  const smijeOpisna = req.session?.user?.moze_roba_magacin || smijeCijene;
+  if (req.session?.user?.rola !== 'admin'
+      && !(samoCijenaIliStanje && smijeCijene)
+      && !(samoOpisna && smijeOpisna))
     return res.status(403).json({ error: 'Nemate dozvolu za ovu izmjenu.' });
   try {
-    const { naziv, jed_mjera, aktivan, cijena, stanje, objekt_id } = req.body;
-    const ZAJEDNICKA = { naziv, jed_mjera, aktivan };
+    const { naziv, jed_mjera, aktivan, cijena, stanje, objekt_id,
+            naziv_gotov, naziv_en, naziv_it, naziv_gotov_en, naziv_gotov_it } = req.body;
+    /* Naziv gotovog proizvoda i prevodi — prazan tekst se cuva kao NULL, da se
+       "nije uneseno" i "uneseno pa obrisano" ne razlikuju u prikazu. */
+    const prazno = v => (v === undefined ? undefined : (String(v).trim() || null));
+    const ZAJEDNICKA = {
+      naziv, jed_mjera, aktivan,
+      naziv_gotov:    prazno(naziv_gotov),
+      naziv_en:       prazno(naziv_en),
+      naziv_it:       prazno(naziv_it),
+      naziv_gotov_en: prazno(naziv_gotov_en),
+      naziv_gotov_it: prazno(naziv_gotov_it),
+    };
     const sets = [], vals = [];
     let i = 1;
     for (const k of Object.keys(ZAJEDNICKA)) {
@@ -2307,7 +2328,7 @@ router.post('/:id/slika', preskociAkoNijeArtikal, zahtijevaProdaju, upload.field
 router.get('/:id/slike', preskociAkoNijeArtikal, zahtijevaProdaju, async (req, res) => {
   try {
     const r = await pool.query(
-      'SELECT id, url, redosled, glavna FROM roba_slike WHERE roba_id=$1 ORDER BY glavna DESC, redosled ASC',
+      'SELECT id, url, thumb_url, redosled, glavna, gotov_proizvod FROM roba_slike WHERE roba_id=$1 ORDER BY glavna DESC, redosled ASC',
       [req.params.id]
     );
     res.json(r.rows);
@@ -2318,6 +2339,25 @@ router.get('/:id/slike', preskociAkoNijeArtikal, zahtijevaProdaju, async (req, r
 
 // POST /api/roba/:id/slike/:slikaId/glavna — postavlja jednu sliku kao glavnu (skida
 // oznaku sa svih ostalih tog artikla).
+/* Oznaka "slika gotovog proizvoda" — ZASEBNA od "glavna".
+   Slika artikla pokazuje MATERIJAL (ploču, teksturu), a slika gotovog proizvoda
+   GOTOVU STVAR (sto, radnu ploču u kuhinji). Ista slika moze biti i jedno i drugo,
+   ili samo jedno — zato je zasebno polje, a ne treca vrijednost polja "glavna".
+   Za razliku od glavne, gotovih moze biti VISE (razni uglovi, razne postavke). */
+router.post('/:id/slike/:slikaId/gotov', preskociAkoNijeArtikal, zahtijevaProdaju, async (req, res) => {
+  const ukljuci = req.body?.gotov !== false;
+  try {
+    const r = await pool.query(
+      'UPDATE roba_slike SET gotov_proizvod=$1 WHERE id=$2 AND roba_id=$3 RETURNING id, gotov_proizvod',
+      [ukljuci, req.params.slikaId, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: 'Slika nije pronađena.' });
+    res.json({ ok: true, gotov_proizvod: r.rows[0].gotov_proizvod });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/:id/slike/:slikaId/glavna', preskociAkoNijeArtikal, zahtijevaProdaju, async (req, res) => {
   const client = await pool.connect();
   try {

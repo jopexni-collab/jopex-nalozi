@@ -492,6 +492,27 @@ const mjOtvoreni = new Set();
    zbirova I iz grafikona, pa se moze gledati "samo proizvodnja" ili "samo dvije grupe". */
 const mjIskljuceni = new Set();
 
+
+/* Cekiranje SVE DJECE jednog cvora odjednom. Bez ovoga se kod grupe sa 40 artikala
+   mora klikati jedan po jedan.
+   Radi tako sto se svakom djetetu doda ili ukloni putanja iz skupa iskljucenih —
+   sam roditelj se ne dira, pa ostaje ukljucen. */
+function mjCekirajDjecu(putanjaRoditelja, ukljuci, ev){
+  if(ev) ev.stopPropagation();
+  const prefiks = putanjaRoditelja + '|';
+  // Skloni sve postojece odluke za potomke, pa upisi novu
+  for(const p of [...mjIskljuceni]) if(p.startsWith(prefiks)) mjIskljuceni.delete(p);
+  if(!ukljuci){
+    const cvor = mjNadjiCvor(putanjaRoditelja);
+    if(cvor) for(const ime of cvor.djeca.keys()) mjIskljuceni.add(prefiks + ime);
+  }
+  renderMjesecni();
+}
+
+/* Cvorovi se pamte pri iscrtavanju, da se ne gradi stablo drugi put */
+let mjStablo = new Map();
+function mjNadjiCvor(putanja){ return mjStablo.get(putanja) || null; }
+
 function mjPrekidacCekiranja(putanja, ev){
   if(ev) ev.stopPropagation();
   if(mjIskljuceni.has(putanja)) mjIskljuceni.delete(putanja); else mjIskljuceni.add(putanja);
@@ -596,6 +617,7 @@ function renderMjesecni(){
 
   function crtajCvor(cvor, nivo, putanja, izlaz){
     const kljuc = putanja ? `${putanja}|${cvor.ime}` : cvor.ime;
+    mjStablo.set(kljuc, cvor);
     const imaDjecu = cvor.djeca.size > 0 && nivo < nivoi.length - 1;
     const otvoren = mjOtvoreni.has(kljuc);
     const jeProiz = cvor.ime === MJ_PROIZVODNJA;
@@ -619,6 +641,13 @@ function renderMjesecni(){
             ${nivo===0&&jeProiz?'🏭 ':''}${esc(cvor.ime)}
           </span>
           ${cvor.opis?`<span style="color:#8b96a5;font-size:9.5px;"> · ${esc(cvor.opis)}</span>`:''}
+          ${(imaDjecu && otvoren) ? `
+            <span style="margin-left:7px;white-space:nowrap;">
+              <button type="button" onclick="mjCekirajDjecu('${kljuc.replace(/'/g,"\\'")}', true, event)"
+                title="Označi sve ispod" style="font-size:9px;padding:0 5px;border:1px solid #c3c9d1;background:#fff;border-radius:3px;cursor:pointer;color:#6b7a8d;">sve</button>
+              <button type="button" onclick="mjCekirajDjecu('${kljuc.replace(/'/g,"\\'")}', false, event)"
+                title="Poništi sve ispod" style="font-size:9px;padding:0 5px;border:1px solid #c3c9d1;background:#fff;border-radius:3px;cursor:pointer;color:#6b7a8d;margin-left:2px;">ništa</button>
+            </span>` : ''}
         </td>
         ${mjeseci.map(m=>`<td style="padding:${nivo?2:3}px 8px;text-align:right;${cvor.po_mjesecu[m]?'':'color:#dfe3e8;'}">${fmt(cvor.po_mjesecu[m]||0) || '·'}</td>`).join('')}
         <td style="padding:${nivo?2:3}px 8px;text-align:right;font-weight:${nivo===0?800:600};background:${nivo===0?'#eef2f8':'#f4f7fa'};">${fmt(cvor.ukupno)}</td>
@@ -631,6 +660,7 @@ function renderMjesecni(){
   }
 
   const izlaz = [];
+  mjStablo = new Map();
   [...koren.values()].sort((a,b)=>b.ukupno-a.ukupno).forEach(c=>crtajCvor(c, 0, '', izlaz));
 
   const nazivKorena = IME[izbor[0]] || 'Grupa';

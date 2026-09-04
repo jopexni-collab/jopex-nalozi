@@ -1160,6 +1160,7 @@ let lagerSort={kolona:'sifra',smjer:'asc'};
 const LAGER_KOLONE=[
   {k:'sifra',lbl:'Šifra',align:'left',tip:'text'},
   {k:'naziv',lbl:'Naziv',align:'left',tip:'text'},
+  {k:'gotov',lbl:'Gotov proizvod',align:'left',tip:'text'},
   {k:'grupa',lbl:'Grupa',align:'left',tip:'select'},
   {k:'debljina',lbl:'Deb. (cm)',align:'center',tip:'select-num'},
   {k:'tabla',lbl:'Tabla (mm)',align:'center',tip:'text'},
@@ -3586,6 +3587,11 @@ function renderLagerRedovi(){
       </td>
       <td style="padding:1px 5px;font-weight:700;">${esc(s.sifra)}</td>
       <td style="padding:1px 5px;font-weight:700;">${esc(s.naziv)}</td>
+      <td style="padding:1px 5px;">${
+        s.naziv_gotov
+          ? `<span style="color:#1f8a4c;">${esc(s.naziv_gotov)}</span>`
+          : '<span style="color:#dfe3e8;">—</span>'
+      }<button onclick="otvoriGotovProizvod(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}','${esc(s.naziv_gotov||'').replace(/'/g,"&apos;")}')" title="Naziv gotovog proizvoda i prevodi" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:3px;">✎</button></td>
       <td style="padding:1px 5px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
       <td style="padding:1px 5px;text-align:center;color:#6b7a8d;">
         ${s.debljina_cm??'—'}
@@ -3636,6 +3642,9 @@ function renderLagerRedovi(){
 }
 
 function lagerVrijednostZaKolonu(s, k){
+  // Naziv gotovog proizvoda — artikal je dio (postolje, tabla), gotov proizvod je ono
+  // sto kupac vidi u katalogu (sto, radna ploca).
+  if(k==='gotov') return s.naziv_gotov || '';
   // Dimenzija table (mm) — potrebna za planiranje reza. Prazno = jos nije uneseno.
   if(k==='tabla') return (s.std_sirina&&s.std_visina) ? `${Math.round(s.std_sirina)}×${Math.round(s.std_visina)}` : '';
   if(k==='debljina') return s.debljina_cm;
@@ -3902,6 +3911,59 @@ function otvoriDimenzijeZaIzabrane(){
   dimPregled();
   document.getElementById('modal-dimenzije').style.display = 'flex';
   setTimeout(()=>document.getElementById('dim-sirina').focus(), 50);
+}
+
+
+/* ═══ GOTOV PROIZVOD ═══════════════════════════════════════════════════════════════
+   Artikal je SIROVINA ili dio ("postolje za sto", "tabla Rosa Porino"), a od njega
+   nastaje gotov proizvod ("sto Rosa 160×90"). Kupac u katalogu treba da vidi gotov
+   proizvod; lager i dalje vodi dijelove. */
+let gpArtikalId = null;
+
+async function otvoriGotovProizvod(id, naziv, nazivGotov){
+  gpArtikalId = id;
+  document.getElementById('gp-artikal').textContent = naziv;
+  document.getElementById('gp-naziv').value = nazivGotov || '';
+  document.getElementById('gp-greska').style.display = 'none';
+  ['gp-naziv-en','gp-naziv-it','gp-gotov-en','gp-gotov-it'].forEach(x=>document.getElementById(x).value='');
+  document.getElementById('modal-gotov').style.display = 'flex';
+
+  // Prevodi se dovlace zasebno — u lager listi se ne prenose (nepotrebno bi je opteretili)
+  try{
+    const r = await fetch(`${API}/api/roba/${id}`);
+    if(r.ok){
+      const a = await r.json();
+      document.getElementById('gp-naziv-en').value = a.naziv_en || '';
+      document.getElementById('gp-naziv-it').value = a.naziv_it || '';
+      document.getElementById('gp-gotov-en').value = a.naziv_gotov_en || '';
+      document.getElementById('gp-gotov-it').value = a.naziv_gotov_it || '';
+    }
+  }catch(e){ /* prevodi ostaju prazni — osnovni naziv se svejedno moze snimiti */ }
+
+  setTimeout(()=>document.getElementById('gp-naziv').focus(), 60);
+}
+
+async function sacuvajGotovProizvod(){
+  const greska = document.getElementById('gp-greska');
+  greska.style.display = 'none';
+  try{
+    const r = await fetch(`${API}/api/roba/${gpArtikalId}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        naziv_gotov:    document.getElementById('gp-naziv').value,
+        naziv_en:       document.getElementById('gp-naziv-en').value,
+        naziv_it:       document.getElementById('gp-naziv-it').value,
+        naziv_gotov_en: document.getElementById('gp-gotov-en').value,
+        naziv_gotov_it: document.getElementById('gp-gotov-it').value,
+      }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    document.getElementById('modal-gotov').style.display='none';
+    if(typeof ucitajLagerListu==='function') ucitajLagerListu();
+  }catch(e){
+    greska.style.display='block'; greska.textContent = '✗ ' + e.message;
+  }
 }
 
 /* ═══ DIMENZIJE TABLE ═══════════════════════════════════════════════════════════
@@ -5462,6 +5524,51 @@ fetch(`${API}/api/auth/me`).then(r=>{
 
     <div id="dim-greska" style="display:none;color:var(--red,#c0392b);font-size:12.5px;margin-bottom:10px;"></div>
     <button onclick="sacuvajDimenzije()" style="width:100%;padding:11px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;">✓ Sačuvaj dimenzije</button>
+  </div>
+</div>
+<div id="modal-gotov" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:905;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:20px;max-width:470px;width:94vw;max-height:90vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <h3 style="margin:0;font-size:16px;">🪑 Gotov proizvod</h3>
+      <button onclick="document.getElementById('modal-gotov').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+    </div>
+    <div id="gp-artikal" style="font-size:12.5px;color:#6b7a8d;margin-bottom:14px;"></div>
+
+    <label style="font-size:11.5px;font-weight:700;color:#555;display:block;margin-bottom:4px;">Naziv gotovog proizvoda</label>
+    <input type="text" id="gp-naziv" placeholder="npr. Sto Rosa Porino 160×90"
+           style="width:100%;padding:9px 11px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:14px;font-weight:700;margin-bottom:4px;">
+    <div style="font-size:11px;color:#8b96a5;line-height:1.45;margin-bottom:16px;">
+      Artikal je <b>dio</b> (postolje, tabla). Gotov proizvod je ono što kupac vidi u katalogu.
+      Više artikala može imati isti naziv gotovog proizvoda.
+    </div>
+
+    <div style="border-top:1px solid #eee;padding-top:13px;">
+      <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:9px;">🌍 Prevodi <span style="font-weight:400;color:#8b96a5;">— prazno znači da se koristi osnovni naziv</span></div>
+
+      <div style="display:flex;gap:9px;margin-bottom:9px;">
+        <div style="flex:1;">
+          <label style="font-size:10.5px;color:#6b7a8d;display:block;margin-bottom:3px;">🇬🇧 Naziv artikla (EN)</label>
+          <input type="text" id="gp-naziv-en" style="width:100%;padding:6px 9px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12.5px;">
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:10.5px;color:#6b7a8d;display:block;margin-bottom:3px;">🇮🇹 Naziv artikla (IT)</label>
+          <input type="text" id="gp-naziv-it" style="width:100%;padding:6px 9px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12.5px;">
+        </div>
+      </div>
+      <div style="display:flex;gap:9px;">
+        <div style="flex:1;">
+          <label style="font-size:10.5px;color:#6b7a8d;display:block;margin-bottom:3px;">🇬🇧 Gotov proizvod (EN)</label>
+          <input type="text" id="gp-gotov-en" style="width:100%;padding:6px 9px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12.5px;">
+        </div>
+        <div style="flex:1;">
+          <label style="font-size:10.5px;color:#6b7a8d;display:block;margin-bottom:3px;">🇮🇹 Gotov proizvod (IT)</label>
+          <input type="text" id="gp-gotov-it" style="width:100%;padding:6px 9px;border:1px solid var(--border,#ddd);border-radius:6px;font-size:12.5px;">
+        </div>
+      </div>
+    </div>
+
+    <div id="gp-greska" style="display:none;color:var(--red,#c0392b);font-size:12.5px;margin-top:11px;"></div>
+    <button onclick="sacuvajGotovProizvod()" style="width:100%;margin-top:15px;padding:11px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;">✓ Sačuvaj</button>
   </div>
 </div>
 </body>
