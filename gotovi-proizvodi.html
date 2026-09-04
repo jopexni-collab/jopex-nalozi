@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="bs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gotovi proizvodi — JoPeX</title>
+<style>
+:root{--blue:#1a5fa8;--dark:#134a85;--green:#1f8a4c;--red:#c0392b;--orange:#b8860b;--bg:#f3f5f8;--border:#dde3ea;}
+*{box-sizing:border-box;}
+body{margin:0;font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:#1a2733;}
+header{background:var(--blue);color:#fff;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+header h1{margin:0;font-size:16px;}
+header a{color:#fff;text-decoration:none;font-size:12px;border:1px solid rgba(255,255,255,.4);padding:5px 10px;border-radius:6px;}
+.wrap{max-width:1180px;margin:16px auto;padding:0 14px;display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;}
+.panel{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px;}
+.lijevo{flex:0 0 260px;min-width:230px;}
+.desno{flex:1;min-width:330px;}
+.btn{font:inherit;font-size:12.5px;padding:7px 14px;border:none;background:var(--blue);color:#fff;border-radius:7px;cursor:pointer;font-weight:700;}
+.btn.sivi{background:#fff;color:inherit;border:1px solid var(--border);font-weight:400;}
+.btn.zeleni{background:var(--green);}
+input,select{font:inherit;font-size:12.5px;padding:6px 9px;border:1px solid #ccc;border-radius:6px;}
+label.mala{font-size:10.5px;color:#6b7a8d;display:block;margin-bottom:3px;}
+table{width:100%;border-collapse:collapse;font-size:11.5px;}
+th{background:#1f3864;color:#fff;padding:5px 7px;text-align:left;font-weight:700;}
+td{padding:3px 7px;border-bottom:1px solid #eef0f3;}
+.stavka-red:nth-child(even){background:#f7f9fb;}
+.grupa-oznaka{font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:6px;background:#e8eef7;color:#1f3864;}
+.prazno{padding:22px;text-align:center;color:#8b96a5;font-size:12.5px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>🪑 Gotovi proizvodi</h1>
+  <a href="roba-magacin.html">← Roba i magacini</a>
+</header>
+
+<div class="wrap">
+  <!-- SPISAK -->
+  <div class="panel lijevo">
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <input type="text" id="pretraga" placeholder="🔍 Traži..." oninput="renderSpisak()" style="flex:1;min-width:0;">
+      <button class="btn" onclick="noviProizvod()" title="Nov gotov proizvod">＋</button>
+    </div>
+    <div id="spisak"></div>
+  </div>
+
+  <!-- DETALJ -->
+  <div class="panel desno" id="detalj">
+    <div class="prazno">Izaberi gotov proizvod ili napravi novi.</div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let proizvodi = [], trenutni = null, objekti = [], tipoviKupaca = [];
+
+function esc(s){ return String(s??'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function fm(n){ return (Number(n)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+/* Citanje brojeva sa ZAREZOM kao decimalom — isto pravilo kao u ostatku sistema. */
+function broj(v){
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/\s/g,'').replace(/[^\d.,-]/g,'');
+  if (!s) return 0;
+  if (s.includes(',')) s = s.replace(/\./g,'').replace(/,/g,'.');
+  const n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+
+async function pocetak(){
+  try{
+    const r = await fetch(`${API}/api/auth/me`);
+    if(!r.ok){ location.href='login.html'; return; }
+  }catch(e){ location.href='login.html'; return; }
+
+  // Objekti i tipovi kupaca — za racun cijene
+  try{
+    const [ro, rt] = await Promise.all([
+      fetch(`${API}/api/prodajni-objekti`),
+      fetch(`${API}/api/cijene/tipovi`),
+    ]);
+    if(ro.ok) objekti = await ro.json();
+    if(rt.ok){ const d = await rt.json(); tipoviKupaca = d.tipovi || d || []; }
+  }catch(e){ /* racun cijene ce javiti ako nesto fali */ }
+
+  await ucitajSpisak();
+}
+
+async function ucitajSpisak(){
+  const cont = document.getElementById('spisak');
+  cont.innerHTML = '<div class="prazno">Učitavanje...</div>';
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi?svi=1`);
+    if(!r.ok){ const d = await r.json().catch(()=>({})); throw new Error(d.error || `Server je vratio ${r.status}`); }
+    proizvodi = await r.json();
+    renderSpisak();
+  }catch(e){
+    cont.innerHTML = `<div class="prazno" style="color:var(--red);">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+function renderSpisak(){
+  const q = (document.getElementById('pretraga').value||'').toLowerCase().trim();
+  const lista = proizvodi.filter(p => !q || String(p.naziv).toLowerCase().includes(q));
+  const cont = document.getElementById('spisak');
+  if(!proizvodi.length){
+    cont.innerHTML = '<div class="prazno">Još nema gotovih proizvoda.<br><span style="font-size:11px;">Klikni ＋ da napraviš prvi.</span></div>';
+    return;
+  }
+  cont.innerHTML = lista.map(p=>`
+    <div onclick="otvori(${p.id})" style="padding:7px 9px;border-radius:7px;cursor:pointer;margin-bottom:4px;
+         background:${trenutni?.id===p.id?'#e8eef7':'transparent'};border:1px solid ${trenutni?.id===p.id?'#b8d4f0':'transparent'};">
+      <div style="font-size:12.5px;font-weight:700;${p.aktivan?'':'opacity:.5;'}">${esc(p.naziv)}</div>
+      <div style="font-size:10.5px;color:#8b96a5;">
+        ${p.broj_stavki} ${p.broj_stavki===1?'komponenta':'komponenti'} ·
+        ${p.broj_dimenzija} ${p.broj_dimenzija===1?'mjera':'mjera'}
+        ${p.aktivan?'':' · <span style="color:var(--red);">neaktivan</span>'}
+      </div>
+    </div>`).join('') || '<div class="prazno">Nema rezultata.</div>';
+}
+
+async function noviProizvod(){
+  /* Nazivi iz kolone roba.naziv_gotov — ako je neko vec oznacio artikle, sastavnica se
+     sama popuni tim komponentama. Inace se naziv upisuje rucno. */
+  let prijedlozi = [];
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/nazivi`);
+    if(r.ok) prijedlozi = (await r.json()).filter(x=>!x.ima_sastavnicu);
+  }catch(e){}
+
+  const tekst = prijedlozi.length
+    ? `Naziv gotovog proizvoda:\n\nIz lagera (kolona "Gotov proizvod"), još bez sastavnice:\n`
+      + prijedlozi.slice(0,12).map(x=>`  · ${x.naziv} (${x.broj_artikala} art.)`).join('\n')
+    : 'Naziv gotovog proizvoda:';
+  const naziv = prompt(tekst, prijedlozi[0]?.naziv || '');
+  if(!naziv || !naziv.trim()) return;
+
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ naziv: naziv.trim() }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    await ucitajSpisak();
+    await otvori(d.id);
+    if(d.dodato_stavki) alert(`✓ Napravljeno. Iz lagera je preuzeto ${d.dodato_stavki} komponenti — podesi im faktor i grupu izbora.`);
+  }catch(e){ alert('✗ ' + e.message); }
+}
+
+async function otvori(id){
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${id}`);
+    if(!r.ok){ const d = await r.json().catch(()=>({})); throw new Error(d.error || `Server je vratio ${r.status}`); }
+    trenutni = await r.json();
+    renderSpisak();
+    renderDetalj();
+  }catch(e){ alert('✗ ' + e.message); }
+}
+
+function renderDetalj(){
+  const p = trenutni;
+  if(!p){ document.getElementById('detalj').innerHTML = '<div class="prazno">Izaberi gotov proizvod.</div>'; return; }
+
+  // Grupisanje stavki: obavezne odvojeno od alternativa
+  const obavezne = p.stavke.filter(s=>!s.grupa_izbora);
+  const grupe = {};
+  for(const s of p.stavke){ if(s.grupa_izbora) (grupe[s.grupa_izbora] = grupe[s.grupa_izbora]||[]).push(s); }
+
+  const redStavke = s => `
+    <tr class="stavka-red">
+      <td>
+        <input type="text" value="${esc(s.grupa_izbora||'')}" placeholder="—" list="grupe-lista"
+               onchange="izmijeniStavku(${s.id},'grupa_izbora',this.value)"
+               title="Stavke iste grupe su alternative. Prazno = obavezna komponenta."
+               style="width:88px;font-size:11px;padding:3px 6px;">
+      </td>
+      <td>
+        <b>${esc(s.roba_naziv || s.opis || '—')}</b>
+        ${s.sifra?`<span style="color:#8b96a5;font-size:10px;"> ${esc(s.sifra)}</span>`:''}
+      </td>
+      <td>
+        <select onchange="izmijeniStavku(${s.id},'tip_kolicine',this.value)" style="font-size:11px;padding:3px 5px;">
+          <option value="kom"      ${s.tip_kolicine==='kom'?'selected':''}>kom</option>
+          <option value="povrsina" ${s.tip_kolicine==='povrsina'?'selected':''}>m² (iz mjere)</option>
+          <option value="duzina"   ${s.tip_kolicine==='duzina'?'selected':''}>m¹ (obim)</option>
+        </select>
+      </td>
+      <td style="text-align:right;">
+        <input type="text" inputmode="decimal" value="${s.kolicina}" onchange="izmijeniStavku(${s.id},'kolicina',this.value)"
+               style="width:52px;text-align:right;font-size:11px;padding:3px 5px;">
+      </td>
+      <td style="text-align:right;">
+        <input type="text" inputmode="decimal" value="${s.faktor}" onchange="izmijeniStavku(${s.id},'faktor',this.value)"
+               title="Marža po komponenti — postolje ×2, ploča ×3"
+               style="width:46px;text-align:right;font-size:11px;padding:3px 5px;font-weight:700;color:var(--green);">
+      </td>
+      <td style="text-align:center;">
+        <button onclick="obrisiStavku(${s.id})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:12px;">🗑</button>
+      </td>
+    </tr>`;
+
+  document.getElementById('detalj').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+      <div>
+        <div style="font-size:17px;font-weight:800;">${esc(p.naziv)}</div>
+        <div style="font-size:11px;color:#8b96a5;">
+          ${p.stavke.length} komponenti · ${p.dimenzije.length} mjera
+          ${Object.keys(grupe).length?` · grupe izbora: ${Object.keys(grupe).map(esc).join(', ')}`:''}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button class="btn sivi" onclick="preimenuj()">✎ Preimenuj</button>
+        <button class="btn sivi" style="color:var(--red);" onclick="obrisiProizvod()">🗑</button>
+      </div>
+    </div>
+
+    <datalist id="grupe-lista">${[...new Set(p.stavke.map(s=>s.grupa_izbora).filter(Boolean))].map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
+
+    <!-- KOMPONENTE -->
+    <div style="font-size:13px;font-weight:800;margin-bottom:6px;">Komponente</div>
+    <div style="font-size:11px;color:#6b7a8d;line-height:1.5;margin-bottom:8px;">
+      Stavke sa <b>istom grupom izbora</b> su alternative — bira se jedna.
+      Prazna grupa znači <b>obavezna</b> komponenta (okov, rad).
+      <b>Faktor</b> je marža po komponenti; on pravi cjenovnik, a popust po tipu kupca dolazi posebno.
+    </div>
+    <table>
+      <thead><tr>
+        <th style="width:96px;">Grupa izbora</th><th>Komponenta</th>
+        <th style="width:104px;">Mjeri se</th><th style="width:62px;text-align:right;">Količina</th>
+        <th style="width:56px;text-align:right;">Faktor</th><th style="width:30px;"></th>
+      </tr></thead>
+      <tbody>
+        ${obavezne.map(redStavke).join('')}
+        ${Object.entries(grupe).map(([g,st])=>`
+          <tr><td colspan="6" style="background:#e8eef7;padding:3px 7px;">
+            <span class="grupa-oznaka">${esc(g)}</span>
+            <span style="font-size:10.5px;color:#6b7a8d;"> — ${st.length} ${st.length===1?'opcija':'opcije'}, bira se jedna</span>
+          </td></tr>
+          ${st.map(redStavke).join('')}`).join('')}
+        ${!p.stavke.length?'<tr><td colspan="6" class="prazno">Nema komponenti.</td></tr>':''}
+      </tbody>
+    </table>
+
+    <div style="display:flex;gap:6px;align-items:center;margin-top:9px;flex-wrap:wrap;position:relative;">
+      <input type="text" id="trazi-artikal" placeholder="Traži artikal iz lagera..." oninput="traziArtikal()" autocomplete="off" style="flex:1;min-width:190px;">
+      <div id="rez-artikal" style="display:none;position:absolute;top:100%;left:0;z-index:20;background:#fff;border:1px solid #ccc;border-radius:7px;max-height:200px;overflow-y:auto;box-shadow:0 4px 14px rgba(0,0,0,.15);min-width:300px;"></div>
+      <button class="btn sivi" onclick="dodajRucnuStavku()" title="Stavka koja nije artikal — npr. rad">+ Ručna stavka</button>
+    </div>
+
+    <!-- DIMENZIJE -->
+    <div style="font-size:13px;font-weight:800;margin:16px 0 6px;">Dimenzije</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+      ${p.dimenzije.map(d=>`
+        <span style="background:#eef2f8;border:1px solid var(--border);border-radius:7px;padding:4px 9px;font-size:12px;font-weight:700;">
+          ${Math.round(d.sirina)}×${Math.round(d.visina)}
+          ${d.naziv?`<span style="font-weight:400;color:#8b96a5;"> ${esc(d.naziv)}</span>`:''}
+          <button onclick="obrisiDimenziju(${d.id})" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:11px;margin-left:3px;">✕</button>
+        </span>`).join('')}
+      <button class="btn sivi" onclick="dodajDimenziju()">+ Dimenzija</button>
+    </div>
+
+    <!-- RAČUN -->
+    <div style="font-size:13px;font-weight:800;margin:16px 0 6px;">Cijene</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:9px;">
+      <div>
+        <label class="mala">Objekat (čije cijene)</label>
+        <select id="rc-objekat">${objekti.map(o=>`<option value="${o.id}">${esc(o.naziv)}</option>`).join('')}</select>
+      </div>
+      <div>
+        <label class="mala">Tip kupca (popust)</label>
+        <select id="rc-tip"><option value="">— bez popusta (cjenovnik) —</option>
+          ${tipoviKupaca.map(t=>`<option value="${t.id}">${esc(t.naziv)}${t.popust_posto?` (−${t.popust_posto}%)`:''}</option>`).join('')}
+        </select>
+      </div>
+      <button class="btn zeleni" onclick="izracunaj()">▶ Izračunaj</button>
+    </div>
+    <div id="rc-rezultat"></div>`;
+}
+
+/* ── IZMJENE ───────────────────────────────────────────────────────────────── */
+async function izmijeniStavku(sid, polje, vrijednost){
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/stavka/${sid}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ [polje]: vrijednost }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    await otvori(trenutni.id);
+  }catch(e){ alert('✗ ' + e.message); }
+}
+
+async function obrisiStavku(sid){
+  if(!confirm('Obrisati ovu komponentu?')) return;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/stavka/${sid}`,{method:'DELETE'});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
+    await otvori(trenutni.id);
+    await ucitajSpisak();
+  }catch(e){ alert('✗ ' + e.message); }
+}
+
+let tajmerArtikal = null;
+function traziArtikal(){
+  clearTimeout(tajmerArtikal);
+  const q = document.getElementById('trazi-artikal').value.trim();
+  const rez = document.getElementById('rez-artikal');
+  if(q.length < 2){ rez.style.display='none'; return; }
+  tajmerArtikal = setTimeout(async ()=>{
+    try{
+      const r = await fetch(`${API}/api/roba?q=${encodeURIComponent(q)}&limit=12`);
+      const d = await r.json();
+      const lista = Array.isArray(d) ? d : (d.stavke||[]);
+      if(!lista.length){ rez.style.display='none'; return; }
+      rez.innerHTML = lista.slice(0,12).map(a=>`
+        <div onclick="dodajArtikal(${a.id},'${esc(a.jed_mjera||'')}')" style="padding:6px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid #f2f3f5;">
+          <span style="color:#999;">${esc(a.sifra)}</span> ${esc(a.naziv)}
+          <span style="color:#8b96a5;font-size:10.5px;"> · ${esc(a.jed_mjera||'')}</span>
+        </div>`).join('');
+      rez.style.display='block';
+    }catch(e){ rez.style.display='none'; }
+  }, 280);
+}
+
+async function dodajArtikal(robaId, jm){
+  document.getElementById('rez-artikal').style.display='none';
+  document.getElementById('trazi-artikal').value='';
+  // Artikal u m² je gotovo sigurno ploča — količina mu se izvodi iz dimenzija proizvoda
+  const tip = String(jm||'').toLowerCase().includes('m2') ? 'povrsina' : 'kom';
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${trenutni.id}/stavke`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ roba_id: robaId, tip_kolicine: tip, kolicina: 1, faktor: 1 }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    await otvori(trenutni.id);
+    await ucitajSpisak();
+  }catch(e){ alert('✗ ' + e.message); }
+}
+
+async function dodajRucnuStavku(){
+  const opis = prompt('Opis stavke (npr. "rad — rezanje i poliranje"):');
+  if(!opis || !opis.trim()) return;
+  const cijena = prompt('Fiksna cijena (KM):', '0');
+  if(cijena === null) return;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${trenutni.id}/stavke`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ opis: opis.trim(), fiksna_cijena: broj(cijena), tip_kolicine:'kom', kolicina:1, faktor:1 }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    await otvori(trenutni.id);
+  }catch(e){ alert('✗ ' + e.message); }
+}
+
+async function dodajDimenziju(){
+  const s = prompt('Širina (mm):', '1600');  if(s === null) return;
+  const v = prompt('Visina (mm):', '900');   if(v === null) return;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${trenutni.id}/dimenzije`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ sirina: broj(s), visina: broj(v) }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    await otvori(trenutni.id);
+    await ucitajSpisak();
+  }catch(e){ alert('✗ ' + e.message); }
+}
+
+async function obrisiDimenziju(did){
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/dimenzija/${did}`,{method:'DELETE'});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
+    await otvori(trenutni.id);
+    await ucitajSpisak();
+  }catch(e){ alert('✗ ' + e.message); }
+}
+
+async function preimenuj(){
+  const naziv = prompt('Novi naziv:', trenutni.naziv);
+  if(!naziv || !naziv.trim() || naziv === trenutni.naziv) return;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${trenutni.id}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ naziv: naziv.trim() }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    await ucitajSpisak(); await otvori(trenutni.id);
+  }catch(e){ alert('✗ ' + e.message); }
+}
+
+async function obrisiProizvod(){
+  if(!confirm(`Obrisati "${trenutni.naziv}" sa svim komponentama i dimenzijama?`)) return;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${trenutni.id}`,{method:'DELETE'});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
+    trenutni = null;
+    await ucitajSpisak();
+    renderDetalj();
+  }catch(e){ alert('✗ ' + e.message); }
+}
+
+/* ── RAČUN ─────────────────────────────────────────────────────────────────── */
+async function izracunaj(){
+  const cont = document.getElementById('rc-rezultat');
+  cont.innerHTML = '<div class="prazno">Računam...</div>';
+  const q = new URLSearchParams({ objekt_id: document.getElementById('rc-objekat').value });
+  const tip = document.getElementById('rc-tip').value;
+  if(tip) q.set('tip_kupca_id', tip);
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${trenutni.id}/cijena?${q}`);
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+
+    const imaPopust = (d.cijene[0]?.popust_posto || 0) > 0;
+    const imaGrupa = (d.grupe_izbora||[]).length > 0;
+    const nepotpunih = d.cijene.filter(x=>x.nepotpuno).length;
+
+    cont.innerHTML = `
+      ${nepotpunih ? `<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:9px 12px;margin-bottom:9px;font-size:12px;color:#8b6914;">
+        ⚠️ ${nepotpunih} ${nepotpunih===1?'kombinacija ima':'kombinacija ima'} komponentu bez cijene u ovom objektu — te cijene nisu tačne.
+      </div>` : ''}
+      ${d.skraceno ? `<div style="font-size:11px;color:var(--orange);margin-bottom:7px;">Prikazano prvih 200 od ${d.broj_kombinacija} kombinacija.</div>` : ''}
+      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">
+        <table>
+          <thead><tr>
+            ${(d.grupe_izbora||[]).map(g=>`<th>${esc(g.naziv)}</th>`).join('')}
+            <th>Mjera</th><th style="text-align:right;">m²</th>
+            <th style="text-align:right;">Cjenovnik</th>
+            ${imaPopust?`<th style="text-align:right;">Popust</th><th style="text-align:right;background:#2d4a7c;">Plaća</th>`:''}
+          </tr></thead>
+          <tbody>${d.cijene.map((c,i)=>`
+            <tr style="background:${i%2?'#f7f9fb':'#fff'};${c.nepotpuno?'color:var(--orange);':''}">
+              ${(d.grupe_izbora||[]).map(g=>{
+                const iz = (c.izbor||[]).find(x=>x.grupa===g.naziv);
+                return `<td>${esc(iz?.naziv||'—')}</td>`;
+              }).join('')}
+              <td><b>${esc(c.dimenzija||'—')}</b></td>
+              <td style="text-align:right;color:#8b96a5;">${c.povrsina_m2 ? c.povrsina_m2.toFixed(3) : ''}</td>
+              <td style="text-align:right;${imaPopust?'color:#8b96a5;text-decoration:line-through;':'font-weight:800;'}">${fm(c.cijena_cjenovnik)}</td>
+              ${imaPopust?`
+                <td style="text-align:right;color:var(--green);">−${fm(c.popust)}</td>
+                <td style="text-align:right;font-weight:800;background:#eef2f8;">${fm(c.cijena)}</td>`:''}
+            </tr>`).join('')}</tbody>
+        </table>
+      </div>
+      <div style="font-size:11px;color:#8b96a5;margin-top:7px;line-height:1.55;">
+        Cijene u ${esc(d.valuta||'KM')}. ${d.cijene.length} ${d.cijene.length===1?'kombinacija':'kombinacija'}.
+        ${imaPopust?`Popust <b>${esc(d.tip_kupca||'')}</b> primijenjen na cjenovnik.`:'Bez popusta — prikazan je cjenovnik.'}
+        ${imaGrupa?'<br>Iz svake grupe izbora ulazi po jedna komponenta; obavezne ulaze uvijek.':''}
+      </div>`;
+  }catch(e){
+    cont.innerHTML = `<div class="prazno" style="color:var(--red);">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+pocetak();
+</script>
+</body>
+</html>

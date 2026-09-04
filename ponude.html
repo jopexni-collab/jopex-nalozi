@@ -212,8 +212,14 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
   .fg input,.fg select{ min-height:40px; }
   .tip-tab{ padding:11px 8px!important; font-size:12px!important; }
   .sec{ padding:10px!important; }
-  header{ height:44px; }
-  .hdr-btn{ padding:6px 8px!important; font-size:11px!important; }
+  /* Zaglavlje ima 13 dugmadi - na telefonu stane 6, a Print je 12. da bi
+     se do njih doslo, traka se KLIZI vodoravno umjesto da bude odsjecena. */
+  header{ height:46px; overflow-x:auto!important; overflow-y:hidden!important;
+          -webkit-overflow-scrolling:touch; justify-content:flex-start!important; }
+  header::-webkit-scrollbar{ height:0; }
+  .hdr-btns{ flex-wrap:nowrap; }
+  .hdr-btn{ padding:7px 9px!important; font-size:12px!important; white-space:nowrap; }
+  header>*{ flex-shrink:0; }
   /* Zaglavlje sa popisom stavki - manji udio na malom ekranu */
   .item-list-wrap{ max-height:38%!important; }
   /* Sirine polja koje su racunate za desktop */
@@ -403,6 +409,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
     <button class="hdr-btn" onclick="genDXF()" title="Generiši DXF za CNC">DXF</button>
     <button class="hdr-btn" onclick="savePonudaWord()" title="Sačuvaj kao Word">WORD</button>
     <button class="hdr-btn" onclick="window.print()" title="Štampaj / PDF">🖨 Print</button>
+    <button class="hdr-btn" id="btn-podijeli" onclick="otvoriSlanje()" title="Napravi PDF i pošalji (WhatsApp, Viber, e-pošta)">📤 Pošalji PDF</button>
     <button class="hdr-btn" onclick="odjava()" title="Odjava" style="background:rgba(200,50,50,0.25);">🚪 Izlaz</button>
   </div>
   <div style="font-size:13px;font-weight:700;white-space:nowrap;padding-left:12px;">JoPeX <span id="hdr-who" style="font-size:10px;opacity:.7;font-weight:400;margin-left:6px;"></span></div>
@@ -1067,6 +1074,191 @@ function mPrikaz(sta){
     if(sta==='ponuda') genPon(typeof _ponCurrency!=='undefined'?_ponCurrency:'KM');
   }catch(e){}
   try{ window.scrollTo(0,0); }catch(e){}
+}
+// ── PDF I DIJELJENJE ─────────────────────────────────────────────
+// Na telefonu "Print" nije od koristi - nema stampaca. Umjesto toga se
+// pravi PDF i salje kroz WhatsApp, Viber, e-postu... preko sistemskog
+// dijeljenja. Ako pregledac ne podrzava dijeljenje fajla, PDF se preuzme.
+function _nazivPDF(){
+  var k=(gs('kl-ime')||'').trim().replace(/[^\w\u00c0-\u024f]+/g,'_').replace(/^_|_$/g,'');
+  var d=new Date();
+  var dt=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+  return 'Ponuda_'+(k||'JoPeX')+'_'+dt+'.pdf';
+}
+// Napravi PDF i vrati ga kao Blob (bez slanja)
+async function _napraviPDF(){
+  var doc=ge('pon-doc');
+  if(!doc||!doc.innerHTML.trim()) throw new Error('Prvo generi\u0161i ponudu (dugme \u201eGen.Pon\u201c).');
+  if(typeof html2pdf==='undefined')
+    throw new Error('Modul za PDF nije u\u010ditan. Provjeri internet vezu,\n'
+      +'ili koristi \u201ePrint\u201c pa \u201eSa\u010duvaj kao PDF\u201c.');
+  return await html2pdf().set({
+    margin:[10,8,12,8],
+    filename:_nazivPDF(),
+    image:{type:'jpeg', quality:0.92},
+    html2canvas:{scale:2, useCORS:true, backgroundColor:'#ffffff'},
+    jsPDF:{unit:'mm', format:'a4', orientation:'portrait'},
+    pagebreak:{mode:['css','legacy'], avoid:['tr','.p-img-wrap']}
+  }).from(doc).outputPdf('blob');
+}
+function _blobUBase64(blob){
+  return new Promise(function(res,rej){
+    var r=new FileReader();
+    r.onload=function(){ res(String(r.result).split(',')[1]); };
+    r.onerror=rej;
+    r.readAsDataURL(blob);
+  });
+}
+// PDF se okaci na oblak i vrati se LINK. Aplikacije kao WhatsApp i Viber
+// se ne mogu pozvati sa prilogom - primaju samo tekst - pa se salje link.
+async function _pdfNaOblak(){
+  var blob=await _napraviPDF();
+  var b64=await _blobUBase64(blob);
+  var naziv=_nazivPDF().replace(/\.pdf$/,'');
+  var r=await fetch(API_URL+'/api/upload',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({naziv:naziv, ponuda_b64:b64})
+  });
+  if(!r.ok) throw new Error('Slanje na oblak nije uspjelo (HTTP '+r.status+').');
+  var d=await r.json().catch(function(){return null;});
+  if(!d||!d.ponuda_link) throw new Error('Oblak nije vratio link.');
+  return d.ponuda_link;
+}
+// Izbor nacina slanja
+function otvoriSlanje(){
+  var doc=ge('pon-doc');
+  if(!doc||!doc.innerHTML.trim()){
+    alert('Prvo generi\u0161i ponudu (dugme \u201eGen.Pon\u201c).');
+    return;
+  }
+  var stari=ge('slanje-modal'); if(stari) stari.remove();
+  var m=document.createElement('div');
+  m.id='slanje-modal';
+  m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;'
+    +'display:flex;align-items:center;justify-content:center;padding:16px';
+  var d=function(ikona,naslov,opis,fn,boja){
+    return '<button onclick="'+fn+'" style="display:flex;align-items:center;gap:10px;'
+      +'width:100%;text-align:left;background:#fff;border:1px solid #dde2ea;border-radius:8px;'
+      +'padding:12px;margin-bottom:8px;cursor:pointer;font:inherit">'
+      +'<span style="font-size:22px;width:30px;text-align:center">'+ikona+'</span>'
+      +'<span style="flex:1"><b style="font-size:13px;color:'+(boja||'#1a2332')+'">'+naslov+'</b>'
+      +'<br><span style="font-size:11px;color:#8a93a3">'+opis+'</span></span></button>';
+  };
+  var imaShare=!!(navigator.share);
+  m.innerHTML='<div style="background:#f7f9fc;border-radius:10px;max-width:380px;width:100%;'
+    +'padding:14px">'
+    +'<div style="display:flex;align-items:center;margin-bottom:10px">'
+    +'<b style="font-size:15px;color:#134a85">\ud83d\udce4 Po\u0161alji ponudu</b>'
+    +'<button onclick="document.getElementById(\'slanje-modal\').remove()" '
+    +'style="margin-left:auto;background:none;border:none;font-size:20px;cursor:pointer;'
+    +'color:#999">\u2715</button></div>'
+    +'<div id="slanje-status" style="display:none;font-size:12px;color:#1a5fa8;'
+    +'padding:8px;background:#eef4fb;border-radius:6px;margin-bottom:8px"></div>'
+    +(imaShare?d('\ud83d\udcf1','Podijeli (PDF u prilogu)',
+        'Sistemski izbor \u2014 WhatsApp, Viber, e-po\u0161ta\u2026','_slanje(\'share\')','#1a5fa8'):'')
+    +d('\ud83d\udfe2','WhatsApp','Okaci PDF na oblak i po\u0161alje link','_slanje(\'wa\')','#1f8a4c')
+    +d('\ud83d\udfe3','Viber','Okaci PDF na oblak i po\u0161alje link','_slanje(\'viber\')','#7a4fa0')
+    +d('\ud83d\udd17','Kopiraj link','Za lijepljenje bilo gdje','_slanje(\'link\')')
+    +d('\u2b07','Preuzmi PDF','Sa\u010duvaj na ure\u0111aj','_slanje(\'download\')')
+    +'<div style="font-size:10px;color:#8a93a3;padding:4px 2px">'
+    +'WhatsApp i Viber ne primaju prilog iz pregleda\u010da, pa im se \u0161alje link na PDF.'
+    +'</div></div>';
+  document.body.appendChild(m);
+}
+async function _slanje(nacin){
+  var st=ge('slanje-status');
+  function poruka(t){ if(st){ st.style.display=''; st.innerHTML=t; } }
+  try{
+    if(nacin==='share'){
+      poruka('Pravim PDF\u2026');
+      var blob=await _napraviPDF();
+      var fajl=new File([blob], _nazivPDF(), {type:'application/pdf'});
+      if(navigator.canShare && !navigator.canShare({files:[fajl]}))
+        throw new Error('Ovaj pregleda\u010d ne \u0161alje fajlove \u2014 probaj WhatsApp ili Viber (link).');
+      await navigator.share({files:[fajl], title:'Ponuda',
+        text:'Ponuda '+((gs('kl-ime')||'').trim()||'JoPeX')});
+      var mm=ge('slanje-modal'); if(mm) mm.remove();
+      return;
+    }
+    if(nacin==='download'){
+      poruka('Pravim PDF\u2026');
+      var b2=await _napraviPDF();
+      var url=URL.createObjectURL(b2);
+      var a=document.createElement('a');
+      a.href=url; a.download=_nazivPDF();
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); },1500);
+      poruka('\u2713 Preuzeto.');
+      return;
+    }
+    poruka('Pravim PDF i \u0161aljem na oblak\u2026');
+    var link=await _pdfNaOblak();
+    var tekst='Ponuda '+((gs('kl-ime')||'').trim()||'')+' \u2014 '+link;
+    if(nacin==='wa'){
+      window.open('https://wa.me/?text='+encodeURIComponent(tekst),'_blank');
+      poruka('\u2713 WhatsApp otvoren.');
+    } else if(nacin==='viber'){
+      window.open('viber://forward?text='+encodeURIComponent(tekst),'_blank');
+      poruka('\u2713 Viber otvoren. Ako se ne otvori, kopiraj link.');
+    } else {
+      try{ await navigator.clipboard.writeText(link); poruka('\u2713 Link kopiran:<br>'+link); }
+      catch(e){ poruka('Link:<br><input value="'+link+'" readonly style="width:100%;'
+        +'font-size:11px;padding:4px" onclick="this.select()">'); }
+    }
+  }catch(e){
+    if(/abort|cancel/i.test(String(e&&e.name)+String(e&&e.message))){
+      var m3=ge('slanje-modal'); if(m3) m3.remove(); return;
+    }
+    poruka('<b style="color:#c0392b">'+String(e.message||e).replace(/\n/g,'<br>')+'</b>');
+  }
+}
+async function podijeliPonudu(){
+  var doc=ge('pon-doc');
+  if(!doc||!doc.innerHTML.trim()){
+    alert('Prvo generi\u0161i ponudu (dugme \u201eGen.Pon\u201c).');
+    return;
+  }
+  if(typeof html2pdf==='undefined'){
+    alert('Modul za PDF nije u\u010ditan. Provjeri internet vezu pa poku\u0161aj ponovo,\n'
+      +'ili koristi \u201ePrint\u201c pa \u201eSa\u010duvaj kao PDF\u201c.');
+    return;
+  }
+  var btn=ge('btn-podijeli');
+  var stari=btn?btn.innerHTML:'';
+  if(btn){ btn.disabled=true; btn.innerHTML='\u23f3 PDF...'; }
+  try{
+    var opt={
+      margin:[10,8,12,8],
+      filename:_nazivPDF(),
+      image:{type:'jpeg', quality:0.92},
+      html2canvas:{scale:2, useCORS:true, backgroundColor:'#ffffff'},
+      jsPDF:{unit:'mm', format:'a4', orientation:'portrait'},
+      pagebreak:{mode:['css','legacy'], avoid:['tr','.p-img-wrap']}
+    };
+    var blob=await html2pdf().set(opt).from(doc).outputPdf('blob');
+    var fajl=new File([blob], _nazivPDF(), {type:'application/pdf'});
+    // Sistemsko dijeljenje - WhatsApp, Viber, e-posta...
+    if(navigator.canShare && navigator.canShare({files:[fajl]}) && navigator.share){
+      await navigator.share({
+        files:[fajl],
+        title:'Ponuda',
+        text:'Ponuda '+((gs('kl-ime')||'').trim()||'JoPeX')
+      });
+    } else {
+      // Bez dijeljenja - preuzmi fajl
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a');
+      a.href=url; a.download=_nazivPDF();
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); },1500);
+    }
+  }catch(e){
+    // Korisnik je odustao od dijeljenja - to nije greska
+    if(!/abort|cancel/i.test(String(e&&e.name)+String(e&&e.message)))
+      alert('PDF nije napravljen: '+(e.message||e));
+  }finally{
+    if(btn){ btn.disabled=false; btn.innerHTML=stari; }
+  }
 }
 function _jeUzakEkran(){
   try{ return window.matchMedia('(max-width:760px)').matches; }catch(e){ return false; }

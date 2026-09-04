@@ -331,6 +331,9 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <button type="button" class="glavni-tab-btn" data-tab="presek" onclick="prebaciGlavniTabRM('presek')">⚖️ Presek / Usaglašavanje</button>
   <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
   <button type="button" class="glavni-tab-btn" data-tab="uporedi" onclick="prebaciGlavniTabRM('uporedi')">⚖️ Uporedi PJ</button>
+  <button type="button" class="glavni-tab-btn" data-tab="gotovi" onclick="prebaciGlavniTabRM('gotovi')">🪑 Gotovi proizvodi</button>
+  <a href="gotovi-proizvodi.html" class="glavni-tab-btn" style="text-decoration:none;display:inline-flex;align-items:center;"
+     title="Sastavnice gotovih proizvoda — komponente, faktori, cijene">🪑 Gotovi proizvodi</a>
   <button type="button" class="glavni-tab-btn" data-tab="akcije" onclick="prebaciGlavniTabRM('akcije')">🏷️ Akcije</button>
   <button type="button" class="glavni-tab-btn" data-tab="kretanje" onclick="prebaciGlavniTabRM('kretanje')">📈 Kretanje robe</button>
   <button type="button" class="glavni-tab-btn" data-tab="uvoz" onclick="prebaciGlavniTabRM('uvoz')">📥 Uvoz robe</button>
@@ -935,6 +938,27 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     </div>
 
     <div id="import-msg"></div>
+  </div>
+</div>
+
+<div id="tab-gotovi" style="display:none;">
+  <div class="import-box">
+    <h3>🪑 Gotovi proizvodi</h3>
+    <div class="uzorak-hint">
+      Gotov proizvod se sastoji od artikala iz lagera. Cijena se <b>računa</b>:
+      cijena artikla × količina × faktor. Kupac plaća <b>neto površinu</b> — otpad je pokriven faktorom.
+      Faktor pravi <b>cjenovnik</b>; popust po tipu kupca dolazi povrh njega.
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+      <input type="text" id="gpr-naziv-novi" placeholder="Naziv novog proizvoda (npr. Sto Pandora)"
+             style="flex:1;min-width:200px;font:inherit;font-size:12.5px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;">
+      <button type="button" onclick="gprNovi()" style="padding:7px 15px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:6px;font-weight:700;cursor:pointer;font-size:12.5px;">+ Novi</button>
+      <button type="button" class="ce-tip-btn" style="font-size:11.5px;" onclick="gprUcitaj()">↻ Osvježi</button>
+    </div>
+
+    <div id="gpr-prijedlozi" style="display:none;background:#eef4fc;border:1px solid #b8d4f0;border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:12px;"></div>
+    <div id="gpr-spisak"></div>
   </div>
 </div>
 
@@ -3832,6 +3856,8 @@ function prebaciGlavniTabRM(tab){
   if(tab==='master-grupe') mgUcitaj();
   document.getElementById('tab-uporedi').style.display = tab==='uporedi' ? 'block' : 'none';
   if(tab==='uporedi') upInit();
+  document.getElementById('tab-gotovi').style.display = tab==='gotovi' ? 'block' : 'none';
+  if(tab==='gotovi') gprUcitaj();
   document.getElementById('tab-akcije').style.display = tab==='akcije' ? 'block' : 'none';
   if(tab==='akcije') akUcitajSpisak();
   if(tab==='izvoz-log') izvozLogUcitaj();
@@ -3951,6 +3977,384 @@ function otvoriDimenzijeZaIzabrane(){
   setTimeout(()=>document.getElementById('dim-sirina').focus(), 50);
 }
 
+
+
+/* ═══ GOTOVI PROIZVODI — SASTAVNICE ═══════════════════════════════════════════════
+   Gotov proizvod ("Sto Pandora") sastoji se od artikala iz lagera. Cijena se RACUNA:
+   cijena × kolicina × faktor. Faktor pravi CJENOVNIK; popust po tipu kupca ide povrh.
+   Komponenta moze biti OBAVEZNA ili dio GRUPE IZBORA (bira se jedno od vise). */
+let gprSve = [], gprOtvoren = null, gprTajmer = null, gprIzabraniArtikal = null;
+
+async function gprUcitaj(){
+  const cont = document.getElementById('gpr-spisak');
+  cont.innerHTML = '<div style="padding:12px;color:#8b96a5;font-size:12.5px;">Učitavanje...</div>';
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi?svi=1`);
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||`Server je vratio ${r.status}`); }
+    gprSve = await r.json();
+    gprRender();
+    gprPrijedlozi();
+  }catch(e){
+    cont.innerHTML = `<div style="padding:12px;color:var(--red,#c0392b);font-size:12.5px;">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+/* Nazivi iz kolone "Gotov proizvod" u lageru kojima jos nije napravljena sastavnica —
+   precica, da se ne kuca isto dvaput. */
+async function gprPrijedlozi(){
+  const el = document.getElementById('gpr-prijedlozi');
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/nazivi`);
+    if(!r.ok) { el.style.display='none'; return; }
+    const lista = (await r.json()).filter(x=>!x.ima_sastavnicu);
+    if(!lista.length){ el.style.display='none'; return; }
+    el.style.display='block';
+    el.innerHTML = `U lageru ima ${lista.length} ${lista.length===1?'naziv':'naziva'} bez sastavnice — klikni da napraviš:<br>`
+      + lista.slice(0,12).map(x=>`<button type="button" onclick="gprNovi('${esc(x.naziv).replace(/'/g,"&apos;")}')"
+          style="margin:4px 4px 0 0;font-size:11.5px;padding:3px 9px;border:1px solid #b8d4f0;background:#fff;border-radius:5px;cursor:pointer;">
+          ${esc(x.naziv)} <span style="color:#8b96a5;">(${x.broj_artikala})</span></button>`).join('');
+  }catch(e){ el.style.display='none'; }
+}
+
+function gprRender(){
+  const cont = document.getElementById('gpr-spisak');
+  if(!gprSve.length){
+    cont.innerHTML = '<div style="padding:14px;color:#8b96a5;font-size:12.5px;text-align:center;background:#f7f8fa;border-radius:8px;">Još nema gotovih proizvoda.</div>';
+    return;
+  }
+  cont.innerHTML = gprSve.map(g=>`
+    <div style="border:1px solid var(--border,#ddd);border-radius:9px;margin-bottom:8px;overflow:hidden;">
+      <div onclick="gprPrekidac(${g.id})" style="padding:9px 12px;cursor:pointer;background:${gprOtvoren===g.id?'#eef4fc':'#fff'};display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div>
+          <b style="font-size:13px;">${gprOtvoren===g.id?'▾':'▸'} ${esc(g.naziv)}</b>
+          ${!g.aktivan?'<span style="color:#8b96a5;font-size:11px;"> · neaktivan</span>':''}
+          <div style="font-size:11px;color:#8b96a5;margin-top:2px;">
+            ${g.broj_stavki} ${g.broj_stavki===1?'komponenta':'komponenti'} · ${g.broj_dimenzija} ${g.broj_dimenzija===1?'dimenzija':'dimenzija'}
+            ${g.broj_stavki===0?' · <span style="color:var(--orange,#b8860b);">⚠ nema komponenti</span>':''}
+          </div>
+        </div>
+        <button onclick="gprObrisi(${g.id},event)" title="Obriši" style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--red,#c0392b);">🗑</button>
+      </div>
+      ${gprOtvoren===g.id?`<div id="gpr-detalj-${g.id}" style="padding:12px;border-top:1px solid #eee;background:#fafbfc;">Učitavanje...</div>`:''}
+    </div>`).join('');
+  if(gprOtvoren) gprUcitajDetalj(gprOtvoren);
+}
+
+function gprPrekidac(id){
+  gprOtvoren = gprOtvoren === id ? null : id;
+  gprIzabraniArtikal = null;
+  gprRender();
+}
+
+async function gprNovi(naziv){
+  const polje = document.getElementById('gpr-naziv-novi');
+  const n = (naziv || polje.value).trim();
+  if(!n){ alert('Unesi naziv gotovog proizvoda.'); return; }
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ naziv: n }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
+    polje.value = '';
+    gprOtvoren = d.id;
+    await gprUcitaj();
+    if(d.dodato_stavki) alert(`✓ Napravljeno. Iz lagera je preuzeto ${d.dodato_stavki} ${d.dodato_stavki===1?'artikal':'artikala'} — podesi faktore.`);
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+async function gprObrisi(id, ev){
+  if(ev) ev.stopPropagation();
+  if(!confirm('Obrisati ovaj gotov proizvod sa svim komponentama i dimenzijama?')) return;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${id}`,{method:'DELETE'});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
+    if(gprOtvoren===id) gprOtvoren=null;
+    gprUcitaj();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+
+/* ── DETALJ: komponente, dimenzije, racun ────────────────────────────────────── */
+async function gprUcitajDetalj(id){
+  const el = document.getElementById('gpr-detalj-'+id);
+  if(!el) return;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${id}`);
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
+    const g = await r.json();
+    gprRenderDetalj(el, g);
+  }catch(e){
+    el.innerHTML = `<div style="color:var(--red,#c0392b);font-size:12.5px;">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+function gprRenderDetalj(el, g){
+  const TIP = { kom:'komad', povrsina:'m² (iz dimenzija)', duzina:'m¹ (obim)' };
+  el.innerHTML = `
+    <div style="font-size:12px;font-weight:800;margin-bottom:7px;">Komponente</div>
+    <div style="font-size:11px;color:#8b96a5;margin-bottom:8px;line-height:1.45;">
+      Stavke iste <b>grupe izbora</b> su alternative — bira se jedna. Stavka <b>bez grupe</b> ulazi uvijek.
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+        <thead><tr style="background:#1f3864;color:#fff;">
+          <th style="padding:4px 6px;text-align:left;">Grupa izbora</th>
+          <th style="padding:4px 6px;text-align:left;">Komponenta</th>
+          <th style="padding:4px 6px;text-align:left;">Mjeri se</th>
+          <th style="padding:4px 6px;text-align:right;">Količina</th>
+          <th style="padding:4px 6px;text-align:right;">Faktor</th>
+          <th style="padding:4px 6px;"></th>
+        </tr></thead>
+        <tbody>${(g.stavke||[]).map((s,i)=>`
+          <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
+            <td style="padding:2px 6px;">
+              <input type="text" value="${esc(s.grupa_izbora||'')}" placeholder="—"
+                     onchange="gprIzmjeniStavku(${s.id},'grupa_izbora',this.value,${g.id})"
+                     style="width:88px;font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
+            </td>
+            <td style="padding:2px 6px;"><b>${esc(s.roba_naziv||s.opis||'—')}</b>${s.sifra?`<span style="color:#8b96a5;"> · ${esc(s.sifra)}</span>`:''}</td>
+            <td style="padding:2px 6px;">
+              <select onchange="gprIzmjeniStavku(${s.id},'tip_kolicine',this.value,${g.id})"
+                      style="font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
+                ${Object.entries(TIP).map(([k,v])=>`<option value="${k}" ${s.tip_kolicine===k?'selected':''}>${v}</option>`).join('')}
+              </select>
+            </td>
+            <td style="padding:2px 6px;text-align:right;">
+              <input type="text" inputmode="decimal" value="${uPolje(s.kolicina,3)}"
+                     onchange="gprIzmjeniStavku(${s.id},'kolicina',this.value,${g.id})"
+                     style="width:58px;text-align:right;font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
+            </td>
+            <td style="padding:2px 6px;text-align:right;">
+              <input type="text" inputmode="decimal" value="${uPolje(s.faktor,2)}"
+                     onchange="gprIzmjeniStavku(${s.id},'faktor',this.value,${g.id})"
+                     style="width:52px;text-align:right;font:inherit;font-size:11px;font-weight:700;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
+            </td>
+            <td style="padding:2px 6px;text-align:center;">
+              <button onclick="gprObrisiStavku(${s.id},${g.id})" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--red,#c0392b);">🗑</button>
+            </td>
+          </tr>`).join('') || '<tr><td colspan="6" style="padding:10px;text-align:center;color:#8b96a5;">Nema komponenti.</td></tr>'}</tbody>
+      </table>
+    </div>
+
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;position:relative;">
+      <input type="text" id="gpr-trazi-${g.id}" placeholder="Traži artikal iz lagera..." autocomplete="off"
+             oninput="gprTraziArtikal(${g.id})"
+             style="flex:1;min-width:180px;font:inherit;font-size:12px;padding:6px 9px;border:1px solid #ccc;border-radius:5px;">
+      <div id="gpr-rez-${g.id}" style="display:none;position:absolute;top:100%;left:0;z-index:20;background:#fff;border:1px solid #ccc;border-radius:6px;max-height:180px;overflow-y:auto;box-shadow:0 3px 10px rgba(0,0,0,.15);min-width:290px;"></div>
+      <button onclick="gprDodajStavku(${g.id})" style="padding:6px 13px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:5px;font-weight:700;cursor:pointer;font-size:12px;">+ Dodaj</button>
+    </div>
+
+    <div style="font-size:12px;font-weight:800;margin:14px 0 7px;">Dimenzije</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+      ${(g.dimenzije||[]).map(d=>`
+        <span style="background:#eef4fc;border:1px solid #b8d4f0;border-radius:6px;padding:3px 9px;font-size:11.5px;font-weight:700;">
+          ${Math.round(d.sirina)}×${Math.round(d.visina)}
+          <button onclick="gprObrisiDim(${d.id},${g.id})" style="background:none;border:none;cursor:pointer;color:var(--red,#c0392b);font-size:11px;margin-left:3px;padding:0;">✕</button>
+        </span>`).join('')}
+      <input type="text" inputmode="decimal" id="gpr-dim-s-${g.id}" placeholder="širina" style="width:66px;font:inherit;font-size:11.5px;padding:4px 7px;border:1px solid #ccc;border-radius:5px;">
+      <span style="color:#8b96a5;">×</span>
+      <input type="text" inputmode="decimal" id="gpr-dim-v-${g.id}" placeholder="visina" style="width:66px;font:inherit;font-size:11.5px;padding:4px 7px;border:1px solid #ccc;border-radius:5px;">
+      <button onclick="gprDodajDim(${g.id})" style="padding:4px 11px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:5px;font-weight:700;cursor:pointer;font-size:11.5px;">+</button>
+    </div>
+
+    <div style="font-size:12px;font-weight:800;margin:14px 0 7px;">Cijene</div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:end;margin-bottom:9px;">
+      <select id="gpr-obj-${g.id}" style="font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ccc;border-radius:5px;"><option value="">— objekat —</option></select>
+      <select id="gpr-tip-${g.id}" style="font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ccc;border-radius:5px;"><option value="">— bez popusta —</option></select>
+      <button onclick="gprIzracunaj(${g.id})" style="padding:6px 15px;border:none;background:#6b4fa0;color:#fff;border-radius:5px;font-weight:700;cursor:pointer;font-size:12px;">▶ Izračunaj</button>
+    </div>
+    <div id="gpr-cijene-${g.id}"></div>`;
+
+  gprPopuniListe(g.id);
+}
+
+/* Objekti i tipovi kupaca za racun — povlace se jednom po otvaranju */
+async function gprPopuniListe(id){
+  try{
+    const r = await fetch(`${API}/api/prodajni-objekti`);
+    if(r.ok){
+      const o = await r.json();
+      const sel = document.getElementById('gpr-obj-'+id);
+      if(sel && Array.isArray(o)) sel.innerHTML = '<option value="">— objekat —</option>' +
+        o.map(x=>`<option value="${x.id}">${esc(x.naziv)}</option>`).join('');
+    }
+  }catch(e){}
+  try{
+    const r = await fetch(`${API}/api/cijene/tipovi`);
+    if(r.ok){
+      const d = await r.json();
+      const sel = document.getElementById('gpr-tip-'+id);
+      if(sel && d.tipovi) sel.innerHTML = '<option value="">— bez popusta —</option>' +
+        d.tipovi.map(t=>`<option value="${t.id}">${esc(t.naziv)}${t.popust_posto?` (−${t.popust_posto}%)`:''}</option>`).join('');
+    }
+  }catch(e){}
+}
+
+
+async function gprIzmjeniStavku(sid, polje, vrijednost, gid){
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/stavka/${sid}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ [polje]: vrijednost }),
+    });
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
+    // Racun se NE osvjezava sam — korisnik jos podesava; klikne "Izračunaj" kad zavrsi
+  }catch(e){ alert('✗ '+e.message); gprUcitajDetalj(gid); }
+}
+
+async function gprObrisiStavku(sid, gid){
+  if(!confirm('Obrisati ovu komponentu?')) return;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/stavka/${sid}`,{method:'DELETE'});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
+    gprUcitajDetalj(gid); gprUcitaj();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+/* Pretraga artikala iz lagera — komponente se biraju odavde, ne iz kolone
+   "Gotov proizvod". Isto postolje ide u vise stolova, pa jedna kolona ne bi bila dovoljna. */
+function gprTraziArtikal(gid){
+  clearTimeout(gprTajmer);
+  gprIzabraniArtikal = null;
+  const polje = document.getElementById('gpr-trazi-'+gid);
+  const rez = document.getElementById('gpr-rez-'+gid);
+  const q = polje.value.trim();
+  if(q.length < 2){ rez.style.display='none'; return; }
+  gprTajmer = setTimeout(async ()=>{
+    try{
+      const r = await fetch(`${API}/api/roba?q=${encodeURIComponent(q)}&limit=12`);
+      const d = await r.json();
+      const lista = Array.isArray(d) ? d : (d.stavke||[]);
+      if(!lista.length){ rez.style.display='none'; return; }
+      rez.innerHTML = lista.slice(0,12).map(a=>`
+        <div onclick="gprIzaberiArtikal(${gid},${a.id},'${esc(a.naziv).replace(/'/g,"&apos;")}','${esc(a.sifra)}','${esc(a.jed_mjera||'')}')"
+             style="padding:5px 9px;cursor:pointer;font-size:12px;border-bottom:1px solid #f2f3f5;">
+          <span style="color:#999;">${esc(a.sifra)}</span> ${esc(a.naziv)}
+          <span style="color:#8b96a5;font-size:10.5px;"> · ${esc(a.jed_mjera||'')}</span>
+        </div>`).join('');
+      rez.style.display='block';
+    }catch(e){ rez.style.display='none'; }
+  }, 280);
+}
+
+function gprIzaberiArtikal(gid, id, naziv, sifra, jm){
+  gprIzabraniArtikal = { id, naziv, sifra, jed_mjera: jm };
+  document.getElementById('gpr-trazi-'+gid).value = `${sifra} ${naziv}`;
+  document.getElementById('gpr-rez-'+gid).style.display = 'none';
+}
+
+async function gprDodajStavku(gid){
+  if(!gprIzabraniArtikal){ alert('Izaberi artikal iz spiska.'); return; }
+  /* Artikal koji se mjeri u m² je gotovo sigurno ploca — kolicina mu se izvodi iz
+     dimenzija proizvoda. Ostalo ide po komadu. Moze se promijeniti poslije. */
+  const tip = String(gprIzabraniArtikal.jed_mjera||'').toLowerCase().includes('m2') ? 'povrsina' : 'kom';
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${gid}/stavke`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ roba_id: gprIzabraniArtikal.id, tip_kolicine: tip, kolicina: 1, faktor: 1 }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
+    document.getElementById('gpr-trazi-'+gid).value = '';
+    gprIzabraniArtikal = null;
+    gprUcitajDetalj(gid); gprUcitaj();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+async function gprDodajDim(gid){
+  const s = broj(document.getElementById('gpr-dim-s-'+gid).value);
+  const v = broj(document.getElementById('gpr-dim-v-'+gid).value);
+  if(!s || !v){ alert('Unesi širinu i visinu u milimetrima.'); return; }
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${gid}/dimenzije`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ sirina: s, visina: v }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
+    document.getElementById('gpr-dim-s-'+gid).value='';
+    document.getElementById('gpr-dim-v-'+gid).value='';
+    gprUcitajDetalj(gid); gprUcitaj();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+async function gprObrisiDim(did, gid){
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/dimenzija/${did}`,{method:'DELETE'});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
+    gprUcitajDetalj(gid); gprUcitaj();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+/* Racun — vraca cijenu za svaku dimenziju, a ako ima grupa izbora onda za svaku
+   kombinaciju. Cijene se povlace SVJEZE iz lagera tog objekta. */
+async function gprIzracunaj(gid){
+  const cont = document.getElementById('gpr-cijene-'+gid);
+  const obj = document.getElementById('gpr-obj-'+gid).value;
+  const tip = document.getElementById('gpr-tip-'+gid).value;
+  if(!obj){ cont.innerHTML = '<div style="color:var(--orange,#b8860b);font-size:12px;">Izaberi objekat — cijene se povlače iz njegovog lagera.</div>'; return; }
+  cont.innerHTML = '<div style="color:#8b96a5;font-size:12px;">Računam...</div>';
+  try{
+    const q = new URLSearchParams({ objekt_id: obj });
+    if(tip) q.set('tip_kupca_id', tip);
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${gid}/cijena?${q}`);
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
+    gprRenderCijene(cont, d);
+  }catch(e){
+    cont.innerHTML = `<div style="color:var(--red,#c0392b);font-size:12px;">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+function gprRenderCijene(cont, d){
+  const fm = v => (v||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const imaIzbor = (d.grupe_izbora||[]).length > 0;
+  const redovi = [];
+
+  for(const c of d.cijene||[]){
+    const varijante = c.varijante || [c];
+    for(const v of varijante){
+      redovi.push({
+        dim: c.naziv,
+        izbor: (v.izbor||[]).map(x=>x.naziv).join(' + '),
+        osnovica: v.osnovica, popust: v.popust, popust_posto: v.popust_posto,
+        cijena: v.cijena, nepotpuno: v.nepotpuno,
+      });
+    }
+  }
+  if(!redovi.length){ cont.innerHTML='<div style="color:#8b96a5;font-size:12px;">Nema komponenti ni dimenzija.</div>'; return; }
+
+  const imaNepotpunih = redovi.some(r=>r.nepotpuno);
+  cont.innerHTML = `
+    ${imaNepotpunih?'<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:7px 10px;font-size:11.5px;color:#8b6914;margin-bottom:8px;">⚠ Neke komponente nemaju cijenu u ovom objektu — ti redovi su nepotpuni.</div>':''}
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+        <thead><tr style="background:#6b4fa0;color:#fff;">
+          <th style="padding:4px 7px;text-align:left;">Dimenzija</th>
+          ${imaIzbor?'<th style="padding:4px 7px;text-align:left;">Izbor</th>':''}
+          <th style="padding:4px 7px;text-align:right;">Cjenovnik</th>
+          ${d.tip_kupca?`<th style="padding:4px 7px;text-align:right;">Popust</th>`:''}
+          <th style="padding:4px 7px;text-align:right;">Cijena</th>
+        </tr></thead>
+        <tbody>${redovi.map((r,i)=>`
+          <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;${r.nepotpuno?'opacity:.55;':''}">
+            <td style="padding:3px 7px;font-weight:700;">${esc(r.dim)}</td>
+            ${imaIzbor?`<td style="padding:3px 7px;">${esc(r.izbor||'—')}</td>`:''}
+            <td style="padding:3px 7px;text-align:right;color:#6b7a8d;">${fm(r.osnovica)}</td>
+            ${d.tip_kupca?`<td style="padding:3px 7px;text-align:right;color:var(--green,#1f8a4c);">−${fm(r.popust)}</td>`:''}
+            <td style="padding:3px 7px;text-align:right;font-weight:800;">${fm(r.cijena)} ${esc(d.valuta||'KM')}</td>
+          </tr>`).join('')}</tbody>
+      </table>
+    </div>
+    <div style="font-size:10.5px;color:#8b96a5;margin-top:6px;line-height:1.5;">
+      ${redovi.length} ${redovi.length===1?'cijena':'cijena'}${imaIzbor?` · ${d.grupe_izbora.map(g=>g.naziv+' ('+g.opcije.length+')').join(', ')}`:''}
+      ${d.tip_kupca?` · popust za: ${esc(d.tip_kupca)}`:''}
+      <br>Faktor pravi cjenovnik; popust dolazi povrh njega. Cijene se povlače svježe iz lagera.
+    </div>`;
+}
 
 /* ═══ GOTOV PROIZVOD ═══════════════════════════════════════════════════════════════
    Artikal je SIROVINA ili dio ("postolje za sto", "tabla Rosa Porino"), a od njega
