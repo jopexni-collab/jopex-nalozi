@@ -4193,6 +4193,11 @@ function gprRenderDetalj(el, g){
         <thead><tr style="background:#1f3864;color:#fff;">
           <th style="padding:4px 6px;text-align:left;">Grupa izbora</th>
           <th style="padding:4px 6px;text-align:left;">Komponenta</th>
+          <th style="padding:4px 6px;text-align:center;" title="★ glavna slika artikla · 🪑 slika gotovog proizvoda">Slike</th>
+          <th style="padding:4px 6px;text-align:left;">Grupa</th>
+          <th style="padding:4px 6px;text-align:center;">Deb.</th>
+          <th style="padding:4px 6px;text-align:center;" title="Dimenzija table iz lagera">Tabla (mm)</th>
+          <th style="padding:4px 6px;text-align:center;">JM</th>
           <th style="padding:4px 6px;text-align:left;">Mjeri se</th>
           <th style="padding:4px 6px;text-align:right;">Količina</th>
           <th style="padding:4px 6px;text-align:right;" title="Raspoloživo u izabranom objektu">Na stanju</th>
@@ -4210,6 +4215,29 @@ function gprRenderDetalj(el, g){
                      style="width:88px;font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
             </td>
             <td style="padding:2px 6px;"><b>${esc(s.roba_naziv||s.opis||'—')}</b>${s.sifra?`<span style="color:#8b96a5;"> · ${esc(s.sifra)}</span>`:''}</td>
+            <td style="padding:2px 6px;text-align:center;white-space:nowrap;">${
+              !s.roba_id ? '' : `
+              <span title="${s.slika_glavna?'Glavna slika postavljena':'⚠ Nema glavne slike'}" style="display:inline-block;vertical-align:middle;">
+                ${s.slika_glavna
+                  ? `<img src="${esc(s.slika_glavna)}" style="width:26px;height:26px;object-fit:cover;border-radius:4px;border:2px solid #4a90d9;">`
+                  : `<span style="display:inline-flex;width:26px;height:26px;border-radius:4px;border:1px dashed #c3c9d1;align-items:center;justify-content:center;font-size:10px;color:#c3c9d1;">★</span>`}
+              </span>
+              <span title="${s.slika_gotov?'Slika gotovog proizvoda postavljena':'⚠ Nema slike gotovog proizvoda'}" style="display:inline-block;vertical-align:middle;margin-left:2px;">
+                ${s.slika_gotov
+                  ? `<img src="${esc(s.slika_gotov)}" style="width:26px;height:26px;object-fit:cover;border-radius:4px;border:2px solid #6b4fa0;">`
+                  : `<span style="display:inline-flex;width:26px;height:26px;border-radius:4px;border:1px dashed #c3c9d1;align-items:center;justify-content:center;font-size:10px;color:#c3c9d1;">🪑</span>`}
+              </span>
+              ${s.broj_slika>0?`<button onclick="otvoriKaruselSlika(${s.roba_id},'${esc(s.roba_naziv||'').replace(/'/g,"&apos;")}')" title="Otvori slike (${s.broj_slika})" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--blue);vertical-align:middle;">✎</button>`
+                              :`<span title="Artikal nema nijednu sliku" style="color:var(--orange,#b8860b);font-size:11px;vertical-align:middle;"> ⚠</span>`}
+            `}</td>
+            <td style="padding:2px 6px;color:#6b7a8d;">${esc(s.grupa||'')}</td>
+            <td style="padding:2px 6px;text-align:center;color:#6b7a8d;">${s.debljina_cm ?? ''}</td>
+            <td style="padding:2px 6px;text-align:center;white-space:nowrap;">${
+              (s.std_sirina && s.std_visina)
+                ? `<span style="color:#6b7a8d;">${Math.round(s.std_sirina)}×${Math.round(s.std_visina)}</span>`
+                : (s.roba_id ? '<span title="Bez dimenzija table se ne može planirati rez" style="color:var(--orange,#b8860b);">⚠</span>' : '')
+            }</td>
+            <td style="padding:2px 6px;text-align:center;color:#6b7a8d;">${esc(s.jed_mjera||'')}</td>
             <td style="padding:2px 6px;">
               <select onchange="gprIzmjeniStavku(${s.id},'tip_kolicine',this.value,${g.id})"
                       style="font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
@@ -4248,8 +4276,14 @@ function gprRenderDetalj(el, g){
             <td style="padding:2px 6px;text-align:center;">
               <button onclick="gprObrisiStavku(${s.id},${g.id})" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--red,#c0392b);">🗑</button>
             </td>
-          </tr>`).join('') || '<tr><td colspan="10" style="padding:10px;text-align:center;color:#8b96a5;">Nema komponenti.</td></tr>'}</tbody>
+          </tr>`).join('') || '<tr><td colspan="15" style="padding:10px;text-align:center;color:#8b96a5;">Nema komponenti.</td></tr>'}</tbody>
       </table>
+    </div>
+
+    <div style="font-size:10.5px;color:#8b96a5;margin-top:5px;">
+      Slike: <b style="color:#4a90d9;">plavi okvir</b> = glavna slika artikla ·
+      <b style="color:#6b4fa0;">ljubičasti</b> = slika gotovog proizvoda ·
+      isprekidano = nije označeno. Klik na ✎ otvara slike tog artikla.
     </div>
 
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;position:relative;">

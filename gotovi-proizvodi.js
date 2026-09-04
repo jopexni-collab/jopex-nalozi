@@ -82,8 +82,19 @@ router.get('/:id', async (req, res) => {
        vidi ima li materijala i po kojoj cijeni, pa zna da li da ide sa nizom ili visom. */
     const objektId = parseInt(req.query.objekt_id) || null;
     const s = await pool.query(
+      /* Uz komponentu se vraca i SLIKA, plus podatak IMA LI oznacenu glavnu i sliku
+         gotovog proizvoda — da se u sastavnici odmah vidi sta jos treba oznaciti,
+         umjesto da se ide artikal po artikal kroz lager. */
+      /* Iz lager liste se prenosi SVE osim kolone "Ukupno" — ona ovdje nema smisla,
+         jer se u sastavnici racuna cijena po komponenti, ne vrijednost zaliha. */
       `SELECT st.*, ro.sifra, ro.naziv AS roba_naziv, ro.jed_mjera, ro.grupa,
-              rp.cijena AS cijena_lager, rp.stanje AS stanje_lager
+              ro.debljina_cm, ro.std_sirina, ro.std_visina, ro.naziv_gotov,
+              rp.cijena AS cijena_lager, rp.stanje AS stanje_lager,
+              (SELECT COALESCE(thumb_url, url) FROM roba_slike
+               WHERE roba_id = ro.id AND glavna = true LIMIT 1)          AS slika_glavna,
+              (SELECT COALESCE(thumb_url, url) FROM roba_slike
+               WHERE roba_id = ro.id AND gotov_proizvod = true LIMIT 1)  AS slika_gotov,
+              (SELECT COUNT(*) FROM roba_slike WHERE roba_id = ro.id)::int AS broj_slika
        FROM gotov_stavke st
        LEFT JOIN roba ro ON ro.id = st.roba_id
        LEFT JOIN roba_pj rp ON rp.roba_id = st.roba_id AND rp.objekt_id = $2
