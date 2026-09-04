@@ -1008,6 +1008,59 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       cijena artikla × količina × faktor. Kupac plaća <b>neto površinu</b> — otpad je pokriven faktorom.
       Faktor pravi <b>cjenovnik</b>; popust po tipu kupca dolazi povrh njega.
     </div>
+    <!-- Dva koraka: PRVO se definisu grupe proizvoda i sta u njih smije, TEK ONDA se
+         pravi pojedinacan proizvod. Zato su odvojeni. -->
+    <div style="display:flex;gap:7px;margin-bottom:12px;">
+      <button type="button" id="gpr-pod-1" onclick="gprPodTab('grupe')"
+              style="font:inherit;font-size:12.5px;padding:8px 16px;border:1px solid var(--border,#ddd);background:var(--blue,#1a5fa8);color:#fff;border-radius:7px;cursor:pointer;font-weight:700;">
+        1️⃣ Grupe proizvoda
+      </button>
+      <button type="button" id="gpr-pod-2" onclick="gprPodTab('proizvodi')"
+              style="font:inherit;font-size:12.5px;padding:8px 16px;border:1px solid var(--border,#ddd);background:#fff;border-radius:7px;cursor:pointer;font-weight:700;">
+        2️⃣ Proizvodi
+      </button>
+    </div>
+
+    <!-- ═══ KORAK 1: GRUPE PROIZVODA ═══ -->
+    <div id="gpr-dio-grupe">
+      <div style="background:#f7f8fa;border-radius:8px;padding:10px 13px;margin-bottom:11px;font-size:12px;line-height:1.65;">
+        <b>Grupa proizvoda</b> kaže od čega se proizvod sastoji — npr. <i>Sto</i> ima
+        postolje, ploču i dodatni rad. Za svaki sastojak biraš <b>koje grupe artikala</b>
+        smiju u njega i <b>kako se mjeri</b>.<br>
+        Ograničenja štede vrijeme: za ploču stola postaviš <b>max debljinu 3 cm</b>,
+        pa se deblje table uopšte ne nude.
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:11px;">
+        <input type="text" id="gpg-naziv" placeholder="Naziv grupe (npr. Sto, Klupice, Stepenice)"
+               style="flex:1;min-width:220px;font:inherit;font-size:12.5px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;">
+        <select id="gpg-oblik" style="font:inherit;font-size:12.5px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;">
+          <optgroup label="Stolovi">
+            <option value="PRAV">▭ Pravougaoni</option>
+            <option value="KVAD">◻ Kvadratni</option>
+            <option value="KRUG">◯ Okrugli</option>
+            <option value="OVAL">⬭ Ovalni</option>
+            <option value="BACVA">▢ Bačvasti</option>
+            <option value="ZAOB">▭ Zaobljeni uglovi</option>
+          </optgroup>
+          <optgroup label="Ploče">
+            <option value="I">▭ Pravougli</option>
+            <option value="L">⌐ L oblik</option>
+            <option value="U">∪ U oblik</option>
+            <option value="V">∨ V oblik</option>
+            <option value="N">◺ Nepravilan</option>
+            <option value="G">⊐ G oblik</option>
+          </optgroup>
+        </select>
+        <button onclick="gpgNova()" style="padding:7px 15px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:6px;font-weight:700;cursor:pointer;font-size:12.5px;">+ Nova grupa</button>
+        <button class="ce-tip-btn" style="font-size:11.5px;" onclick="gpgUcitaj()">↻ Osvježi</button>
+      </div>
+
+      <div id="gpg-spisak"></div>
+    </div>
+
+    <!-- ═══ KORAK 2: PROIZVODI ═══ -->
+    <div id="gpr-dio-proizvodi" style="display:none;">
     <div style="background:#f7f8fa;border-radius:8px;padding:10px 13px;margin-bottom:11px;font-size:12px;line-height:1.65;">
       <b>Kako se pravi:</b><br>
       <b>1.</b> Upiši naziv proizvoda (npr. <i>Sto Pandora</i>) → <b>+ Napravi sastavnicu</b><br>
@@ -1027,9 +1080,14 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <!-- Naziv se moze UKUCATI slobodno ili izabrati iz kolone "Gotov proizvod" u
            lageru. Ranije je bio samo izbor, pa se nov proizvod nije mogao napraviti
            dok se artikli ne oznace — a to je obrnut redosled od nacina rada. -->
+      <!-- Grupa se bira PRVA — iz nje proizvod nasljedjuje sastojke, pa je sastavnica
+           odmah postavljena i ne pamti se sta ide u sto. -->
+      <select id="gpr-grupa-nova" style="font:inherit;font-size:12.5px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;min-width:150px;">
+        <option value="">— izaberi grupu —</option>
+      </select>
       <input type="text" id="gpr-naziv-novi" list="gpr-nazivi-lista"
-             placeholder="Naziv proizvoda (npr. Sto Pandora) — ukucaj ili izaberi"
-             style="flex:1;min-width:250px;font:inherit;font-size:12.5px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;">
+             placeholder="Naziv proizvoda (npr. Sto Pandora)"
+             style="flex:1;min-width:210px;font:inherit;font-size:12.5px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;">
       <datalist id="gpr-nazivi-lista"></datalist>
       <button type="button" onclick="gprNovi()" style="padding:7px 15px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:6px;font-weight:700;cursor:pointer;font-size:12.5px;">+ Napravi sastavnicu</button>
       <button type="button" class="ce-tip-btn" style="font-size:11.5px;" onclick="gprUcitaj()">↻ Osvježi</button>
@@ -1037,7 +1095,8 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
     <div id="gpr-prijedlozi" style="display:none;background:#eef4fc;border:1px solid #b8d4f0;border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:12px;"></div>
     <div id="gpr-spisak"></div>
-  </div>
+  </div><!-- /gpr-dio-proizvodi -->
+</div>
 </div>
 
 <div id="tab-akcije" style="display:none;">
@@ -3963,7 +4022,7 @@ function prebaciGlavniTabRM(tab){
   document.getElementById('tab-uporedi').style.display = tab==='uporedi' ? 'block' : 'none';
   if(tab==='uporedi') upInit();
   document.getElementById('tab-gotovi').style.display = tab==='gotovi' ? 'block' : 'none';
-  if(tab==='gotovi'){ gprUcitaj(); gprUcitajNazive(); }
+  if(tab==='gotovi'){ gprPodTab('grupe'); gprUcitajNazive(); }
   document.getElementById('tab-akcije').style.display = tab==='akcije' ? 'block' : 'none';
   if(tab==='akcije') akUcitajSpisak();
   if(tab==='izvoz-log') izvozLogUcitaj();
@@ -4091,6 +4150,213 @@ function otvoriDimenzijeZaIzabrane(){
    Komponenta moze biti OBAVEZNA ili dio GRUPE IZBORA (bira se jedno od vise). */
 let gprSve = [], gprOtvoren = null, gprTajmer = null, gprIzabraniArtikal = null;
 
+
+/* ═══ GRUPE PROIZVODA (korak 1) ═══════════════════════════════════════════════════
+   Prvo se definise SASTAV: sto ima postolje, plocu i rad. Za svaki sastojak se kaze
+   koje grupe artikala smiju u njega i kako se mjeri. Tek onda se pravi pojedinacan
+   proizvod — i sastavnica mu je vec postavljena. */
+let gpgSve = [], gpgOtvorena = null, gpgGrupeArtikala = [];
+
+function gprPodTab(koji){
+  const grupe = koji === 'grupe';
+  document.getElementById('gpr-dio-grupe').style.display = grupe ? 'block' : 'none';
+  document.getElementById('gpr-dio-proizvodi').style.display = grupe ? 'none' : 'block';
+  const akt = 'background:var(--blue,#1a5fa8);color:#fff;', mir = 'background:#fff;color:inherit;';
+  const st = 'font:inherit;font-size:12.5px;padding:8px 16px;border:1px solid var(--border,#ddd);border-radius:7px;cursor:pointer;font-weight:700;';
+  document.getElementById('gpr-pod-1').style.cssText = st + (grupe ? akt : mir);
+  document.getElementById('gpr-pod-2').style.cssText = st + (grupe ? mir : akt);
+  if(grupe) gpgUcitaj(); else { gprUcitaj(); gprUcitajGrupe(); }
+}
+
+async function gpgUcitaj(){
+  const cont = document.getElementById('gpg-spisak');
+  cont.innerHTML = '<div style="padding:14px;color:#8b96a5;font-size:12.5px;">Učitavanje...</div>';
+  try{
+    // Grupe artikala iz lagera — za izbor sta smije u sastojak
+    if(!gpgGrupeArtikala.length){
+      try{
+        const rg = await fetch(`${API}/api/roba/liste-grupa`);
+        if(rg.ok){ const d = await rg.json(); gpgGrupeArtikala = (d.grupe || d || []).filter(Boolean); }
+      }catch(e){}
+    }
+    const r = await fetch(`${API}/api/gotovi-proizvodi/grupe?svi=1`);
+    if(!r.ok){ const d = await r.json().catch(()=>({})); throw new Error(d.error || `Server je vratio ${r.status}`); }
+    gpgSve = await r.json();
+    gpgRender();
+  }catch(e){
+    cont.innerHTML = `<div style="padding:14px;color:var(--red,#c0392b);font-size:12.5px;">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+function gpgRender(){
+  const cont = document.getElementById('gpg-spisak');
+  if(!gpgSve.length){
+    cont.innerHTML = '<div style="padding:18px;text-align:center;color:#8b96a5;font-size:12.5px;">Još nema grupa proizvoda.<br><span style="font-size:11.5px;">Upiši naziv gore (npr. <b>Sto</b>) i klikni „+ Nova grupa".</span></div>';
+    return;
+  }
+  cont.innerHTML = gpgSve.map(g=>`
+    <div style="border:1px solid var(--border,#ddd);border-radius:9px;margin-bottom:9px;overflow:hidden;">
+      <div onclick="gpgPrekidac(${g.id})" style="display:flex;justify-content:space-between;align-items:center;gap:9px;padding:9px 12px;cursor:pointer;background:${gpgOtvorena===g.id?'#e8eef7':'#f7f8fa'};flex-wrap:wrap;">
+        <div>
+          <span style="font-size:11px;color:#8b96a5;">${gpgOtvorena===g.id?'▾':'▸'}</span>
+          <b style="font-size:13.5px;">${esc(g.naziv)}</b>
+          <span style="font-size:11px;color:#6b7a8d;"> · ${esc(GPR_OBLICI[g.oblik]?.lbl||g.oblik)}</span>
+          <span style="font-size:11px;color:#8b96a5;"> · ${g.broj_sastojaka} ${g.broj_sastojaka===1?'sastojak':'sastojaka'}</span>
+          ${g.broj_proizvoda?`<span style="font-size:11px;color:var(--green,#1f8a4c);"> · ${g.broj_proizvoda} ${g.broj_proizvoda===1?'proizvod':'proizvoda'}</span>`:''}
+        </div>
+        <button onclick="event.stopPropagation();gpgObrisi(${g.id})" style="background:none;border:none;cursor:pointer;color:var(--red,#c0392b);font-size:13px;">🗑</button>
+      </div>
+      ${gpgOtvorena===g.id?`<div id="gpg-detalj-${g.id}" style="padding:11px 12px;"></div>`:''}
+    </div>`).join('');
+  if(gpgOtvorena) gpgUcitajDetalj(gpgOtvorena);
+}
+
+function gpgPrekidac(id){
+  gpgOtvorena = (gpgOtvorena === id) ? null : id;
+  gpgRender();
+}
+
+async function gpgNova(){
+  const naziv = document.getElementById('gpg-naziv').value.trim();
+  if(!naziv){ alert('Upiši naziv grupe (npr. „Sto").'); return; }
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/grupe`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ naziv, oblik: document.getElementById('gpg-oblik').value }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
+    document.getElementById('gpg-naziv').value = '';
+    gpgOtvorena = d.id;
+    await gpgUcitaj();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+async function gpgObrisi(id){
+  const g = gpgSve.find(x=>x.id===id);
+  if(!confirm(`Obrisati grupu „${g?.naziv||''}" sa svim sastojcima?`)) return;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/grupe/${id}`,{method:'DELETE'});
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.error||'Greška.');
+    gpgOtvorena = null;
+    await gpgUcitaj();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+async function gpgUcitajDetalj(id){
+  const el = document.getElementById('gpg-detalj-'+id);
+  if(!el) return;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/grupe/${id}`);
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
+    gpgRenderDetalj(el, await r.json());
+  }catch(e){
+    el.innerHTML = `<div style="color:var(--red,#c0392b);font-size:12.5px;">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+function gpgRenderDetalj(el, g){
+  const TIPM = { kom:'komad', povrsina:'m² (iz oblika)', duzina:'m¹ (obim)' };
+  el.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:7px;">Sastojci — redom kako ulaze u proizvod</div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:11.5px;white-space:nowrap;">
+        <thead><tr style="background:#1f3864;color:#fff;">
+          <th style="padding:4px 6px;width:34px;">#</th>
+          <th style="padding:4px 6px;text-align:left;">Naziv sastojka</th>
+          <th style="padding:4px 6px;text-align:left;">Grupe artikala koje smiju</th>
+          <th style="padding:4px 6px;text-align:left;">Mjeri se</th>
+          <th style="padding:4px 6px;text-align:right;" title="Ploča stola nema smisla deblja od 3 cm">Max deb.</th>
+          <th style="padding:4px 6px;text-align:center;">Obavezan</th>
+          <th style="padding:4px 6px;width:30px;"></th>
+        </tr></thead>
+        <tbody>${(g.sastojci||[]).map((s,i)=>`
+          <tr style="background:${i%2?'#f7f9fb':'#fff'};border-bottom:1px solid #eef0f3;">
+            <td style="padding:3px 6px;text-align:center;font-weight:700;color:#6b7a8d;">${s.redni_broj}</td>
+            <td style="padding:3px 6px;">
+              <input type="text" value="${esc(s.naziv)}" onchange="gpgIzmjeni(${s.id},'naziv',this.value,${g.id})"
+                     style="width:120px;font:inherit;font-size:11px;padding:3px 6px;border:1px solid #ddd;border-radius:4px;font-weight:700;">
+            </td>
+            <td style="padding:3px 6px;">
+              <input type="text" value="${esc((s.dozvoljene_grupe||[]).join(', '))}" placeholder="sve grupe" list="gpg-grupe-lista"
+                     onchange="gpgIzmjeni(${s.id},'dozvoljene_grupe',this.value.split(',').map(x=>x.trim()).filter(Boolean),${g.id})"
+                     title="Odvoji zarezom: tasto, kvarc, granit. Prazno = sve grupe."
+                     style="width:190px;font:inherit;font-size:11px;padding:3px 6px;border:1px solid #ddd;border-radius:4px;">
+            </td>
+            <td style="padding:3px 6px;">
+              <select onchange="gpgIzmjeni(${s.id},'tip_kolicine',this.value,${g.id})" style="font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
+                ${Object.entries(TIPM).map(([k,v])=>`<option value="${k}" ${s.tip_kolicine===k?'selected':''}>${v}</option>`).join('')}
+              </select>
+            </td>
+            <td style="padding:3px 6px;text-align:right;">
+              <input type="text" inputmode="decimal" value="${s.max_debljina??''}" placeholder="—"
+                     onchange="gpgIzmjeni(${s.id},'max_debljina',this.value,${g.id})"
+                     style="width:52px;text-align:right;font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
+            </td>
+            <td style="padding:3px 6px;text-align:center;">
+              <input type="checkbox" ${s.obavezan?'checked':''} onchange="gpgIzmjeni(${s.id},'obavezan',this.checked,${g.id})"
+                     title="Obavezan sastojak mora imati bar jedan artikal">
+            </td>
+            <td style="padding:3px 6px;text-align:center;">
+              <button onclick="gpgObrisiSastojak(${s.id},${g.id})" style="background:none;border:none;cursor:pointer;color:var(--red,#c0392b);font-size:11px;">🗑</button>
+            </td>
+          </tr>`).join('') || '<tr><td colspan="7" style="padding:12px;text-align:center;color:#8b96a5;">Nema sastojaka — dodaj prvi ispod.</td></tr>'}</tbody>
+      </table>
+    </div>
+    <datalist id="gpg-grupe-lista">${gpgGrupeArtikala.map(x=>`<option value="${esc(x)}">`).join('')}</datalist>
+
+    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-top:9px;">
+      <input type="text" id="gpg-sast-${g.id}" placeholder="Naziv sastojka (npr. postolje, ploča, obrada)"
+             style="flex:1;min-width:210px;font:inherit;font-size:12px;padding:6px 9px;border:1px solid #ccc;border-radius:5px;">
+      <button onclick="gpgDodajSastojak(${g.id})" style="padding:6px 13px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:5px;font-weight:700;cursor:pointer;font-size:12px;">+ Sastojak</button>
+    </div>
+    <div style="font-size:10.5px;color:#8b96a5;margin-top:5px;line-height:1.5;">
+      Redosled sastojaka je redosled kojim ulaze u proizvod.
+      <b>Grupe artikala</b> odvoji zarezom — prazno znači da su sve dozvoljene.
+      <b>Max debljina</b> u cm — deblje table se neće nuditi.
+    </div>`;
+}
+
+async function gpgDodajSastojak(gid){
+  const polje = document.getElementById('gpg-sast-'+gid);
+  const naziv = polje.value.trim();
+  if(!naziv){ alert('Upiši naziv sastojka (npr. „ploča").'); return; }
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/grupe/${gid}/sastojci`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ naziv }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
+    polje.value = '';
+    await gpgUcitajDetalj(gid);
+    await gpgUcitaj();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+async function gpgIzmjeni(sid, polje, vrijednost, gid){
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/sastojak/${sid}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ [polje]: vrijednost }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
+    await gpgUcitajDetalj(gid);
+  }catch(e){ alert('✗ '+e.message); }
+}
+
+async function gpgObrisiSastojak(sid, gid){
+  if(!confirm('Obrisati ovaj sastojak?')) return;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/sastojak/${sid}`,{method:'DELETE'});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
+    await gpgUcitajDetalj(gid);
+    await gpgUcitaj();
+  }catch(e){ alert('✗ '+e.message); }
+}
+
 async function gprUcitaj(){
   const cont = document.getElementById('gpr-spisak');
   cont.innerHTML = '<div style="padding:12px;color:#8b96a5;font-size:12.5px;">Učitavanje...</div>';
@@ -4156,6 +4422,24 @@ function gprPrekidac(id){
 /* Nazivi iz kolone roba.naziv_gotov — sastavnica se pravi IZ njih.
    Prikazuju se samo oni koji jos nemaju sastavnicu; oni koji je imaju se ne nude
    dvaput, jer bi drugi pokusaj svejedno bio odbijen (naziv je jedinstven). */
+
+/* Spisak grupa za korak 2 — iz njih proizvod nasljedjuje sastojke. */
+async function gprUcitajGrupe(){
+  const sel = document.getElementById('gpr-grupa-nova');
+  if(!sel) return;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/grupe`);
+    if(!r.ok) throw new Error('Ne mogu učitati grupe.');
+    const g = await r.json();
+    if(!g.length){
+      sel.innerHTML = '<option value="">— nema grupa, prvo korak 1 —</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">— bez grupe —</option>' + g.map(x=>
+      `<option value="${x.id}">${esc(x.naziv)} (${x.broj_sastojaka} sast.)</option>`).join('');
+  }catch(e){ sel.innerHTML = '<option value="">— greška —</option>'; }
+}
+
 async function gprUcitajNazive(){
   const sel = document.getElementById('gpr-nazivi-lista');
   if(!sel) return;
@@ -4181,7 +4465,7 @@ async function gprNovi(naziv){
   try{
     const r = await fetch(`${API}/api/gotovi-proizvodi`,{
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ naziv: n }),
+      body: JSON.stringify({ naziv: n, grupa_proizvoda_id: document.getElementById('gpr-grupa-nova')?.value || null }),
     });
     const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
     if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
@@ -4189,7 +4473,8 @@ async function gprNovi(naziv){
     gprOtvoren = d.id;
     await gprUcitaj();
     await gprUcitajNazive();
-    if(d.dodato_stavki) alert(`✓ Napravljeno. Iz lagera je preuzeto ${d.dodato_stavki} ${d.dodato_stavki===1?'artikal':'artikala'} — podesi faktore.`);
+    if(d.sastojaka) alert(`✓ Napravljeno. Preuzeto ${d.sastojaka} ${d.sastojaka===1?'sastojak':'sastojaka'} iz grupe — dodaj artikle u svaki.`);
+    else if(d.dodato_stavki) alert(`✓ Napravljeno. Iz lagera je preuzeto ${d.dodato_stavki} ${d.dodato_stavki===1?'artikal':'artikala'} — podesi faktore.`);
   }catch(e){ alert('✗ '+e.message); }
 }
 
