@@ -4294,7 +4294,7 @@ function gprRenderDetalj(el, g){
               style="font:inherit;font-size:12px;padding:6px 12px;border:1px solid #ccc;background:#fff;border-radius:5px;cursor:pointer;white-space:nowrap;">
         🔎 Izbor iz lagera
       </button>
-      <div id="gpr-rez-${g.id}" style="display:none;position:absolute;top:100%;left:0;z-index:20;background:#fff;border:1px solid #ccc;border-radius:6px;max-height:180px;overflow-y:auto;box-shadow:0 3px 10px rgba(0,0,0,.15);min-width:290px;"></div>
+      <div id="gpr-rez-${g.id}" style="display:none;position:absolute;top:100%;left:0;z-index:20;background:#fff;border:1px solid #ccc;border-radius:6px;max-height:280px;overflow:auto;box-shadow:0 4px 14px rgba(0,0,0,.18);min-width:min(760px, 92vw);"></div>
       <button onclick="gprDodajStavku(${g.id})" style="padding:6px 13px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:5px;font-weight:700;cursor:pointer;font-size:12px;">+ Dodaj</button>
     </div>
 
@@ -4416,7 +4416,10 @@ async function gprOtvoriIzbornik(gid){
        prekidaci trenutni, bez novog poziva pri svakoj promjeni. */
     const r = await fetch(`${API}/api/roba/lager?objekt_id=${encodeURIComponent(obj)}`);
     if(!r.ok){ const d = await r.json().catch(()=>({})); throw new Error(d.error || `Server je vratio ${r.status}`); }
-    giSvi = await r.json();
+    /* Ruta vraca OBJEKAT sa poljem "stavke", ne cist niz (uz njega ide i ukupna
+       vrijednost lagera). Bez ovoga je giSvi bio objekat, pa filter nije radio. */
+    const d = await r.json();
+    giSvi = Array.isArray(d) ? d : (d.stavke || []);
     giFiltriraj();
   }catch(e){
     lista.innerHTML = `<div style="padding:16px;text-align:center;color:var(--red,#c0392b);font-size:12.5px;">✗ ${esc(e.message)}${obj?'':'<br><span style="font-size:11px;color:#8b96a5;">Izaberi objekat iznad tabele.</span>'}</div>`;
@@ -4520,16 +4523,54 @@ function gprTraziArtikal(gid){
   if(q.length < 2){ rez.style.display='none'; return; }
   gprTajmer = setTimeout(async ()=>{
     try{
-      const r = await fetch(`${API}/api/roba?q=${encodeURIComponent(q)}&limit=12`);
+      /* Vuce se iz LAGERA izabranog objekta — tako spisak ima stanje i cijenu,
+         isto kao lager lista. Ranije je isao opsti sifrarnik, bez tih podataka. */
+      const obj = gprObjekat[gid] || '';
+      const r = await fetch(`${API}/api/roba/lager?objekt_id=${encodeURIComponent(obj)}`);
       const d = await r.json();
-      const lista = Array.isArray(d) ? d : (d.stavke||[]);
+      const svi = Array.isArray(d) ? d : (d.stavke||[]);
+      const ql = q.toLowerCase();
+      const lista = svi.filter(a =>
+        String(a.sifra).toLowerCase().includes(ql) || String(a.naziv).toLowerCase().includes(ql));
       if(!lista.length){ rez.style.display='none'; return; }
-      rez.innerHTML = lista.slice(0,12).map(a=>`
-        <div onclick="gprIzaberiArtikal(${gid},${a.id},'${esc(a.naziv).replace(/'/g,"&apos;")}','${esc(a.sifra)}','${esc(a.jed_mjera||'')}')"
-             style="padding:5px 9px;cursor:pointer;font-size:12px;border-bottom:1px solid #f2f3f5;">
-          <span style="color:#999;">${esc(a.sifra)}</span> ${esc(a.naziv)}
-          <span style="color:#8b96a5;font-size:10.5px;"> · ${esc(a.jed_mjera||'')}</span>
-        </div>`).join('');
+
+      rez.innerHTML = `
+        <table style="width:100%;border-collapse:collapse;font-size:10.5px;line-height:1.25;white-space:nowrap;">
+          <thead><tr style="background:#1f3864;color:#fff;">
+            <th style="padding:3px 6px;text-align:left;font-size:10px;">Šifra</th>
+            <th style="padding:3px 6px;text-align:left;font-size:10px;">Naziv</th>
+            <th style="padding:3px 6px;text-align:left;font-size:10px;">Gotov proizvod</th>
+            <th style="padding:3px 6px;text-align:left;font-size:10px;">Grupa</th>
+            <th style="padding:3px 6px;text-align:center;font-size:10px;">Deb.</th>
+            <th style="padding:3px 6px;text-align:center;font-size:10px;">Tabla (mm)</th>
+            <th style="padding:3px 6px;text-align:center;font-size:10px;">JM</th>
+            <th style="padding:3px 6px;text-align:right;font-size:10px;">Stanje</th>
+            <th style="padding:3px 6px;text-align:right;font-size:10px;">Cijena/JM</th>
+            <th style="padding:3px 6px;text-align:center;font-size:10px;">Slika</th>
+          </tr></thead>
+          <tbody>${lista.slice(0,25).map((a,i)=>`
+            <tr onclick="gprIzaberiArtikal(${gid},${a.id},'${esc(a.naziv).replace(/'/g,"&apos;")}','${esc(a.sifra)}','${esc(a.jed_mjera||'')}');gprDodajStavku(${gid});"
+                style="background:${i%2?'#f5f7fa':'#fff'};cursor:pointer;border-bottom:1px solid #eee;">
+              <td style="padding:1px 6px;font-weight:700;">${esc(a.sifra)}</td>
+              <td style="padding:1px 6px;font-weight:700;">${esc(a.naziv)}</td>
+              <td style="padding:1px 6px;">${a.naziv_gotov?`<span style="color:var(--green,#1f8a4c);">${esc(a.naziv_gotov)}</span>`:'<span style="color:#dfe3e8;">—</span>'}</td>
+              <td style="padding:1px 6px;color:#6b7a8d;">${esc(a.grupa||'—')}</td>
+              <td style="padding:1px 6px;text-align:center;color:#6b7a8d;">${a.debljina_cm ?? '—'}</td>
+              <td style="padding:1px 6px;text-align:center;">${
+                (a.std_sirina && a.std_visina)
+                  ? `<span style="color:#6b7a8d;">${Math.round(a.std_sirina)}×${Math.round(a.std_visina)}</span>`
+                  : '<span style="color:var(--orange,#b8860b);">⚠</span>'
+              }</td>
+              <td style="padding:1px 6px;text-align:center;color:#6b7a8d;">${esc(a.jed_mjera||'')}</td>
+              <td style="padding:1px 6px;text-align:right;${(Number(a.stanje)||0)>0?'':'color:var(--red,#c0392b);font-weight:700;'}">${uPolje(a.stanje||0,2)}</td>
+              <td style="padding:1px 6px;text-align:right;font-weight:700;">${uPolje(a.cijena||0,2)}</td>
+              <td style="padding:1px 6px;text-align:center;">${
+                a.glavna_slika ? `<img src="${esc(a.glavna_slika)}" style="width:22px;height:22px;object-fit:cover;border-radius:3px;">`
+                               : '<span style="color:#dfe3e8;">—</span>'
+              }</td>
+            </tr>`).join('')}</tbody>
+        </table>
+        ${lista.length>25?`<div style="padding:5px;text-align:center;color:#8b96a5;font-size:10.5px;">Još ${lista.length-25} — suzi pretragu ili koristi 🔎 Izbor iz lagera.</div>`:''}`;
       rez.style.display='block';
     }catch(e){ rez.style.display='none'; }
   }, 280);
