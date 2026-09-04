@@ -4170,7 +4170,7 @@ async function gprUcitajDetalj(id){
   try{
     /* Objekat se prosljedjuje da bi uz svaku komponentu stiglo STANJE i CIJENA iz
        njegovog lagera — bez toga te kolone ostaju prazne. */
-    const obj = document.getElementById('gpr-obj-'+id)?.value || '';
+    const obj = gprObjekat[id] || document.getElementById('gpr-obj-'+id)?.value || '';
     const r = await fetch(`${API}/api/gotovi-proizvodi/${id}${obj?`?objekt_id=${obj}`:''}`);
     if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
     const g = await r.json();
@@ -4313,7 +4313,7 @@ function gprRenderDetalj(el, g){
 
     <div style="font-size:12px;font-weight:800;margin:14px 0 7px;">Cijene</div>
     <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:end;margin-bottom:9px;">
-      <select id="gpr-obj-${g.id}" onchange="gprUcitajDetalj(${g.id})" title="Čije cijene i stanje se prikazuju" style="font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ccc;border-radius:5px;"><option value="">— objekat —</option></select>
+      <select id="gpr-obj-${g.id}" onchange="gprPostaviObjekat(${g.id}, this.value)" title="Čije cijene i stanje se prikazuju" style="font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ccc;border-radius:5px;"><option value="">— objekat —</option></select>
       <select id="gpr-tip-${g.id}" style="font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ccc;border-radius:5px;"><option value="">— bez popusta —</option></select>
       <button onclick="gprIzracunaj(${g.id})" style="padding:6px 15px;border:none;background:#6b4fa0;color:#fff;border-radius:5px;font-weight:700;cursor:pointer;font-size:12px;">▶ Izračunaj</button>
     </div>
@@ -4323,6 +4323,17 @@ function gprRenderDetalj(el, g){
 }
 
 /* Objekti i tipovi kupaca za racun — povlace se jednom po otvaranju */
+
+/* Izabrani objekat po proizvodu — cuva se van prikaza, da ponovno iscrtavanje ne
+   pokrece novo ucitavanje (to je pravilo petlju i treperenje). */
+const gprObjekat = {};
+
+function gprPostaviObjekat(id, vrijednost){
+  if(gprObjekat[id] === vrijednost) return;   // nema promjene — nema ucitavanja
+  gprObjekat[id] = vrijednost;
+  gprUcitajDetalj(id);
+}
+
 async function gprPopuniListe(id){
   try{
     const r = await fetch(`${API}/api/prodajni-objekti`);
@@ -4330,15 +4341,15 @@ async function gprPopuniListe(id){
       const o = await r.json();
       const sel = document.getElementById('gpr-obj-'+id);
       if(sel && Array.isArray(o)){
-        sel.innerHTML = '<option value="">— objekat —</option>' +
-          o.map(x=>`<option value="${x.id}">${esc(x.naziv)}</option>`).join('');
-        /* Bira se PRVI objekat sam — bez njega su kolone stanja i cijene prazne, a
-           izbor iz lagera javlja gresku. Korisnik ga svejedno moze promijeniti. */
-        if(o.length && !sel.value){
+        /* Izabrani objekat se pamti VAN prikaza. Ranije se postavljao ovdje pa se
+           pozivalo ponovno ucitavanje — a ono opet dodje ovamo, i tako u krug
+           (padajuca lista je treperila). Sad se vrijednost samo VRATI, bez poziva. */
+        if(!gprObjekat[id]){
           const podr = o.find(x=>/aleksandrovac/i.test(x.naziv)) || o[0];
-          sel.value = podr.id;
-          gprUcitajDetalj(id);
+          if(podr) gprObjekat[id] = String(podr.id);
         }
+        sel.innerHTML = '<option value="">— objekat —</option>' +
+          o.map(x=>`<option value="${x.id}" ${String(x.id)===gprObjekat[id]?'selected':''}>${esc(x.naziv)}</option>`).join('');
       }
     }
   }catch(e){}
@@ -4393,7 +4404,7 @@ async function gprOtvoriIzbornik(gid){
 
   /* Lager je uvijek vezan za JEDAN objekat — bez njega ruta ne zna cije cijene i
      stanje da vrati. Ako nije izabran, kaze se to jasno umjesto greske sa servera. */
-  const obj = document.getElementById('gpr-obj-'+gid)?.value || '';
+  const obj = gprObjekat[gid] || document.getElementById('gpr-obj-'+gid)?.value || '';
   if(!obj){
     lista.innerHTML = `<div style="padding:20px;text-align:center;color:var(--orange,#b8860b);font-size:12.5px;line-height:1.6;">
       Prvo izaberi <b>prodajni objekat</b> iznad tabele.<br>
@@ -4452,26 +4463,39 @@ function giFiltriraj(){
     `${prikaz.length} od ${giSvi.length} artikala`;
 
   document.getElementById('gi-lista').innerHTML = prikaz.length ? `
-    <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
-      <thead><tr style="background:#1f3864;color:#fff;position:sticky;top:0;">
-        <th style="padding:4px 7px;text-align:left;">Šifra</th>
-        <th style="padding:4px 7px;text-align:left;">Naziv</th>
-        <th style="padding:4px 7px;text-align:left;">Grupa</th>
-        <th style="padding:4px 7px;text-align:center;">Deb.</th>
-        <th style="padding:4px 7px;text-align:center;">JM</th>
-        <th style="padding:4px 7px;text-align:right;">Stanje</th>
-        <th style="padding:4px 7px;text-align:right;">Cijena</th>
+    <table style="width:100%;border-collapse:collapse;font-size:10.5px;line-height:1.25;">
+      <thead><tr style="background:#1f3864;color:#fff;position:sticky;top:0;z-index:5;">
+        <th style="padding:4px 6px;text-align:left;font-size:10px;position:sticky;top:0;background:#1f3864;">Šifra</th>
+        <th style="padding:4px 6px;text-align:left;font-size:10px;position:sticky;top:0;background:#1f3864;">Naziv</th>
+        <th style="padding:4px 6px;text-align:left;font-size:10px;position:sticky;top:0;background:#1f3864;">Gotov proizvod</th>
+        <th style="padding:4px 6px;text-align:left;font-size:10px;position:sticky;top:0;background:#1f3864;">Grupa</th>
+        <th style="padding:4px 6px;text-align:center;font-size:10px;position:sticky;top:0;background:#1f3864;">Deb. (cm)</th>
+        <th style="padding:4px 6px;text-align:center;font-size:10px;position:sticky;top:0;background:#1f3864;">Tabla (mm)</th>
+        <th style="padding:4px 6px;text-align:center;font-size:10px;position:sticky;top:0;background:#1f3864;">JM</th>
+        <th style="padding:4px 6px;text-align:right;font-size:10px;position:sticky;top:0;background:#1f3864;">Stanje</th>
+        <th style="padding:4px 6px;text-align:right;font-size:10px;position:sticky;top:0;background:#1f3864;">Cijena/JM</th>
+        <th style="padding:4px 6px;text-align:center;font-size:10px;position:sticky;top:0;background:#1f3864;">Slika</th>
       </tr></thead>
       <tbody>${prikaz.slice(0,300).map((a,i)=>`
         <tr onclick="giIzaberi(${a.id},'${esc(a.naziv).replace(/'/g,"&apos;")}','${esc(a.sifra)}','${esc(a.jed_mjera||'')}')"
-            style="background:${i%2?'#f7f9fb':'#fff'};cursor:pointer;border-bottom:1px solid #eef0f3;">
-          <td style="padding:3px 7px;font-weight:700;">${esc(a.sifra)}</td>
-          <td style="padding:3px 7px;">${esc(a.naziv)}</td>
-          <td style="padding:3px 7px;color:#6b7a8d;">${esc(a.grupa||'')}</td>
-          <td style="padding:3px 7px;text-align:center;color:#6b7a8d;">${a.debljina_cm ?? ''}</td>
-          <td style="padding:3px 7px;text-align:center;color:#6b7a8d;">${esc(a.jed_mjera||'')}</td>
-          <td style="padding:3px 7px;text-align:right;${(Number(a.stanje)||0)>0?'':'color:var(--red,#c0392b);'}">${uPolje(a.stanje||0,2)}</td>
-          <td style="padding:3px 7px;text-align:right;font-weight:700;">${uPolje(a.cijena||0,2)}</td>
+            style="background:${i%2?'#f5f7fa':'#fff'};cursor:pointer;border-bottom:1px solid #eee;line-height:1.25;">
+          <td style="padding:1px 6px;font-weight:700;">${esc(a.sifra)}</td>
+          <td style="padding:1px 6px;font-weight:700;">${esc(a.naziv)}</td>
+          <td style="padding:1px 6px;">${a.naziv_gotov?`<span style="color:var(--green,#1f8a4c);">${esc(a.naziv_gotov)}</span>`:'<span style="color:#dfe3e8;">—</span>'}</td>
+          <td style="padding:1px 6px;color:#6b7a8d;">${esc(a.grupa||'—')}</td>
+          <td style="padding:1px 6px;text-align:center;color:#6b7a8d;">${a.debljina_cm ?? '—'}</td>
+          <td style="padding:1px 6px;text-align:center;white-space:nowrap;">${
+            (a.std_sirina && a.std_visina)
+              ? `<span style="color:#6b7a8d;">${Math.round(a.std_sirina)}×${Math.round(a.std_visina)}</span>`
+              : '<span style="color:var(--orange,#b8860b);" title="Bez dimenzija table">⚠</span>'
+          }</td>
+          <td style="padding:1px 6px;text-align:center;color:#6b7a8d;">${esc(a.jed_mjera||'')}</td>
+          <td style="padding:1px 6px;text-align:right;${(Number(a.stanje)||0)>0?'':'color:var(--red,#c0392b);font-weight:700;'}">${(Number(a.stanje)||0)<0?'⚠ ':''}${uPolje(a.stanje||0,2)}</td>
+          <td style="padding:1px 6px;text-align:right;font-weight:700;">${uPolje(a.cijena||0,2)}</td>
+          <td style="padding:1px 6px;text-align:center;">${
+            a.glavna_slika ? `<img src="${esc(a.glavna_slika)}" style="width:24px;height:24px;object-fit:cover;border-radius:3px;">`
+                           : '<span style="color:#dfe3e8;">—</span>'
+          }</td>
         </tr>`).join('')}</tbody>
     </table>
     ${prikaz.length>300?'<div style="padding:8px;text-align:center;color:#8b96a5;font-size:11px;">Prikazano prvih 300 — suzi filtere.</div>':''}`
@@ -4481,6 +4505,10 @@ function giFiltriraj(){
 function giIzaberi(id, naziv, sifra, jm){
   document.getElementById('modal-gpr-izbor').style.display = 'none';
   gprIzaberiArtikal(giZaGrupu, id, naziv, sifra, jm);
+  /* Iz izbornika se stavka dodaje ODMAH — korisnik je vec izabrao red iz tabele,
+     traziti jos jedan klik na "Dodaj" bilo bi suvisno. Kod pretrage po tekstu
+     dugme ostaje, jer se tamo moze pogrijesiti u kucanju. */
+  gprDodajStavku(giZaGrupu);
 }
 
 function gprTraziArtikal(gid){
