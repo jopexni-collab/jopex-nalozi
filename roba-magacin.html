@@ -653,6 +653,10 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
     <!-- Karusel — vidljiv samo ako artikal VEĆ ima bar jednu sliku -->
     <div id="msa-karusel" style="display:none;margin-bottom:12px;">
+      <div id="msa-podsjetnik" style="display:none;background:#f3f0f8;border:1px solid #d6cce8;border-radius:7px;padding:8px 11px;margin-bottom:9px;font-size:12px;color:#6b4fa0;line-height:1.45;">
+        🪑 Nijedna slika nije označena kao <b>slika gotovog proizvoda</b> — bez nje se u
+        sastavnici i katalogu neće imati šta prikazati. Izaberi sliku i klikni „🪑 Gotov proizvod".
+      </div>
       <div style="position:relative;background:#f5f5f5;border-radius:8px;overflow:hidden;">
         <img id="msa-karusel-img" onclick="msaOtvoriPuniEkran()" title="Klikni za prikaz preko celog ekrana" style="width:100%;height:260px;object-fit:contain;display:block;cursor:zoom-in;">
         <button onclick="msaPomjeri(-1)" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:32px;height:32px;font-size:16px;cursor:pointer;">‹</button>
@@ -2197,6 +2201,12 @@ function msaZatvori(){
 }
 
 async function otvoriKaruselSlika(robaId, naziv){
+  /* Bez artikla nema sta da se otvara — npr. rucno unesena stavka "rad" nema roba_id.
+     Ranije bi funkcija tiho pukla, pa bi izgledalo da klik ne radi. */
+  if(!robaId){
+    alert('Ova stavka nije vezana za artikal iz lagera (npr. ručno unesen rad), pa nema slika.');
+    return;
+  }
   msaTrenutniRobaId=robaId;
   document.getElementById('msa-naziv').textContent=naziv;
   document.getElementById('msa-status').style.display='none';
@@ -2233,6 +2243,14 @@ function msaPrikaziTrenutnu(){
 
   /* Gotov proizvod je ZASEBNA oznaka od glavne — ista slika moze biti i jedno i drugo,
      ili samo jedno. Zato se ne iskljucuje kad je slika glavna, nego se samo prebacuje. */
+  /* Podsjetnik: ako artikal ima slike ali NIJEDNA nije oznacena kao gotov proizvod,
+     to se ovdje kaze — inace se u sastavnici i katalogu ne bi imalo sta prikazati. */
+  const traka = document.getElementById('msa-podsjetnik');
+  if(traka){
+    const imaGotov = msaSlike.some(x=>x.gotov_proizvod);
+    traka.style.display = (msaSlike.length && !imaGotov) ? 'block' : 'none';
+  }
+
   const btnGotov=document.getElementById('msa-btn-gotov');
   if(btnGotov){
     if(s.gotov_proizvod){
@@ -4221,77 +4239,47 @@ function gprRenderDetalj(el, g){
           <th style="padding:4px 6px;text-align:right;" title="Direktna cijena — zaobilazi faktor i maržu">Fiksna</th>
           <th style="padding:4px 6px;"></th>
         </tr></thead>
-        <tbody>${(g.stavke||[]).map((s,i)=>`
-          <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
-            <td style="padding:2px 6px;">
-              <input type="text" value="${esc(s.grupa_izbora||'')}" placeholder="—"
-                     onchange="gprIzmjeniStavku(${s.id},'grupa_izbora',this.value,${g.id})"
-                     style="width:88px;font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
-            </td>
-            <td style="padding:2px 6px;"><b>${esc(s.roba_naziv||s.opis||'—')}</b>${s.sifra?`<span style="color:#8b96a5;"> · ${esc(s.sifra)}</span>`:''}</td>
-            <td style="padding:2px 6px;text-align:center;white-space:nowrap;">${
-              !s.roba_id ? '' : `
-              <span title="${s.slika_glavna?'Glavna slika postavljena':'⚠ Nema glavne slike'}" style="display:inline-block;vertical-align:middle;">
-                ${s.slika_glavna
-                  ? `<img src="${esc(s.slika_glavna)}" style="width:26px;height:26px;object-fit:cover;border-radius:4px;border:2px solid #4a90d9;">`
-                  : `<span style="display:inline-flex;width:26px;height:26px;border-radius:4px;border:1px dashed #c3c9d1;align-items:center;justify-content:center;font-size:10px;color:#c3c9d1;">★</span>`}
-              </span>
-              <span title="${s.slika_gotov?'Slika gotovog proizvoda postavljena':'⚠ Nema slike gotovog proizvoda'}" style="display:inline-block;vertical-align:middle;margin-left:2px;">
-                ${s.slika_gotov
-                  ? `<img src="${esc(s.slika_gotov)}" style="width:26px;height:26px;object-fit:cover;border-radius:4px;border:2px solid #6b4fa0;">`
-                  : `<span style="display:inline-flex;width:26px;height:26px;border-radius:4px;border:1px dashed #c3c9d1;align-items:center;justify-content:center;font-size:10px;color:#c3c9d1;">🪑</span>`}
-              </span>
-              ${s.broj_slika>0?`<button onclick="otvoriKaruselSlika(${s.roba_id},'${esc(s.roba_naziv||'').replace(/'/g,"&apos;")}')" title="Otvori slike (${s.broj_slika})" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--blue);vertical-align:middle;">✎</button>`
-                              :`<span title="Artikal nema nijednu sliku" style="color:var(--orange,#b8860b);font-size:11px;vertical-align:middle;"> ⚠</span>`}
-            `}</td>
-            <td style="padding:2px 6px;color:#6b7a8d;">${esc(s.grupa||'')}</td>
-            <td style="padding:2px 6px;text-align:center;color:#6b7a8d;">${s.debljina_cm ?? ''}</td>
-            <td style="padding:2px 6px;text-align:center;white-space:nowrap;">${
-              (s.std_sirina && s.std_visina)
-                ? `<span style="color:#6b7a8d;">${Math.round(s.std_sirina)}×${Math.round(s.std_visina)}</span>`
-                : (s.roba_id ? '<span title="Bez dimenzija table se ne može planirati rez" style="color:var(--orange,#b8860b);">⚠</span>' : '')
-            }</td>
-            <td style="padding:2px 6px;text-align:center;color:#6b7a8d;">${esc(s.jed_mjera||'')}</td>
-            <td style="padding:2px 6px;">
-              <select onchange="gprIzmjeniStavku(${s.id},'tip_kolicine',this.value,${g.id})"
-                      style="font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
-                ${Object.entries(TIP).map(([k,v])=>`<option value="${k}" ${s.tip_kolicine===k?'selected':''}>${v}</option>`).join('')}
-              </select>
-            </td>
-            <td style="padding:2px 6px;text-align:right;">
-              <input type="text" inputmode="decimal" value="${uPolje(s.kolicina,3)}"
-                     onchange="gprIzmjeniStavku(${s.id},'kolicina',this.value,${g.id})"
-                     style="width:58px;text-align:right;font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
-            </td>
-            <td style="padding:2px 6px;text-align:right;color:${(s.stanje_lager??0)>0?'#6b7a8d':'var(--red,#c0392b)'};" title="Raspoloživo u izabranom objektu">
-              ${s.roba_id ? (s.stanje_lager!=null ? uPolje(s.stanje_lager,2) : '—') : ''}
-            </td>
-            <td style="padding:2px 6px;text-align:right;color:#6b7a8d;">
-              ${s.roba_id ? (s.cijena_lager!=null ? uPolje(s.cijena_lager,2) : '<span style="color:var(--orange,#b8860b);">nema</span>') : ''}
-            </td>
-            <td style="padding:2px 6px;text-align:right;">
-              <input type="text" inputmode="decimal" value="${uPolje(s.faktor,2)}"
-                     ${s.fiksna_cijena!=null?'disabled title="Fiksna cijena zaobilazi faktor"':''}
-                     onchange="gprIzmjeniStavku(${s.id},'faktor',this.value,${g.id})"
-                     style="width:48px;text-align:right;font:inherit;font-size:11px;font-weight:700;padding:3px 5px;border:1px solid #ddd;border-radius:4px;${s.fiksna_cijena!=null?'opacity:.4;':''}">
-            </td>
-            <td style="padding:2px 6px;text-align:right;">
-              <input type="text" inputmode="decimal" value="${s.marza_posto!=null?uPolje(s.marza_posto,1):''}" placeholder="—"
-                     ${s.fiksna_cijena!=null?'disabled':''}
-                     onchange="gprIzmjeniStavku(${s.id},'marza_posto',this.value,${g.id})"
-                     style="width:48px;text-align:right;font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;${s.fiksna_cijena!=null?'opacity:.4;':''}">
-            </td>
-            <td style="padding:2px 6px;text-align:right;">
-              <input type="text" inputmode="decimal" value="${s.fiksna_cijena!=null?uPolje(s.fiksna_cijena,2):''}" placeholder="—"
-                     onchange="gprIzmjeniStavku(${s.id},'fiksna_cijena',this.value,${g.id})"
-                     title="Upiši cijenu direktno — zaobilazi lager, faktor i maržu"
-                     style="width:60px;text-align:right;font:inherit;font-size:11px;padding:3px 5px;border:1px solid ${s.fiksna_cijena!=null?'var(--green,#1f8a4c)':'#ddd'};border-radius:4px;${s.fiksna_cijena!=null?'font-weight:700;color:var(--green,#1f8a4c);':''}">
-            </td>
-            <td style="padding:2px 6px;text-align:center;">
-              <button onclick="gprObrisiStavku(${s.id},${g.id})" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--red,#c0392b);">🗑</button>
-            </td>
-          </tr>`).join('') || '<tr><td colspan="15" style="padding:10px;text-align:center;color:#8b96a5;">Nema komponenti.</td></tr>'}</tbody>
+        <tbody>${(() => {
+          /* HIJERARHIJA: prvo obavezne stavke, pa grupe izbora. Svaka grupa ima svoje
+             dugme za dodavanje, sa istim izbornikom kao lager lista. */
+          const obavezne = (g.stavke||[]).filter(x => !x.grupa_izbora);
+          const poGrupi = {};
+          for(const x of (g.stavke||[])){ if(x.grupa_izbora) (poGrupi[x.grupa_izbora] = poGrupi[x.grupa_izbora] || []).push(x); }
+
+          const zaglavlje = (naziv, broj, boja, jeGrupa) => `
+            <tr style="background:${boja};">
+              <td colspan="15" style="padding:4px 7px;">
+                <b style="font-size:11.5px;color:#1f3864;">${esc(naziv)}</b>
+                <span style="font-size:10.5px;color:#6b7a8d;"> — ${broj} ${broj===1?'stavka':'stavki'}${jeGrupa?', bira se jedna':''}</span>
+                <button onclick="gprDodajUGrupu(${g.id},'${esc(jeGrupa?naziv:'').replace(/'/g,"&apos;")}')"
+                        style="margin-left:8px;font-size:10.5px;padding:2px 9px;border:1px solid var(--blue,#1a5fa8);background:#fff;color:var(--blue,#1a5fa8);border-radius:5px;cursor:pointer;font-weight:700;">
+                  + Dodaj
+                </button>
+              </td>
+            </tr>`;
+
+          let out = '', br = 0;
+          if(obavezne.length) out += zaglavlje('Obavezne komponente', obavezne.length, '#eef2f8', false)
+                                   + obavezne.map(s => gprRedStavke(g, s, br++)).join('');
+          for(const [naziv, st] of Object.entries(poGrupi)){
+            out += zaglavlje(naziv, st.length, '#e8eef7', true)
+                 + st.map(s => gprRedStavke(g, s, br++)).join('');
+          }
+          if(!(g.stavke||[]).length)
+            out = '<tr><td colspan="15" style="padding:12px;text-align:center;color:#8b96a5;">Nema komponenti — dodaj prvu ispod.</td></tr>';
+          return out;
+        })()}</tbody>
       </table>
+    </div>
+
+    <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;">
+      <button onclick="gprDodajUGrupu(${g.id},'')" style="font-size:11.5px;padding:6px 13px;border:1px solid var(--blue,#1a5fa8);background:#fff;color:var(--blue,#1a5fa8);border-radius:6px;cursor:pointer;font-weight:700;">
+        + Obavezna komponenta
+      </button>
+      <button onclick="gprNovaGrupa(${g.id})" style="font-size:11.5px;padding:6px 13px;border:1px solid #6b4fa0;background:#fff;color:#6b4fa0;border-radius:6px;cursor:pointer;font-weight:700;"
+              title="Grupa alternativa — npr. tri postolja od kojih se bira jedno">
+        + Nova grupa izbora
+      </button>
     </div>
 
     <div style="font-size:10.5px;color:#8b96a5;margin-top:5px;">
@@ -4408,6 +4396,100 @@ async function gprObrisiStavku(sid, gid){
    kombinacija koja ne daje nijedan rezultat. */
 let giSvi = [], giZaGrupu = null;
 
+
+/* Jedan red stavke — izdvojeno da se moze crtati unutar svake grupe zasebno. */
+function gprRedStavke(g, s, i){
+  return `
+          <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
+            <td style="padding:2px 6px;">
+              <input type="text" value="${esc(s.grupa_izbora||'')}" placeholder="—"
+                     onchange="gprIzmjeniStavku(${s.id},'grupa_izbora',this.value,${g.id})"
+                     style="width:88px;font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
+            </td>
+            <td style="padding:2px 6px;"><b>${esc(s.roba_naziv||s.opis||'—')}</b>${s.sifra?`<span style="color:#8b96a5;"> · ${esc(s.sifra)}</span>`:''}</td>
+            <td style="padding:2px 6px;text-align:center;white-space:nowrap;">${
+              !s.roba_id ? '' : `
+              <span title="${s.slika_glavna?'Glavna slika postavljena':'⚠ Nema glavne slike'}" style="display:inline-block;vertical-align:middle;">
+                ${s.slika_glavna
+                  ? `<img src="${esc(s.slika_glavna)}" style="width:26px;height:26px;object-fit:cover;border-radius:4px;border:2px solid #4a90d9;">`
+                  : `<span style="display:inline-flex;width:26px;height:26px;border-radius:4px;border:1px dashed #c3c9d1;align-items:center;justify-content:center;font-size:10px;color:#c3c9d1;">★</span>`}
+              </span>
+              <span title="${s.slika_gotov?'Slika gotovog proizvoda postavljena':'⚠ Nema slike gotovog proizvoda'}" style="display:inline-block;vertical-align:middle;margin-left:2px;">
+                ${s.slika_gotov
+                  ? `<img src="${esc(s.slika_gotov)}" style="width:26px;height:26px;object-fit:cover;border-radius:4px;border:2px solid #6b4fa0;">`
+                  : `<span style="display:inline-flex;width:26px;height:26px;border-radius:4px;border:1px dashed #c3c9d1;align-items:center;justify-content:center;font-size:10px;color:#c3c9d1;">🪑</span>`}
+              </span>
+              ${/* Dugme stoji UVIJEK — i kad artikal nema nijednu sliku. Karusel sluzi i za
+                    otpremanje nove, pa se sve radi iz sastavnice, bez odlaska u lager. */''}
+              <button onclick="otvoriKaruselSlika(${s.roba_id},'${esc(s.roba_naziv||'').replace(/'/g,"&apos;")}')"
+                      title="${s.broj_slika>0?`Otvori slike (${s.broj_slika}) — označi glavnu i sliku gotovog proizvoda`:'Nema slika — klikni da dodaš i označiš'}"
+                      style="background:none;border:none;cursor:pointer;font-size:11px;color:${s.broj_slika>0?'var(--blue)':'var(--orange,#b8860b)'};vertical-align:middle;font-weight:700;">
+                ${s.broj_slika>0?'✎':'＋'}
+              </button>
+            `}</td>
+            <td style="padding:2px 6px;color:#6b7a8d;">${esc(s.grupa||'')}</td>
+            <td style="padding:2px 6px;text-align:center;color:#6b7a8d;">${s.debljina_cm ?? ''}</td>
+            <td style="padding:2px 6px;text-align:center;white-space:nowrap;">${
+              (s.std_sirina && s.std_visina)
+                ? `<span style="color:#6b7a8d;">${Math.round(s.std_sirina)}×${Math.round(s.std_visina)}</span>`
+                : (s.roba_id ? '<span title="Bez dimenzija table se ne može planirati rez" style="color:var(--orange,#b8860b);">⚠</span>' : '')
+            }</td>
+            <td style="padding:2px 6px;text-align:center;color:#6b7a8d;">${esc(s.jed_mjera||'')}</td>
+            <td style="padding:2px 6px;">
+              <select onchange="gprIzmjeniStavku(${s.id},'tip_kolicine',this.value,${g.id})"
+                      style="font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
+                ${Object.entries(TIP).map(([k,v])=>`<option value="${k}" ${s.tip_kolicine===k?'selected':''}>${v}</option>`).join('')}
+              </select>
+            </td>
+            <td style="padding:2px 6px;text-align:right;">
+              <input type="text" inputmode="decimal" value="${uPolje(s.kolicina,3)}"
+                     onchange="gprIzmjeniStavku(${s.id},'kolicina',this.value,${g.id})"
+                     style="width:58px;text-align:right;font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;">
+            </td>
+            <td style="padding:2px 6px;text-align:right;color:${(s.stanje_lager??0)>0?'#6b7a8d':'var(--red,#c0392b)'};" title="Raspoloživo u izabranom objektu">
+              ${s.roba_id ? (s.stanje_lager!=null ? uPolje(s.stanje_lager,2) : '—') : ''}
+            </td>
+            <td style="padding:2px 6px;text-align:right;color:#6b7a8d;">
+              ${s.roba_id ? (s.cijena_lager!=null ? uPolje(s.cijena_lager,2) : '<span style="color:var(--orange,#b8860b);">nema</span>') : ''}
+            </td>
+            <td style="padding:2px 6px;text-align:right;">
+              <input type="text" inputmode="decimal" value="${uPolje(s.faktor,2)}"
+                     ${s.fiksna_cijena!=null?'disabled title="Fiksna cijena zaobilazi faktor"':''}
+                     onchange="gprIzmjeniStavku(${s.id},'faktor',this.value,${g.id})"
+                     style="width:48px;text-align:right;font:inherit;font-size:11px;font-weight:700;padding:3px 5px;border:1px solid #ddd;border-radius:4px;${s.fiksna_cijena!=null?'opacity:.4;':''}">
+            </td>
+            <td style="padding:2px 6px;text-align:right;">
+              <input type="text" inputmode="decimal" value="${s.marza_posto!=null?uPolje(s.marza_posto,1):''}" placeholder="—"
+                     ${s.fiksna_cijena!=null?'disabled':''}
+                     onchange="gprIzmjeniStavku(${s.id},'marza_posto',this.value,${g.id})"
+                     style="width:48px;text-align:right;font:inherit;font-size:11px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;${s.fiksna_cijena!=null?'opacity:.4;':''}">
+            </td>
+            <td style="padding:2px 6px;text-align:right;">
+              <input type="text" inputmode="decimal" value="${s.fiksna_cijena!=null?uPolje(s.fiksna_cijena,2):''}" placeholder="—"
+                     onchange="gprIzmjeniStavku(${s.id},'fiksna_cijena',this.value,${g.id})"
+                     title="Upiši cijenu direktno — zaobilazi lager, faktor i maržu"
+                     style="width:60px;text-align:right;font:inherit;font-size:11px;padding:3px 5px;border:1px solid ${s.fiksna_cijena!=null?'var(--green,#1f8a4c)':'#ddd'};border-radius:4px;${s.fiksna_cijena!=null?'font-weight:700;color:var(--green,#1f8a4c);':''}">
+            </td>
+            <td style="padding:2px 6px;text-align:center;">
+              <button onclick="gprObrisiStavku(${s.id},${g.id})" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--red,#c0392b);">🗑</button>
+            </td>
+          </tr>`;
+}
+
+/* Dodavanje u ODREDJENU grupu. Izbornik pamti u koju grupu ide, pa se stavka odmah
+   svrsta — ranije je dodavanje bilo samo jedno na dnu, bez oznake grupe. */
+let gprCiljnaGrupa = '';
+function gprDodajUGrupu(gid, grupa){
+  gprCiljnaGrupa = grupa || '';
+  gprOtvoriIzbornik(gid);
+}
+
+function gprNovaGrupa(gid){
+  const n = prompt('Naziv nove grupe izbora:\n\nStavke iste grupe su alternative — bira se jedna.\nNpr. „postolje", „ploča", „ivica".');
+  if(!n || !n.trim()) return;
+  gprDodajUGrupu(gid, n.trim());
+}
+
 async function gprOtvoriIzbornik(gid){
   giZaGrupu = gid;
   document.getElementById('modal-gpr-izbor').style.display = 'flex';
@@ -4515,7 +4597,7 @@ function giFiltriraj(){
             ${a.glavna_slika
               ? `<img src="${esc(a.glavna_slika)}" style="width:24px;height:24px;object-fit:cover;border-radius:3px;border:2px solid #4a90d9;cursor:pointer;">`
               : `<span style="display:inline-flex;width:24px;height:24px;border-radius:3px;border:1px dashed #c3c9d1;align-items:center;justify-content:center;font-size:9px;color:#c3c9d1;cursor:pointer;">★</span>`}
-            <span style="color:var(--blue);font-size:10px;cursor:pointer;">✎</span>
+            <span style="color:${a.glavna_slika?'var(--blue)':'var(--orange,#b8860b)'};font-size:10px;cursor:pointer;font-weight:700;">${a.glavna_slika?'✎':'＋'}</span>
           </td>
         </tr>`).join('')}</tbody>
     </table>
@@ -4608,12 +4690,16 @@ async function gprDodajStavku(gid){
   try{
     const r = await fetch(`${API}/api/gotovi-proizvodi/${gid}/stavke`,{
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ roba_id: gprIzabraniArtikal.id, tip_kolicine: tip, kolicina: 1, faktor: 1 }),
+      body: JSON.stringify({
+        roba_id: gprIzabraniArtikal.id, tip_kolicine: tip, kolicina: 1, faktor: 1,
+        grupa_izbora: gprCiljnaGrupa || null,   // u koju grupu ide (prazno = obavezna)
+      }),
     });
     const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
     if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
     document.getElementById('gpr-trazi-'+gid).value = '';
     gprIzabraniArtikal = null;
+    gprCiljnaGrupa = '';
     gprUcitajDetalj(gid); gprUcitaj();
   }catch(e){ alert('✗ '+e.message); }
 }
@@ -6320,6 +6406,23 @@ fetch(`${API}/api/auth/me`).then(r=>{
     if (!t) { nag.textContent = ''; return; }
     const n = broj(t);
     nag.textContent = (t === String(n) || t === fmt(n)) ? '' : `= ${fmt(n)}`;
+  });
+})();
+
+/* Hvata SVAKU gresku na stranici i prikazuje je na vrhu. Bez ovoga greska ostaje samo
+   u konzoli (F12), a korisniku izgleda kao da dugme "ne radi". */
+(function(){
+  window.addEventListener('error', e => {
+    let el = document.getElementById('greska-traka');
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'greska-traka';
+      el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#c0392b;'
+        + 'color:#fff;padding:9px 14px;font-size:12.5px;line-height:1.4;box-shadow:0 2px 8px rgba(0,0,0,.3);cursor:pointer;';
+      el.onclick = () => el.remove();
+      document.body.prepend(el);
+    }
+    el.textContent = 'Greška: ' + e.message + (e.lineno ? ' — red ' + e.lineno : '') + '  (klikni da skloniš)';
   });
 })();
 </script>
