@@ -25,6 +25,119 @@ function broj(v) {
   return isFinite(n) ? n : 0;
 }
 
+/* ── OBLICI ────────────────────────────────────────────────────────────────────────
+   Preuzeto iz modula Ponude (SHAPES), da se isti oblici koriste svuda — ponuda, nalog
+   i gotov proizvod govore istim jezikom.
+   Mjere se cuvaju kao {A: 2800, B: 600, ...}, jer svaki oblik ima svoj skup. */
+const OBLICI = {
+  /* ── OBLICI STOLOVA ──
+     Racun povrsine se STVARNO razlikuje: ovalni sto 1800×1000 ima 1,414 m², a
+     pravougaoni iste mjere 1,800 m² — 21% manje materijala. Da se svi racunaju kao
+     pravougaoni, cijena bi bila znatno veca od stvarne. */
+  PRAV:  { lbl: 'Pravougaoni sto',     dims: ['A','B'],     grupa: 'sto' },
+  KVAD:  { lbl: 'Kvadratni sto',       dims: ['A'],         grupa: 'sto' },
+  KRUG:  { lbl: 'Okrugli sto',         dims: ['D'],         grupa: 'sto' },
+  OVAL:  { lbl: 'Ovalni sto',          dims: ['A','B'],     grupa: 'sto' },
+  BACVA: { lbl: 'Bačvasti sto',        dims: ['A','B'],     grupa: 'sto' },
+  ZAOB:  { lbl: 'Zaobljeni uglovi',    dims: ['A','B','R'], grupa: 'sto' },
+
+  /* ── OBLICI PLOCA (iz modula Ponude) ── */
+  I:  { lbl: 'Pravougli',   dims: ['A','B'] },
+  L:  { lbl: 'L oblik',     dims: ['A','C','D','E'] },
+  U:  { lbl: 'U oblik',     dims: ['A','B','C','D','E','F'] },
+  V:  { lbl: 'V oblik',     dims: ['A','B','C','D','F','G'] },
+  N:  { lbl: 'Nepravilan',  dims: ['A','B','C'] },
+  G:  { lbl: 'G oblik',     dims: ['A','B','C','D','E','F','G','H'] },
+  KRUG: { lbl: 'Okrugli',   dims: ['D'] },     // D = precnik
+};
+
+/* Povrsina i obim po obliku. Mjere su u mm, rezultat u m² i m¹.
+   Kod slozenih oblika (L, U, V, G) povrsina je zbir pravougaonih krakova — isti nacin
+   kako se i rezu, pa se poklapa sa stvarnim utroskom. */
+function mjereOblika(oblik, m) {
+  const v = k => parseFloat(m?.[k]) || 0;
+  let mm2 = 0, mm1 = 0;
+
+  switch (oblik) {
+    case 'PRAV':
+      mm2 = v('A') * v('B');
+      mm1 = 2 * (v('A') + v('B'));
+      break;
+    case 'KVAD':
+      mm2 = v('A') * v('A');
+      mm1 = 4 * v('A');
+      break;
+    case 'OVAL': {
+      // Elipsa: π·a·b/4 gdje su a i b puni precnici
+      mm2 = Math.PI * v('A') * v('B') / 4;
+      // Ramanujanova pribliznost za obim elipse — tacna do promila
+      const a = v('A') / 2, b = v('B') / 2;
+      const h = Math.pow(a - b, 2) / Math.pow(a + b, 2);
+      mm1 = Math.PI * (a + b) * (1 + (3 * h) / (10 + Math.sqrt(4 - 3 * h)));
+      break;
+    }
+    case 'BACVA':
+      /* Pravougaonik sa polukruznim krajevima: puna povrsina minus sto "odsijeku"
+         zaobljenja. Krajevi su polukrugovi precnika B. */
+      mm2 = v('A') * v('B') - (4 - Math.PI) * Math.pow(v('B') / 2, 2);
+      mm1 = 2 * (v('A') - v('B')) + Math.PI * v('B');
+      break;
+    case 'ZAOB':
+      // Cetiri zaobljena ugla radijusa R zajedno "odsijeku" (4−π)·R²
+      mm2 = v('A') * v('B') - (4 - Math.PI) * Math.pow(v('R'), 2);
+      mm1 = 2 * (v('A') + v('B')) - 8 * v('R') + 2 * Math.PI * v('R');
+      break;
+    case 'KRUG': {
+      const r = v('D') / 2;
+      mm2 = Math.PI * r * r;
+      mm1 = Math.PI * v('D');
+      break;
+    }
+    case 'L':
+      // Gornji krak A×C + donji krak E×D
+      mm2 = v('A') * v('C') + v('E') * v('D');
+      mm1 = 2 * (v('A') + v('C') + v('E') + v('D'));
+      break;
+    case 'U':
+      // Gornji A×D + lijevi B×E + desni C×F
+      mm2 = v('A') * v('D') + v('B') * v('E') + v('C') * v('F');
+      mm1 = 2 * (v('A') + v('B') + v('C'));
+      break;
+    case 'V':
+      // Gornji A×C + donji (B−C)×D, kosina se ne oduzima — rez ide po okviru
+      mm2 = v('A') * v('C') + Math.max(0, v('B') - v('C')) * v('D');
+      mm1 = 2 * (v('A') + v('B'));
+      break;
+    case 'G':
+      // Vanjski okvir A×B minus unutrasnji izrez G×H
+      mm2 = Math.max(0, v('A') * v('B') - v('G') * v('H'));
+      mm1 = 2 * (v('A') + v('B'));
+      break;
+    case 'N':
+      // Trapez: (lijeva + desna visina) / 2 × donja duzina
+      mm2 = ((v('B') + v('C')) / 2) * v('A');
+      mm1 = 2 * (v('A') + Math.max(v('B'), v('C')));
+      break;
+    default:  // 'I' — pravougli
+      mm2 = v('A') * v('B');
+      mm1 = 2 * (v('A') + v('B'));
+  }
+  return { m2: mm2 / 1e6, m1: mm1 / 1000 };
+}
+
+/* Kratak opis dimenzije za prikaz: "2800×600", "Ø1200", "L 3000/600/600/1000" */
+function opisOblika(oblik, m) {
+  const v = k => Math.round(parseFloat(m?.[k]) || 0);
+  if (oblik === 'KRUG') return `Ø${v('D')}`;
+  if (oblik === 'KVAD') return `${v('A')}×${v('A')}`;
+  if (oblik === 'OVAL') return `⬭ ${v('A')}×${v('B')}`;
+  if (oblik === 'BACVA') return `▢ ${v('A')}×${v('B')}`;
+  if (oblik === 'ZAOB') return `${v('A')}×${v('B')} r${v('R')}`;
+  if (oblik === 'PRAV' || oblik === 'I' || !oblik) return `${v('A')}×${v('B')}`;
+  const d = (OBLICI[oblik]?.dims || []).map(v).filter(Boolean).join('/');
+  return `${oblik} ${d}`;
+}
+
 function smijeMijenjati(req) {
   const u = req.session?.user;
   return u?.rola === 'admin' || u?.moze_roba_magacin || u?.moze_cijene;
@@ -55,6 +168,204 @@ router.get('/', async (req, res) => {
 /* ── GET /nazivi — nazivi iz kolone roba.naziv_gotov ───────────────────────────
    Sastavnica se pravi IZ te kolone: neko u lageru označi postolje i ploču istim
    nazivom, a ovdje se ti artikli sami ponude kao komponente. */
+// GET /oblici — spisak oblika sa mjerama koje traze (za obrazac u prikazu)
+/* ═══ GRUPE PROIZVODA I SASTOJCI ═══════════════════════════════════════════════════
+   Nivo iznad sastavnice. Grupa ("Sto") kaze OD CEGA se sastoji i sta smije u svaki
+   sastojak — pa se sastavnica sama postavi, a izbor artikla je vec suzen.
+   Bez toga bi se za svaki nov sto iznova kucalo sta ide u njega. */
+
+router.get('/grupe', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT g.*,
+              (SELECT COUNT(*) FROM grupa_sastojci s WHERE s.grupa_id = g.id)::int AS broj_sastojaka,
+              (SELECT COUNT(*) FROM gotovi_proizvodi p WHERE p.grupa_proizvoda_id = g.id)::int AS broj_proizvoda
+       FROM grupe_proizvoda g
+       ${req.query.svi === '1' ? '' : 'WHERE g.aktivan = true'}
+       ORDER BY g.redosled, g.naziv`
+    );
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/grupe/:id', async (req, res) => {
+  try {
+    const g = await pool.query('SELECT * FROM grupe_proizvoda WHERE id=$1', [req.params.id]);
+    if (!g.rows.length) return res.status(404).json({ error: 'Grupa nije pronađena.' });
+    const s = await pool.query(
+      'SELECT * FROM grupa_sastojci WHERE grupa_id=$1 ORDER BY redni_broj, id', [req.params.id]
+    );
+    res.json({ ...g.rows[0], sastojci: s.rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/grupe', async (req, res) => {
+  if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
+  const naziv = String(req.body?.naziv || '').trim();
+  if (!naziv) return res.status(400).json({ error: 'Unesite naziv grupe proizvoda.' });
+  try {
+    const u = req.session.user;
+    const r = await pool.query(
+      `INSERT INTO grupe_proizvoda (naziv, oblik, opis, kreirao_id, kreirao_ime)
+       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [naziv, OBLICI[req.body?.oblik] ? req.body.oblik : 'PRAV',
+       req.body?.opis || null, u.id, u.ime_prezime]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'Grupa sa tim nazivom već postoji.' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/grupe/:id', async (req, res) => {
+  if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
+  const DOZ = ['naziv', 'oblik', 'opis', 'aktivan', 'redosled'];
+  const sets = [], vals = [];
+  let i = 1;
+  for (const k of DOZ) {
+    if (!(k in req.body)) continue;
+    if (k === 'oblik' && !OBLICI[req.body[k]]) continue;
+    sets.push(`${k}=$${i++}`); vals.push(req.body[k]);
+  }
+  if (!sets.length) return res.status(400).json({ error: 'Nema polja za izmjenu.' });
+  vals.push(req.params.id);
+  try {
+    const r = await pool.query(`UPDATE grupe_proizvoda SET ${sets.join(',')} WHERE id=$${i} RETURNING *`, vals);
+    if (!r.rows.length) return res.status(404).json({ error: 'Grupa nije pronađena.' });
+    res.json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/grupe/:id', async (req, res) => {
+  if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
+  try {
+    // Grupa se ne brise ako je neki proizvod koristi — inace bi ostao bez strukture
+    const p = await pool.query(
+      'SELECT COUNT(*)::int AS n FROM gotovi_proizvodi WHERE grupa_proizvoda_id=$1', [req.params.id]
+    );
+    if (p.rows[0].n > 0)
+      return res.status(400).json({
+        error: `Grupu koristi ${p.rows[0].n} ${p.rows[0].n === 1 ? 'proizvod' : 'proizvoda'} — prvo ih premjesti ili obriši.`,
+      });
+    const r = await pool.query('DELETE FROM grupe_proizvoda WHERE id=$1 RETURNING id', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Grupa nije pronađena.' });
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/* ── SASTOJCI ────────────────────────────────────────────────────────────────── */
+router.post('/grupe/:id/sastojci', async (req, res) => {
+  if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
+  const naziv = String(req.body?.naziv || '').trim();
+  if (!naziv) return res.status(400).json({ error: 'Unesite naziv sastojka (npr. „ploča").' });
+  try {
+    const n = await pool.query(
+      'SELECT COALESCE(MAX(redni_broj),0)+1 AS r FROM grupa_sastojci WHERE grupa_id=$1', [req.params.id]
+    );
+    const grupe = Array.isArray(req.body?.dozvoljene_grupe)
+      ? req.body.dozvoljene_grupe.map(x => String(x).trim()).filter(Boolean) : null;
+    const r = await pool.query(
+      `INSERT INTO grupa_sastojci
+         (grupa_id, redni_broj, naziv, dozvoljene_grupe, tip_kolicine,
+          min_debljina, max_debljina, samo_na_stanju, obavezan, napomena)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [req.params.id, n.rows[0].r, naziv,
+       grupe && grupe.length ? grupe : null,
+       ['kom','povrsina','duzina'].includes(req.body?.tip_kolicine) ? req.body.tip_kolicine : 'kom',
+       req.body?.min_debljina ? broj(req.body.min_debljina) : null,
+       req.body?.max_debljina ? broj(req.body.max_debljina) : null,
+       req.body?.samo_na_stanju === true,
+       req.body?.obavezan === true,
+       req.body?.napomena || null]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.patch('/sastojak/:sid', async (req, res) => {
+  if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
+  const DOZ = ['naziv','dozvoljene_grupe','tip_kolicine','min_debljina','max_debljina',
+               'samo_na_stanju','obavezan','napomena','redni_broj'];
+  const sets = [], vals = [];
+  let i = 1;
+  for (const k of DOZ) {
+    if (!(k in req.body)) continue;
+    let v = req.body[k];
+    if (['min_debljina','max_debljina'].includes(k)) v = (v === '' || v == null) ? null : broj(v);
+    if (k === 'dozvoljene_grupe') {
+      v = Array.isArray(v) ? v.map(x => String(x).trim()).filter(Boolean) : null;
+      if (v && !v.length) v = null;
+    }
+    sets.push(`${k}=$${i++}`); vals.push(v);
+  }
+  if (!sets.length) return res.status(400).json({ error: 'Nema polja za izmjenu.' });
+  vals.push(req.params.sid);
+  try {
+    const r = await pool.query(`UPDATE grupa_sastojci SET ${sets.join(',')} WHERE id=$${i} RETURNING *`, vals);
+    if (!r.rows.length) return res.status(404).json({ error: 'Sastojak nije pronađen.' });
+    res.json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/sastojak/:sid', async (req, res) => {
+  if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
+  try {
+    const r = await pool.query('DELETE FROM grupa_sastojci WHERE id=$1 RETURNING id', [req.params.sid]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Sastojak nije pronađen.' });
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/* ── GET /sastojak/:sid/artikli — artikli koji SMIJU u ovaj sastojak ──────────────
+   Ogranicenja se primjenjuju na SERVERU, ne u prikazu: za plocu stola nema smisla
+   nuditi table deblje od 3 cm, pa se i ne salju. */
+router.get('/sastojak/:sid/artikli', async (req, res) => {
+  const objektId = parseInt(req.query.objekt_id) || null;
+  try {
+    const s = await pool.query('SELECT * FROM grupa_sastojci WHERE id=$1', [req.params.sid]);
+    if (!s.rows.length) return res.status(404).json({ error: 'Sastojak nije pronađen.' });
+    const sast = s.rows[0];
+
+    const uslovi = ['r.aktivan = true'];
+    const vals = [objektId];
+    if (sast.dozvoljene_grupe?.length) {
+      vals.push(sast.dozvoljene_grupe);
+      uslovi.push(`LOWER(TRIM(COALESCE(r.grupa,''))) = ANY(SELECT LOWER(TRIM(x)) FROM unnest($${vals.length}::text[]) x)`);
+    }
+    if (sast.min_debljina != null) { vals.push(sast.min_debljina); uslovi.push(`r.debljina_cm >= $${vals.length}`); }
+    if (sast.max_debljina != null) { vals.push(sast.max_debljina); uslovi.push(`r.debljina_cm <= $${vals.length}`); }
+    if (sast.samo_na_stanju) uslovi.push('COALESCE(rp.stanje,0) > 0');
+
+    const r = await pool.query(
+      `SELECT r.id, r.sifra, r.naziv, r.grupa, r.jed_mjera, r.debljina_cm,
+              r.std_sirina, r.std_visina, r.naziv_gotov,
+              rp.cijena, rp.stanje,
+              (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS glavna_slika,
+              (SELECT COUNT(*) FROM roba_slike WHERE roba_id=r.id)::int AS broj_slika
+       FROM roba r
+       LEFT JOIN roba_pj rp ON rp.roba_id = r.id AND rp.objekt_id = $1
+       WHERE ${uslovi.join(' AND ')}
+       ORDER BY r.grupa, r.naziv LIMIT 500`,
+      vals
+    );
+    res.json({
+      sastojak: sast,
+      artikli: r.rows,
+      // Da prikaz moze reci ZASTO je spisak kratak
+      ogranicenja: {
+        grupe: sast.dozvoljene_grupe || null,
+        min_debljina: sast.min_debljina, max_debljina: sast.max_debljina,
+        samo_na_stanju: sast.samo_na_stanju,
+      },
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/oblici', (req, res) => {
+  res.json(Object.entries(OBLICI).map(([id, o]) => ({ id, lbl: o.lbl, dims: o.dims })));
+});
+
 router.get('/nazivi', async (req, res) => {
   try {
     const r = await pool.query(
@@ -89,6 +400,8 @@ router.get('/:id', async (req, res) => {
          jer se u sastavnici racuna cijena po komponenti, ne vrijednost zaliha. */
       `SELECT st.*, ro.sifra, ro.naziv AS roba_naziv, ro.jed_mjera, ro.grupa,
               ro.debljina_cm, ro.std_sirina, ro.std_visina, ro.naziv_gotov,
+              sa.naziv AS sastojak_naziv, sa.redni_broj AS sastojak_red,
+              sa.dozvoljene_grupe, sa.max_debljina, sa.obavezan,
               rp.cijena AS cijena_lager, rp.stanje AS stanje_lager,
               (SELECT COALESCE(thumb_url, url) FROM roba_slike
                WHERE roba_id = ro.id AND glavna = true LIMIT 1)          AS slika_glavna,
@@ -98,7 +411,8 @@ router.get('/:id', async (req, res) => {
        FROM gotov_stavke st
        LEFT JOIN roba ro ON ro.id = st.roba_id
        LEFT JOIN roba_pj rp ON rp.roba_id = st.roba_id AND rp.objekt_id = $2
-       WHERE st.gotov_id = $1 ORDER BY st.redosled, st.id`,
+       LEFT JOIN grupa_sastojci sa ON sa.id = st.sastojak_id
+       WHERE st.gotov_id = $1 ORDER BY COALESCE(sa.redni_broj, 99), st.redosled, st.id`,
       [req.params.id, objektId]
     );
     const d = await pool.query(
@@ -123,12 +437,32 @@ router.post('/', async (req, res) => {
   try {
     await client.query('BEGIN');
     const u = req.session.user;
+    const grupaId = parseInt(req.body?.grupa_proizvoda_id) || null;
     const g = await client.query(
-      `INSERT INTO gotovi_proizvodi (naziv, grupa, opis, kreirao_id, kreirao_ime)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [naziv, req.body?.grupa || null, req.body?.opis || null, u.id, u.ime_prezime]
+      `INSERT INTO gotovi_proizvodi (naziv, grupa, opis, grupa_proizvoda_id, kreirao_id, kreirao_ime)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [naziv, req.body?.grupa || null, req.body?.opis || null, grupaId, u.id, u.ime_prezime]
     );
     const gotovId = g.rows[0].id;
+
+    /* Ako je proizvod vezan za GRUPU, njeni sastojci se odmah prenose kao prazne
+       stavke — tako se sastavnica sama postavi i ne pamti se sta ide u sto. */
+    let prenesenoSastojaka = 0;
+    if (grupaId) {
+      const sast = await client.query(
+        'SELECT * FROM grupa_sastojci WHERE grupa_id=$1 ORDER BY redni_broj, id', [grupaId]
+      );
+      for (const s of sast.rows) {
+        await client.query(
+          `INSERT INTO gotov_stavke
+             (gotov_id, sastojak_id, grupa_izbora, tip_kolicine, kolicina, faktor, redosled, opis)
+           VALUES ($1,$2,$3,$4,1,1,$5,$6)`,
+          [gotovId, s.id, s.naziv, s.tip_kolicine, s.redni_broj,
+           `(prazno — dodaj artikal u „${s.naziv}")`]
+        );
+        prenesenoSastojaka++;
+      }
+    }
 
     // Artikli koji već nose taj naziv → same stavke sastavnice
     const artikli = await client.query(
@@ -148,7 +482,7 @@ router.post('/', async (req, res) => {
       );
     }
     await client.query('COMMIT');
-    res.status(201).json({ ...g.rows[0], dodato_stavki: artikli.rows.length });
+    res.status(201).json({ ...g.rows[0], dodato_stavki: artikli.rows.length, sastojaka: prenesenoSastojaka });
   } catch (err) {
     await client.query('ROLLBACK');
     if (err.code === '23505')
@@ -221,13 +555,13 @@ router.post('/:id/stavke', async (req, res) => {
 
 router.patch('/stavka/:sid', async (req, res) => {
   if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
-  const DOZVOLJENA = ['roba_id', 'opis', 'tip_kolicine', 'kolicina', 'faktor', 'fiksna_cijena', 'marza_posto', 'redosled', 'grupa_izbora', 'podrazumijevana'];
+  const DOZVOLJENA = ['roba_id', 'opis', 'tip_kolicine', 'kolicina', 'faktor', 'fiksna_cijena', 'marza_posto', 'sirina_kom', 'visina_kom', 'redosled', 'grupa_izbora', 'podrazumijevana', 'sastojak_id'];
   const sets = [], vals = [];
   let i = 1;
   for (const k of DOZVOLJENA) {
     if (!(k in req.body)) continue;
     let v = req.body[k];
-    if (['kolicina', 'faktor', 'fiksna_cijena', 'marza_posto'].includes(k)) v = (v === '' || v == null) ? null : broj(v);
+    if (['kolicina','faktor','fiksna_cijena','marza_posto','sirina_kom','visina_kom'].includes(k)) v = (v === '' || v == null) ? null : broj(v);
     sets.push(`${k}=$${i++}`);
     vals.push(v);
   }
@@ -256,22 +590,69 @@ router.delete('/stavka/:sid', async (req, res) => {
 /* ── DIMENZIJE ───────────────────────────────────────────────────────────────── */
 router.post('/:id/dimenzije', async (req, res) => {
   if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
+  /* Dva oblika: pravougaonik (sirina × visina) i krug (precnik). Okrugli sto se ne
+     moze opisati kroz sirinu i visinu — povrsina mu je πr², ne s×v. */
+  /* Nov zapis: oblik iz spiska (I, L, U, V, N, G, KRUG) i mjere {A, B, ...}.
+     Stari (sirina/visina) se i dalje prima, da ranije dimenzije nastave da rade. */
+  if (req.body?.oblik && OBLICI[req.body.oblik]) {
+    const ob = req.body.oblik;
+    const m = req.body.mjere || {};
+    const trazene = OBLICI[ob].dims;
+    const fale = trazene.filter(k => !(broj(m[k]) > 0));
+    if (fale.length)
+      return res.status(400).json({ error: `Nedostaju mjere: ${fale.join(', ')}.` });
+    const premale = trazene.filter(k => broj(m[k]) < 20);
+    if (premale.length)
+      return res.status(400).json({
+        error: `Mjere se unose u MILIMETRIMA. Premalo: ${premale.map(k=>`${k}=${broj(m[k])}`).join(', ')}.`,
+      });
+    try {
+      const n = await pool.query(
+        'SELECT COALESCE(MAX(redosled),0)+1 AS r FROM gotov_dimenzije WHERE gotov_id=$1', [req.params.id]
+      );
+      const cisto = {};
+      for (const k of trazene) cisto[k] = broj(m[k]);
+      const r = await pool.query(
+        `INSERT INTO gotov_dimenzije (gotov_id, oblik, mjere, naziv, redosled)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [req.params.id, ob, JSON.stringify(cisto), req.body?.naziv || null, n.rows[0].r]
+      );
+      return res.status(201).json(r.rows[0]);
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  const oblik = req.body?.oblik === 'krug' ? 'krug' : 'pravougaonik';
   const sirina = broj(req.body?.sirina), visina = broj(req.body?.visina);
-  if (sirina <= 0 || visina <= 0)
-    return res.status(400).json({ error: 'Unesite širinu i visinu (mm).' });
-  // Mjere su u MILIMETRIMA — štiti od unosa u centimetrima (160 umjesto 1600)
-  if (sirina < 100 || visina < 100)
-    return res.status(400).json({
-      error: `Mjere se unose u MILIMETRIMA (npr. 1600 × 900). Uneseno: ${sirina} × ${visina}.`,
+  const precnik = broj(req.body?.precnik);
+
+  if (oblik === 'krug') {
+    if (precnik <= 0) return res.status(400).json({ error: 'Unesite prečnik (mm).' });
+    if (precnik < 100) return res.status(400).json({
+      error: `Prečnik se unosi u MILIMETRIMA (npr. 1200). Uneseno: ${precnik}.`,
     });
+  } else {
+    if (sirina <= 0 || visina <= 0)
+      return res.status(400).json({ error: 'Unesite širinu i visinu (mm).' });
+    if (sirina < 100 || visina < 100)
+      return res.status(400).json({
+        error: `Mjere se unose u MILIMETRIMA (npr. 1600 × 900). Uneseno: ${sirina} × ${visina}.`,
+      });
+  }
+
   try {
     const n = await pool.query(
       'SELECT COALESCE(MAX(redosled),0)+1 AS r FROM gotov_dimenzije WHERE gotov_id=$1', [req.params.id]
     );
     const r = await pool.query(
-      `INSERT INTO gotov_dimenzije (gotov_id, sirina, visina, naziv, redosled)
-       VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [req.params.id, sirina, visina, req.body?.naziv || null, n.rows[0].r]
+      `INSERT INTO gotov_dimenzije (gotov_id, oblik, sirina, visina, precnik, naziv, redosled)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.params.id, oblik,
+       oblik === 'krug' ? null : sirina,
+       oblik === 'krug' ? null : visina,
+       oblik === 'krug' ? precnik : null,
+       req.body?.naziv || null, n.rows[0].r]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
@@ -368,21 +749,41 @@ router.get('/:id/cijena', async (req, res) => {
     const sveKombinacije = imenaGrupa.length ? kombinacije() : [[]];
     const kombinacijeZaRacun = sveKombinacije.slice(0, MAX_KOMBINACIJA);
 
+    /* Povrsina i obim zavise od OBLIKA. Okrugli sto se ne moze racunati kao pravougaoni
+       — Ø1200 daje 1,131 m², a ne 1,44 kao kvadrat iste stranice. */
+    /* Mjere dimenzije — novi zapis (oblik + mjere{A,B,...}) ili stari (sirina/visina/precnik).
+       Stari se i dalje podrzava da postojece dimenzije ne prestanu da rade. */
+    function mjere(d) {
+      if (!d) return { m2: 0, m1: 0 };
+      if (d.mjere && d.oblik && OBLICI[d.oblik]) return mjereOblika(d.oblik, d.mjere);
+      if (d.oblik === 'krug' || d.precnik) return mjereOblika('KRUG', { D: d.precnik });
+      return mjereOblika('I', { A: d.sirina, B: d.visina });
+    }
+
     function racunaj(dim, izabrane) {
-      const m2 = dim ? (parseFloat(dim.sirina) * parseFloat(dim.visina)) / 1e6 : 0;
-      const m1 = dim ? (2 * (parseFloat(dim.sirina) + parseFloat(dim.visina))) / 1000 : 0;
+      const osnovne = mjere(dim);
+      const m2 = osnovne.m2, m1 = osnovne.m1;
       const razrada = [];
       let osnovica = 0, nepotpuno = false;
 
       for (const st of [...obavezne, ...izabrane]) {
+        // Prazan sastojak (jos bez artikla) se preskace — nema sta da se racuna
+        if (!st.roba_id && st.fiksna_cijena == null) continue;
         const cijena = st.fiksna_cijena != null
           ? parseFloat(st.fiksna_cijena)
           : (st.cijena_lager != null ? parseFloat(st.cijena_lager) : null);
         if (cijena == null && st.fiksna_cijena == null) nepotpuno = true;
 
         const mnozilac = parseFloat(st.kolicina) || 1;
-        const kol = st.tip_kolicine === 'povrsina' ? m2 * mnozilac
-                  : st.tip_kolicine === 'duzina'   ? m1 * mnozilac
+        /* MJERA PO KOMPONENTI: kod stepenica svaki dio ima svoju (gaziste 1200×330,
+           celo 1200×160). Prazno polje znaci "uzmi iz proizvoda" — tako sto, gdje sve
+           dijeli istu mjeru, radi bez ijednog dodatnog unosa. */
+        const vlastita = (st.sirina_kom != null || st.visina_kom != null);
+        const mv = vlastita
+          ? mjereOblika('I', { A: st.sirina_kom ?? dim?.sirina, B: st.visina_kom ?? dim?.visina })
+          : { m2, m1 };
+        const kol = st.tip_kolicine === 'povrsina' ? mv.m2 * mnozilac
+                  : st.tip_kolicine === 'duzina'   ? mv.m1 * mnozilac
                   : mnozilac;
         /* TRI nacina da se dodje do jedinicne cijene, po prioritetu:
              1. FIKSNA cijena  — upisana rucno, ide direktno (bez faktora i marze)
@@ -421,7 +822,11 @@ router.get('/:id/cijena', async (req, res) => {
         dimenzija_id: dim?.id || null,
         sirina: dim ? +dim.sirina : null,
         visina: dim ? +dim.visina : null,
-        dimenzija: dim ? (dim.naziv || `${Math.round(dim.sirina)}×${Math.round(dim.visina)}`) : null,
+        dimenzija: dim ? (dim.naziv || (dim.mjere && dim.oblik
+          ? opisOblika(dim.oblik, dim.mjere)
+          : (dim.oblik === 'krug' || dim.precnik
+             ? `Ø${Math.round(dim.precnik)}`
+             : `${Math.round(dim.sirina)}×${Math.round(dim.visina)}`))) : null,
         izbor: izabrane.map(x => ({
           grupa: x.grupa_izbora, stavka_id: x.id,
           naziv: x.roba_naziv || x.opis, sifra: x.sifra,
