@@ -4244,7 +4244,12 @@ function gpgRender(){
                       background:${gpgIzabranProizvod===p.id?'#f3f0f8':'transparent'};font-size:11.5px;">
             <span>📦</span>
             <span style="flex:1;${p.aktivan?'':'opacity:.5;'}">${esc(p.naziv)}</span>
-            <span style="font-size:9.5px;color:#8b96a5;">${p.broj_dimenzija||0}m</span>
+            ${/* Broj mjera. Ranije je pisalo "0m" — licilo je na metre i lijepilo se uz
+                  naziv. Sad se prikazuje samo UPOZORENJE kad mjera nema, jer bez njih
+                  proizvod ne moze u katalog. */''}
+            ${!(p.broj_dimenzija||0)
+              ? '<span style="font-size:9.5px;color:var(--orange,#b8860b);" title="Nema nijednu mjeru — dodaj dimenzije da bi mogao u katalog">⚠</span>'
+              : `<span style="font-size:9.5px;color:#8b96a5;" title="${p.broj_dimenzija} ${p.broj_dimenzija===1?'mjera':'mjera'}">${p.broj_dimenzija}×</span>`}
             <button onclick="event.stopPropagation();gpgObrisiProizvod(${p.id},'${esc(p.naziv).replace(/'/g,"&apos;")}')" title="Obriši proizvod"
                     style="background:none;border:none;cursor:pointer;color:#c3c9d1;font-size:10px;padding:0 2px;"
                     onmouseover="this.style.color='var(--red,#c0392b)'" onmouseout="this.style.color='#c3c9d1'">🗑</button>
@@ -5880,12 +5885,22 @@ function gprRenderCijene(cont, d){
         </div>
         ${stavke.map(x=>`
           <div style="display:flex;align-items:center;gap:7px;padding:4px 9px 4px 26px;font-size:11.5px;${x.bez_cijene?'color:var(--orange,#b8860b);':''}">
+            ${/* Kolicina ide PRVA, sa svojom jedinicom: "1 kom" za komadne stavke,
+                  "1,440 m²" za povrsinske. Tek onda naziv i sifra — tako se odmah vidi
+                  cega ima koliko, umjesto da se brojka trazi na kraju reda. */''}
+            <span style="min-width:64px;text-align:right;font-weight:700;color:#1f3864;">
+              ${x.jedinica==='m²' || x.jedinica==='m¹'
+                ? (Number(x.kolicina)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:3,maximumFractionDigits:3})
+                : (Number(x.kolicina)||0).toLocaleString('sr-Latn-BA',{maximumFractionDigits:0})}
+              <span style="font-weight:400;color:#6b7a8d;">${esc(x.jedinica||'kom')}</span>
+            </span>
             <span style="flex:1;">
               ${esc(x.naziv||'—')}
+              ${x.sifra?`<span style="color:#8b96a5;font-size:10px;"> · ${esc(x.sifra)}</span>`:''}
               ${x.bez_cijene?' <span style="font-size:10px;">⚠ nema cijene</span>':''}
             </span>
-            <span style="color:#8b96a5;font-size:10.5px;min-width:74px;text-align:right;">
-              ${x.kolicina} ${esc(x.jedinica||'')}${x.cijena!=null?` × ${fm(x.cijena)}`:''}
+            <span style="color:#8b96a5;font-size:10.5px;min-width:64px;text-align:right;">
+              ${x.cijena!=null?`× ${fm(x.cijena)}`:''}
             </span>
             <span style="color:#6b4fa0;font-size:10.5px;min-width:38px;text-align:right;">
               ${x.fiksna?'fiksno':`×${x.faktor}${x.marza_posto?` +${x.marza_posto}%`:''}`}
