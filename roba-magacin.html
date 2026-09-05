@@ -4441,6 +4441,22 @@ function gpgZavrsiSastojak(gid){
   gpgUcitajSastojke(gid);
 }
 
+
+/* Mjere koje sastojak moze odredjivati. Isti spisak kao na serveru. */
+const GPR_MJERE = {
+  duzina:   { lbl:'Dužina' },
+  sirina:   { lbl:'Širina' },
+  visina:   { lbl:'Visina' },
+  debljina: { lbl:'Debljina' },
+  precnik:  { lbl:'Prečnik' },
+};
+
+function gpgPromjenaMjera(sid, gid){
+  const izabrane = [...document.querySelectorAll('#gpg-detalj input[type=checkbox]')]
+    .filter(i => GPR_MJERE[i.value] && i.checked).map(i => i.value);
+  gpgIzmjeni(sid, 'definise', izabrane, gid);
+}
+
 function gpgPrikaziSastojak(g, sid){
   const s = (g.sastojci||[]).find(x=>x.id===sid);
   if(!s) return gpgPrikaziGrupu(g);
@@ -4508,6 +4524,30 @@ function gpgPrikaziSastojak(g, sid){
       <div style="font-size:10.5px;color:#8b96a5;margin-top:4px;line-height:1.5;">
         Pri sastavljanju se nude <b>samo artikli iz označenih grupa</b>.
         Ako nijedna nije označena, dozvoljene su sve.
+      </div>
+    </div>
+
+    <!-- Svaki sastojak kaze KOJU MJERU odredjuje: postolje visinu, ploca sirinu i
+         duzinu, kod klupica i debljinu. Vrijednosti se unose po proizvodu, jer nisu
+         svi stolovi iste visine (trpezarijski i klub sto se razlikuju). -->
+    <div style="background:#f3f0f8;border-radius:8px;padding:10px 12px;margin-bottom:11px;">
+      <div style="font-size:11.5px;font-weight:700;color:#6b4fa0;margin-bottom:7px;">
+        Koje mjere ovaj sastojak određuje
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${Object.entries(GPR_MJERE).map(([k,m])=>{
+          const izabrana = (s.definise||[]).includes(k);
+          return `<label style="display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:7px;cursor:pointer;font-size:12px;
+                       border:1px solid ${izabrana?'#6b4fa0':'var(--border,#ddd)'};background:${izabrana?'#fff':'#fafbfc'};font-weight:${izabrana?'700':'400'};">
+            <input type="checkbox" value="${k}" ${izabrana?'checked':''} onchange="gpgPromjenaMjera(${s.id},${g.id})">
+            ${esc(m.lbl)}
+          </label>`;
+        }).join('')}
+      </div>
+      <div style="font-size:10.5px;color:#8b96a5;margin-top:7px;line-height:1.5;">
+        Npr. <b>postolje → Visina</b>, <b>ploča → Dužina i Širina</b>.
+        Kod proizvoda se onda traže tačno te mjere.
+        Površina se računa iz <b>dužine × širine</b>; visina i debljina su opisne.
       </div>
     </div>
 
@@ -4895,6 +4935,8 @@ async function gprPrikaziCjenovnik(pid){
 function gprRenderDetalj(el, g){
   if(!window.__gprStavke) window.__gprStavke = {};
   window.__gprStavke[g.id] = g.stavke || [];
+  if(!window.__gprPodaciDetalj) window.__gprPodaciDetalj = {};
+  window.__gprPodaciDetalj[g.id] = g;   // obrazac dimenzija cita sta sastojci odredjuju
 
   el.innerHTML = `
     <!-- Zaglavlje proizvoda: slika, naziv i osnovna podesavanja. Izmjene se cuvaju
@@ -5090,6 +5132,9 @@ function gprRenderDetalj(el, g){
       <span id="gpr-dim-polja-${g.id}" style="display:inline-flex;gap:5px;align-items:center;flex-wrap:nowrap;white-space:nowrap;"></span>
       <button onclick="gprDodajDim(${g.id})" style="padding:4px 11px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:5px;font-weight:700;cursor:pointer;font-size:11.5px;">+ Dodaj mjeru</button>
       <span id="gpr-dim-poruka-${g.id}" style="font-size:11px;color:#8b96a5;"></span>
+    </div>
+    <div id="gpr-dim-moguci-${g.id}" style="margin-top:5px;padding-left:2px;"></div>
+    <div style="display:none;"
     </div>
 
     <div style="font-size:12px;font-weight:800;margin:14px 0 7px;">Cijene</div>
@@ -5706,22 +5751,60 @@ const GPR_OBLICI = {
   G:    { lbl:'G oblik',    dims:[['A','gornja dužina'],['B','lijeva visina'],['C','desna visina'],['D','donja dužina'],['E','gorn. pomak'],['F','lijeva unut.'],['G','donja unut. duž.'],['H','donja unut. šir.']] },
 };
 
+/* Oblici po vrsti — kruzni traze samo precnik, pravougaoni duzinu i sirinu.
+   Elipsa i bacva se upisuju u pravougaoni okvir, pa im trebaju iste mjere. */
+const GPR_KRUZNI = ['KRUG'];
+const GPR_PRAVOUGAONI = ['PRAV','KVAD','OVAL','BACVA','ZAOB','I','L','U','V','N','G'];
+
 function gprOblikPromjena(gid){
-  const ob = document.getElementById('gpr-dim-o-'+gid)?.value || 'PRAV';
   const cont = document.getElementById('gpr-dim-polja-'+gid);
   if(!cont) return;
-  const def = GPR_OBLICI[ob] || GPR_OBLICI.PRAV;
-  cont.innerHTML = def.dims.map(([k, opis])=>`
-    <span style="display:inline-flex;align-items:center;gap:2px;">
-      <span style="font-size:10px;color:#8b96a5;font-weight:700;">${k}</span>
-      <input type="text" inputmode="decimal" id="gpr-dm-${gid}-${k}" placeholder="${esc(opis)}" title="${esc(opis)} (mm)"
-             style="width:${def.dims.length>4?'56':'72'}px;font:inherit;font-size:11px;padding:4px 6px;border:1px solid #ccc;border-radius:5px;">
+  const ob = document.getElementById('gpr-dim-o-'+gid)?.value || 'PRAV';
+  const jeKruzni = GPR_KRUZNI.includes(ob);
+
+  /* OBLIK odredjuje osnovne mjere, SASTOJCI dodaju svoje (visina sa postolja,
+     debljina kod klupica). Kvadratni trazi samo stranicu — sirina se izjednaci. */
+  const g = window.__gprPodaciDetalj?.[gid];
+  const odSastojaka = [...new Set((g?.sastojci_grupe || []).flatMap(s => s.definise || []))]
+    .filter(k => !['duzina','sirina','precnik'].includes(k));
+
+  const osnovne = jeKruzni ? ['precnik']
+                : ob === 'KVAD' ? ['duzina']
+                : ['duzina','sirina'];
+
+  const lista = [...osnovne, ...odSastojaka].map(k => [k, GPR_MJERE[k]?.lbl || k]);
+
+  cont.innerHTML = lista.map(([k, opis])=>`
+    <span style="display:inline-flex;align-items:center;gap:3px;">
+      <span style="font-size:10px;color:#8b96a5;font-weight:700;">${esc(opis)}</span>
+      <input type="text" inputmode="decimal" id="gpr-dm-${gid}-${k}" placeholder="mm"
+             title="${esc(opis)} (mm)${k==='duzina'&&!jeKruzni?' — najveća dužina'>'':''}"
+             style="width:66px;font:inherit;font-size:11px;padding:4px 6px;border:1px solid #ccc;border-radius:5px;">
     </span>`).join('');
+
+  /* Ostali MOGUCI oblici sa istim mjerama — katalog ih navodi kao opciju.
+     Nudi se samo ista vrsta: uz okrugli nema smisla ponuditi pravougaoni. */
+  const ostali = (jeKruzni ? GPR_KRUZNI : GPR_PRAVOUGAONI).filter(o => o !== ob && GPR_OBLICI[o]);
+  const mog = document.getElementById('gpr-dim-moguci-'+gid);
+  if(mog){
+    mog.innerHTML = ostali.length ? `
+      <span style="font-size:10px;color:#8b96a5;margin-right:4px;">moguć i:</span>
+      ${ostali.map(o=>`
+        <label style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;cursor:pointer;margin-right:7px;">
+          <input type="checkbox" class="gpr-mog-${gid}" value="${o}">
+          ${esc(GPR_OBLICI[o].lbl)}
+        </label>`).join('')}` : '';
+  }
 }
 
 async function gprDodajDim(gid){
   const ob = document.getElementById('gpr-dim-o-'+gid)?.value || 'PRAV';
-  const def = GPR_OBLICI[ob] || GPR_OBLICI.PRAV;
+  const jeKruzni = GPR_KRUZNI.includes(ob);
+  const g = window.__gprPodaciDetalj?.[gid];
+  const odSastojaka = [...new Set((g?.sastojci_grupe || []).flatMap(s => s.definise || []))]
+    .filter(k => !['duzina','sirina','precnik'].includes(k));
+  const osnovne = jeKruzni ? ['precnik'] : ob === 'KVAD' ? ['duzina'] : ['duzina','sirina'];
+  const def = { dims: [...osnovne, ...odSastojaka].map(k => [k, GPR_MJERE[k]?.lbl || k]) };
   const mjere = {};
   for(const [k, opis] of def.dims){
     const polje = document.getElementById(`gpr-dm-${gid}-${k}`);
@@ -5742,7 +5825,11 @@ async function gprDodajDim(gid){
     }
     mjere[k] = v;
   }
-  const telo = { oblik: ob, mjere };
+  // Kvadratni: sirina se izjednacava sa duzinom, da racun radi bez posebnog slucaja
+  if(ob === 'KVAD' && mjere.duzina) mjere.sirina = mjere.duzina;
+
+  const moguci = [...document.querySelectorAll('.gpr-mog-'+gid+':checked')].map(i=>i.value);
+  const telo = { oblik: ob, mjere, moguci_oblici: moguci };
   const poruka = document.getElementById('gpr-dim-poruka-'+gid);
   if(poruka){ poruka.textContent = 'Dodajem...'; poruka.style.color = '#8b96a5'; }
   try{

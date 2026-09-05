@@ -143,6 +143,9 @@
 .legenda-stavka{display:inline-flex;flex-direction:column;align-items:center;gap:2px;}
 .legenda-ime{font-size:10px;color:#8b96a5;white-space:nowrap;}
 .legenda-nap{font-size:10.5px;color:#8b96a5;margin-top:8px;}
+
+.oblik-opcija .oblik-ikona{stroke:#c3c9d1;stroke-dasharray:2 2;}
+.oblik-opcija .oblik-mjera{color:#c3c9d1;}
 </style>
 </head>
 <body>
@@ -448,6 +451,12 @@ function gotovProizvod(p){
         </div>`
       : (mjere.length ? `<div class="gotov-mjere">Dostupne mjere: ${mjere.map(esc).join(' · ')}</div>` : '')}
 
+      ${/* Kad proizvod nema unesenih dimenzija, ikonice se nemaju odakle crtati.
+            Umjesto tihe praznine kaze se sta fali — inace izgleda kao da ne radi. */''}
+      ${(!(p.dimenzije||[]).length && podaci.sa_cijenama) ? `<div class="gotov-uslov">
+        Cijena važi za navedeni <b>materijal</b> i izvedbu.
+      </div>` : ''}
+
       ${/* Oblici na DNU — diskretno, poslije cijena, jer su dopuna a ne glavna stvar */''}
       ${(p.dimenzije||[]).length ? `<div class="gotov-oblici">
         <span class="oblik-uvod">Dostupni oblici:</span>
@@ -455,7 +464,14 @@ function gotovProizvod(p){
           <span class="oblik-stavka" title="${esc(oblikNaziv(d.oblik))} ${esc(opisDim(d))}">
             ${oblikIkona(d.oblik)}
             <span class="oblik-mjera">${esc(opisDim(d))}</span>
-          </span>`).join('')}
+          </span>
+          ${/* Ostali MOGUCI oblici sa istim mjerama — blijedi, jer su opcija a ne
+                zadana izvedba. Ista mjera, drugi izgled. */''}
+          ${(d.moguci_oblici||[]).map(o=>`
+            <span class="oblik-stavka oblik-opcija" title="Moguće i: ${esc(oblikNaziv(o))}">
+              ${oblikIkona(o)}
+              <span class="oblik-mjera">${esc(oblikNaziv(o))}</span>
+            </span>`).join('')}`).join('')}
       </div>` : ''}
     </div>`;
 }

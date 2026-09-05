@@ -29,6 +29,23 @@ function broj(v) {
    Preuzeto iz modula Ponude (SHAPES), da se isti oblici koriste svuda — ponuda, nalog
    i gotov proizvod govore istim jezikom.
    Mjere se cuvaju kao {A: 2800, B: 600, ...}, jer svaki oblik ima svoj skup. */
+/* Mjere koje sastojak moze da DEFINISE. Postolje odredjuje visinu, ploca sirinu i
+   duzinu, kod klupica debljinu. Vrijednosti se unose PO PROIZVODU — nisu svi stolovi
+   iste visine (trpezarijski i klub sto se razlikuju). */
+/* Oblici se dijele po tome KOJE MJERE traze:
+     kruzni      → samo precnik
+     pravougaoni → duzina × sirina (maksimalne, jer se elipsa i bacva upisuju u okvir) */
+const KRUZNI = ['KRUG'];
+const PRAVOUGAONI = ['PRAV', 'KVAD', 'OVAL', 'BACVA', 'ZAOB', 'I', 'L', 'U', 'V', 'N', 'G'];
+
+const MJERE = {
+  duzina:   { lbl: 'Dužina',   kratko: 'D' },
+  sirina:   { lbl: 'Širina',   kratko: 'Š' },
+  visina:   { lbl: 'Visina',   kratko: 'V' },
+  debljina: { lbl: 'Debljina', kratko: 'd' },
+  precnik:  { lbl: 'Prečnik',  kratko: 'Ø' },
+};
+
 const OBLICI = {
   /* ── OBLICI STOLOVA ──
      Racun povrsine se STVARNO razlikuje: ovalni sto 1800×1000 ima 1,414 m², a
@@ -128,6 +145,15 @@ function mjereOblika(oblik, m) {
 /* Kratak opis dimenzije za prikaz: "2800×600", "Ø1200", "L 3000/600/600/1000" */
 function opisOblika(oblik, m) {
   const v = k => Math.round(parseFloat(m?.[k]) || 0);
+  /* Imenovane mjere: "1600×900" ili "1600×900×720" kad je visina unesena. */
+  if (m?.duzina || m?.sirina) {
+    const d = [v('duzina'), v('sirina')].filter(Boolean).join('×');
+    const dodaci = [];
+    if (m.visina) dodaci.push(`H${v('visina')}`);
+    if (m.debljina) dodaci.push(`${v('debljina')}mm`);
+    return d + (dodaci.length ? ' · ' + dodaci.join(' · ') : '');
+  }
+  if (m?.precnik) return `Ø${v('precnik')}` + (m.visina ? ` · H${v('visina')}` : '');
   if (oblik === 'KRUG') return `Ø${v('D')}`;
   if (oblik === 'KVAD') return `${v('A')}×${v('A')}`;
   if (oblik === 'OVAL') return `⬭ ${v('A')}×${v('B')}`;
@@ -303,13 +329,17 @@ router.post('/grupe/:id/sastojci', async (req, res) => {
 router.patch('/sastojak/:sid', async (req, res) => {
   if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
   const DOZ = ['naziv','dozvoljene_grupe','tip_kolicine','min_debljina','max_debljina',
-               'samo_na_stanju','obavezan','napomena','redni_broj'];
+               'samo_na_stanju','obavezan','napomena','redni_broj','definise'];
   const sets = [], vals = [];
   let i = 1;
   for (const k of DOZ) {
     if (!(k in req.body)) continue;
     let v = req.body[k];
     if (['min_debljina','max_debljina'].includes(k)) v = (v === '' || v == null) ? null : broj(v);
+    if (k === 'definise') {
+      v = Array.isArray(v) ? v.filter(x => MJERE[x]) : null;
+      if (v && !v.length) v = null;
+    }
     if (k === 'dozvoljene_grupe') {
       v = Array.isArray(v) ? v.map(x => String(x).trim()).filter(Boolean) : null;
       if (v && !v.length) v = null;
@@ -379,8 +409,18 @@ router.get('/sastojak/:sid/artikli', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /mjere — spisak mjera koje sastojak moze definisati
+router.get('/mjere', (req, res) => {
+  res.json(Object.entries(MJERE).map(([id, m]) => ({ id, ...m })));
+});
+
 router.get('/oblici', (req, res) => {
-  res.json(Object.entries(OBLICI).map(([id, o]) => ({ id, lbl: o.lbl, dims: o.dims })));
+  res.json({
+    oblici: Object.entries(OBLICI).map(([id, o]) => ({
+      id, lbl: o.lbl, dims: o.dims, kruzni: KRUZNI.includes(id),
+    })),
+    kruzni: KRUZNI, pravougaoni: PRAVOUGAONI,
+  });
 });
 
 router.get('/nazivi', async (req, res) => {
@@ -630,6 +670,50 @@ router.post('/:id/dimenzije', async (req, res) => {
      moze opisati kroz sirinu i visinu — povrsina mu je πr², ne s×v. */
   /* Nov zapis: oblik iz spiska (I, L, U, V, N, G, KRUG) i mjere {A, B, ...}.
      Stari (sirina/visina) se i dalje prima, da ranije dimenzije nastave da rade. */
+  /* NOV zapis: imenovane mjere {duzina, sirina, visina, debljina} — sastojci kazu
+     koje traze, pa se unosi samo ono sto proizvod stvarno ima. */
+  if (req.body?.mjere && !Array.isArray(req.body.mjere) &&
+      Object.keys(req.body.mjere).some(k => MJERE[k])) {
+    const m = req.body.mjere;
+    const cisto = {};
+    for (const k of Object.keys(MJERE)) if (broj(m[k]) > 0) cisto[k] = broj(m[k]);
+    const ob = OBLICI[req.body?.oblik] ? req.body.oblik : 'PRAV';
+    if (KRUZNI.includes(ob)) {
+      if (!cisto.precnik) return res.status(400).json({ error: 'Za okrugli oblik unesite prečnik.' });
+    } else if (!cisto.duzina || !cisto.sirina) {
+      return res.status(400).json({ error: 'Unesite dužinu i širinu.' });
+    }
+    if (!Object.keys(cisto).length)
+      return res.status(400).json({ error: 'Unesite bar jednu mjeru.' });
+    const premale = Object.entries(cisto).filter(([k, v]) => k !== 'debljina' && v < 20);
+    if (premale.length)
+      return res.status(400).json({
+        error: `Mjere se unose u MILIMETRIMA. Premalo: ${premale.map(([k, v]) => `${MJERE[k].lbl}=${v}`).join(', ')}.`,
+      });
+    try {
+      const n = await pool.query(
+        'SELECT COALESCE(MAX(redosled),0)+1 AS r FROM gotov_dimenzije WHERE gotov_id=$1', [req.params.id]
+      );
+      /* Ostali MOGUCI oblici sa istim mjerama — katalog ih navodi kao opciju.
+         Samo oni iste vrste: kruzni sa kruznim, pravougaoni sa pravougaonim. */
+      const osnovni = OBLICI[req.body?.oblik] ? req.body.oblik : 'PRAV';
+      const jeKruzni = KRUZNI.includes(osnovni);
+      const moguci = Array.isArray(req.body?.moguci_oblici)
+        ? req.body.moguci_oblici.filter(o =>
+            OBLICI[o] && o !== osnovni &&
+            (jeKruzni ? KRUZNI.includes(o) : PRAVOUGAONI.includes(o)))
+        : [];
+
+      const r = await pool.query(
+        `INSERT INTO gotov_dimenzije (gotov_id, oblik, mjere, moguci_oblici, naziv, redosled)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [req.params.id, osnovni, JSON.stringify(cisto),
+         moguci.length ? moguci : null, req.body?.naziv || null, n.rows[0].r]
+      );
+      return res.status(201).json(r.rows[0]);
+    } catch (err) { return res.status(500).json({ error: err.message }); }
+  }
+
   if (req.body?.oblik && OBLICI[req.body.oblik]) {
     const ob = req.body.oblik;
     const m = req.body.mjere || {};
@@ -865,10 +949,18 @@ router.get('/:id/cijena', async (req, res) => {
        — Ø1200 daje 1,131 m², a ne 1,44 kao kvadrat iste stranice. */
     /* Mjere dimenzije — novi zapis (oblik + mjere{A,B,...}) ili stari (sirina/visina/precnik).
        Stari se i dalje podrzava da postojece dimenzije ne prestanu da rade. */
+    /* Dimenzija proizvoda nosi IMENOVANE mjere: {duzina, sirina, visina, debljina}.
+       Povrsina se racuna iz duzine i sirine; visina je opisna (ne ulazi u m²).
+       Stari zapisi sa {A,B} i sa sirina/visina se i dalje citaju. */
     function mjere(d) {
       if (!d) return { m2: 0, m1: 0 };
-      if (d.mjere && d.oblik && OBLICI[d.oblik]) return mjereOblika(d.oblik, d.mjere);
-      if (d.oblik === 'krug' || d.precnik) return mjereOblika('KRUG', { D: d.precnik });
+      const m = d.mjere || {};
+      if (m.precnik) return mjereOblika('KRUG', { D: m.precnik });
+      if (m.duzina || m.sirina)
+        return mjereOblika(d.oblik && OBLICI[d.oblik] && d.oblik !== 'I' ? d.oblik : 'PRAV',
+                           { A: m.duzina || 0, B: m.sirina || 0, D: m.precnik || 0, R: m.radijus || 0 });
+      if (m.A || m.B || m.D) return mjereOblika(d.oblik || 'I', m);
+      if (d.precnik) return mjereOblika('KRUG', { D: d.precnik });
       return mjereOblika('I', { A: d.sirina, B: d.visina });
     }
 
