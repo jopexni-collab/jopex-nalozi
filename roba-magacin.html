@@ -5225,8 +5225,6 @@ function gprRenderDetalj(el, g){
       <span id="gpr-dim-poruka-${g.id}" style="font-size:11px;color:#8b96a5;"></span>
     </div>
     <div id="gpr-dim-moguci-${g.id}" style="margin-top:5px;padding-left:2px;"></div>
-    <div style="display:none;"
-    </div>
 
     <div style="font-size:12px;font-weight:800;margin:14px 0 7px;">Cijene</div>
     <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:end;margin-bottom:9px;">
@@ -6021,6 +6019,42 @@ async function gprIzracunaj(gid){
 
 /* Snimanje (zamrzavanje) izracunatih cijena. Cuva se CIJELI presjek, ne dopuna —
    inace bi ostajale cijene kombinacija koje vise ne postoje. */
+
+/* Spisak cjenovnika za izbor pri snimanju. Prazno = zajednicki, kao ranije. */
+async function gprUcitajCjenovnike(pid){
+  const sel = document.getElementById('gpr-cjen-izbor-'+pid);
+  if(!sel) return;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/cjenovnici`);
+    if(!r.ok) return;
+    const lista = await r.json();
+    const trenutni = sel.value;
+    sel.innerHTML = '<option value="">— zajednički cjenovnik —</option>' + lista.map(c=>
+      `<option value="${c.id}" ${String(c.id)===trenutni?'selected':''}>${esc(c.naziv)}${c.tip_kupca?` · ${esc(c.tip_kupca)}`:''}${c.objekt_naziv?` · ${esc(c.objekt_naziv)}`:''}</option>`
+    ).join('');
+  }catch(e){ /* ostaje zajednicki */ }
+}
+
+async function gprNoviCjenovnik(pid){
+  const naziv = prompt('Naziv cjenovnika:\n\nnpr. Veleprodaja 2026, Maloprodaja Niš, Akcija proljeće');
+  if(!naziv || !naziv.trim()) return;
+  const objId = document.getElementById('gpr-obj-'+pid)?.value || null;
+  const tipId = document.getElementById('gpr-tip-'+pid)?.value || null;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/cjenovnici`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      /* Objekat i tip kupca se preuzimaju iz onoga sto je izabrano za racun —
+         cjenovnik i cijene tako uvijek pripadaju istom kupcu i istoj PJ. */
+      body: JSON.stringify({ naziv: naziv.trim(), objekt_id: objId, tip_kupca_id: tipId }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
+    await gprUcitajCjenovnike(pid);
+    const sel = document.getElementById('gpr-cjen-izbor-'+pid);
+    if(sel) sel.value = String(d.id);
+  }catch(e){ alert('✗ '+e.message); }
+}
+
 async function gprSnimiCijene(pid){
   const d = window.__gprPodaci?.[pid];
   if(!d || !d.cijene?.length){
@@ -6033,6 +6067,7 @@ async function gprSnimiCijene(pid){
     const r = await fetch(`${API}/api/gotovi-proizvodi/${pid}/snimi-cijene`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
+        cjenovnik_id: document.getElementById('gpr-cjen-izbor-'+pid)?.value || null,
         valuta: d.valuta || 'KM',
         objekt_id: document.getElementById('gpr-obj-'+pid)?.value || null,
         objekt_naziv: document.getElementById('gpr-obj-'+pid)?.selectedOptions?.[0]?.textContent || null,
@@ -6049,7 +6084,9 @@ async function gprSnimiCijene(pid){
     const res = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
     if(!r.ok) throw new Error(res.error||`Server je vratio ${r.status}`);
     if(oznaka){
-      oznaka.textContent = `✓ Snimljeno ${res.snimljeno} ${res.snimljeno===1?'cijena':'cijena'}`;
+      const sel = document.getElementById('gpr-cjen-izbor-'+pid);
+      const ime = sel?.selectedOptions?.[0]?.textContent || 'zajednički';
+      oznaka.textContent = `✓ Snimljeno ${res.snimljeno} u „${ime.replace(/^—\s*|\s*—$/g,'')}"`;
       oznaka.style.color = 'var(--green,#1f8a4c)';
     }
     /* Detalj se ucitava ponovo — inace zaglavlje i dalje pise "cjenovnik nije snimljen",
@@ -6209,9 +6246,18 @@ function gprRenderCijene(cont, d){
         <!-- Cijene se racunaju UZIVO iz lagera — mijenjaju se cim se promijeni cijena
              komponente. Za katalog treba ZAMRZNUTA verzija, pa se snima presjek. -->
         <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-top:11px;padding-top:11px;border-top:1px solid var(--border,#ddd);">
+          <!-- Snima se U ODREDJENI cjenovnik — jedan proizvod moze imati vise cijena,
+               po tipu kupca ili objektu. Ostali cjenovnici ostaju netaknuti. -->
+          <select id="gpr-cjen-izbor-${d.id}" style="font:inherit;font-size:12.5px;padding:7px 10px;border:1px solid #ccc;border-radius:7px;">
+            <option value="">— zajednički cjenovnik —</option>
+          </select>
           <button onclick="gprSnimiCijene(${d.id})"
                   style="font:inherit;font-size:12.5px;padding:8px 16px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:7px;cursor:pointer;font-weight:700;">
-            💾 Snimi cjenovnik (${redovi.length})
+            💾 Snimi u cjenovnik (${redovi.length})
+          </button>
+          <button onclick="gprNoviCjenovnik(${d.id})" title="Napravi nov cjenovnik"
+                  style="font:inherit;font-size:12.5px;padding:8px 13px;border:1px solid var(--green,#1f8a4c);background:#fff;color:var(--green,#1f8a4c);border-radius:7px;cursor:pointer;font-weight:700;">
+            + Nov
           </button>
           <button onclick="gprSpremanZaKatalog(${d.id})"
                   style="font:inherit;font-size:12.5px;padding:8px 16px;border:1px solid #6b4fa0;background:#fff;color:#6b4fa0;border-radius:7px;cursor:pointer;font-weight:700;">
@@ -6252,6 +6298,8 @@ function gprRenderCijene(cont, d){
         </details>
       </div>
     </div>`;
+
+  gprUcitajCjenovnike(d.id);   // spisak cjenovnika za izbor pri snimanju
 }
 
 

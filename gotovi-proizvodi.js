@@ -836,6 +836,84 @@ router.delete('/dimenzija/:did', async (req, res) => {
    Cijene se inace racunaju uzivo iz lagera, pa se mijenjaju cim se promijeni cijena
    neke komponente. Katalog to ne smije — odstampana cijena mora ostati ista.
    Ovdje se snima presjek: koja kombinacija, koja mjera, koja cijena, za kog kupca. */
+/* ═══ IMENOVANI CJENOVNICI ═════════════════════════════════════════════════════════
+   Jedan proizvod moze imati vise cjenovnika — po tipu kupca, po objektu, po sezoni.
+   Snimanjem se cijene upisuju U ODREDJENI cjenovnik, pa se ostali ne diraju. */
+
+router.get('/cjenovnici', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT c.*,
+              (SELECT COUNT(DISTINCT gotov_id) FROM gotov_cjenovnik g WHERE g.cjenovnik_id = c.id)::int AS broj_proizvoda,
+              (SELECT COUNT(*) FROM gotov_cjenovnik g WHERE g.cjenovnik_id = c.id)::int AS broj_cijena
+       FROM cjenovnici c
+       ${req.query.svi === '1' ? '' : 'WHERE c.aktivan = true'}
+       ORDER BY c.naziv`
+    );
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/cjenovnici', async (req, res) => {
+  if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
+  const naziv = String(req.body?.naziv || '').trim();
+  if (!naziv) return res.status(400).json({ error: 'Unesite naziv cjenovnika.' });
+  try {
+    const u = req.session.user;
+    let tipNaziv = null, objNaziv = null;
+    if (req.body?.tip_kupca_id) {
+      const t = await pool.query('SELECT naziv FROM tipovi_kupaca WHERE id=$1', [req.body.tip_kupca_id]);
+      tipNaziv = t.rows[0]?.naziv || null;
+    }
+    if (req.body?.objekt_id) {
+      const o = await pool.query('SELECT naziv, valuta FROM prodajni_objekti WHERE id=$1', [req.body.objekt_id]);
+      objNaziv = o.rows[0]?.naziv || null;
+    }
+    const r = await pool.query(
+      `INSERT INTO cjenovnici (naziv, tip_kupca_id, tip_kupca, objekt_id, objekt_naziv,
+                               valuta, vazi_od, vazi_do, napomena, kreirao_id, kreirao_ime)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [naziv, parseInt(req.body?.tip_kupca_id) || null, tipNaziv,
+       parseInt(req.body?.objekt_id) || null, objNaziv,
+       req.body?.valuta || 'KM', req.body?.vazi_od || null, req.body?.vazi_do || null,
+       req.body?.napomena || null, u.id, u.ime_prezime]
+    );
+    res.status(201).json(r.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(400).json({ error: 'Cjenovnik sa tim nazivom već postoji.' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch('/cjenovnici/:id', async (req, res) => {
+  if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
+  const DOZ = ['naziv', 'aktivan', 'vazi_od', 'vazi_do', 'napomena'];
+  const sets = [], vals = [];
+  let i = 1;
+  for (const k of DOZ) {
+    if (!(k in req.body)) continue;
+    sets.push(`${k}=$${i++}`); vals.push(req.body[k] || null);
+  }
+  if (!sets.length) return res.status(400).json({ error: 'Nema polja za izmjenu.' });
+  vals.push(req.params.id);
+  try {
+    const r = await pool.query(`UPDATE cjenovnici SET ${sets.join(',')} WHERE id=$${i} RETURNING *`, vals);
+    if (!r.rows.length) return res.status(404).json({ error: 'Cjenovnik nije pronađen.' });
+    res.json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/cjenovnici/:id', async (req, res) => {
+  if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
+  try {
+    // Cijene se brisu zajedno sa cjenovnikom — inace bi ostale bez pripadnosti
+    await pool.query('DELETE FROM gotov_cjenovnik WHERE cjenovnik_id=$1', [req.params.id]);
+    const r = await pool.query('DELETE FROM cjenovnici WHERE id=$1 RETURNING id', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Cjenovnik nije pronađen.' });
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.post('/:id/snimi-cijene', async (req, res) => {
   if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
   const redovi = Array.isArray(req.body?.cijene) ? req.body.cijene : null;
@@ -847,17 +925,24 @@ router.post('/:id/snimi-cijene', async (req, res) => {
     await client.query('BEGIN');
     const u = req.session.user;
 
-    /* Stari cjenovnik se brise — snima se UVIJEK cijeli presjek, ne dopuna.
-       Inace bi ostajale cijene kombinacija koje vise ne postoje. */
-    await client.query('DELETE FROM gotov_cjenovnik WHERE gotov_id=$1', [req.params.id]);
+    /* Brise se samo presjek TOG proizvoda u TOM cjenovniku — ostali cjenovnici
+       ostaju netaknuti. Bez cjenovnik_id ponasa se kao ranije (jedan zajednicki). */
+    const cjenovnikId = parseInt(req.body?.cjenovnik_id) || null;
+    if (cjenovnikId) {
+      await client.query('DELETE FROM gotov_cjenovnik WHERE gotov_id=$1 AND cjenovnik_id=$2',
+        [req.params.id, cjenovnikId]);
+    } else {
+      await client.query('DELETE FROM gotov_cjenovnik WHERE gotov_id=$1 AND cjenovnik_id IS NULL',
+        [req.params.id]);
+    }
 
     for (const r of redovi) {
       await client.query(
         `INSERT INTO gotov_cjenovnik
-           (gotov_id, kombinacija, opis_izbora, dimenzija, povrsina_m2, cijena, valuta,
+           (gotov_id, cjenovnik_id, kombinacija, opis_izbora, dimenzija, povrsina_m2, cijena, valuta,
             objekt_id, objekt_naziv, tip_kupca_id, tip_kupca, popust_posto, snimio_id, snimio_ime)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-        [req.params.id, r.kombinacija || null, r.opis_izbora || null, r.dimenzija || null,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+        [req.params.id, cjenovnikId, r.kombinacija || null, r.opis_izbora || null, r.dimenzija || null,
          broj(r.povrsina_m2), broj(r.cijena), req.body?.valuta || 'KM',
          parseInt(req.body?.objekt_id) || null, req.body?.objekt_naziv || null,
          parseInt(req.body?.tip_kupca_id) || null, req.body?.tip_kupca || null,
@@ -882,8 +967,12 @@ router.post('/:id/snimi-cijene', async (req, res) => {
 router.get('/:id/cjenovnik', async (req, res) => {
   try {
     const r = await pool.query(
-      'SELECT * FROM gotov_cjenovnik WHERE gotov_id=$1 ORDER BY dimenzija, opis_izbora',
-      [req.params.id]
+      `SELECT c.*, cj.naziv AS cjenovnik_naziv
+       FROM gotov_cjenovnik c
+       LEFT JOIN cjenovnici cj ON cj.id = c.cjenovnik_id
+       WHERE c.gotov_id=$1 ${req.query.cjenovnik_id ? 'AND c.cjenovnik_id=$2' : ''}
+       ORDER BY cj.naziv NULLS FIRST, c.dimenzija, c.opis_izbora`,
+      req.query.cjenovnik_id ? [req.params.id, req.query.cjenovnik_id] : [req.params.id]
     );
     res.json(r.rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
