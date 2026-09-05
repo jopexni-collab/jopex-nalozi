@@ -710,6 +710,12 @@ document.getElementById('logout').onclick=async e=>{
 /* ═══ GOTOVI PROIZVODI U KATALOGU ══════════════════════════════════════════════════
    Katalog moze prikazivati materijale (artikli), gotove proizvode (sastavnice) ili
    oboje. Kvadratic na GRUPI ukljucuje sve njene proizvode, na proizvodu pojedinacno. */
+/* Escape za tekst iz baze — naziv proizvoda moze sadrzati < ili &, sto bi bez ovoga
+   pokvarilo prikaz. U ovoj stranici funkcija nije postojala. */
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
 let katSta = 'materijali';
 let katGotoviPodaci = [];
 const katIzabraniGotovi = new Set();
@@ -839,6 +845,22 @@ function katGotoviFiltriraj(){
     g.style.display = vidljivih ? 'block' : 'none';
   });
 }
+
+
+/* Hvata svaku gresku na stranici i prikazuje je na vrhu — bez ovoga greska ostaje
+   samo u konzoli, a korisniku izgleda kao da se nista ne ucitava. */
+window.addEventListener('error', e => {
+  let el = document.getElementById('greska-traka');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'greska-traka';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#c0392b;color:#fff;'
+      + 'padding:9px 14px;font-size:12.5px;line-height:1.4;cursor:pointer;';
+    el.onclick = () => el.remove();
+    document.body.prepend(el);
+  }
+  el.textContent = 'Greška: ' + e.message + (e.lineno ? ' — red ' + e.lineno : '') + '  (klikni da skloniš)';
+});
 
 </script>
 </body>
