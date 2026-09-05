@@ -95,6 +95,23 @@
        tacno), nove su 1200px (sa rezervom). Vise kolona = manja kartica = ostrija slika,
        pa se namjerno NE smanjuje broj kolona. */
   }
+
+/* ── GOTOVI PROIZVODI ────────────────────────────────────────────────────────── */
+.gotov-proizvod{border:1px solid var(--border,#ddd);border-radius:10px;padding:13px;margin-bottom:13px;background:#fff;
+  break-inside:avoid;page-break-inside:avoid;}
+.gotov-zaglavlje{display:flex;gap:14px;align-items:flex-start;margin-bottom:11px;flex-wrap:wrap;}
+.gotov-slika{width:170px;height:130px;object-fit:cover;border-radius:8px;flex-shrink:0;}
+.gotov-tekst{flex:1;min-width:170px;}
+.gotov-naziv{font-size:17px;font-weight:800;line-height:1.25;}
+.gotov-opis{font-size:12.5px;color:#6b7a8d;margin-top:4px;line-height:1.5;}
+.gotov-upit{font-size:12.5px;color:#b8860b;font-weight:700;margin-top:6px;}
+.gotov-tabela{width:100%;border-collapse:collapse;font-size:12.5px;}
+.gotov-tabela th{background:#1f3864;color:#fff;padding:5px 8px;text-align:left;font-weight:700;}
+.gotov-tabela td{padding:4px 8px;border-bottom:1px solid #eef0f3;}
+.gotov-tabela tr:nth-child(even) td{background:#f7f9fb;}
+.gotov-tabela .desno{text-align:right;}
+.gotov-mjere{font-size:12.5px;color:#6b7a8d;}
+@media print{ .gotov-proizvod{border-color:#ccc;} }
 </style>
 </head>
 <body>
@@ -212,18 +229,84 @@ function render(){
   document.getElementById('btn-mreza').classList.toggle('aktivan', prikaz==='mreza');
   document.getElementById('btn-lista').classList.toggle('aktivan', prikaz==='lista');
 
-  if(!podaci.stavke.length){
+  const gotovi = podaci.gotovi || [];
+  if(!podaci.stavke.length && !gotovi.length){
     document.getElementById('sadrzaj').innerHTML = '<div class="ucitavanje">Katalog je prazan.</div>';
     return;
   }
-  // Grupisanje po grupi proizvoda — kupcu je preglednije nego jedan dugačak spisak.
-  const poGrupama = {};
-  podaci.stavke.forEach(s => { (poGrupama[s.grupa||'Ostalo'] ||= []).push(s); });
 
-  document.getElementById('sadrzaj').innerHTML = Object.entries(poGrupama).map(([grupa, stavke]) => `
-    <div class="grupa-naslov">${esc(grupa)}</div>
-    <div class="${prikaz}">${stavke.map(s => prikaz==='mreza' ? kartica(s) : red(s)).join('')}</div>
-  `).join('');
+  /* GOTOVI PROIZVODI idu PRVI — to je ono sto kupac kupuje. Materijali su ono od cega
+     se pravi, pa dolaze ispod, kao dopuna. */
+  let html = '';
+  if(gotovi.length){
+    const poGrupi = {};
+    gotovi.forEach(p => { (poGrupi[p.grupa_naziv||'Gotovi proizvodi'] ||= []).push(p); });
+    html += Object.entries(poGrupi).map(([grupa, lista]) => `
+      <div class="grupa-naslov">${esc(grupa)}</div>
+      ${lista.map(gotovProizvod).join('')}
+    `).join('');
+  }
+
+  if(podaci.stavke.length){
+    const poGrupama = {};
+    podaci.stavke.forEach(s => { (poGrupama[s.grupa||'Ostalo'] ||= []).push(s); });
+    if(gotovi.length) html += '<div class="grupa-naslov" style="margin-top:26px;">Materijali</div>';
+    html += Object.entries(poGrupama).map(([grupa, stavke]) => `
+      <div class="grupa-naslov">${esc(grupa)}</div>
+      <div class="${prikaz}">${stavke.map(s => prikaz==='mreza' ? kartica(s) : red(s)).join('')}</div>
+    `).join('');
+  }
+
+  document.getElementById('sadrzaj').innerHTML = html;
+}
+
+/* Gotov proizvod: slika, naziv i TABELA svih kombinacija sa cijenama.
+   Kad katalog ide bez cijena, tabela prikazuje samo mjere. */
+function gotovProizvod(p){
+  const cijene = p.cijene || [];
+  const saCijenama = podaci.sa_cijenama && cijene.length;
+
+  // Kombinacije se slazu u tabelu: redovi = izbor, kolone = mjere
+  const mjere = [...new Set(cijene.map(x => x.dimenzija).filter(Boolean))];
+  const izbori = [...new Set(cijene.map(x => x.opis_izbora).filter(Boolean))];
+  const nadji = (iz, mj) => cijene.find(x => x.opis_izbora === iz && x.dimenzija === mj);
+
+  return `
+    <div class="gotov-proizvod">
+      <div class="gotov-zaglavlje">
+        ${p.slika_url
+          ? `<img class="gotov-slika" src="${esc(p.slika_url)}" loading="lazy" alt="${esc(p.naziv)}">`
+          : '<div class="nema-slike gotov-slika">🪑</div>'}
+        <div class="gotov-tekst">
+          <div class="gotov-naziv">${esc(p.naziv)}</div>
+          ${p.opis ? `<div class="gotov-opis">${esc(p.opis)}</div>` : ''}
+          ${p.na_upit ? '<div class="gotov-upit">Cijena na upit</div>' : ''}
+        </div>
+      </div>
+
+      ${saCijenama && izbori.length ? `
+        <table class="gotov-tabela">
+          <thead><tr>
+            <th>Izvedba</th>
+            ${mjere.map(m => `<th class="desno">${esc(m)}</th>`).join('')}
+          </tr></thead>
+          <tbody>${izbori.map(iz => `
+            <tr>
+              <td>${esc(iz)}</td>
+              ${mjere.map(m => {
+                const x = nadji(iz, m);
+                /* fm() vec dodaje "KM"; za EUR objekte se valuta ispisuje zasebno. */
+                if(!x) return '<td class="desno">—</td>';
+                const v = (x.valuta||'KM').toUpperCase();
+                const tekst = v === 'KM'
+                  ? fm(x.cijena)
+                  : (parseFloat(x.cijena)||0).toLocaleString('bs-BA',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ' + esc(v);
+                return `<td class="desno">${tekst}</td>`;
+              }).join('')}
+            </tr>`).join('')}</tbody>
+        </table>`
+      : (mjere.length ? `<div class="gotov-mjere">Dostupne mjere: ${mjere.map(esc).join(' · ')}</div>` : '')}
+    </div>`;
 }
 
 function slikaHtml(s, klasa){

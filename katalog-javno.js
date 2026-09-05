@@ -29,12 +29,48 @@ router.get('/:token', async (req, res) => {
 
     // Ako je poslato BEZ cijena, cijene se uklanjaju OVDJE (na serveru) — ne salju se
     // uopste, pa se ne mogu izvuci ni kroz alate pregledaca.
-    const stavke = kat.sa_cijenama
+    let stavke = kat.sa_cijenama
       ? podaci.stavke
       : podaci.stavke.map(({ cijena, cijena_bez_pdv, pdv_iznos, ...ostalo }) => ostalo);
+    // Katalog samo sa gotovim proizvodima ne salje materijale
+    if (kat.sta_ulazi === 'gotovi') stavke = [];
+
+    /* GOTOVI PROIZVODI — sastavnice sa zamrznutim cjenovnikom.
+       Cijene se NE racunaju ovdje uzivo: katalog mora pokazivati ono sto je bilo
+       snimljeno, inace bi se odstampana cijena razlikovala od one na ekranu.
+       Proizvod bez snimljenog cjenovnika prolazi — uz njega stoji "na upit". */
+    let gotovi = [];
+    if (kat.gotovi_proizvodi && Array.isArray(kat.gotovi_ids) && kat.gotovi_ids.length) {
+      const gp = await pool.query(
+        `SELECT p.id, p.naziv, p.naziv_en, p.naziv_it, p.opis, p.slika_url,
+                p.cjenovnik_kada, gp.naziv AS grupa_naziv, gp.oblik
+         FROM gotovi_proizvodi p
+         LEFT JOIN grupe_proizvoda gp ON gp.id = p.grupa_proizvoda_id
+         WHERE p.id = ANY($1::int[]) AND p.aktivan = true
+         ORDER BY gp.redosled NULLS LAST, gp.naziv NULLS LAST, p.naziv`,
+        [kat.gotovi_ids]
+      );
+
+      const cijene = kat.sa_cijenama
+        ? (await pool.query(
+            `SELECT gotov_id, opis_izbora, dimenzija, povrsina_m2, cijena, valuta
+             FROM gotov_cjenovnik WHERE gotov_id = ANY($1::int[])
+             ORDER BY dimenzija, opis_izbora`, [kat.gotovi_ids]
+          )).rows
+        : [];
+
+      gotovi = gp.rows.map(p => ({
+        ...p,
+        // Bez cijena se ne salju uopste — ne mogu se izvuci ni alatima pregledaca
+        cijene: kat.sa_cijenama ? cijene.filter(x => x.gotov_id === p.id) : [],
+        na_upit: kat.sa_cijenama && !cijene.some(x => x.gotov_id === p.id),
+      }));
+    }
 
     res.json({
       naslov: kat.naslov,
+      sta_ulazi: kat.sta_ulazi || 'materijali',
+      gotovi,
       kupac_naziv: kat.kupac_naziv,
       tip_naziv: kat.tip_naziv,
       prikaz: kat.prikaz,

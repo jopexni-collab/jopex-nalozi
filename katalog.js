@@ -140,13 +140,19 @@ router.post('/', smijeSlati, async (req, res) => {
     const token = crypto.randomBytes(16).toString('hex');
     const r = await pool.query(
       `INSERT INTO katalozi (javni_token, tip_kupca_id, tip_naziv, grupe, objekt_id,
-                             prikaz, sa_cijenama, naslov, kupac_naziv, kreirao_id, kreirao_ime, samo_dostupno, debljine, sifre)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id, javni_token`,
+                             prikaz, sa_cijenama, naslov, kupac_naziv, kreirao_id, kreirao_ime, samo_dostupno, debljine, sifre,
+                              gotovi_proizvodi, gotovi_ids, sta_ulazi)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id, javni_token`,
       [token, tip_kupca_id || null, tipNaziv, grupe, objekt_id || null,
        prikaz === 'lista' ? 'lista' : 'mreza', sa_cijenama !== false,
        naslov || null, kupac_naziv || null, u.id, u.ime_prezime, samo_dostupno === true,
        Array.isArray(debljine)&&debljine.length ? debljine.map(Number) : null,
-       Array.isArray(sifre)&&sifre.length ? sifre : null]
+       Array.isArray(sifre)&&sifre.length ? sifre : null,
+       /* Gotovi proizvodi: koji su izabrani i sta uopste ulazi u katalog */
+       req.body?.gotovi_proizvodi === true,
+       Array.isArray(req.body?.gotovi_ids) && req.body.gotovi_ids.length
+         ? req.body.gotovi_ids.map(x => parseInt(x)).filter(Boolean) : null,
+       ['materijali','gotovi','oba'].includes(req.body?.sta_ulazi) ? req.body.sta_ulazi : 'materijali']
     );
     res.status(201).json({ ok: true, token: r.rows[0].javni_token, id: r.rows[0].id });
   } catch (err) {

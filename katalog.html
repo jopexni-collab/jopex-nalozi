@@ -113,6 +113,42 @@ main{max-width:760px;margin:0 auto;padding:20px 16px 40px;}
     </div>
 
     <!-- 2. GRUPE PROIZVODA -->
+    <!-- Katalog moze prikazivati MATERIJALE (artikli iz lagera), GOTOVE PROIZVODE
+         (sastavnice sa cijenama) ili oboje. Gotov proizvod je ono sto kupac kupuje —
+         sto, klupica; materijal je ono od cega se pravi. -->
+    <div style="margin-bottom:14px;">
+      <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:5px;">Šta ulazi u katalog</label>
+      <div style="display:flex;gap:7px;flex-wrap:wrap;">
+        <button type="button" id="kat-sta-mat" onclick="katStaUlazi('materijali')"
+                style="flex:1;min-width:110px;padding:8px;border:1px solid var(--border,#ddd);background:var(--blue,#1a5fa8);color:#fff;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;">
+          📦 Materijali
+        </button>
+        <button type="button" id="kat-sta-got" onclick="katStaUlazi('gotovi')"
+                style="flex:1;min-width:110px;padding:8px;border:1px solid var(--border,#ddd);background:#fff;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;">
+          🪑 Gotovi proizvodi
+        </button>
+        <button type="button" id="kat-sta-oba" onclick="katStaUlazi('oba')"
+                style="flex:1;min-width:90px;padding:8px;border:1px solid var(--border,#ddd);background:#fff;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;">
+          Oboje
+        </button>
+      </div>
+    </div>
+
+    <!-- IZBOR GOTOVIH PROIZVODA -->
+    <div id="kat-gotovi-blok" style="display:none;margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;flex-wrap:wrap;gap:6px;">
+        <label style="font-size:12px;font-weight:700;color:#555;">Gotovi proizvodi</label>
+        <span>
+          <button type="button" onclick="katGotoviSve(true)" style="padding:3px 10px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;font-size:11px;">Sve</button>
+          <button type="button" onclick="katGotoviSve(false)" style="padding:3px 10px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;font-size:11px;">Ništa</button>
+        </span>
+      </div>
+      <input type="text" id="kat-gotovi-pretraga" placeholder="🔍 traži proizvod..." oninput="katGotoviFiltriraj()"
+             style="width:100%;font:inherit;font-size:12px;padding:6px 9px;border:1px solid #ddd;border-radius:6px;margin-bottom:6px;">
+      <div id="kat-gotovi" style="max-height:230px;overflow-y:auto;border:1px solid #ddd;border-radius:8px;padding:7px 9px;"></div>
+      <div id="kat-gotovi-info" style="font-size:11px;color:#8b96a5;margin-top:4px;"></div>
+    </div>
+
     <div style="margin-bottom:14px;">
       <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:5px;">2. Grupe proizvoda</label>
       <input type="text" id="kat-grupe-pretraga" placeholder="🔍 Traži po grupi, nazivu artikla ili šifri..." oninput="katFiltrirajGrupe()" style="width:100%;padding:6px 9px;border:1px solid #ddd;border-radius:6px;font-size:12px;margin-bottom:6px;box-sizing:border-box;">
@@ -563,6 +599,10 @@ async function katNapravi(){
         tip_kupca_id: tipId ? parseInt(tipId) : null,
         grupe, objekt_id: katObjektId, prikaz: katPrikaz,
         sa_cijenama: saCijenama,
+        /* Sta ulazi u katalog i koji gotovi proizvodi su izabrani */
+        sta_ulazi: katSta,
+        gotovi_proizvodi: (katSta === 'gotovi' || katSta === 'oba'),
+        gotovi_ids: [...katIzabraniGotovi],
         samo_dostupno: document.getElementById('kat-samo-dostupno').checked,
         debljine: katIzabraneDebljine(),
         sifre: katUpisaneSifre(),
@@ -666,6 +706,140 @@ document.getElementById('logout').onclick=async e=>{
   await fetch(API+'/api/auth/logout',{method:'POST'});
   location.href='login.html';
 };
+
+/* ═══ GOTOVI PROIZVODI U KATALOGU ══════════════════════════════════════════════════
+   Katalog moze prikazivati materijale (artikli), gotove proizvode (sastavnice) ili
+   oboje. Kvadratic na GRUPI ukljucuje sve njene proizvode, na proizvodu pojedinacno. */
+let katSta = 'materijali';
+let katGotoviPodaci = [];
+const katIzabraniGotovi = new Set();
+
+function katStaUlazi(sta){
+  katSta = sta;
+  const akt = 'background:var(--blue,#1a5fa8);color:#fff;', mir = 'background:#fff;color:inherit;';
+  const st = 'flex:1;min-width:90px;padding:8px;border:1px solid var(--border,#ddd);border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;';
+  document.getElementById('kat-sta-mat').style.cssText = st + (sta==='materijali'?akt:mir);
+  document.getElementById('kat-sta-got').style.cssText = st + (sta==='gotovi'?akt:mir);
+  document.getElementById('kat-sta-oba').style.cssText = st + (sta==='oba'?akt:mir);
+
+  // Materijali i gotovi imaju svoje izbore — prikazuje se samo ono sto je u igri
+  const gotovi = (sta === 'gotovi' || sta === 'oba');
+  const materijali = (sta === 'materijali' || sta === 'oba');
+  document.getElementById('kat-gotovi-blok').style.display = gotovi ? 'block' : 'none';
+  const grupeBlok = document.getElementById('kat-grupe')?.closest('div[style*="margin-bottom"]');
+  if(grupeBlok) grupeBlok.style.display = materijali ? 'block' : 'none';
+  const filteri = document.getElementById('kat-filteri-blok');
+  if(filteri) filteri.style.display = materijali ? 'block' : 'none';
+
+  if(gotovi && !katGotoviPodaci.length) katUcitajGotove();
+}
+
+async function katUcitajGotove(){
+  const cont = document.getElementById('kat-gotovi');
+  cont.innerHTML = '<div style="padding:12px;text-align:center;color:#8b96a5;font-size:12px;">Učitavanje...</div>';
+  try{
+    const [rg, rp] = await Promise.all([
+      fetch(`${API}/api/gotovi-proizvodi/grupe`),
+      fetch(`${API}/api/gotovi-proizvodi`),
+    ]);
+    if(!rg.ok || !rp.ok) throw new Error('Ne mogu učitati gotove proizvode.');
+    const grupe = await rg.json();
+    const proizvodi = await rp.json();
+
+    katGotoviPodaci = grupe.map(g => ({
+      ...g,
+      proizvodi: proizvodi.filter(p => p.grupa_proizvoda_id === g.id),
+    }));
+    // Proizvodi bez grupe idu u svoju sekciju, da ne ispadnu iz izbora
+    const bezGrupe = proizvodi.filter(p => !p.grupa_proizvoda_id);
+    if(bezGrupe.length) katGotoviPodaci.push({ id:0, naziv:'Bez grupe', proizvodi: bezGrupe });
+
+    katGotoviRender();
+  }catch(e){
+    cont.innerHTML = `<div style="padding:12px;color:var(--red,#c0392b);font-size:12px;">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+function katGotoviRender(){
+  const cont = document.getElementById('kat-gotovi');
+  if(!katGotoviPodaci.length || !katGotoviPodaci.some(g=>g.proizvodi.length)){
+    cont.innerHTML = '<div style="padding:14px;text-align:center;color:#8b96a5;font-size:12px;line-height:1.6;">Nema gotovih proizvoda.<br><span style="font-size:11px;">Napravi ih u <b>Roba i magacini → Gotovi proizvodi</b>.</span></div>';
+    return;
+  }
+  const saCijenama = document.getElementById('kat-cijene')?.checked;
+
+  cont.innerHTML = katGotoviPodaci.filter(g=>g.proizvodi.length).map(g=>{
+    const sviIzabrani = g.proizvodi.every(p=>katIzabraniGotovi.has(p.id));
+    const nekiIzabrani = g.proizvodi.some(p=>katIzabraniGotovi.has(p.id));
+    return `
+    <div class="kat-g-grupa" data-tekst="${esc(g.naziv).toLowerCase()}" style="margin-bottom:7px;">
+      <label style="display:flex;align-items:center;gap:7px;padding:3px 4px;font-size:12.5px;cursor:pointer;font-weight:700;">
+        <input type="checkbox" ${sviIzabrani?'checked':''} ${!sviIzabrani&&nekiIzabrani?'data-djelimicno="1"':''}
+               onchange="katGrupaGotovih(${g.id},this.checked)">
+        <span style="flex:1;">📂 ${esc(g.naziv)}</span>
+        <span style="font-size:10px;color:#8b96a5;font-weight:400;">${g.proizvodi.length}</span>
+      </label>
+      ${g.proizvodi.map(p=>{
+        /* Proizvod bez snimljenog cjenovnika se i dalje MOZE izabrati — u katalogu ce
+           stajati "na upit" umjesto cijene. Zabrana bi bila stroza nego sto treba. */
+        const bezCijena = !p.cjenovnik_kada;
+        return `
+        <label class="kat-g-red" data-tekst="${esc(p.naziv).toLowerCase()}"
+               style="display:flex;align-items:center;gap:7px;padding:2px 4px 2px 22px;font-size:12px;cursor:pointer;">
+          <input type="checkbox" value="${p.id}" ${katIzabraniGotovi.has(p.id)?'checked':''}
+                 onchange="katProizvodGotovih(${p.id},this.checked)">
+          <span style="flex:1;">${esc(p.naziv)}</span>
+          ${saCijenama && bezCijena
+            ? '<span style="font-size:9.5px;color:var(--orange,#b8860b);" title="Nema snimljen cjenovnik — u katalogu će stajati „na upit"">⚠ bez cijena</span>'
+            : ''}
+          ${!p.slika_url ? '<span style="font-size:9.5px;color:#c3c9d1;" title="Nema sliku gotovog proizvoda">🖼</span>' : ''}
+        </label>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+
+  const uk = katIzabraniGotovi.size;
+  document.getElementById('kat-gotovi-info').textContent =
+    uk ? `Izabrano ${uk} ${uk===1?'proizvod':'proizvoda'}` : 'Nijedan proizvod nije izabran.';
+}
+
+function katGrupaGotovih(gid, ukljuci){
+  const g = katGotoviPodaci.find(x=>x.id===gid);
+  if(!g) return;
+  for(const p of g.proizvodi){
+    if(ukljuci) katIzabraniGotovi.add(p.id); else katIzabraniGotovi.delete(p.id);
+  }
+  katGotoviRender();
+}
+
+function katProizvodGotovih(pid, ukljuci){
+  if(ukljuci) katIzabraniGotovi.add(pid); else katIzabraniGotovi.delete(pid);
+  katGotoviRender();
+}
+
+function katGotoviSve(ukljuci){
+  // Dira samo VIDLJIVO poslije pretrage — kao ostali filteri u sistemu
+  document.querySelectorAll('#kat-gotovi .kat-g-red').forEach(r=>{
+    if(r.style.display === 'none') return;
+    const id = parseInt(r.querySelector('input').value);
+    if(ukljuci) katIzabraniGotovi.add(id); else katIzabraniGotovi.delete(id);
+  });
+  katGotoviRender();
+}
+
+function katGotoviFiltriraj(){
+  const q = (document.getElementById('kat-gotovi-pretraga').value||'').toLowerCase().trim();
+  document.querySelectorAll('#kat-gotovi .kat-g-grupa').forEach(g=>{
+    let vidljivih = 0;
+    g.querySelectorAll('.kat-g-red').forEach(r=>{
+      const ok = !q || r.dataset.tekst.includes(q) || g.dataset.tekst.includes(q);
+      r.style.display = ok ? 'flex' : 'none';
+      if(ok) vidljivih++;
+    });
+    g.style.display = vidljivih ? 'block' : 'none';
+  });
+}
+
 </script>
 </body>
 </html>
