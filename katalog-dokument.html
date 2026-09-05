@@ -232,14 +232,20 @@ async function ucitaj(){
     if(d.kupac_naziv) dijelovi.push(`Za: <b>${esc(d.kupac_naziv)}</b>`);
     if(d.sa_cijenama && d.tip_naziv) dijelovi.push(`Cijene: ${esc(d.tip_naziv)}${d.sa_pdv?` (sa PDV ${d.pdv_stopa}%)`:' (bez PDV-a)'}`);
     document.getElementById('podnaslov').innerHTML = dijelovi.join(' · ');
-    document.getElementById('traka-info').textContent = d.sa_cijenama ? 'Cijene u KM' : '';
+    document.getElementById('traka-info').textContent =
+      d.sa_cijenama ? `${T('cijena')}: ${(d.valuta||'KM')}` : '';
     if(d.kreirao_ime){
       const datum = new Date(d.kreirano);
       document.getElementById('info-posiljaoca').textContent =
         `Pripremio: ${d.kreirao_ime} · ${String(datum.getDate()).padStart(2,'0')}.${String(datum.getMonth()+1).padStart(2,'0')}.${datum.getFullYear()}.`;
     }
     render();
-  }catch(e){ prikaziGresku('Greška pri učitavanju kataloga.'); }
+  }catch(e){
+    /* Prava poruka umjesto opste — bez nje se ne zna da li je pukla mreza, server
+       ili sam prikaz, pa "Učitavanje..." ostaje zauvijek. */
+    console.error('katalog:', e);
+    prikaziGresku('Greška pri učitavanju: ' + (e && e.message ? e.message : e));
+  }
 }
 
 function prikaziGresku(poruka){
