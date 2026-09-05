@@ -5166,50 +5166,60 @@ function gprRenderDetalj(el, g){
       <button onclick="gprDodajStavku(${g.id})" style="padding:6px 13px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:5px;font-weight:700;cursor:pointer;font-size:12px;">+ Dodaj</button>
     </div>
 
-    <div style="font-size:12px;font-weight:800;margin:14px 0 7px;">Dimenzije</div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-      ${(g.dimenzije||[]).map(d=>`
-        <span style="background:#eef4fc;border:1px solid #b8d4f0;border-radius:6px;padding:3px 9px;font-size:11.5px;font-weight:700;display:inline-flex;align-items:center;gap:5px;">
-          <span style="font-size:10.5px;color:#6b7a8d;font-weight:400;">${esc(GPR_OBLICI[d.oblik]?.lbl || d.oblik || '')}</span>
-          ${gprOpisDim(d)}
-          ${/* Moguci oblici se VIDE na samoj dimenziji i mogu se mijenjati kasnije.
-                Ranije su se postavljali samo pri dodavanju, pa se nije znalo jesu li
-                uopste zapisani. */''}
-          <button onclick="gprObrisiDim(${d.id},${g.id})" title="Obriši mjeru"
-                  style="background:none;border:none;cursor:pointer;color:var(--red,#c0392b);font-size:11px;padding:0;">✕</button>
-        </span>`).join('')}
-      <!-- Okrugli sto ima povrsinu πr² — racunanje kao pravougaonog dalo bi skoro
-           30% vise, pa oblik mora biti izbor, ne pretpostavka. -->
-      <!-- Oblici preuzeti iz modula Ponude — isti jezik u ponudi, nalogu i sastavnici.
-           Polja se mijenjaju prema izabranom obliku (L trazi 4 mjere, U trazi 6). -->
-      <select id="gpr-dim-o-${g.id}" onchange="gprOblikPromjena(${g.id})" style="font:inherit;font-size:11.5px;padding:4px 7px;border:1px solid #ccc;border-radius:5px;">
-        <optgroup label="Stolovi">
-          <option value="PRAV">▭ Pravougaoni</option>
-          <option value="KVAD">◻ Kvadratni</option>
-          <option value="KRUG">◯ Okrugli</option>
-          <option value="OVAL">⬭ Ovalni</option>
-          <option value="BACVA">▢ Bačvasti</option>
-          <option value="ZAOB">▭ Zaobljeni uglovi</option>
-        </optgroup>
-        <optgroup label="Ploče i radne površine">
-          <option value="I">▭ Pravougli</option>
-          <option value="L">⌐ L oblik</option>
-          <option value="U">∪ U oblik</option>
-          <option value="V">∨ V oblik</option>
-          <option value="N">◺ Nepravilan</option>
-          <option value="G">⊐ G oblik</option>
-        </optgroup>
-      </select>
-      <span id="gpr-dim-polja-${g.id}" style="display:inline-flex;gap:5px;align-items:center;flex-wrap:nowrap;white-space:nowrap;"></span>
-      <button onclick="gprDodajDim(${g.id})" style="padding:4px 11px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:5px;font-weight:700;cursor:pointer;font-size:11.5px;">+ Dodaj mjeru</button>
-      <span id="gpr-dim-poruka-${g.id}" style="font-size:11px;color:#8b96a5;"></span>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 7px;flex-wrap:wrap;gap:8px;">
+      <span style="font-size:12px;font-weight:800;">Dimenzije</span>
+      <button onclick="gprPrekidacDodavanja(${g.id})" id="gpr-dim-dugme-${g.id}"
+              style="font:inherit;font-size:11.5px;padding:5px 13px;border:1px solid var(--green,#1f8a4c);background:#fff;color:var(--green,#1f8a4c);border-radius:6px;cursor:pointer;font-weight:700;">
+        + Nova mjera
+      </button>
     </div>
-    <div id="gpr-dim-moguci-${g.id}" style="margin-top:5px;padding-left:2px;"></div>
 
-    <!-- Moguci oblici stoje ODMAH ISPOD mjera, jer se na njih odnose. Vaze za cijeli
-         proizvod — ista sastavnica ne moze nositi jedan oblik u jednoj mjeri, a drugi
-         u drugoj. Nude se samo oblici sa ISTIM mjerama: uz pravougaoni nema okruglog,
-         jer bi trazio precnik. -->
+    ${/* Postojece mjere: oblik, mjera i brisanje. Obrazac za unos je SAKRIVEN dok se
+          ne klikne "+ Nova mjera" — inace se njegov izbor oblika mijesao sa izborom
+          "isti sto, drugi izgled" ispod, pa je izgledalo kao dva ista podesavanja. */''}
+    ${(g.dimenzije||[]).length ? `
+      <div style="border:1px solid var(--border,#ddd);border-radius:8px;overflow:hidden;">
+        ${(g.dimenzije||[]).map((d,i)=>`
+          <div style="display:flex;align-items:center;gap:9px;padding:5px 10px;font-size:12px;background:${i%2?'#f7f9fb':'#fff'};border-bottom:1px solid #eef0f3;">
+            <span style="font-size:10.5px;color:#6b7a8d;min-width:74px;">${esc(GPR_OBLICI[d.oblik]?.lbl || d.oblik || '')}</span>
+            <b style="flex:1;">${gprOpisDim(d)}</b>
+            <button onclick="gprObrisiDim(${d.id},${g.id})" title="Obriši mjeru"
+                    style="background:none;border:none;cursor:pointer;color:#c3c9d1;font-size:12px;"
+                    onmouseover="this.style.color='var(--red,#c0392b)'" onmouseout="this.style.color='#c3c9d1'">🗑</button>
+          </div>`).join('')}
+      </div>`
+      : '<div style="padding:11px;text-align:center;color:#8b96a5;font-size:11.5px;border:1px dashed var(--border,#ddd);border-radius:8px;">Nema nijedne mjere — klikni „+ Nova mjera".</div>'}
+
+    <!-- OBRAZAC ZA UNOS — sakriven dok se ne zatrazi -->
+    <div id="gpr-dim-obrazac-${g.id}" style="display:none;margin-top:9px;padding:10px 12px;background:#f7f8fa;border:1px solid var(--border,#ddd);border-radius:8px;">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <select id="gpr-dim-o-${g.id}" onchange="gprOblikPromjena(${g.id})" style="font:inherit;font-size:12px;padding:5px 9px;border:1px solid #ccc;border-radius:5px;">
+          <optgroup label="Stolovi">
+            <option value="PRAV">▭ Pravougaoni</option>
+            <option value="KVAD">◻ Kvadratni</option>
+            <option value="KRUG">◯ Okrugli</option>
+            <option value="OVAL">⬭ Ovalni</option>
+            <option value="BACVA">▢ Bačvasti</option>
+            <option value="ZAOB">▭ Zaobljeni uglovi</option>
+          </optgroup>
+          <optgroup label="Ploče i radne površine">
+            <option value="I">▭ Pravougli</option>
+            <option value="L">⌐ L oblik</option>
+            <option value="U">∪ U oblik</option>
+            <option value="V">∨ V oblik</option>
+            <option value="N">◺ Nepravilan</option>
+            <option value="G">⊐ G oblik</option>
+          </optgroup>
+        </select>
+        <span id="gpr-dim-polja-${g.id}" style="display:inline-flex;gap:5px;align-items:center;flex-wrap:nowrap;white-space:nowrap;"></span>
+        <button onclick="gprDodajDim(${g.id})" style="padding:5px 13px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:5px;font-weight:700;cursor:pointer;font-size:11.5px;">✓ Dodaj</button>
+        <button onclick="gprPrekidacDodavanja(${g.id})" style="padding:5px 11px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;font-size:11.5px;">Odustani</button>
+        <span id="gpr-dim-poruka-${g.id}" style="font-size:11px;color:#8b96a5;"></span>
+      </div>
+      <div id="gpr-dim-moguci-${g.id}" style="margin-top:6px;"></div>
+    </div>
+
+    <!-- Isti sto, drugi izgled — vazi za SVE mjere ovog proizvoda -->
     <div style="margin-top:9px;padding:8px 11px;background:#faf9fc;border:1px solid #e0d8ee;border-radius:8px;">
       <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
         <span style="font-size:11.5px;color:#6b4fa0;font-weight:700;">Isti sto, drugi izgled:</span>
@@ -5221,7 +5231,7 @@ function gprRenderDetalj(el, g){
       </div>
       <div style="font-size:10px;color:#8b96a5;margin-top:5px;line-height:1.45;">
         Iste mjere, druga izvedba — u katalogu stoje kao mogućnost uz istu cijenu.
-        Okrugli sto traži prečnik, pa se dodaje kao <b>zasebna mjera</b>, ne ovdje.
+        Okrugli sto traži prečnik, pa se dodaje kao <b>zasebna mjera</b> gore.
       </div>
     </div>
 
@@ -5891,6 +5901,20 @@ const GPR_KRUZNI = ['KRUG'];
 const GPR_STOLOVI = ['PRAV','KVAD','OVAL','BACVA','ZAOB'];
 const GPR_PRAVOUGAONI = ['PRAV','KVAD','OVAL','BACVA','ZAOB','I','L','U','V','N','G'];
 
+
+/* Obrazac za unos mjere je sakriven dok se ne zatrazi — inace se njegov izbor oblika
+   mijesao sa izborom "isti sto, drugi izgled" ispod, pa je izgledalo kao dva ista
+   podesavanja jedno ispod drugog. */
+function gprPrekidacDodavanja(gid){
+  const ob = document.getElementById('gpr-dim-obrazac-'+gid);
+  const dug = document.getElementById('gpr-dim-dugme-'+gid);
+  if(!ob) return;
+  const otvoren = ob.style.display !== 'none';
+  ob.style.display = otvoren ? 'none' : 'block';
+  if(dug) dug.textContent = otvoren ? '+ Nova mjera' : '✕ Zatvori';
+  if(!otvoren) setTimeout(()=>gprOblikPromjena(gid), 20);
+}
+
 function gprOblikPromjena(gid){
   const cont = document.getElementById('gpr-dim-polja-'+gid);
   if(!cont) return;
@@ -5980,6 +6004,10 @@ async function gprDodajDim(gid){
     const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
     if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
     if(poruka){ poruka.textContent = '✓ Dimenzija dodata'; poruka.style.color = 'var(--green,#1f8a4c)'; }
+    const ob = document.getElementById('gpr-dim-obrazac-'+gid);
+    const dug = document.getElementById('gpr-dim-dugme-'+gid);
+    if(ob) ob.style.display = 'none';
+    if(dug) dug.textContent = '+ Nova mjera';
     if(window.__gprPodaci) delete window.__gprPodaci[gid];
     gprOznaciZastarjelim(gid);   // nova mjera = nova cijena, cjenovnik treba azurirati
     /* Ciste se DINAMICKA polja (gpr-dm-{gid}-{A,B,D,R}). Ranije su se cistila stara
