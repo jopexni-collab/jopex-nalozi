@@ -784,6 +784,37 @@ router.post('/:id/dimenzije', async (req, res) => {
   }
 });
 
+/* PATCH /dimenzija/:did — izmjena postojece dimenzije, prije svega mogucih oblika.
+   Bez ovoga su se moguci oblici mogli postaviti samo pri dodavanju, pa se poslije
+   nisu vidjeli ni mijenjali. */
+router.patch('/dimenzija/:did', async (req, res) => {
+  if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
+  const sets = [], vals = [];
+  let i = 1;
+
+  if ('moguci_oblici' in req.body) {
+    const d = await pool.query('SELECT oblik FROM gotov_dimenzije WHERE id=$1', [req.params.did]);
+    if (!d.rows.length) return res.status(404).json({ error: 'Dimenzija nije pronađena.' });
+    const osnovni = d.rows[0].oblik || 'PRAV';
+    const jeKruzni = KRUZNI.includes(osnovni);
+    const dozvoljeni = jeKruzni ? KRUZNI : STOLOVI.includes(osnovni) ? STOLOVI : PRAVOUGAONI;
+    const m = Array.isArray(req.body.moguci_oblici)
+      ? req.body.moguci_oblici.filter(o => OBLICI[o] && o !== osnovni && dozvoljeni.includes(o))
+      : [];
+    sets.push(`moguci_oblici=$${i++}`); vals.push(m.length ? m : null);
+  }
+  if ('naziv' in req.body) { sets.push(`naziv=$${i++}`); vals.push(req.body.naziv || null); }
+
+  if (!sets.length) return res.status(400).json({ error: 'Nema polja za izmjenu.' });
+  vals.push(req.params.did);
+  try {
+    const r = await pool.query(
+      `UPDATE gotov_dimenzije SET ${sets.join(',')} WHERE id=$${i} RETURNING *`, vals);
+    if (!r.rows.length) return res.status(404).json({ error: 'Dimenzija nije pronađena.' });
+    res.json(r.rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.delete('/dimenzija/:did', async (req, res) => {
   if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
   try {
