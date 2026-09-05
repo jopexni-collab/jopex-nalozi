@@ -29,17 +29,6 @@ router.get('/:token', async (req, res) => {
 
     // Ako je poslato BEZ cijena, cijene se uklanjaju OVDJE (na serveru) — ne salju se
     // uopste, pa se ne mogu izvuci ni kroz alate pregledaca.
-    let stavke = kat.sa_cijenama
-      ? podaci.stavke
-      : podaci.stavke.map(({ cijena, cijena_bez_pdv, pdv_iznos, ...ostalo }) => ostalo);
-    // Katalog samo sa gotovim proizvodima ne salje materijale
-    if (kat.sta_ulazi === 'gotovi') stavke = [];
-    else if (jezik !== 'bs') stavke = stavke.map(s => ({ ...s, grupa: pr(s.grupa) }));
-
-    /* GOTOVI PROIZVODI — sastavnice sa zamrznutim cjenovnikom.
-       Cijene se NE racunaju ovdje uzivo: katalog mora pokazivati ono sto je bilo
-       snimljeno, inace bi se odstampana cijena razlikovala od one na ekranu.
-       Proizvod bez snimljenog cjenovnika prolazi — uz njega stoji "na upit". */
     /* Rjecnik prijevoda — baza i unos ostaju na nasem jeziku, prijevod se trazi tek
        ovdje. Sto nije prevedeno ostaje kako jeste, pa katalog nikad nije prazan. */
     const jezik = kat.jezik || 'bs';
@@ -52,6 +41,17 @@ router.get('/:token', async (req, res) => {
     }
     const pr = t => (t && prijevodi[String(t).toLowerCase()]) || t;
 
+    let stavke = kat.sa_cijenama
+      ? podaci.stavke
+      : podaci.stavke.map(({ cijena, cijena_bez_pdv, pdv_iznos, ...ostalo }) => ostalo);
+    // Katalog samo sa gotovim proizvodima ne salje materijale
+    if (kat.sta_ulazi === 'gotovi') stavke = [];
+    else if (jezik !== 'bs') stavke = stavke.map(s => ({ ...s, grupa: pr(s.grupa) }));
+
+    /* GOTOVI PROIZVODI — sastavnice sa zamrznutim cjenovnikom.
+       Cijene se NE racunaju ovdje uzivo: katalog mora pokazivati ono sto je bilo
+       snimljeno, inace bi se odstampana cijena razlikovala od one na ekranu.
+       Proizvod bez snimljenog cjenovnika prolazi — uz njega stoji "na upit". */
     let gotovi = [];
     if (kat.gotovi_proizvodi && Array.isArray(kat.gotovi_ids) && kat.gotovi_ids.length) {
       const gp = await pool.query(
