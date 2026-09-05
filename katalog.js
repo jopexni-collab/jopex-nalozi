@@ -162,7 +162,11 @@ router.post('/', smijeSlati, async (req, res) => {
        /* Gotovi proizvodi: koji su izabrani i sta uopste ulazi u katalog */
        staUlazi === 'gotovi' || staUlazi === 'oba',
        izabraniGotovi.length ? izabraniGotovi : null,
-       staUlazi]
+       staUlazi,
+       /* Jezik i valuta kataloga — prevod i preracun rade se u prikazu, ovdje se
+          samo pamti sta je izabrano. */
+       ['bs','en','it','de','fr'].includes(req.body?.jezik) ? req.body.jezik : 'bs',
+       ['KM','EUR'].includes(req.body?.valuta) ? req.body.valuta : 'KM']
     );
     res.status(201).json({ ok: true, token: r.rows[0].javni_token, id: r.rows[0].id });
   } catch (err) {
