@@ -4915,29 +4915,31 @@ async function gprPrikaziCjenovnik(pid){
    "Sacuvaj" i poruku — ranije se nije znalo je li ista zapisano. */
 let gudDimId = null, gudGid = null;
 
-function gprUrediDim(did, gid){
-  const g = window.__gprPodaciDetalj?.[gid];
-  const d = (g?.dimenzije || []).find(x => x.id === did);
-  if(!d) return;
-  gudDimId = did; gudGid = gid;
+function gprUrediOblike(pid){
+  const g = window.__gprPodaciDetalj?.[pid];
+  if(!g) return;
+  gudDimId = pid;   // sad je to proizvod, ne mjera
+  gudGid = pid;
 
-  document.getElementById('gud-mjera').textContent =
-    `${GPR_OBLICI[d.oblik]?.lbl || d.oblik} · ${gprOpisDim(d)}`;
+  document.getElementById('gud-mjera').textContent = g.naziv || '';
   document.getElementById('gud-poruka').textContent = '';
 
-  const jeKruzni = GPR_KRUZNI.includes(d.oblik);
+  /* Nudi se ista vrsta kao osnovni oblik grupe. Ako grupa nema oblik, nude se svi
+     oblici stolova. */
+  const osnovni = g.grupa_oblik || 'PRAV';
+  const jeKruzni = GPR_KRUZNI.includes(osnovni);
+  /* SAMO ista vrsta mjera. Okrugli trazi precnik, pravougaoni duzinu i sirinu —
+     mijesanje bi znacilo da cijena vazi za nesto sto se ne moze izmjeriti istim brojem. */
   const izvor = jeKruzni ? GPR_KRUZNI
-              : GPR_STOLOVI.includes(d.oblik) ? GPR_STOLOVI : GPR_PRAVOUGAONI;
-  const ostali = izvor.filter(o => o !== d.oblik && GPR_OBLICI[o]);
-  const trenutni = d.moguci_oblici || [];
+              : GPR_STOLOVI.includes(osnovni) ? GPR_STOLOVI
+              : GPR_PRAVOUGAONI;
+  const trenutni = g.moguci_oblici || [];
 
-  document.getElementById('gud-izbor').innerHTML = ostali.length
-    ? ostali.map(o=>`
-      <label style="display:flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid ${trenutni.includes(o)?'#6b4fa0':'var(--border,#ddd)'};border-radius:7px;cursor:pointer;font-size:12px;">
-        <input type="checkbox" value="${o}" ${trenutni.includes(o)?'checked':''}>
-        ${esc(GPR_OBLICI[o].lbl)}
-      </label>`).join('')
-    : '<div style="color:#8b96a5;font-size:12px;">Za ovaj oblik nema alternative sa istim mjerama.</div>';
+  document.getElementById('gud-izbor').innerHTML = izvor.filter(o=>GPR_OBLICI[o]).map(o=>`
+    <label style="display:flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid ${trenutni.includes(o)?'#6b4fa0':'var(--border,#ddd)'};border-radius:7px;cursor:pointer;font-size:12px;">
+      <input type="checkbox" value="${o}" ${trenutni.includes(o)?'checked':''}>
+      ${esc(GPR_OBLICI[o].lbl)}
+    </label>`).join('');
 
   document.getElementById('modal-gpr-dim').style.display = 'flex';
 }
@@ -4947,7 +4949,7 @@ async function gprSacuvajDim(){
   const poruka = document.getElementById('gud-poruka');
   poruka.textContent = 'Čuvam...'; poruka.style.color = '#8b96a5';
   try{
-    const r = await fetch(`${API}/api/gotovi-proizvodi/dimenzija/${gudDimId}`,{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${gudDimId}`,{
       method:'PATCH', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ moguci_oblici: izabrani }),
     });
@@ -5009,6 +5011,7 @@ function gprRenderDetalj(el, g){
         <div style="font-size:11px;color:#8b96a5;margin-top:4px;">
           ${g.grupa_naziv?`Grupa: <b>${esc(g.grupa_naziv)}</b> · oblik ${esc(GPR_OBLICI[g.grupa_oblik]?.lbl||g.grupa_oblik||'')}`:'<i>bez grupe proizvoda</i>'}
         </div>
+
 
         <div style="display:flex;gap:9px;flex-wrap:wrap;align-items:end;margin-top:9px;">
           <div>
@@ -5172,13 +5175,6 @@ function gprRenderDetalj(el, g){
           ${/* Moguci oblici se VIDE na samoj dimenziji i mogu se mijenjati kasnije.
                 Ranije su se postavljali samo pri dodavanju, pa se nije znalo jesu li
                 uopste zapisani. */''}
-          ${(d.moguci_oblici||[]).length
-            ? `<span title="Mogući i: ${(d.moguci_oblici||[]).map(o=>esc(GPR_OBLICI[o]?.lbl||o)).join(', ')}"
-                     style="font-size:10px;color:#6b4fa0;font-weight:700;background:#f3f0f8;padding:1px 5px;border-radius:4px;">
-                +${(d.moguci_oblici||[]).length}
-              </span>` : ''}
-          <button onclick="gprUrediDim(${d.id},${g.id})" title="Podesi moguće oblike"
-                  style="background:none;border:none;cursor:pointer;color:var(--blue,#1a5fa8);font-size:10px;padding:0;">✎</button>
           <button onclick="gprObrisiDim(${d.id},${g.id})" title="Obriši mjeru"
                   style="background:none;border:none;cursor:pointer;color:var(--red,#c0392b);font-size:11px;padding:0;">✕</button>
         </span>`).join('')}
@@ -5209,6 +5205,25 @@ function gprRenderDetalj(el, g){
       <span id="gpr-dim-poruka-${g.id}" style="font-size:11px;color:#8b96a5;"></span>
     </div>
     <div id="gpr-dim-moguci-${g.id}" style="margin-top:5px;padding-left:2px;"></div>
+
+    <!-- Moguci oblici stoje ODMAH ISPOD mjera, jer se na njih odnose. Vaze za cijeli
+         proizvod — ista sastavnica ne moze nositi jedan oblik u jednoj mjeri, a drugi
+         u drugoj. Nude se samo oblici sa ISTIM mjerama: uz pravougaoni nema okruglog,
+         jer bi trazio precnik. -->
+    <div style="margin-top:9px;padding:8px 11px;background:#faf9fc;border:1px solid #e0d8ee;border-radius:8px;">
+      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
+        <span style="font-size:11.5px;color:#6b4fa0;font-weight:700;">Isti sto, drugi izgled:</span>
+        ${(g.moguci_oblici||[]).length
+          ? (g.moguci_oblici||[]).map(o=>`<span style="font-size:10.5px;background:#fff;border:1px solid #d6cce8;color:#6b4fa0;padding:2px 9px;border-radius:5px;font-weight:700;">${esc(GPR_OBLICI[o]?.lbl||o)}</span>`).join('')
+          : '<span style="font-size:10.5px;color:#c3c9d1;">nijedan</span>'}
+        <button onclick="gprUrediOblike(${g.id})"
+                style="background:#fff;border:1px solid #6b4fa0;border-radius:5px;padding:3px 11px;cursor:pointer;color:#6b4fa0;font-size:10.5px;font-weight:700;">✎ Podesi</button>
+      </div>
+      <div style="font-size:10px;color:#8b96a5;margin-top:5px;line-height:1.45;">
+        Iste mjere, druga izvedba — u katalogu stoje kao mogućnost uz istu cijenu.
+        Okrugli sto traži prečnik, pa se dodaje kao <b>zasebna mjera</b>, ne ovdje.
+      </div>
+    </div>
 
     <div style="font-size:12px;font-weight:800;margin:14px 0 7px;">Cijene</div>
     <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:end;margin-bottom:9px;">
@@ -8154,13 +8169,13 @@ fetch(`${API}/api/auth/me`).then(r=>{
 <div id="modal-gpr-dim" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:925;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:12px;padding:17px;max-width:440px;width:94vw;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <h3 style="margin:0;font-size:15.5px;">✎ Mogući oblici</h3>
+      <h3 style="margin:0;font-size:15.5px;">✎ Mogući oblici proizvoda</h3>
       <button onclick="document.getElementById('modal-gpr-dim').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
     </div>
     <div id="gud-mjera" style="font-size:13px;font-weight:700;margin-bottom:10px;"></div>
     <div style="font-size:11.5px;color:#6b7a8d;line-height:1.5;margin-bottom:11px;">
-      Ista mjera, drugi izgled. Označeni oblici se u katalogu navode kao <b>mogućnost</b>,
-      uz istu cijenu.
+      Vrijedi za <b>sve mjere</b> ovog proizvoda. Označeni oblici se u katalogu navode
+      kao mogućnost, uz istu cijenu.
     </div>
     <div id="gud-izbor" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:7px;"></div>
     <div style="display:flex;gap:7px;align-items:center;margin-top:15px;">

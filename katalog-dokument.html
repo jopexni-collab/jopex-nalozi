@@ -167,6 +167,11 @@
 .gotov-kartica .oblik-mjera{font-size:8px;}
 
 .th-nap{display:block;font-size:9.5px;font-weight:400;opacity:.75;}
+
+.gotov-k-ikona{display:inline-flex;flex:0 0 auto;}
+.gotov-k-ikona .oblik-ikona{width:17px;height:17px;stroke:#8b96a5;}
+.th-ikona{display:inline-flex;vertical-align:middle;margin-right:4px;}
+.th-ikona .oblik-ikona{width:16px;height:16px;stroke:#fff;stroke-width:1.8;}
 </style>
 </head>
 <body>
@@ -357,8 +362,12 @@ function gotovKartica(p){
   const mjere = Object.keys(poMjeri);
   const viseIzvedbi = new Set(cijene.map(x=>x.opis_izbora)).size > 1;
 
-  const sviOblici = [...new Set((p.dimenzije||[])
-    .flatMap(d => [d.oblik, ...(d.moguci_oblici||[])]).filter(Boolean))];
+  /* Oblici dolaze sa PROIZVODA — vaze za sve njegove mjere. Uz njih idu i oblici
+     samih mjera, ako se razlikuju. */
+  const sviOblici = [...new Set([
+    ...(p.dimenzije||[]).map(d => d.oblik),
+    ...(p.moguci_oblici||[]),
+  ].filter(Boolean))];
 
   return `
     <div class="gotov-kartica">
@@ -373,14 +382,19 @@ function gotovKartica(p){
           p.na_upit || !mjere.length
             ? '<div class="gotov-k-upit">Cijena na upit</div>'
             : `<div class="gotov-k-cijene">
-                ${mjere.map(m=>`
+                ${/* Ikonica oblika ISPRED mjere — okrugli sto se odmah razlikuje od
+                      pravougaonog, bez citanja brojeva. */''}
+                ${mjere.map(m=>{
+                  const dim = (p.dimenzije||[]).find(x => opisDim(x) === m);
+                  return `
                   <div class="gotov-k-red">
+                    ${dim ? `<span class="gotov-k-ikona" title="${esc(oblikNaziv(dim.oblik))}">${oblikIkona(dim.oblik)}</span>` : ''}
                     <span class="gotov-k-mjera">${esc(m)}</span>
                     <span class="gotov-k-iznos">${fmv(poMjeri[m].cijena, val)}</span>
                   </div>
                   ${viseIzvedbi && poMjeri[m].izvedba
-                    ? `<div class="gotov-k-izvedba">${esc(poMjeri[m].izvedba)}</div>` : ''}
-                `).join('')}
+                    ? `<div class="gotov-k-izvedba">${esc(poMjeri[m].izvedba)}</div>` : ''}`;
+                }).join('')}
                </div>
                ${viseIzvedbi ? '<div class="gotov-k-nap">Cijena za navedenu izvedbu i mjeru.</div>' : ''}`
         ) : (mjere.length ? `<div class="gotov-k-mjere">${mjere.map(esc).join(' · ')}</div>` : '')}
@@ -471,7 +485,7 @@ function gotovProizvod(p){
               ${p.dimenzije.map(d=>`<span class="gotov-dim">${esc(opisDim(d))}</span>`).join('')}
             </div>
             <div class="gotov-oblici">
-              ${[...new Set(p.dimenzije.flatMap(d => [d.oblik, ...(d.moguci_oblici||[])]).filter(Boolean))]
+              ${[...new Set([...(p.dimenzije||[]).map(d=>d.oblik), ...(p.moguci_oblici||[])].filter(Boolean))]
                 .map(o=>`
                   <span class="oblik-stavka" title="${esc(oblikNaziv(o))}">
                     ${oblikIkona(o)}
@@ -495,7 +509,12 @@ function gotovProizvod(p){
         <table class="gotov-tabela">
           <thead><tr>
             <th>Izvedba</th>
-            ${mjere.map(m => `<th class="desno">${esc(m)}</th>`).join('')}
+            ${/* Ikonica oblika u zaglavlju kolone — okrugli i pravougaoni se razlikuju
+                  na prvi pogled, a brojevi ostaju citljivi. */''}
+            ${mjere.map(m => {
+              const dim = (p.dimenzije||[]).find(x => opisDim(x) === m);
+              return `<th class="desno">${dim ? `<span class="th-ikona">${oblikIkona(dim.oblik)}</span>` : ''}${esc(m)}</th>`;
+            }).join('')}
           </tr></thead>
           <tbody>${izbori.map(iz => `
             <tr>

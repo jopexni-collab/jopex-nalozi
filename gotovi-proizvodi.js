@@ -574,13 +574,21 @@ router.post('/', async (req, res) => {
 /* ── PATCH /:id ─────────────────────────────────────────────────────────────── */
 router.patch('/:id', async (req, res) => {
   if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
-  const DOZVOLJENA = ['naziv', 'naziv_en', 'naziv_it', 'grupa', 'opis', 'aktivan', 'zaokruzi_na', 'slika_url', 'slika_roba_id', 'grupa_proizvoda_id', 'spreman_za_katalog'];
+  const DOZVOLJENA = ['naziv', 'naziv_en', 'naziv_it', 'grupa', 'opis', 'aktivan', 'zaokruzi_na', 'slika_url', 'slika_roba_id', 'grupa_proizvoda_id', 'spreman_za_katalog', 'moguci_oblici'];
   const sets = [], vals = [];
   let i = 1;
   for (const k of DOZVOLJENA) {
     if (!(k in req.body)) continue;
+    let v = req.body[k];
+    if (k === 'zaokruzi_na') v = broj(v);
+    /* Moguci oblici vaze za CIJELI proizvod — ista sastavnica ne moze da nosi jedan
+       oblik u jednoj mjeri, a drugi u drugoj. Zato stoje ovdje, ne na mjeri. */
+    if (k === 'moguci_oblici') {
+      v = Array.isArray(v) ? v.filter(x => OBLICI[x]) : null;
+      if (v && !v.length) v = null;
+    }
     sets.push(`${k}=$${i++}`);
-    vals.push(k === 'zaokruzi_na' ? broj(req.body[k]) : req.body[k]);
+    vals.push(v);
   }
   if (!sets.length) return res.status(400).json({ error: 'Nema polja za izmjenu.' });
   vals.push(req.params.id);
