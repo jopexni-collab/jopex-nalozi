@@ -5183,13 +5183,21 @@ function gprRenderDetalj(el, g){
       </div>
 
       ${(g.dimenzije||[]).map((d,i)=>{
+        /* Cijena iz zadnjeg RACUNA ako postoji, inace SNIMLJENA iz cjenovnika — tako
+           se cijene vide i poslije ponovnog otvaranja, bez klika na "Izračunaj". */
         const cij = (window.__gprPodaci?.[g.id]?.cijene || [])
           .filter(x => String(x.dimenzija_id) === String(d.id));
-        const najniza = cij.length ? Math.min(...cij.map(x=>Number(x.cijena)||0)) : null;
+        const izRacuna = cij.length ? Math.min(...cij.map(x=>Number(x.cijena)||0)) : null;
+        const najniza = izRacuna != null ? izRacuna
+                      : (d.snimljena_cijena != null ? Number(d.snimljena_cijena) : null);
+        const svjeza = izRacuna != null;
         return `
         <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;font-size:12px;background:${i%2?'#f7f9fb':'#fff'};border-bottom:1px solid #eef0f3;">
           <b style="flex:1;">${gprOpisDim(d)}</b>
-          <span style="min-width:82px;text-align:right;font-weight:700;">${najniza!=null?fm(najniza):'<span style="color:#c3c9d1;font-weight:400;">—</span>'}</span>
+          <span style="min-width:82px;text-align:right;font-weight:700;${svjeza?'':'color:#6b7a8d;'}"
+                title="${najniza==null?'Klikni „▶ Izračunaj"':(svjeza?'Iz posljednjeg računa':'Iz snimljenog cjenovnika')}">
+            ${najniza!=null ? fm(najniza) : '<span style="color:#c3c9d1;font-weight:400;">—</span>'}
+          </span>
           <span style="min-width:62px;text-align:center;">
             <input type="checkbox" ${d.u_katalogu!==false?'checked':''} title="Prikazuje se u katalogu"
                    onchange="gprMjeraUKatalog(${d.id},${g.id},this.checked)" style="cursor:pointer;">

@@ -476,8 +476,23 @@ router.get('/:id', async (req, res) => {
        WHERE st.gotov_id = $1 ORDER BY COALESCE(sa.redni_broj, 99), st.redosled, st.id`,
       [req.params.id, objektId]
     );
+    /* Uz svaku mjeru ide i NAJNIZA SNIMLJENA cijena — tako se cijene vide i poslije
+       ponovnog otvaranja, bez pokretanja racuna. */
     const d = await pool.query(
-      'SELECT * FROM gotov_dimenzije WHERE gotov_id=$1 ORDER BY redosled, id',
+      `SELECT dm.*,
+              (SELECT MIN(c.cijena) FROM gotov_cjenovnik c
+               WHERE c.gotov_id = dm.gotov_id
+                 AND (c.dimenzija = dm.naziv
+                      OR c.dimenzija = CASE
+                           WHEN dm.mjere->>'precnik' IS NOT NULL
+                             THEN 'Ø' || round((dm.mjere->>'precnik')::numeric)
+                           ELSE round((dm.mjere->>'duzina')::numeric) || '×' || round((dm.mjere->>'sirina')::numeric)
+                         END
+                      OR c.dimenzija LIKE (round((dm.mjere->>'duzina')::numeric) || '×' || round((dm.mjere->>'sirina')::numeric) || '%'))
+              ) AS snimljena_cijena,
+              (SELECT c.valuta FROM gotov_cjenovnik c WHERE c.gotov_id = dm.gotov_id LIMIT 1) AS valuta
+       FROM gotov_dimenzije dm
+       WHERE dm.gotov_id=$1 ORDER BY dm.redosled, dm.id`,
       [req.params.id]
     );
     /* Sastojci grupe idu uz proizvod — prikaz iz njih crta sekcije, i one prazne. */
