@@ -1106,9 +1106,15 @@ router.get('/:id/cijena', async (req, res) => {
         /* MJERA PO KOMPONENTI: kod stepenica svaki dio ima svoju (gaziste 1200×330,
            celo 1200×160). Prazno polje znaci "uzmi iz proizvoda" — tako sto, gdje sve
            dijeli istu mjeru, radi bez ijednog dodatnog unosa. */
-        const vlastita = (st.sirina_kom != null || st.visina_kom != null);
+        /* PRVENSTVO: dimenzija proizvoda pobjeđuje. Mjera dijela je ZAMJENA samo kad
+           proizvod nema svoju mjeru — npr. kod stepenica, gdje gaziste i celo imaju
+           razlicite mjere unutar istog proizvoda.
+           Ranije je mjera dijela nadjacavala dimenziju, pa su sve mjere stola davale
+           istu povrsinu — a time i istu cijenu. */
+        const dimIma = m2 > 0;
+        const vlastita = !dimIma && (st.sirina_kom != null || st.visina_kom != null);
         const mv = vlastita
-          ? mjereOblika('I', { A: st.sirina_kom ?? dim?.sirina, B: st.visina_kom ?? dim?.visina })
+          ? mjereOblika('I', { A: st.sirina_kom, B: st.visina_kom })
           : { m2, m1 };
         const kol = st.tip_kolicine === 'povrsina' ? mv.m2 * mnozilac
                   : st.tip_kolicine === 'duzina'   ? mv.m1 * mnozilac
