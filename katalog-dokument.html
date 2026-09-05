@@ -211,6 +211,72 @@
 </div>
 
 <script>
+/* ═══ JEZICI ═══════════════════════════════════════════════════════════════════════
+   Katalog za inostranstvo. Nazivi proizvoda dolaze iz baze (naziv_en, naziv_it...),
+   a stalni tekst se prevodi ovdje. Ako prevoda nema, pada na osnovni jezik — bolje
+   nego prazno polje. */
+const PRIJEVODI = {
+  bs: { materijal:'Materijal', dostupno_i_u:'Dostupno i u:', na_upit:'cijena na upit',
+        cijena_na_upit:'Cijena na upit', izvedba:'Izvedba', postolje_ploca:'postolje + ploča',
+        cijena:'Cijena', mjera:'Mjera', dostupne_mjere:'Dostupne mjere:',
+        oblici:'Oblici stolova', materijali:'Materijali', gotovi:'Gotovi proizvodi',
+        uslov:'Cijena je za navedenu izvedbu i mjeru u zaglavlju kolone. Druga izvedba ili mjera mijenja cijenu.',
+        oblici_nap:'Dostupnost oblika zavisi od postolja — uz svaki proizvod stoji šta nosi.',
+        prazan:T('prazan') },
+  en: { materijal:'Material', dostupno_i_u:'Also available in:', na_upit:'price on request',
+        cijena_na_upit:'Price on request', izvedba:'Version', postolje_ploca:'base + top',
+        cijena:'Price', mjera:'Size', dostupne_mjere:'Available sizes:',
+        oblici:'Table shapes', materijali:'Materials', gotovi:'Finished products',
+        uslov:'Price applies to the version shown and the size in the column header. Other versions or sizes change the price.',
+        oblici_nap:'Shape availability depends on the base — each product shows what it supports.',
+        prazan:'The catalogue is empty.' },
+  it: { materijal:'Materiale', dostupno_i_u:'Disponibile anche in:', na_upit:'prezzo su richiesta',
+        cijena_na_upit:'Prezzo su richiesta', izvedba:'Versione', postolje_ploca:'base + piano',
+        cijena:'Prezzo', mjera:'Misura', dostupne_mjere:'Misure disponibili:',
+        oblici:'Forme dei tavoli', materijali:'Materiali', gotovi:'Prodotti finiti',
+        uslov:'Il prezzo vale per la versione indicata e la misura nell\'intestazione. Altre versioni o misure cambiano il prezzo.',
+        oblici_nap:'La disponibilità delle forme dipende dalla base — ogni prodotto indica cosa supporta.',
+        prazan:'Il catalogo è vuoto.' },
+  de: { materijal:'Material', dostupno_i_u:'Auch erhältlich in:', na_upit:'Preis auf Anfrage',
+        cijena_na_upit:'Preis auf Anfrage', izvedba:'Ausführung', postolje_ploca:'Gestell + Platte',
+        cijena:'Preis', mjera:'Maß', dostupne_mjere:'Verfügbare Maße:',
+        oblici:'Tischformen', materijali:'Materialien', gotovi:'Fertigprodukte',
+        uslov:'Der Preis gilt für die angegebene Ausführung und das Maß in der Spaltenüberschrift. Andere Ausführungen oder Maße ändern den Preis.',
+        oblici_nap:'Die Formauswahl hängt vom Gestell ab — bei jedem Produkt steht, was möglich ist.',
+        prazan:'Der Katalog ist leer.' },
+  fr: { materijal:'Matériau', dostupno_i_u:'Aussi disponible en :', na_upit:'prix sur demande',
+        cijena_na_upit:'Prix sur demande', izvedba:'Version', postolje_ploca:'piètement + plateau',
+        cijena:'Prix', mjera:'Dimension', dostupne_mjere:'Dimensions disponibles :',
+        oblici:'Formes de tables', materijali:'Matériaux', gotovi:'Produits finis',
+        uslov:'Le prix s\'applique à la version indiquée et à la dimension en tête de colonne. Une autre version ou dimension modifie le prix.',
+        oblici_nap:'Les formes disponibles dépendent du piètement — chaque produit indique ce qu\'il permet.',
+        prazan:'Le catalogue est vide.' },
+};
+
+function T(kljuc){
+  const j = podaci?.jezik || 'bs';
+  return (PRIJEVODI[j] && PRIJEVODI[j][kljuc]) || PRIJEVODI.bs[kljuc] || kljuc;
+}
+
+/* Naziv na izabranom jeziku; ako prevoda nema, ostaje osnovni. */
+function nazivJezik(o){
+  const j = podaci?.jezik || 'bs';
+  if(j === 'bs') return o.naziv;
+  return o['naziv_' + j] || o.naziv;
+}
+
+/* Preracun u valutu kataloga. Kurs EUR/KM je FIKSAN, pa je pretvaranje tacno. */
+const KURS_EUR = 1.95583;
+function uValutu(iznos, izVal){
+  const cilj = (podaci?.valuta || 'KM').toUpperCase();
+  const iz = (izVal || 'KM').toUpperCase();
+  let v = Number(iznos) || 0;
+  if(iz === cilj) return { v, val: cilj };
+  if(iz === 'KM' && cilj === 'EUR') return { v: v / KURS_EUR, val: 'EUR' };
+  if(iz === 'EUR' && cilj === 'KM') return { v: v * KURS_EUR, val: 'KM' };
+  return { v, val: iz };
+}
+
 const API = location.origin;
 let podaci = null, prikaz = 'mreza';
 
@@ -470,72 +536,6 @@ function fmv(v, valuta){
 /* Sitne 2D ikonice oblika — kupcu odmah kazu kako sto izgleda, a ne zauzimaju mjesto.
    Crtaju se kao SVG: uvijek ostre, i pri stampi i na ekranu. */
 /* Kratak naziv za ispod ikonice — pun ide u opis koji se vidi prelaskom misa. */
-
-/* ═══ JEZICI ═══════════════════════════════════════════════════════════════════════
-   Katalog za inostranstvo. Nazivi proizvoda dolaze iz baze (naziv_en, naziv_it...),
-   a stalni tekst se prevodi ovdje. Ako prevoda nema, pada na osnovni jezik — bolje
-   nego prazno polje. */
-const PRIJEVODI = {
-  bs: { materijal:'Materijal', dostupno_i_u:'Dostupno i u:', na_upit:'cijena na upit',
-        cijena_na_upit:'Cijena na upit', izvedba:'Izvedba', postolje_ploca:'postolje + ploča',
-        cijena:'Cijena', mjera:'Mjera', dostupne_mjere:'Dostupne mjere:',
-        oblici:'Oblici stolova', materijali:'Materijali', gotovi:'Gotovi proizvodi',
-        uslov:'Cijena je za navedenu izvedbu i mjeru u zaglavlju kolone. Druga izvedba ili mjera mijenja cijenu.',
-        oblici_nap:'Dostupnost oblika zavisi od postolja — uz svaki proizvod stoji šta nosi.',
-        prazan:T('prazan') },
-  en: { materijal:'Material', dostupno_i_u:'Also available in:', na_upit:'price on request',
-        cijena_na_upit:'Price on request', izvedba:'Version', postolje_ploca:'base + top',
-        cijena:'Price', mjera:'Size', dostupne_mjere:'Available sizes:',
-        oblici:'Table shapes', materijali:'Materials', gotovi:'Finished products',
-        uslov:'Price applies to the version shown and the size in the column header. Other versions or sizes change the price.',
-        oblici_nap:'Shape availability depends on the base — each product shows what it supports.',
-        prazan:'The catalogue is empty.' },
-  it: { materijal:'Materiale', dostupno_i_u:'Disponibile anche in:', na_upit:'prezzo su richiesta',
-        cijena_na_upit:'Prezzo su richiesta', izvedba:'Versione', postolje_ploca:'base + piano',
-        cijena:'Prezzo', mjera:'Misura', dostupne_mjere:'Misure disponibili:',
-        oblici:'Forme dei tavoli', materijali:'Materiali', gotovi:'Prodotti finiti',
-        uslov:'Il prezzo vale per la versione indicata e la misura nell\'intestazione. Altre versioni o misure cambiano il prezzo.',
-        oblici_nap:'La disponibilità delle forme dipende dalla base — ogni prodotto indica cosa supporta.',
-        prazan:'Il catalogo è vuoto.' },
-  de: { materijal:'Material', dostupno_i_u:'Auch erhältlich in:', na_upit:'Preis auf Anfrage',
-        cijena_na_upit:'Preis auf Anfrage', izvedba:'Ausführung', postolje_ploca:'Gestell + Platte',
-        cijena:'Preis', mjera:'Maß', dostupne_mjere:'Verfügbare Maße:',
-        oblici:'Tischformen', materijali:'Materialien', gotovi:'Fertigprodukte',
-        uslov:'Der Preis gilt für die angegebene Ausführung und das Maß in der Spaltenüberschrift. Andere Ausführungen oder Maße ändern den Preis.',
-        oblici_nap:'Die Formauswahl hängt vom Gestell ab — bei jedem Produkt steht, was möglich ist.',
-        prazan:'Der Katalog ist leer.' },
-  fr: { materijal:'Matériau', dostupno_i_u:'Aussi disponible en :', na_upit:'prix sur demande',
-        cijena_na_upit:'Prix sur demande', izvedba:'Version', postolje_ploca:'piètement + plateau',
-        cijena:'Prix', mjera:'Dimension', dostupne_mjere:'Dimensions disponibles :',
-        oblici:'Formes de tables', materijali:'Matériaux', gotovi:'Produits finis',
-        uslov:'Le prix s\'applique à la version indiquée et à la dimension en tête de colonne. Une autre version ou dimension modifie le prix.',
-        oblici_nap:'Les formes disponibles dépendent du piètement — chaque produit indique ce qu\'il permet.',
-        prazan:'Le catalogue est vide.' },
-};
-
-function T(kljuc){
-  const j = podaci?.jezik || 'bs';
-  return (PRIJEVODI[j] && PRIJEVODI[j][kljuc]) || PRIJEVODI.bs[kljuc] || kljuc;
-}
-
-/* Naziv na izabranom jeziku; ako prevoda nema, ostaje osnovni. */
-function nazivJezik(o){
-  const j = podaci?.jezik || 'bs';
-  if(j === 'bs') return o.naziv;
-  return o['naziv_' + j] || o.naziv;
-}
-
-/* Preracun u valutu kataloga. Kurs EUR/KM je FIKSAN, pa je pretvaranje tacno. */
-const KURS_EUR = 1.95583;
-function uValutu(iznos, izVal){
-  const cilj = (podaci?.valuta || 'KM').toUpperCase();
-  const iz = (izVal || 'KM').toUpperCase();
-  let v = Number(iznos) || 0;
-  if(iz === cilj) return { v, val: cilj };
-  if(iz === 'KM' && cilj === 'EUR') return { v: v / KURS_EUR, val: 'EUR' };
-  if(iz === 'EUR' && cilj === 'KM') return { v: v * KURS_EUR, val: 'KM' };
-  return { v, val: iz };
-}
 
 function oblikKratko(o){
   return { PRAV:'pravoug.', KVAD:'kvadrat', KRUG:'okrugli', OVAL:'ovalni',
