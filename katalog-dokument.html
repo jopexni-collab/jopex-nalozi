@@ -404,7 +404,7 @@ function gotovKartica(p){
     <div class="gotov-kartica">
       ${p.slika_url
         ? `<img class="gotov-k-slika" src="${esc(p.slika_url)}" loading="lazy" alt="${esc(p.naziv)}">`
-        : '<div class="nema-slike gotov-k-slika">🪑</div>'}
+        : '<div class="nema-slike gotov-k-slika">🍽️</div>'}
       <div class="gotov-k-tijelo">
         <div class="gotov-k-naziv">${esc(p.naziv)}</div>
         ${(p.sastojci||[]).length
@@ -509,7 +509,7 @@ function gotovProizvod(p){
         <div class="gotov-lijevo">
           ${p.slika_url
             ? `<img class="gotov-slika" src="${esc(p.slika_url)}" loading="lazy" alt="${esc(p.naziv)}">`
-            : '<div class="nema-slike gotov-slika">🪑</div>'}
+            : '<div class="nema-slike gotov-slika">🍽️</div>'}
 
           ${/* Dimenzije ISPOD SLIKE, pa svi moguci oblici ispod njih — kupac prvo vidi
                 kako sto izgleda, pa koje mjere i izvedbe postoje. */''}
