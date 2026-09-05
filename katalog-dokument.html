@@ -146,6 +146,25 @@
 
 .oblik-opcija .oblik-ikona{stroke:#c3c9d1;stroke-dasharray:2 2;}
 .oblik-opcija .oblik-mjera{color:#c3c9d1;}
+
+.gotov-lijevo{flex:0 0 180px;}
+.gotov-lijevo .gotov-slika{width:180px;}
+.gotov-dim-spisak{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px;}
+.gotov-dim{font-size:11px;font-weight:700;background:#eef2f8;color:#1f3864;padding:2px 8px;border-radius:5px;}
+.gotov-lijevo .gotov-oblici{margin-top:7px;gap:10px;}
+.gotov-lijevo .oblik-ikona{width:24px;height:24px;}
+
+.gotov-k-cijene{margin-top:7px;}
+.gotov-k-red{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:2px 0;border-bottom:1px solid #f2f3f5;}
+.gotov-k-mjera{font-size:11.5px;color:#6b7a8d;}
+.gotov-k-iznos{font-size:14px;font-weight:800;white-space:nowrap;}
+.gotov-k-izvedba{font-size:10px;color:#8b96a5;padding-bottom:3px;}
+.gotov-k-nap{font-size:10px;color:#8b96a5;margin-top:5px;line-height:1.4;}
+.gotov-kartica .gotov-oblici{margin-top:8px;gap:9px;}
+.gotov-kartica .oblik-ikona{width:22px;height:22px;}
+.gotov-kartica .oblik-mjera{font-size:9px;}
+
+.th-nap{display:block;font-size:9.5px;font-weight:400;opacity:.75;}
 </style>
 </head>
 <body>
@@ -321,17 +340,23 @@ function render(){
 /* Kartica za MREZNI prikaz — slika, naziv i raspon cijena. Puna tabela kombinacija
    ne staje u karticu, pa se prikazuje "od–do"; detalji su u listi. */
 function gotovKartica(p){
-  const cijene = (p.cijene||[]).map(x=>Number(x.cijena)||0).filter(Boolean);
-  const min = cijene.length ? Math.min(...cijene) : null;
-  const max = cijene.length ? Math.max(...cijene) : null;
-  const val = p.cijene?.[0]?.valuta || 'KM';
-  const cijenaTekst = !podaci.sa_cijenama ? ''
-    : (p.na_upit || !cijene.length) ? '<div class="gotov-k-upit">Cijena na upit</div>'
-    : (min === max
-        ? `<div class="gotov-k-cijena">${fmv(min, val)}</div>`
-        : `<div class="gotov-k-cijena">${fmv(min, val)} – ${fmv(max, val)}</div>`);
+  /* Kartica pokazuje CIJENU PO DIMENZIJI, ne samo raspon — kupac odmah vidi sta kosta
+     koja mjera. Ispod idu oblici koji su za to postolje mogući. */
+  const cijene = p.cijene || [];
+  const val = cijene[0]?.valuta || 'KM';
 
-  const mjere = [...new Set((p.cijene||[]).map(x=>x.dimenzija).filter(Boolean))];
+  // Grupisanje po mjeri; ako ima vise izvedbi, uzima se najniza (od te cijene)
+  const poMjeri = {};
+  for(const x of cijene){
+    const k = x.dimenzija || '—';
+    const v = Number(x.cijena) || 0;
+    if(!poMjeri[k] || v < poMjeri[k].cijena) poMjeri[k] = { cijena: v, izvedba: x.opis_izbora };
+  }
+  const mjere = Object.keys(poMjeri);
+  const viseIzvedbi = new Set(cijene.map(x=>x.opis_izbora)).size > 1;
+
+  const sviOblici = [...new Set((p.dimenzije||[])
+    .flatMap(d => [d.oblik, ...(d.moguci_oblici||[])]).filter(Boolean))];
 
   return `
     <div class="gotov-kartica">
@@ -341,13 +366,29 @@ function gotovKartica(p){
       <div class="gotov-k-tijelo">
         <div class="gotov-k-naziv">${esc(p.naziv)}</div>
         ${(p.materijali||[]).length ? `<div class="gotov-k-mat">${(p.materijali||[]).map(esc).join(', ')}</div>` : ''}
-        ${(p.dimenzije||[]).length ? `<div class="gotov-oblici">
-          ${p.dimenzije.slice(0,4).map(d=>`
-            <span class="oblik-stavka" title="${esc(oblikNaziv(d.oblik))} ${esc(opisDim(d))}">
-              ${oblikIkona(d.oblik)}<span class="oblik-mjera">${esc(opisDim(d))}</span>
+
+        ${podaci.sa_cijenama ? (
+          p.na_upit || !mjere.length
+            ? '<div class="gotov-k-upit">Cijena na upit</div>'
+            : `<div class="gotov-k-cijene">
+                ${mjere.map(m=>`
+                  <div class="gotov-k-red">
+                    <span class="gotov-k-mjera">${esc(m)}</span>
+                    <span class="gotov-k-iznos">${fmv(poMjeri[m].cijena, val)}</span>
+                  </div>
+                  ${viseIzvedbi && poMjeri[m].izvedba
+                    ? `<div class="gotov-k-izvedba">${esc(poMjeri[m].izvedba)}</div>` : ''}
+                `).join('')}
+               </div>
+               ${viseIzvedbi ? '<div class="gotov-k-nap">Cijena za navedenu izvedbu i mjeru.</div>' : ''}`
+        ) : (mjere.length ? `<div class="gotov-k-mjere">${mjere.map(esc).join(' · ')}</div>` : '')}
+
+        ${sviOblici.length ? `<div class="gotov-oblici">
+          ${sviOblici.map(o=>`
+            <span class="oblik-stavka" title="${esc(oblikNaziv(o))}">
+              ${oblikIkona(o)}<span class="oblik-mjera">${esc(oblikNaziv(o))}</span>
             </span>`).join('')}
-        </div>` : (mjere.length ? `<div class="gotov-k-mjere">${mjere.slice(0,3).map(esc).join(' · ')}</div>` : '')}
-        ${cijenaTekst}
+        </div>` : ''}
       </div>
     </div>`;
 }
@@ -409,9 +450,26 @@ function gotovProizvod(p){
   return `
     <div class="gotov-proizvod">
       <div class="gotov-zaglavlje">
-        ${p.slika_url
-          ? `<img class="gotov-slika" src="${esc(p.slika_url)}" loading="lazy" alt="${esc(p.naziv)}">`
-          : '<div class="nema-slike gotov-slika">🪑</div>'}
+        <div class="gotov-lijevo">
+          ${p.slika_url
+            ? `<img class="gotov-slika" src="${esc(p.slika_url)}" loading="lazy" alt="${esc(p.naziv)}">`
+            : '<div class="nema-slike gotov-slika">🪑</div>'}
+
+          ${/* Dimenzije ISPOD SLIKE, pa svi moguci oblici ispod njih — kupac prvo vidi
+                kako sto izgleda, pa koje mjere i izvedbe postoje. */''}
+          ${(p.dimenzije||[]).length ? `
+            <div class="gotov-dim-spisak">
+              ${p.dimenzije.map(d=>`<span class="gotov-dim">${esc(opisDim(d))}</span>`).join('')}
+            </div>
+            <div class="gotov-oblici">
+              ${[...new Set(p.dimenzije.flatMap(d => [d.oblik, ...(d.moguci_oblici||[])]).filter(Boolean))]
+                .map(o=>`
+                  <span class="oblik-stavka" title="${esc(oblikNaziv(o))}">
+                    ${oblikIkona(o)}
+                    <span class="oblik-mjera">${esc(oblikNaziv(o))}</span>
+                  </span>`).join('')}
+            </div>` : ''}
+        </div>
         <div class="gotov-tekst">
           <div class="gotov-naziv">${esc(p.naziv)}</div>
           ${p.opis ? `<div class="gotov-opis">${esc(p.opis)}</div>` : ''}
@@ -446,7 +504,7 @@ function gotovProizvod(p){
             </tr>`).join('')}</tbody>
         </table>
         <div class="gotov-uslov">
-          Cijena važi za navedeni <b>materijal</b> i <b>dimenziju</b>.
+          Cijena je za <b>navedenu izvedbu</b> (postolje + ploča) i <b>mjeru</b> u zaglavlju kolone.
           Druga izvedba ili mjera mijenja cijenu.
         </div>`
       : (mjere.length ? `<div class="gotov-mjere">Dostupne mjere: ${mjere.map(esc).join(' · ')}</div>` : '')}
@@ -457,22 +515,6 @@ function gotovProizvod(p){
         Cijena važi za navedeni <b>materijal</b> i izvedbu.
       </div>` : ''}
 
-      ${/* Oblici na DNU — diskretno, poslije cijena, jer su dopuna a ne glavna stvar */''}
-      ${(p.dimenzije||[]).length ? `<div class="gotov-oblici">
-        <span class="oblik-uvod">Dostupni oblici:</span>
-        ${p.dimenzije.map(d=>`
-          <span class="oblik-stavka" title="${esc(oblikNaziv(d.oblik))} ${esc(opisDim(d))}">
-            ${oblikIkona(d.oblik)}
-            <span class="oblik-mjera">${esc(opisDim(d))}</span>
-          </span>
-          ${/* Ostali MOGUCI oblici sa istim mjerama — blijedi, jer su opcija a ne
-                zadana izvedba. Ista mjera, drugi izgled. */''}
-          ${(d.moguci_oblici||[]).map(o=>`
-            <span class="oblik-stavka oblik-opcija" title="Moguće i: ${esc(oblikNaziv(o))}">
-              ${oblikIkona(o)}
-              <span class="oblik-mjera">${esc(oblikNaziv(o))}</span>
-            </span>`).join('')}`).join('')}
-      </div>` : ''}
     </div>`;
 }
 
