@@ -36,6 +36,9 @@ function broj(v) {
      kruzni      → samo precnik
      pravougaoni → duzina × sirina (maksimalne, jer se elipsa i bacva upisuju u okvir) */
 const KRUZNI = ['KRUG'];
+/* Oblici STOLOVA — samo oni se prihvataju kao alternativa jedan drugom.
+   L, U, V i G su oblici kuhinjskih ploca; za sto nemaju smisla. */
+const STOLOVI = ['PRAV', 'KVAD', 'OVAL', 'BACVA', 'ZAOB'];
 const PRAVOUGAONI = ['PRAV', 'KVAD', 'OVAL', 'BACVA', 'ZAOB', 'I', 'L', 'U', 'V', 'N', 'G'];
 
 const MJERE = {
@@ -698,10 +701,11 @@ router.post('/:id/dimenzije', async (req, res) => {
          Samo oni iste vrste: kruzni sa kruznim, pravougaoni sa pravougaonim. */
       const osnovni = OBLICI[req.body?.oblik] ? req.body.oblik : 'PRAV';
       const jeKruzni = KRUZNI.includes(osnovni);
+      const dozvoljeni = jeKruzni ? KRUZNI
+                       : STOLOVI.includes(osnovni) ? STOLOVI
+                       : PRAVOUGAONI;
       const moguci = Array.isArray(req.body?.moguci_oblici)
-        ? req.body.moguci_oblici.filter(o =>
-            OBLICI[o] && o !== osnovni &&
-            (jeKruzni ? KRUZNI.includes(o) : PRAVOUGAONI.includes(o)))
+        ? req.body.moguci_oblici.filter(o => OBLICI[o] && o !== osnovni && dozvoljeni.includes(o))
         : [];
 
       const r = await pool.query(

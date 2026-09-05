@@ -4932,6 +4932,32 @@ async function gprPrikaziCjenovnik(pid){
   }
 }
 
+
+/* Opis dimenzije. Mjere se cuvaju kao IMENOVANE ({duzina, sirina, visina, ...}), pa
+   citanje starih polja sirina/visina daje "0×0". Podrzava se i stari zapis, da
+   ranije unesene dimenzije nastave da rade. */
+function gprOpisDim(d){
+  const m = d.mjere || {};
+  const v = k => Math.round(Number(m[k]) || 0);
+
+  // Nov zapis — imenovane mjere
+  if(m.precnik) return 'Ø' + v('precnik') + (m.visina ? ' · H' + v('visina') : '');
+  if(m.duzina || m.sirina){
+    const osnovno = [v('duzina'), v('sirina')].filter(Boolean).join('×');
+    const dodaci = [];
+    if(m.visina)   dodaci.push('H' + v('visina'));
+    if(m.debljina) dodaci.push(v('debljina') + 'mm');
+    return osnovno + (dodaci.length ? ' · ' + dodaci.join(' · ') : '');
+  }
+  // Zapis sa oznakama oblika (A, B, D)
+  if(m.D) return 'Ø' + v('D');
+  if(m.A || m.B) return [v('A'), v('B')].filter(Boolean).join('×');
+  // Najstariji zapis
+  if(d.precnik) return 'Ø' + Math.round(d.precnik);
+  if(d.sirina || d.visina) return [Math.round(d.sirina||0), Math.round(d.visina||0)].filter(Boolean).join('×');
+  return d.naziv || '—';
+}
+
 function gprRenderDetalj(el, g){
   if(!window.__gprStavke) window.__gprStavke = {};
   window.__gprStavke[g.id] = g.stavke || [];
@@ -5104,7 +5130,7 @@ function gprRenderDetalj(el, g){
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
       ${(g.dimenzije||[]).map(d=>`
         <span style="background:#eef4fc;border:1px solid #b8d4f0;border-radius:6px;padding:3px 9px;font-size:11.5px;font-weight:700;">
-          ${Math.round(d.sirina)}×${Math.round(d.visina)}
+          ${gprOpisDim(d)}
           <button onclick="gprObrisiDim(${d.id},${g.id})" style="background:none;border:none;cursor:pointer;color:var(--red,#c0392b);font-size:11px;margin-left:3px;padding:0;">✕</button>
         </span>`).join('')}
       <!-- Okrugli sto ima povrsinu πr² — racunanje kao pravougaonog dalo bi skoro
@@ -5120,7 +5146,7 @@ function gprRenderDetalj(el, g){
           <option value="BACVA">▢ Bačvasti</option>
           <option value="ZAOB">▭ Zaobljeni uglovi</option>
         </optgroup>
-        <optgroup label="Ploče (iz Ponuda)">
+        <optgroup label="Ploče i radne površine">
           <option value="I">▭ Pravougli</option>
           <option value="L">⌐ L oblik</option>
           <option value="U">∪ U oblik</option>
@@ -5754,6 +5780,9 @@ const GPR_OBLICI = {
 /* Oblici po vrsti — kruzni traze samo precnik, pravougaoni duzinu i sirinu.
    Elipsa i bacva se upisuju u pravougaoni okvir, pa im trebaju iste mjere. */
 const GPR_KRUZNI = ['KRUG'];
+/* Oblici STOLOVA — samo oni se nude kao alternativa. L, U, V i G su oblici kuhinjskih
+   ploca; za sto nemaju smisla, pa se ne nude iako postoje u sistemu. */
+const GPR_STOLOVI = ['PRAV','KVAD','OVAL','BACVA','ZAOB'];
 const GPR_PRAVOUGAONI = ['PRAV','KVAD','OVAL','BACVA','ZAOB','I','L','U','V','N','G'];
 
 function gprOblikPromjena(gid){
@@ -5784,7 +5813,12 @@ function gprOblikPromjena(gid){
 
   /* Ostali MOGUCI oblici sa istim mjerama — katalog ih navodi kao opciju.
      Nudi se samo ista vrsta: uz okrugli nema smisla ponuditi pravougaoni. */
-  const ostali = (jeKruzni ? GPR_KRUZNI : GPR_PRAVOUGAONI).filter(o => o !== ob && GPR_OBLICI[o]);
+  /* Nudi se samo ista vrsta, i to samo oblici STOLOVA. Uz pravougaoni sto nema
+     smisla ponuditi L oblik — to je kuhinjska ploca. */
+  const izvor = jeKruzni ? GPR_KRUZNI
+              : GPR_STOLOVI.includes(ob) ? GPR_STOLOVI
+              : GPR_PRAVOUGAONI;
+  const ostali = izvor.filter(o => o !== ob && GPR_OBLICI[o]);
   const mog = document.getElementById('gpr-dim-moguci-'+gid);
   if(mog){
     mog.innerHTML = ostali.length ? `
