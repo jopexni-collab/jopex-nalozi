@@ -72,10 +72,17 @@ router.get('/:token', async (req, res) => {
 
       /* Materijali od kojih se proizvod pravi — iz komponenti sastavnice.
          Kupcu je bitno da zna da je ploca granit, a ne samo koliko kosta. */
+      /* Sastojci: sta je STVARNO izabrano i koje su grupe jos dozvoljene.
+         Cijena vazi za izabrani artikal; ostale grupe idu kao "dostupno i u". */
       const mat = (await pool.query(
-        `SELECT DISTINCT st.gotov_id, ro.grupa, ro.naziv AS artikal, ro.debljina_cm
-         FROM gotov_stavke st JOIN roba ro ON ro.id = st.roba_id
-         WHERE st.gotov_id = ANY($1::int[]) AND COALESCE(TRIM(ro.grupa),'') <> ''`,
+        `SELECT st.gotov_id, st.sastojak_id,
+                ro.grupa, ro.naziv AS artikal, ro.debljina_cm,
+                sa.naziv AS sastojak, sa.redni_broj, sa.dozvoljene_grupe
+         FROM gotov_stavke st
+         JOIN roba ro ON ro.id = st.roba_id
+         LEFT JOIN grupa_sastojci sa ON sa.id = st.sastojak_id
+         WHERE st.gotov_id = ANY($1::int[])
+         ORDER BY sa.redni_broj NULLS LAST, ro.naziv`,
         [kat.gotovi_ids]
       )).rows;
 
@@ -85,6 +92,30 @@ router.get('/:token', async (req, res) => {
         cijene: kat.sa_cijenama ? cijene.filter(x => x.gotov_id === p.id) : [],
         na_upit: kat.sa_cijenama && !cijene.some(x => x.gotov_id === p.id),
         dimenzije: dim.filter(x => x.gotov_id === p.id),
+
+        /* Sastojci sa IZABRANIM artiklom — kupcu se pokazuje model postolja i konkretan
+           materijal, ne interni naziv grupe. */
+        sastojci: (() => {
+          const moji = mat.filter(x => x.gotov_id === p.id);
+          const po = {};
+          for (const x of moji) {
+            const k = x.sastojak || 'Dio';
+            (po[k] = po[k] || { naziv: k, redni: x.redni_broj || 99, artikli: [], grupe: new Set(), dozvoljene: new Set() })
+              .artikli.push(x.artikal);
+            po[k].grupe.add(x.grupa);
+            for (const g of (x.dozvoljene_grupe || [])) po[k].dozvoljene.add(g);
+          }
+          return Object.values(po)
+            .sort((a, b) => a.redni - b.redni)
+            .map(s => ({
+              naziv: s.naziv,
+              artikli: [...new Set(s.artikli)],
+              // Grupe koje su dozvoljene, a nisu iskoristene — kupac ih moze traziti
+              ostale_grupe: [...s.dozvoljene].filter(g =>
+                ![...s.grupe].some(x => String(x).toLowerCase() === String(g).toLowerCase())),
+            }));
+        })(),
+
         materijali: [...new Set(mat.filter(x => x.gotov_id === p.id).map(x => x.grupa))],
       }));
     }
