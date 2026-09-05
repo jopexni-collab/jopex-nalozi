@@ -5070,6 +5070,16 @@ function gprRenderDetalj(el, g){
 
     <div id="gpr-poruka-${g.id}" style="display:none;padding:8px 12px;border-radius:7px;font-size:12px;margin-bottom:9px;line-height:1.5;"></div>
 
+    <!-- Upozorenje kad je sastavnica mijenjana poslije zadnjeg snimanja -->
+    <div id="gpr-zastario-${g.id}" style="display:${gprZastario[g.id]?'flex':'none'};align-items:center;gap:9px;flex-wrap:wrap;
+                background:#fff8e1;border:1px solid #ffe082;border-radius:7px;padding:8px 12px;font-size:12px;color:#8b6914;margin-bottom:9px;">
+      <span style="flex:1;">⚠ Sastavnica je mijenjana — cjenovnik više ne odgovara.</span>
+      <button onclick="gprAzurirajCjenovnik(${g.id})"
+              style="font:inherit;font-size:12px;padding:6px 14px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">
+        🔄 Ažuriraj cjenovnik
+      </button>
+    </div>
+
     <div style="font-size:12px;font-weight:800;margin-bottom:7px;">Komponente</div>
     <div style="font-size:11px;color:#8b96a5;margin-bottom:8px;line-height:1.45;">
       Stavke iste <b>grupe izbora</b> su alternative — bira se jedna. Stavka <b>bez grupe</b> ulazi uvijek.
@@ -5314,10 +5324,12 @@ async function gprIzmjeniStavku(sid, polje, vrijednost, gid){
 }
 
 async function gprObrisiStavku(sid, gid){
+  if(window.__gprPodaci) delete window.__gprPodaci[gid];
   if(!confirm('Obrisati ovu komponentu?')) return;
   try{
     const r = await fetch(`${API}/api/gotovi-proizvodi/stavka/${sid}`,{method:'DELETE'});
     if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
+    gprOznaciZastarjelim(gid);   // izmjena sastavnice — cjenovnik treba azurirati
     gprUcitajDetalj(gid); gprUcitaj();
   }catch(e){ alert('✗ '+e.message); }
 }
@@ -5465,6 +5477,7 @@ async function gprZamijeniPotvrda(sid, noviId, noviNaziv, sifra, gid, stariNaziv
 
     // Racun vise ne odgovara sastavnici — odbacuje se, da se ne snimi zastarjelo
     if(window.__gprPodaci) delete window.__gprPodaci[gid];
+    gprOznaciZastarjelim(gid);
     await gprUcitajDetalj(gid);
 
     const t2 = document.getElementById('gpr-poruka-'+gid);
@@ -5858,6 +5871,7 @@ async function gprDodajStavku(gid){
     /* Stari racun se odbacuje — komponente su se promijenile, pa bi snimanje
        zamrznulo cijene koje vise ne odgovaraju sastavnici. */
     if(window.__gprPodaci) delete window.__gprPodaci[gid];
+    gprOznaciZastarjelim(gid);
     gprUcitajDetalj(gid); gprUcitaj();
   }catch(e){ alert('✗ '+e.message); }
 }
@@ -5977,6 +5991,8 @@ async function gprDodajDim(gid){
     const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
     if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
     if(poruka){ poruka.textContent = '✓ Dimenzija dodata'; poruka.style.color = 'var(--green,#1f8a4c)'; }
+    if(window.__gprPodaci) delete window.__gprPodaci[gid];
+    gprOznaciZastarjelim(gid);   // nova mjera = nova cijena, cjenovnik treba azurirati
     /* Ciste se DINAMICKA polja (gpr-dm-{gid}-{A,B,D,R}). Ranije su se cistila stara
        "gpr-dim-s" i "gpr-dim-v", koja vise ne postoje — pa je poslije USPJESNOG
        dodavanja pucalo "Cannot set properties of null". */
@@ -5989,9 +6005,11 @@ async function gprDodajDim(gid){
 }
 
 async function gprObrisiDim(did, gid){
+  if(window.__gprPodaci) delete window.__gprPodaci[gid];
   try{
     const r = await fetch(`${API}/api/gotovi-proizvodi/dimenzija/${did}`,{method:'DELETE'});
     if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
+    gprOznaciZastarjelim(gid);   // izmjena sastavnice — cjenovnik treba azurirati
     gprUcitajDetalj(gid); gprUcitaj();
   }catch(e){ alert('✗ '+e.message); }
 }
@@ -6055,9 +6073,47 @@ async function gprNoviCjenovnik(pid){
   }catch(e){ alert('✗ '+e.message); }
 }
 
-async function gprSnimiCijene(pid){
+
+/* Racun i snimanje u JEDNOM koraku. Ranije je trebalo "Izracunaj" pa "Snimi" — pa se
+   lako zaboravilo drugo, i cjenovnik bi ostao star. */
+async function gprAzurirajCjenovnik(pid){
+  const traka = document.getElementById('gpr-poruka-'+pid);
+  const javi = (tekst, boja, poz) => {
+    if(!traka) return;
+    traka.style.display = 'block';
+    traka.style.background = poz || '#eef2f8';
+    traka.style.color = boja || '#1f3864';
+    traka.innerHTML = tekst;
+  };
+  javi('Računam...');
+  try{
+    await gprIzracunaj(pid);
+    const d = window.__gprPodaci?.[pid];
+    if(!d || !d.cijene?.length) throw new Error('Račun nije dao nijednu cijenu — provjeri komponente i mjere.');
+    javi('Snimam...');
+    await gprSnimiCijene(pid, true);
+    javi(`✓ Cjenovnik ažuriran — ${d.cijene.length} ${d.cijene.length===1?'cijena':'cijena'}`,
+         'var(--green,#1f8a4c)', '#eef7f1');
+    gprZastario[pid] = false;
+    setTimeout(()=>{ if(traka) traka.style.display='none'; }, 6000);
+  }catch(e){
+    javi('✗ ' + e.message, 'var(--red,#c0392b)', '#fdecea');
+  }
+}
+
+/* Pamti da je sastavnica mijenjana poslije zadnjeg snimanja — dok se ne azurira,
+   katalog bi stampao stare cijene. */
+const gprZastario = {};
+function gprOznaciZastarjelim(pid){
+  gprZastario[pid] = true;
+  const el = document.getElementById('gpr-zastario-'+pid);
+  if(el) el.style.display = 'block';
+}
+
+async function gprSnimiCijene(pid, tiho){
   const d = window.__gprPodaci?.[pid];
   if(!d || !d.cijene?.length){
+    if(tiho) throw new Error('Nema izračunatih cijena.');
     alert('Prvo klikni „▶ Izračunaj".\n\nAko si u međuvremenu mijenjao komponente,\nizračunaj ponovo — snima se ono što je posljednje izračunato.');
     return;
   }
@@ -6093,6 +6149,7 @@ async function gprSnimiCijene(pid){
        jer je ta poruka iscrtana prije snimanja. */
     await gprUcitajDetalj(pid);
   }catch(e){
+    if(tiho) throw e;
     if(oznaka){ oznaka.textContent = '✗ ' + e.message; oznaka.style.color = 'var(--red,#c0392b)'; }
   }
 }
