@@ -419,8 +419,7 @@ router.get('/:id', async (req, res) => {
       'SELECT * FROM gotov_dimenzije WHERE gotov_id=$1 ORDER BY redosled, id',
       [req.params.id]
     );
-    /* Sastojci grupe idu uz proizvod — prikaz iz njih crta sekcije, i one prazne.
-       Bez toga se ne bi znalo da sastojak postoji dok se u njega nesto ne doda. */
+    /* Sastojci grupe idu uz proizvod — prikaz iz njih crta sekcije, i one prazne. */
     let sastojciGrupe = [];
     if (g.rows[0].grupa_proizvoda_id) {
       const sg = await pool.query(
@@ -428,6 +427,20 @@ router.get('/:id', async (req, res) => {
         [g.rows[0].grupa_proizvoda_id]
       );
       sastojciGrupe = sg.rows;
+
+      /* POPRAVKA: stavke dodate prije nego sto je veza sa sastojkom proradila imaju
+         sastojak_id prazan, pa se prikazuju kao zaseban odjeljak — ispada da je isti
+         sastojak dvaput. Ovdje se povezuju po nazivu, jednom, tiho. */
+      const bezVeze = s.rows.filter(x => !x.sastojak_id && x.grupa_izbora);
+      for (const st of bezVeze) {
+        const ime = String(st.grupa_izbora).replace(/^pod\s*\d+\s*·\s*/i, '').trim().toLowerCase();
+        const nadjen = sastojciGrupe.find(x => String(x.naziv).trim().toLowerCase() === ime);
+        if (!nadjen) continue;
+        await pool.query('UPDATE gotov_stavke SET sastojak_id=$1, grupa_izbora=$2 WHERE id=$3',
+          [nadjen.id, nadjen.naziv, st.id]).catch(() => {});
+        st.sastojak_id = nadjen.id;
+        st.grupa_izbora = nadjen.naziv;
+      }
     }
     res.json({ ...g.rows[0], stavke: s.rows, dimenzije: d.rows, sastojci_grupe: sastojciGrupe });
   } catch (err) {
@@ -719,6 +732,11 @@ router.post('/:id/snimi-cijene', async (req, res) => {
     res.json({ ok: true, snimljeno: redovi.length });
   } catch (err) {
     await client.query('ROLLBACK');
+    /* Ako tabela ne postoji, poruka sa servera je nerazumljiva — ovdje se kaze sta uraditi. */
+    if (err.code === '42P01')
+      return res.status(500).json({
+        error: 'Tabela cjenovnika ne postoji — pokreni migrate_cjenovnik.sql.',
+      });
     res.status(500).json({ error: err.message });
   } finally { client.release(); }
 });
