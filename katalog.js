@@ -129,8 +129,19 @@ router.get('/grupe', smijeSlati, async (req, res) => {
 router.post('/', smijeSlati, async (req, res) => {
   const u = req.session.user;
   const { tip_kupca_id, grupe, objekt_id, prikaz, sa_cijenama, naslov, kupac_naziv, samo_dostupno, debljine, sifre } = req.body || {};
-  if (!Array.isArray(grupe) || !grupe.length)
+  /* Grupe materijala trebaju samo ako materijali ulaze u katalog. Katalog sastavljen
+     iskljucivo od gotovih proizvoda nema nijednu grupu — i to je ispravno. */
+  const staUlazi = ['materijali', 'gotovi', 'oba'].includes(req.body?.sta_ulazi)
+    ? req.body.sta_ulazi : 'materijali';
+  const izabraniGotovi = Array.isArray(req.body?.gotovi_ids)
+    ? req.body.gotovi_ids.map(x => parseInt(x)).filter(Boolean) : [];
+
+  if (staUlazi === 'gotovi') {
+    if (!izabraniGotovi.length)
+      return res.status(400).json({ error: 'Izaberite bar jedan gotov proizvod.' });
+  } else if (!Array.isArray(grupe) || !grupe.length) {
     return res.status(400).json({ error: 'Izaberite bar jednu grupu proizvoda.' });
+  }
   try {
     let tipNaziv = null;
     if (tip_kupca_id) {
@@ -149,10 +160,9 @@ router.post('/', smijeSlati, async (req, res) => {
        Array.isArray(debljine)&&debljine.length ? debljine.map(Number) : null,
        Array.isArray(sifre)&&sifre.length ? sifre : null,
        /* Gotovi proizvodi: koji su izabrani i sta uopste ulazi u katalog */
-       req.body?.gotovi_proizvodi === true,
-       Array.isArray(req.body?.gotovi_ids) && req.body.gotovi_ids.length
-         ? req.body.gotovi_ids.map(x => parseInt(x)).filter(Boolean) : null,
-       ['materijali','gotovi','oba'].includes(req.body?.sta_ulazi) ? req.body.sta_ulazi : 'materijali']
+       staUlazi === 'gotovi' || staUlazi === 'oba',
+       izabraniGotovi.length ? izabraniGotovi : null,
+       staUlazi]
     );
     res.status(201).json({ ok: true, token: r.rows[0].javni_token, id: r.rows[0].id });
   } catch (err) {
@@ -181,6 +191,11 @@ router.get('/pregled', smijeSlati, async (req, res) => {
 
 // Zajednicko ucitavanje stavki — koriste ga i pregled i javni prikaz.
 async function ucitajStavke({ grupe, objekt_id, tip_kupca_id, samo_dostupno, debljine, sifre }) {
+  /* Katalog samo od gotovih proizvoda nema nijednu grupu materijala — tad se ne ide
+     u bazu uopste, umjesto da upit vrati prazno. */
+  if (!Array.isArray(grupe) || !grupe.length)
+    return { stavke: [], sa_pdv: false, pdv_stopa: await pdvStopa() };
+
   let tip = null;
   if (tip_kupca_id) {
     const t = await pool.query('SELECT * FROM tipovi_kupaca WHERE id=$1', [tip_kupca_id]);
