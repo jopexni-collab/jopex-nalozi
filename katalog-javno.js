@@ -59,11 +59,30 @@ router.get('/:token', async (req, res) => {
           )).rows
         : [];
 
+      /* Dimenzije sa OBLIKOM — katalog uz cijenu pokazuje i kako sto izgleda
+         (pravougaoni, okrugli, bacvasti...), sto kupcu govori vise od same brojke. */
+      const dim = (await pool.query(
+        `SELECT gotov_id, oblik, mjere, sirina, visina, precnik, naziv
+         FROM gotov_dimenzije WHERE gotov_id = ANY($1::int[]) ORDER BY redosled, id`,
+        [kat.gotovi_ids]
+      )).rows;
+
+      /* Materijali od kojih se proizvod pravi — iz komponenti sastavnice.
+         Kupcu je bitno da zna da je ploca granit, a ne samo koliko kosta. */
+      const mat = (await pool.query(
+        `SELECT DISTINCT st.gotov_id, ro.grupa, ro.naziv AS artikal, ro.debljina_cm
+         FROM gotov_stavke st JOIN roba ro ON ro.id = st.roba_id
+         WHERE st.gotov_id = ANY($1::int[]) AND COALESCE(TRIM(ro.grupa),'') <> ''`,
+        [kat.gotovi_ids]
+      )).rows;
+
       gotovi = gp.rows.map(p => ({
         ...p,
         // Bez cijena se ne salju uopste — ne mogu se izvuci ni alatima pregledaca
         cijene: kat.sa_cijenama ? cijene.filter(x => x.gotov_id === p.id) : [],
         na_upit: kat.sa_cijenama && !cijene.some(x => x.gotov_id === p.id),
+        dimenzije: dim.filter(x => x.gotov_id === p.id),
+        materijali: [...new Set(mat.filter(x => x.gotov_id === p.id).map(x => x.grupa))],
       }));
     }
 

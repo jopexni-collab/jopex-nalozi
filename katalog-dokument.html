@@ -112,6 +112,26 @@
 .gotov-tabela .desno{text-align:right;}
 .gotov-mjere{font-size:12.5px;color:#6b7a8d;}
 @media print{ .gotov-proizvod{border-color:#ccc;} }
+
+.gotov-mreza{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:13px;}
+.gotov-kartica{border:1px solid var(--border,#ddd);border-radius:10px;overflow:hidden;background:#fff;
+  break-inside:avoid;page-break-inside:avoid;}
+.gotov-k-slika{width:100%;height:150px;object-fit:cover;display:block;}
+.gotov-k-tijelo{padding:9px 11px;}
+.gotov-k-naziv{font-size:14px;font-weight:800;line-height:1.3;}
+.gotov-k-mjere{font-size:11.5px;color:#8b96a5;margin-top:3px;}
+.gotov-k-cijena{font-size:16px;font-weight:800;margin-top:6px;}
+.gotov-k-upit{font-size:12.5px;color:#b8860b;font-weight:700;margin-top:6px;}
+@media print{ .gotov-mreza{grid-template-columns:repeat(3,1fr);} }
+
+/* Sitne ikonice oblika — diskretno, da ne odvlace paznju sa cijene */
+.gotov-oblici{display:flex;gap:9px;flex-wrap:wrap;margin-top:7px;}
+.oblik-stavka{display:inline-flex;flex-direction:column;align-items:center;gap:1px;}
+.oblik-ikona{width:26px;height:26px;fill:none;stroke:#8b96a5;stroke-width:1.6;}
+.oblik-mjera{font-size:9.5px;color:#8b96a5;white-space:nowrap;}
+.gotov-napomena{font-size:12px;color:#6b7a8d;margin-top:5px;}
+.gotov-k-mat{font-size:11px;color:#8b96a5;margin-top:2px;}
+@media print{ .oblik-ikona{stroke:#666;} }
 </style>
 </head>
 <body>
@@ -241,9 +261,13 @@ function render(){
   if(gotovi.length){
     const poGrupi = {};
     gotovi.forEach(p => { (poGrupi[p.grupa_naziv||'Gotovi proizvodi'] ||= []).push(p); });
+    /* Gotovi proizvodi postuju izabrani prikaz — u mrezi idu kao kartice jedna uz
+       drugu, u listi jedan ispod drugog sa punom tabelom cijena. */
     html += Object.entries(poGrupi).map(([grupa, lista]) => `
       <div class="grupa-naslov">${esc(grupa)}</div>
-      ${lista.map(gotovProizvod).join('')}
+      ${prikaz==='mreza'
+        ? `<div class="gotov-mreza">${lista.map(gotovKartica).join('')}</div>`
+        : lista.map(gotovProizvod).join('')}
     `).join('');
   }
 
@@ -262,6 +286,86 @@ function render(){
 
 /* Gotov proizvod: slika, naziv i TABELA svih kombinacija sa cijenama.
    Kad katalog ide bez cijena, tabela prikazuje samo mjere. */
+
+/* Kartica za MREZNI prikaz — slika, naziv i raspon cijena. Puna tabela kombinacija
+   ne staje u karticu, pa se prikazuje "od–do"; detalji su u listi. */
+function gotovKartica(p){
+  const cijene = (p.cijene||[]).map(x=>Number(x.cijena)||0).filter(Boolean);
+  const min = cijene.length ? Math.min(...cijene) : null;
+  const max = cijene.length ? Math.max(...cijene) : null;
+  const val = p.cijene?.[0]?.valuta || 'KM';
+  const cijenaTekst = !podaci.sa_cijenama ? ''
+    : (p.na_upit || !cijene.length) ? '<div class="gotov-k-upit">Cijena na upit</div>'
+    : (min === max
+        ? `<div class="gotov-k-cijena">${fmv(min, val)}</div>`
+        : `<div class="gotov-k-cijena">${fmv(min, val)} – ${fmv(max, val)}</div>`);
+
+  const mjere = [...new Set((p.cijene||[]).map(x=>x.dimenzija).filter(Boolean))];
+
+  return `
+    <div class="gotov-kartica">
+      ${p.slika_url
+        ? `<img class="gotov-k-slika" src="${esc(p.slika_url)}" loading="lazy" alt="${esc(p.naziv)}">`
+        : '<div class="nema-slike gotov-k-slika">🪑</div>'}
+      <div class="gotov-k-tijelo">
+        <div class="gotov-k-naziv">${esc(p.naziv)}</div>
+        ${(p.materijali||[]).length ? `<div class="gotov-k-mat">${(p.materijali||[]).map(esc).join(', ')}</div>` : ''}
+        ${(p.dimenzije||[]).length ? `<div class="gotov-oblici">
+          ${p.dimenzije.slice(0,4).map(d=>`
+            <span class="oblik-stavka" title="${esc(oblikNaziv(d.oblik))} ${esc(opisDim(d))}">
+              ${oblikIkona(d.oblik)}<span class="oblik-mjera">${esc(opisDim(d))}</span>
+            </span>`).join('')}
+        </div>` : (mjere.length ? `<div class="gotov-k-mjere">${mjere.slice(0,3).map(esc).join(' · ')}</div>` : '')}
+        ${cijenaTekst}
+      </div>
+    </div>`;
+}
+
+/* Cijena sa valutom — fm() uvijek dodaje "KM", pa za EUR treba zasebno. */
+function fmv(v, valuta){
+  const val = (valuta||'KM').toUpperCase();
+  return val === 'KM' ? fm(v)
+    : (Number(v)||0).toLocaleString('bs-BA',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ' + val;
+}
+
+
+/* Sitne 2D ikonice oblika — kupcu odmah kazu kako sto izgleda, a ne zauzimaju mjesto.
+   Crtaju se kao SVG: uvijek ostre, i pri stampi i na ekranu. */
+function oblikNaziv(o){
+  return { PRAV:'Pravougaoni', KVAD:'Kvadratni', KRUG:'Okrugli', OVAL:'Ovalni',
+           BACVA:'Bačvasti', ZAOB:'Zaobljeni uglovi', I:'Pravougli', L:'L oblik',
+           U:'U oblik', V:'V oblik', N:'Nepravilan', G:'G oblik' }[o] || 'Pravougaoni';
+}
+
+function oblikIkona(oblik, naslov){
+  const put = {
+    PRAV:  '<rect x="2" y="7" width="24" height="14" rx="1"/>',
+    KVAD:  '<rect x="6" y="4" width="16" height="16" rx="1"/>',
+    KRUG:  '<circle cx="14" cy="14" r="9"/>',
+    OVAL:  '<ellipse cx="14" cy="14" rx="12" ry="7"/>',
+    BACVA: '<path d="M9 7 h10 a7 7 0 0 1 0 14 h-10 a7 7 0 0 1 0-14 z"/>',
+    ZAOB:  '<rect x="2" y="7" width="24" height="14" rx="4"/>',
+    I:     '<rect x="2" y="9" width="24" height="10" rx="1"/>',
+    L:     '<path d="M3 5 h9 v10 h13 v8 h-22 z"/>',
+    U:     '<path d="M3 5 h6 v13 h10 v-13 h6 v19 h-22 z"/>',
+    V:     '<path d="M3 5 h8 v6 h6 v-6 h8 v18 h-22 z"/>',
+    N:     '<path d="M3 21 h22 l-4 -13 h-14 z"/>',
+    G:     '<path d="M3 5 h22 v18 h-9 v-6 h-4 v6 h-9 z"/>',
+  }[oblik] || '<rect x="2" y="7" width="24" height="14" rx="1"/>';
+  return `<svg class="oblik-ikona" viewBox="0 0 28 28" title="${esc(naslov||'')}">${put}</svg>`;
+}
+
+/* Opis dimenzije iz zapisa — novi oblik (mjere{A,B}) ili stari (sirina/visina). */
+function opisDim(d){
+  const m = d.mjere || {};
+  const v = k => Math.round(Number(m[k] ?? 0));
+  if(d.oblik === 'KRUG')  return 'Ø' + (v('D') || Math.round(d.precnik||0));
+  if(d.oblik === 'KVAD')  return v('A') + '×' + v('A');
+  if(m.A && m.B)          return v('A') + '×' + v('B');
+  if(d.sirina && d.visina) return Math.round(d.sirina) + '×' + Math.round(d.visina);
+  return d.naziv || '';
+}
+
 function gotovProizvod(p){
   const cijene = p.cijene || [];
   const saCijenama = podaci.sa_cijenama && cijene.length;
@@ -280,6 +384,19 @@ function gotovProizvod(p){
         <div class="gotov-tekst">
           <div class="gotov-naziv">${esc(p.naziv)}</div>
           ${p.opis ? `<div class="gotov-opis">${esc(p.opis)}</div>` : ''}
+
+          ${(p.materijali||[]).length ? `<div class="gotov-napomena">
+            Materijal: <b>${(p.materijali||[]).map(esc).join(', ')}</b>
+          </div>` : ''}
+
+          ${(p.dimenzije||[]).length ? `<div class="gotov-oblici">
+            ${p.dimenzije.map(d=>`
+              <span class="oblik-stavka" title="${esc(oblikNaziv(d.oblik))} ${esc(opisDim(d))}">
+                ${oblikIkona(d.oblik)}
+                <span class="oblik-mjera">${esc(opisDim(d))}</span>
+              </span>`).join('')}
+          </div>` : ''}
+
           ${p.na_upit ? '<div class="gotov-upit">Cijena na upit</div>' : ''}
         </div>
       </div>
