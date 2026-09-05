@@ -196,10 +196,10 @@
   <div class="podnaslov" id="podnaslov"></div>
 
   <div class="alatke">
-    <button class="btn" id="btn-mreza" onclick="postaviPrikaz('mreza')">▦ Mrežni prikaz</button>
-    <button class="btn" id="btn-lista" onclick="postaviPrikaz('lista')">☰ Linijski prikaz</button>
-    <button class="btn" id="btn-nazad" onclick="katalogNazad()" style="display:none;">← Nazad</button>
-    <button class="btn btn-pdf" id="btn-pdf" onclick="sacuvajPdf()">⬇ Sačuvaj kao PDF</button>
+    <button class="btn" id="btn-mreza" onclick="postaviPrikaz('mreza')" data-t="mreza">▦ Mrežni prikaz</button>
+    <button class="btn" id="btn-lista" onclick="postaviPrikaz('lista')" data-t="lista">☰ Linijski prikaz</button>
+    <button class="btn" id="btn-nazad" onclick="katalogNazad()" style="display:none;" data-t="nazad">← Nazad</button>
+    <button class="btn btn-pdf" id="btn-pdf" onclick="sacuvajPdf()" data-t="pdf">⬇ Sačuvaj kao PDF</button>
   </div>
 
   <div id="sadrzaj"><div class="ucitavanje">Učitavanje kataloga...</div></div>
@@ -222,35 +222,40 @@ const PRIJEVODI = {
         oblici:'Oblici stolova', materijali:'Materijali', gotovi:'Gotovi proizvodi',
         uslov:'Cijena je za navedenu izvedbu i mjeru u zaglavlju kolone. Druga izvedba ili mjera mijenja cijenu.',
         oblici_nap:'Dostupnost oblika zavisi od postolja — uz svaki proizvod stoji šta nosi.',
-        prazan:'Katalog je prazan.' },
+        prazan:'Katalog je prazan.' ,
+        naslov_pred:'Katalog proizvoda', ucitavanje:'Učitavanje kataloga...', stampaj:'🖨 Štampaj', mreza:'▦ Mreža', lista:'☰ Lista', za:'Za', cijene_tip:'Cijene', sa_pdv:'sa PDV', bez_pdv:'bez PDV-a', poslao:'Poslao', o_PRAV:'Pravougaoni', o_KVAD:'Kvadratni', o_KRUG:'Okrugli', o_OVAL:'Ovalni', o_BACVA:'Bačvasti', o_ZAOB:'Zaobljeni uglovi', o_I:'Pravougli', o_L:'L oblik', o_U:'U oblik', o_V:'V oblik', o_N:'Nepravilan', o_G:'G oblik', nazad:'← Nazad', pdf:'⬇ Sačuvaj kao PDF'},
   en: { materijal:'Material', dostupno_i_u:'Also available in:', na_upit:'price on request',
         cijena_na_upit:'Price on request', izvedba:'Version', postolje_ploca:'base + top',
         cijena:'Price', mjera:'Size', dostupne_mjere:'Available sizes:',
         oblici:'Table shapes', materijali:'Materials', gotovi:'Finished products',
         uslov:'Price applies to the version shown and the size in the column header. Other versions or sizes change the price.',
         oblici_nap:'Shape availability depends on the base — each product shows what it supports.',
-        prazan:'The catalogue is empty.' },
+        prazan:'The catalogue is empty.' ,
+        naslov_pred:'Product catalogue', ucitavanje:'Loading catalogue...', stampaj:'🖨 Print', mreza:'▦ Grid', lista:'☰ List', za:'For', cijene_tip:'Prices', sa_pdv:'incl. VAT', bez_pdv:'excl. VAT', poslao:'Sent by', o_PRAV:'Rectangular', o_KVAD:'Square', o_KRUG:'Round', o_OVAL:'Oval', o_BACVA:'Barrel', o_ZAOB:'Rounded corners', o_I:'Straight', o_L:'L shape', o_U:'U shape', o_V:'V shape', o_N:'Irregular', o_G:'G shape', nazad:'← Back', pdf:'⬇ Save as PDF'},
   it: { materijal:'Materiale', dostupno_i_u:'Disponibile anche in:', na_upit:'prezzo su richiesta',
         cijena_na_upit:'Prezzo su richiesta', izvedba:'Versione', postolje_ploca:'base + piano',
         cijena:'Prezzo', mjera:'Misura', dostupne_mjere:'Misure disponibili:',
         oblici:'Forme dei tavoli', materijali:'Materiali', gotovi:'Prodotti finiti',
         uslov:'Il prezzo vale per la versione indicata e la misura nell\'intestazione. Altre versioni o misure cambiano il prezzo.',
         oblici_nap:'La disponibilità delle forme dipende dalla base — ogni prodotto indica cosa supporta.',
-        prazan:'Il catalogo è vuoto.' },
+        prazan:'Il catalogo è vuoto.' ,
+        naslov_pred:'Catalogo prodotti', ucitavanje:'Caricamento catalogo...', stampaj:'🖨 Stampa', mreza:'▦ Griglia', lista:'☰ Elenco', za:'Per', cijene_tip:'Prezzi', sa_pdv:'IVA inclusa', bez_pdv:'IVA esclusa', poslao:'Inviato da', o_PRAV:'Rettangolare', o_KVAD:'Quadrato', o_KRUG:'Rotondo', o_OVAL:'Ovale', o_BACVA:'A botte', o_ZAOB:'Angoli arrotondati', o_I:'Diritto', o_L:'Forma a L', o_U:'Forma a U', o_V:'Forma a V', o_N:'Irregolare', o_G:'Forma a G', nazad:'← Indietro', pdf:'⬇ Salva in PDF'},
   de: { materijal:'Material', dostupno_i_u:'Auch erhältlich in:', na_upit:'Preis auf Anfrage',
         cijena_na_upit:'Preis auf Anfrage', izvedba:'Ausführung', postolje_ploca:'Gestell + Platte',
         cijena:'Preis', mjera:'Maß', dostupne_mjere:'Verfügbare Maße:',
         oblici:'Tischformen', materijali:'Materialien', gotovi:'Fertigprodukte',
         uslov:'Der Preis gilt für die angegebene Ausführung und das Maß in der Spaltenüberschrift. Andere Ausführungen oder Maße ändern den Preis.',
         oblici_nap:'Die Formauswahl hängt vom Gestell ab — bei jedem Produkt steht, was möglich ist.',
-        prazan:'Der Katalog ist leer.' },
+        prazan:'Der Katalog ist leer.' ,
+        naslov_pred:'Produktkatalog', ucitavanje:'Katalog wird geladen...', stampaj:'🖨 Drucken', mreza:'▦ Raster', lista:'☰ Liste', za:'Für', cijene_tip:'Preise', sa_pdv:'inkl. MwSt.', bez_pdv:'zzgl. MwSt.', poslao:'Gesendet von', o_PRAV:'Rechteckig', o_KVAD:'Quadratisch', o_KRUG:'Rund', o_OVAL:'Oval', o_BACVA:'Tonnenform', o_ZAOB:'Abgerundete Ecken', o_I:'Gerade', o_L:'L-Form', o_U:'U-Form', o_V:'V-Form', o_N:'Unregelmäßig', o_G:'G-Form', nazad:'← Zurück', pdf:'⬇ Als PDF speichern'},
   fr: { materijal:'Matériau', dostupno_i_u:'Aussi disponible en :', na_upit:'prix sur demande',
         cijena_na_upit:'Prix sur demande', izvedba:'Version', postolje_ploca:'piètement + plateau',
         cijena:'Prix', mjera:'Dimension', dostupne_mjere:'Dimensions disponibles :',
         oblici:'Formes de tables', materijali:'Matériaux', gotovi:'Produits finis',
         uslov:'Le prix s\'applique à la version indiquée et à la dimension en tête de colonne. Une autre version ou dimension modifie le prix.',
         oblici_nap:'Les formes disponibles dépendent du piètement — chaque produit indique ce qu\'il permet.',
-        prazan:'Le catalogue est vide.' },
+        prazan:'Le catalogue est vide.' ,
+        naslov_pred:'Catalogue produits', ucitavanje:'Chargement du catalogue...', stampaj:'🖨 Imprimer', mreza:'▦ Grille', lista:'☰ Liste', za:'Pour', cijene_tip:'Prix', sa_pdv:'TVA incluse', bez_pdv:'hors TVA', poslao:'Envoyé par', o_PRAV:'Rectangulaire', o_KVAD:'Carré', o_KRUG:'Rond', o_OVAL:'Ovale', o_BACVA:'Tonneau', o_ZAOB:'Angles arrondis', o_I:'Droit', o_L:'Forme en L', o_U:'Forme en U', o_V:'Forme en V', o_N:'Irrégulier', o_G:'Forme en G', nazad:'← Retour', pdf:'⬇ Enregistrer en PDF'},
 };
 
 /* Jezik i valuta se drze u SVOM objektu, ne citaju se iz "podaci" — taj je deklarisan
@@ -297,12 +302,16 @@ async function ucitaj(){
     podaci = d;
     IZBOR.jezik = d.jezik || 'bs';
     IZBOR.valuta = d.valuta || 'KM';
+    /* Dugmad i naslovi oznaceni sa data-t prevode se odjednom — inace bi u
+       katalogu za Italiju ostali na nasem jeziku. */
+    document.querySelectorAll('[data-t]').forEach(el => { el.textContent = T(el.dataset.t); });
+    document.documentElement.lang = IZBOR.jezik;
     prikaz = d.prikaz === 'lista' ? 'lista' : 'mreza';
 
-    document.getElementById('naslov').textContent = d.naslov || 'Katalog proizvoda';
+    document.getElementById('naslov').textContent = d.naslov || T('naslov_pred');
     const dijelovi = [];
-    if(d.kupac_naziv) dijelovi.push(`Za: <b>${esc(d.kupac_naziv)}</b>`);
-    if(d.sa_cijenama && d.tip_naziv) dijelovi.push(`Cijene: ${esc(d.tip_naziv)}${d.sa_pdv?` (sa PDV ${d.pdv_stopa}%)`:' (bez PDV-a)'}`);
+    if(d.kupac_naziv) dijelovi.push(`${T('za')}: <b>${esc(d.kupac_naziv)}</b>`);
+    if(d.sa_cijenama && d.tip_naziv) dijelovi.push(`${T('cijene_tip')}: ${esc(d.tip_naziv)}${d.sa_pdv?` (${T('sa_pdv')} ${d.pdv_stopa}%)`:` (${T('bez_pdv')})`}`);
     document.getElementById('podnaslov').innerHTML = dijelovi.join(' · ');
     document.getElementById('traka-info').textContent =
       d.sa_cijenama ? `${T('cijena')}: ${(d.valuta||'KM')}` : '';
@@ -544,16 +553,17 @@ function fmv(v, valuta){
 /* Kratak naziv za ispod ikonice — pun ide u opis koji se vidi prelaskom misa. */
 
 function oblikKratko(o){
+  /* Skracenice vrijede samo za nas jezik; na stranom se uzima pun naziv, jer
+     "bačva" nema smislenu skracenicu u italijanskom ili njemackom. */
+  if(IZBOR.jezik !== 'bs') return oblikNaziv(o);
   return { PRAV:'pravoug.', KVAD:'kvadrat', KRUG:'okrugli', OVAL:'ovalni',
            BACVA:'bačva', ZAOB:'zaobljen', I:'pravougli', L:'L', U:'U', V:'V',
            N:'nepravil.', G:'G' }[o] || o;
 }
 
-function oblikNaziv(o){
-  return { PRAV:'Pravougaoni', KVAD:'Kvadratni', KRUG:'Okrugli', OVAL:'Ovalni',
-           BACVA:'Bačvasti', ZAOB:'Zaobljeni uglovi', I:'Pravougli', L:'L oblik',
-           U:'U oblik', V:'V oblik', N:'Nepravilan', G:'G oblik' }[o] || 'Pravougaoni';
-}
+/* Nazivi oblika idu kroz rjecnik — u katalogu za inostranstvo mora sve biti na
+   izabranom jeziku, ne samo cijene. */
+function oblikNaziv(o){ return T('o_' + o) || T('o_PRAV'); }
 
 function oblikIkona(oblik, naslov){
   const put = {
