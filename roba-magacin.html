@@ -5170,34 +5170,42 @@ function gprRenderDetalj(el, g){
       <button onclick="gprDodajStavku(${g.id})" style="padding:6px 13px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:5px;font-weight:700;cursor:pointer;font-size:12px;">+ Dodaj</button>
     </div>
 
-    <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 7px;flex-wrap:wrap;gap:8px;">
-      <span style="font-size:12px;font-weight:800;">Dimenzije</span>
-      <button onclick="gprPrekidacDodavanja(${g.id})" id="gpr-dim-dugme-${g.id}"
-              style="font:inherit;font-size:11.5px;padding:5px 13px;border:1px solid var(--green,#1f8a4c);background:#fff;color:var(--green,#1f8a4c);border-radius:6px;cursor:pointer;font-weight:700;">
-        + Nova mjera
-      </button>
-    </div>
+    <div style="font-size:12px;font-weight:800;margin:14px 0 7px;">Dimenzije</div>
 
-    ${/* Postojece mjere: oblik, mjera i brisanje. Obrazac za unos je SAKRIVEN dok se
-          ne klikne "+ Nova mjera" — inace se njegov izbor oblika mijesao sa izborom
-          "isti sto, drugi izgled" ispod, pa je izgledalo kao dva ista podesavanja. */''}
-    ${(g.dimenzije||[]).length ? `
-      <div style="border:1px solid var(--border,#ddd);border-radius:8px;overflow:hidden;">
-        ${(g.dimenzije||[]).map((d,i)=>`
-          <div style="display:flex;align-items:center;gap:9px;padding:5px 10px;font-size:12px;background:${i%2?'#f7f9fb':'#fff'};border-bottom:1px solid #eef0f3;">
-            <span style="font-size:10.5px;color:#6b7a8d;min-width:74px;">${esc(GPR_OBLICI[d.oblik]?.lbl || d.oblik || '')}</span>
-            <b style="flex:1;">${gprOpisDim(d)}</b>
-            <button onclick="gprObrisiDim(${d.id},${g.id})" title="Obriši mjeru"
-                    style="background:none;border:none;cursor:pointer;color:#c3c9d1;font-size:12px;"
-                    onmouseover="this.style.color='var(--red,#c0392b)'" onmouseout="this.style.color='#c3c9d1'">🗑</button>
-          </div>`).join('')}
-      </div>`
-      : '<div style="padding:11px;text-align:center;color:#8b96a5;font-size:11.5px;border:1px dashed var(--border,#ddd);border-radius:8px;">Nema nijedne mjere — klikni „+ Nova mjera".</div>'}
+    ${/* Jedna tabela: oblik, mjera, cijena i "ide u katalog" u istom redu.
+          Zadnji red je prazan — Enter u njemu dodaje mjeru i otvara sljedeci. */''}
+    <div style="border:1px solid var(--border,#ddd);border-radius:8px;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:8px;padding:4px 10px;background:#1f3864;color:#fff;font-size:10px;font-weight:700;">
+        <span style="min-width:104px;">Oblik</span>
+        <span style="flex:1;">Mjera (mm)</span>
+        <span style="min-width:82px;text-align:right;">Cijena</span>
+        <span style="min-width:62px;text-align:center;">Katalog</span>
+        <span style="width:18px;"></span>
+      </div>
 
-    <!-- OBRAZAC ZA UNOS — sakriven dok se ne zatrazi -->
-    <div id="gpr-dim-obrazac-${g.id}" style="display:none;margin-top:9px;padding:10px 12px;background:#f7f8fa;border:1px solid var(--border,#ddd);border-radius:8px;">
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-        <select id="gpr-dim-o-${g.id}" onchange="gprOblikPromjena(${g.id})" style="font:inherit;font-size:12px;padding:5px 9px;border:1px solid #ccc;border-radius:5px;">
+      ${(g.dimenzije||[]).map((d,i)=>{
+        const cij = (window.__gprPodaci?.[g.id]?.cijene || [])
+          .filter(x => String(x.dimenzija_id) === String(d.id));
+        const najniza = cij.length ? Math.min(...cij.map(x=>Number(x.cijena)||0)) : null;
+        return `
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;font-size:12px;background:${i%2?'#f7f9fb':'#fff'};border-bottom:1px solid #eef0f3;">
+          <span style="min-width:104px;font-size:10.5px;color:#6b7a8d;">${esc(GPR_OBLICI[d.oblik]?.lbl || d.oblik || '')}</span>
+          <b style="flex:1;">${gprOpisDim(d)}</b>
+          <span style="min-width:82px;text-align:right;font-weight:700;">${najniza!=null?fm(najniza):'<span style="color:#c3c9d1;font-weight:400;">—</span>'}</span>
+          <span style="min-width:62px;text-align:center;">
+            <input type="checkbox" ${d.u_katalogu!==false?'checked':''} title="Prikazuje se u katalogu"
+                   onchange="gprMjeraUKatalog(${d.id},${g.id},this.checked)" style="cursor:pointer;">
+          </span>
+          <button onclick="gprObrisiDim(${d.id},${g.id})" title="Obriši mjeru"
+                  style="width:18px;background:none;border:none;cursor:pointer;color:#c3c9d1;font-size:12px;padding:0;"
+                  onmouseover="this.style.color='var(--red,#c0392b)'" onmouseout="this.style.color='#c3c9d1'">🗑</button>
+        </div>`;
+      }).join('')}
+
+      <!-- Prazan red za unos — Enter dodaje i ostaje spreman za sljedecu mjeru -->
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#f7f8fa;">
+        <select id="gpr-dim-o-${g.id}" onchange="gprOblikPromjena(${g.id})"
+                style="min-width:104px;font:inherit;font-size:11px;padding:4px 6px;border:1px solid #ccc;border-radius:5px;">
           <optgroup label="Stolovi">
             <option value="PRAV">▭ Pravougaoni</option>
             <option value="KVAD">◻ Kvadratni</option>
@@ -5206,7 +5214,7 @@ function gprRenderDetalj(el, g){
             <option value="BACVA">▢ Bačvasti</option>
             <option value="ZAOB">▭ Zaobljeni uglovi</option>
           </optgroup>
-          <optgroup label="Ploče i radne površine">
+          <optgroup label="Ploče">
             <option value="I">▭ Pravougli</option>
             <option value="L">⌐ L oblik</option>
             <option value="U">∪ U oblik</option>
@@ -5215,27 +5223,36 @@ function gprRenderDetalj(el, g){
             <option value="G">⊐ G oblik</option>
           </optgroup>
         </select>
-        <span id="gpr-dim-polja-${g.id}" style="display:inline-flex;gap:5px;align-items:center;flex-wrap:nowrap;white-space:nowrap;"></span>
-        <button onclick="gprDodajDim(${g.id})" style="padding:5px 13px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:5px;font-weight:700;cursor:pointer;font-size:11.5px;">✓ Dodaj</button>
-        <button onclick="gprPrekidacDodavanja(${g.id})" style="padding:5px 11px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;font-size:11.5px;">Odustani</button>
-        <span id="gpr-dim-poruka-${g.id}" style="font-size:11px;color:#8b96a5;"></span>
+        <span id="gpr-dim-polja-${g.id}" style="flex:1;display:inline-flex;gap:5px;align-items:center;flex-wrap:nowrap;"></span>
+        <button onclick="gprDodajDim(${g.id})"
+                style="padding:4px 12px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:5px;font-weight:700;cursor:pointer;font-size:11px;">+ Dodaj</button>
       </div>
-      <div id="gpr-dim-moguci-${g.id}" style="margin-top:6px;"></div>
+      <div id="gpr-dim-poruka-${g.id}" style="font-size:10.5px;color:#8b96a5;padding:3px 10px 6px;"></div>
     </div>
 
-    <!-- Isti sto, drugi izgled — vazi za SVE mjere ovog proizvoda -->
-    <div style="margin-top:9px;padding:8px 11px;background:#faf9fc;border:1px solid #e0d8ee;border-radius:8px;">
-      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;">
-        <span style="font-size:11.5px;color:#6b4fa0;font-weight:700;">Isti sto, drugi izgled:</span>
-        ${(g.moguci_oblici||[]).length
-          ? (g.moguci_oblici||[]).map(o=>`<span style="font-size:10.5px;background:#fff;border:1px solid #d6cce8;color:#6b4fa0;padding:2px 9px;border-radius:5px;font-weight:700;">${esc(GPR_OBLICI[o]?.lbl||o)}</span>`).join('')
-          : '<span style="font-size:10.5px;color:#c3c9d1;">nijedan</span>'}
-        <button onclick="gprUrediOblike(${g.id})"
-                style="background:#fff;border:1px solid #6b4fa0;border-radius:5px;padding:3px 11px;cursor:pointer;color:#6b4fa0;font-size:10.5px;font-weight:700;">✎ Podesi</button>
+    <!-- Mogući oblici — vrijede za SVE mjere ovog proizvoda -->
+    <div style="margin-top:9px;padding:9px 11px;background:#faf9fc;border:1px solid #e0d8ee;border-radius:8px;">
+      <div style="font-size:11.5px;color:#6b4fa0;font-weight:700;margin-bottom:6px;">
+        Prikaži u katalogu i kao mogući oblik:
       </div>
-      <div style="font-size:10px;color:#8b96a5;margin-top:5px;line-height:1.45;">
-        Iste mjere, druga izvedba — u katalogu stoje kao mogućnost uz istu cijenu.
-        Okrugli sto traži prečnik, pa se dodaje kao <b>zasebna mjera</b> gore.
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${(()=>{
+          const osn = g.grupa_oblik || (g.dimenzije||[])[0]?.oblik || 'PRAV';
+          const izvor = GPR_KRUZNI.includes(osn) ? GPR_KRUZNI
+                      : GPR_STOLOVI.includes(osn) ? GPR_STOLOVI : GPR_PRAVOUGAONI;
+          const izabrani = g.moguci_oblici || [];
+          return izvor.filter(o=>GPR_OBLICI[o]).map(o=>{
+            const akt = izabrani.includes(o);
+            return `<label style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11.5px;
+                         border:1px solid ${akt?'#6b4fa0':'var(--border,#ddd)'};background:${akt?'#fff':'#fafbfc'};font-weight:${akt?'700':'400'};color:${akt?'#6b4fa0':'inherit'};">
+              <input type="checkbox" value="${o}" ${akt?'checked':''} onchange="gprPromjenaOblika(${g.id})">
+              ${esc(GPR_OBLICI[o].lbl)}
+            </label>`;
+          }).join('');
+        })()}
+      </div>
+      <div id="gpr-oblici-poruka-${g.id}" style="font-size:10px;color:#8b96a5;margin-top:6px;line-height:1.45;">
+        Bar jedan mora biti označen. Iste mjere, druga izvedba — u katalogu stoje uz istu cijenu.
       </div>
     </div>
 
@@ -5919,14 +5936,43 @@ const GPR_PRAVOUGAONI = ['PRAV','KVAD','OVAL','BACVA','ZAOB','I','L','U','V','N'
 /* Obrazac za unos mjere je sakriven dok se ne zatrazi — inace se njegov izbor oblika
    mijesao sa izborom "isti sto, drugi izgled" ispod, pa je izgledalo kao dva ista
    podesavanja jedno ispod drugog. */
-function gprPrekidacDodavanja(gid){
-  const ob = document.getElementById('gpr-dim-obrazac-'+gid);
-  const dug = document.getElementById('gpr-dim-dugme-'+gid);
-  if(!ob) return;
-  const otvoren = ob.style.display !== 'none';
-  ob.style.display = otvoren ? 'none' : 'block';
-  if(dug) dug.textContent = otvoren ? '+ Nova mjera' : '✕ Zatvori';
-  if(!otvoren) setTimeout(()=>gprOblikPromjena(gid), 20);
+
+
+/* Bar JEDAN oblik mora ostati oznacen — inace proizvod ne bi imao nijedan izgled,
+   pa se u katalogu ne bi znalo sta se uopste prodaje. */
+async function gprPromjenaOblika(pid){
+  const kutije = [...document.querySelectorAll(`#gpr-oblici-poruka-${pid}`)].length
+    ? [...document.getElementById('gpr-oblici-poruka-'+pid).parentElement.querySelectorAll('input[type=checkbox]')]
+    : [];
+  const izabrani = kutije.filter(i=>i.checked).map(i=>i.value);
+  const poruka = document.getElementById('gpr-oblici-poruka-'+pid);
+
+  if(!izabrani.length){
+    if(poruka){
+      poruka.textContent = '⚠ Bar jedan oblik mora biti označen — vraćam prethodni.';
+      poruka.style.color = 'var(--orange,#b8860b)';
+    }
+    // Vrati onaj koji je upravo iskljucen
+    const prvi = kutije[0];
+    if(prvi){ prvi.checked = true; }
+    return;
+  }
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${pid}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ moguci_oblici: izabrani }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
+    if(poruka){
+      poruka.textContent = `✓ Sačuvano — ${izabrani.length} ${izabrani.length===1?'oblik':'oblika'}`;
+      poruka.style.color = 'var(--green,#1f8a4c)';
+    }
+    const g = window.__gprPodaciDetalj?.[pid];
+    if(g) g.moguci_oblici = izabrani;
+  }catch(e){
+    if(poruka){ poruka.textContent = '✗ ' + e.message; poruka.style.color = 'var(--red,#c0392b)'; }
+  }
 }
 
 function gprOblikPromjena(gid){
@@ -5950,29 +5996,13 @@ function gprOblikPromjena(gid){
   cont.innerHTML = lista.map(([k, opis])=>`
     <span style="display:inline-flex;align-items:center;gap:3px;">
       <span style="font-size:10px;color:#8b96a5;font-weight:700;">${esc(opis)}</span>
+      ${/* Enter dodaje mjeru i ostaje spreman za sljedecu — unos ide bez misa. */''}
       <input type="text" inputmode="decimal" id="gpr-dm-${gid}-${k}" placeholder="mm"
-             title="${esc(opis)} (mm)${k==='duzina'&&!jeKruzni?' — najveća dužina'>'':''}"
+             title="${esc(opis)} (mm)"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();gprDodajDim(${gid});}"
              style="width:66px;font:inherit;font-size:11px;padding:4px 6px;border:1px solid #ccc;border-radius:5px;">
     </span>`).join('');
 
-  /* Ostali MOGUCI oblici sa istim mjerama — katalog ih navodi kao opciju.
-     Nudi se samo ista vrsta: uz okrugli nema smisla ponuditi pravougaoni. */
-  /* Nudi se samo ista vrsta, i to samo oblici STOLOVA. Uz pravougaoni sto nema
-     smisla ponuditi L oblik — to je kuhinjska ploca. */
-  const izvor = jeKruzni ? GPR_KRUZNI
-              : GPR_STOLOVI.includes(ob) ? GPR_STOLOVI
-              : GPR_PRAVOUGAONI;
-  const ostali = izvor.filter(o => o !== ob && GPR_OBLICI[o]);
-  const mog = document.getElementById('gpr-dim-moguci-'+gid);
-  if(mog){
-    mog.innerHTML = ostali.length ? `
-      <span style="font-size:10px;color:#8b96a5;margin-right:4px;">moguć i:</span>
-      ${ostali.map(o=>`
-        <label style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;cursor:pointer;margin-right:7px;">
-          <input type="checkbox" class="gpr-mog-${gid}" value="${o}">
-          ${esc(GPR_OBLICI[o].lbl)}
-        </label>`).join('')}` : '';
-  }
 }
 
 async function gprDodajDim(gid){
@@ -6018,10 +6048,11 @@ async function gprDodajDim(gid){
     const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
     if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
     if(poruka){ poruka.textContent = '✓ Dimenzija dodata'; poruka.style.color = 'var(--green,#1f8a4c)'; }
-    const ob = document.getElementById('gpr-dim-obrazac-'+gid);
-    const dug = document.getElementById('gpr-dim-dugme-'+gid);
-    if(ob) ob.style.display = 'none';
-    if(dug) dug.textContent = '+ Nova mjera';
+    /* Kursor se vraca u prvo polje — Enter tako dodaje mjeru za mjerom, bez misa. */
+    setTimeout(()=>{
+      const prvo = document.querySelector(`[id^="gpr-dm-${gid}-"]`);
+      if(prvo) prvo.focus();
+    }, 80);
     if(window.__gprPodaci) delete window.__gprPodaci[gid];
     gprOznaciZastarjelim(gid);   // nova mjera = nova cijena, cjenovnik treba azurirati
     /* Ciste se DINAMICKA polja (gpr-dm-{gid}-{A,B,D,R}). Ranije su se cistila stara
