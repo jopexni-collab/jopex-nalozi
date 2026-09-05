@@ -253,14 +253,18 @@ const PRIJEVODI = {
         prazan:'Le catalogue est vide.' },
 };
 
+/* Jezik i valuta se drze u SVOM objektu, ne citaju se iz "podaci" — taj je deklarisan
+   nize u fajlu, pa bi svaki poziv prije njega rusio stranicu. */
+const IZBOR = { jezik: 'bs', valuta: 'KM' };
+
 function T(kljuc){
-  const j = podaci?.jezik || 'bs';
+  const j = IZBOR.jezik || 'bs';
   return (PRIJEVODI[j] && PRIJEVODI[j][kljuc]) || PRIJEVODI.bs[kljuc] || kljuc;
 }
 
 /* Naziv na izabranom jeziku; ako prevoda nema, ostaje osnovni. */
 function nazivJezik(o){
-  const j = podaci?.jezik || 'bs';
+  const j = IZBOR.jezik || 'bs';
   if(j === 'bs') return o.naziv;
   return o['naziv_' + j] || o.naziv;
 }
@@ -268,7 +272,7 @@ function nazivJezik(o){
 /* Preracun u valutu kataloga. Kurs EUR/KM je FIKSAN, pa je pretvaranje tacno. */
 const KURS_EUR = 1.95583;
 function uValutu(iznos, izVal){
-  const cilj = (podaci?.valuta || 'KM').toUpperCase();
+  const cilj = (IZBOR.valuta || 'KM').toUpperCase();
   const iz = (izVal || 'KM').toUpperCase();
   let v = Number(iznos) || 0;
   if(iz === cilj) return { v, val: cilj };
@@ -291,6 +295,8 @@ async function ucitaj(){
     const d = await r.json();
     if(!r.ok){ prikaziGresku(d.error || 'Katalog nije dostupan.'); return; }
     podaci = d;
+    IZBOR.jezik = d.jezik || 'bs';
+    IZBOR.valuta = d.valuta || 'KM';
     prikaz = d.prikaz === 'lista' ? 'lista' : 'mreza';
 
     document.getElementById('naslov').textContent = d.naslov || 'Katalog proizvoda';
