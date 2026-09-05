@@ -500,7 +500,7 @@ router.post('/', async (req, res) => {
 /* ── PATCH /:id ─────────────────────────────────────────────────────────────── */
 router.patch('/:id', async (req, res) => {
   if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
-  const DOZVOLJENA = ['naziv', 'naziv_en', 'naziv_it', 'grupa', 'opis', 'aktivan', 'zaokruzi_na', 'slika_url', 'slika_roba_id', 'grupa_proizvoda_id'];
+  const DOZVOLJENA = ['naziv', 'naziv_en', 'naziv_it', 'grupa', 'opis', 'aktivan', 'zaokruzi_na', 'slika_url', 'slika_roba_id', 'grupa_proizvoda_id', 'spreman_za_katalog'];
   const sets = [], vals = [];
   let i = 1;
   for (const k of DOZVOLJENA) {
@@ -543,13 +543,14 @@ router.post('/:id/stavke', async (req, res) => {
       'SELECT COALESCE(MAX(redosled),0)+1 AS r FROM gotov_stavke WHERE gotov_id=$1', [req.params.id]
     );
     const r = await pool.query(
-      `INSERT INTO gotov_stavke (gotov_id, roba_id, opis, tip_kolicine, kolicina, faktor, fiksna_cijena, redosled, grupa_izbora)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      `INSERT INTO gotov_stavke (gotov_id, roba_id, opis, tip_kolicine, kolicina, faktor, fiksna_cijena, redosled, grupa_izbora, sastojak_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [req.params.id, roba_id || null, opis || null,
        ['kom','povrsina','duzina'].includes(tip_kolicine) ? tip_kolicine : 'kom',
        broj(kolicina) || 1, broj(faktor) || 1,
        fiksna_cijena != null && fiksna_cijena !== '' ? broj(fiksna_cijena) : null,
-       n.rows[0].r, String(grupa_izbora || '').trim() || null]
+       n.rows[0].r, String(grupa_izbora || '').trim() || null,
+       parseInt(req.body?.sastojak_id) || null]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
@@ -681,6 +682,58 @@ router.delete('/dimenzija/:did', async (req, res) => {
 /* GET /:id/slike-izbor — sve slike artikala koji ulaze u ovaj proizvod.
    Sluzi da se iz njih izabere ona koja predstavlja GOTOV proizvod. Ako nijedna ne
    odgovara, moze se upisati adresa nove slike. */
+/* POST /:id/snimi-cijene — ZAMRZAVA trenutno izracunate cijene.
+   Cijene se inace racunaju uzivo iz lagera, pa se mijenjaju cim se promijeni cijena
+   neke komponente. Katalog to ne smije — odstampana cijena mora ostati ista.
+   Ovdje se snima presjek: koja kombinacija, koja mjera, koja cijena, za kog kupca. */
+router.post('/:id/snimi-cijene', async (req, res) => {
+  if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
+  const redovi = Array.isArray(req.body?.cijene) ? req.body.cijene : null;
+  if (!redovi || !redovi.length)
+    return res.status(400).json({ error: 'Nema izračunatih cijena za snimanje.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const u = req.session.user;
+
+    /* Stari cjenovnik se brise — snima se UVIJEK cijeli presjek, ne dopuna.
+       Inace bi ostajale cijene kombinacija koje vise ne postoje. */
+    await client.query('DELETE FROM gotov_cjenovnik WHERE gotov_id=$1', [req.params.id]);
+
+    for (const r of redovi) {
+      await client.query(
+        `INSERT INTO gotov_cjenovnik
+           (gotov_id, kombinacija, opis_izbora, dimenzija, povrsina_m2, cijena, valuta,
+            objekt_id, objekt_naziv, tip_kupca_id, tip_kupca, popust_posto, snimio_id, snimio_ime)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        [req.params.id, r.kombinacija || null, r.opis_izbora || null, r.dimenzija || null,
+         broj(r.povrsina_m2), broj(r.cijena), req.body?.valuta || 'KM',
+         parseInt(req.body?.objekt_id) || null, req.body?.objekt_naziv || null,
+         parseInt(req.body?.tip_kupca_id) || null, req.body?.tip_kupca || null,
+         broj(r.popust_posto), u.id, u.ime_prezime]
+      );
+    }
+    await client.query('UPDATE gotovi_proizvodi SET cjenovnik_kada=now() WHERE id=$1', [req.params.id]);
+    await client.query('COMMIT');
+    res.json({ ok: true, snimljeno: redovi.length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+// GET /:id/cjenovnik — snimljene (zamrznute) cijene
+router.get('/:id/cjenovnik', async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT * FROM gotov_cjenovnik WHERE gotov_id=$1 ORDER BY dimenzija, opis_izbora',
+      [req.params.id]
+    );
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/:id/slike-izbor', async (req, res) => {
   try {
     const r = await pool.query(
