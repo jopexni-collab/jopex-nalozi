@@ -419,7 +419,17 @@ router.get('/:id', async (req, res) => {
       'SELECT * FROM gotov_dimenzije WHERE gotov_id=$1 ORDER BY redosled, id',
       [req.params.id]
     );
-    res.json({ ...g.rows[0], stavke: s.rows, dimenzije: d.rows });
+    /* Sastojci grupe idu uz proizvod — prikaz iz njih crta sekcije, i one prazne.
+       Bez toga se ne bi znalo da sastojak postoji dok se u njega nesto ne doda. */
+    let sastojciGrupe = [];
+    if (g.rows[0].grupa_proizvoda_id) {
+      const sg = await pool.query(
+        'SELECT * FROM grupa_sastojci WHERE grupa_id=$1 ORDER BY redni_broj, id',
+        [g.rows[0].grupa_proizvoda_id]
+      );
+      sastojciGrupe = sg.rows;
+    }
+    res.json({ ...g.rows[0], stavke: s.rows, dimenzije: d.rows, sastojci_grupe: sastojciGrupe });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -452,16 +462,10 @@ router.post('/', async (req, res) => {
       const sast = await client.query(
         'SELECT * FROM grupa_sastojci WHERE grupa_id=$1 ORDER BY redni_broj, id', [grupaId]
       );
-      for (const s of sast.rows) {
-        await client.query(
-          `INSERT INTO gotov_stavke
-             (gotov_id, sastojak_id, grupa_izbora, tip_kolicine, kolicina, faktor, redosled, opis)
-           VALUES ($1,$2,$3,$4,1,1,$5,$6)`,
-          [gotovId, s.id, s.naziv, s.tip_kolicine, s.redni_broj,
-           `(prazno — dodaj artikal u „${s.naziv}")`]
-        );
-        prenesenoSastojaka++;
-      }
+      /* Prazne stavke se NE prave. Ranije se za svaki sastojak upisivao prazan red sa
+         opisom "(prazno — dodaj artikal)", koji se nije mogao ni urediti ni obrisati.
+         Umjesto toga prikaz crta sekcije iz same grupe, pa su prazne dok se ne popune. */
+      prenesenoSastojaka = sast.rows.length;
     }
 
     // Artikli koji već nose taj naziv → same stavke sastavnice
@@ -496,7 +500,7 @@ router.post('/', async (req, res) => {
 /* ── PATCH /:id ─────────────────────────────────────────────────────────────── */
 router.patch('/:id', async (req, res) => {
   if (!smijeMijenjati(req)) return res.status(403).json({ error: 'Nemate dozvolu.' });
-  const DOZVOLJENA = ['naziv', 'naziv_en', 'naziv_it', 'grupa', 'opis', 'aktivan', 'zaokruzi_na'];
+  const DOZVOLJENA = ['naziv', 'naziv_en', 'naziv_it', 'grupa', 'opis', 'aktivan', 'zaokruzi_na', 'slika_url', 'slika_roba_id', 'grupa_proizvoda_id'];
   const sets = [], vals = [];
   let i = 1;
   for (const k of DOZVOLJENA) {
@@ -674,6 +678,25 @@ router.delete('/dimenzija/:did', async (req, res) => {
 /* ── GET /:id/cijena — RAČUN ───────────────────────────────────────────────────
    Vraća cijenu za svaku dimenziju, sa razradom po komponenti.
    Parametri: objekt_id (čije cijene), tip_kupca_id (koji popust).            */
+/* GET /:id/slike-izbor — sve slike artikala koji ulaze u ovaj proizvod.
+   Sluzi da se iz njih izabere ona koja predstavlja GOTOV proizvod. Ako nijedna ne
+   odgovara, moze se upisati adresa nove slike. */
+router.get('/:id/slike-izbor', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT sl.id, sl.url, sl.thumb_url, sl.glavna, sl.gotov_proizvod,
+              ro.id AS roba_id, ro.sifra, ro.naziv AS roba_naziv, ro.grupa
+       FROM gotov_stavke st
+       JOIN roba ro ON ro.id = st.roba_id
+       JOIN roba_slike sl ON sl.roba_id = ro.id
+       WHERE st.gotov_id = $1
+       ORDER BY sl.gotov_proizvod DESC, sl.glavna DESC, ro.naziv, sl.redosled`,
+      [req.params.id]
+    );
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/:id/cijena', async (req, res) => {
   const objektId = parseInt(req.query.objekt_id) || null;
   const tipKupcaId = parseInt(req.query.tip_kupca_id) || null;
@@ -834,7 +857,9 @@ router.get('/:id/cijena', async (req, res) => {
         })),
         /* Za veliki pregled: slika gotovog proizvoda one komponente koja je ima.
            Obicno je to ploca — njena slika pokazuje kako sto izgleda gotov. */
-        slika_pregled: [...izabrane, ...obavezne].find(x => x.slika_gotov)?.slika_gotov
+        /* Slika PROIZVODA ima prednost — ona pokazuje gotov sto, a ne teksturu ploce. */
+        slika_pregled: proizvod.slika_url
+                    || [...izabrane, ...obavezne].find(x => x.slika_gotov)?.slika_gotov
                     || [...izabrane].find(x => x.slika)?.slika || null,
         povrsina_m2: +m2.toFixed(3),
         cijena_cjenovnik: +osnovica.toFixed(2),
