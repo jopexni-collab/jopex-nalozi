@@ -346,6 +346,28 @@ function render(){
 
 /* Kartica za MREZNI prikaz — slika, naziv i raspon cijena. Puna tabela kombinacija
    ne staje u karticu, pa se prikazuje "od–do"; detalji su u listi. */
+
+/* Mjera iz cjenovnika je TEKST snimljen u trenutku snimanja; opisDim() ga danas moze
+   ispisati drugacije (npr. sa "· H750"). Zato se poredi po BROJEVIMA — tako se
+   ikonica nadje i kad se zapis u medjuvremenu promijenio. */
+function nadjiDimenziju(p, tekst){
+  const dims = p.dimenzije || [];
+  if(!dims.length || !tekst) return null;
+
+  // Prvo tacno poklapanje
+  const tacno = dims.find(d => opisDim(d) === tekst);
+  if(tacno) return tacno;
+
+  // Pa po brojevima: "1600×900 · H750" i "1600×900" imaju iste prve dvije mjere
+  const broj = s => (String(s).match(/\d+/g) || []).map(Number);
+  const t = broj(tekst);
+  if(!t.length) return null;
+  return dims.find(d => {
+    const b = broj(opisDim(d));
+    return b.length && t.length && b[0] === t[0] && (b[1] ?? null) === (t[1] ?? null);
+  }) || null;
+}
+
 function gotovKartica(p){
   /* Kartica pokazuje CIJENU PO DIMENZIJI, ne samo raspon — kupac odmah vidi sta kosta
      koja mjera. Ispod idu oblici koji su za to postolje mogući. */
@@ -384,11 +406,11 @@ function gotovKartica(p){
             : `<div class="gotov-k-cijene">
                 ${/* Ikonica oblika ISPRED mjere — okrugli sto se odmah razlikuje od
                       pravougaonog, bez citanja brojeva. */''}
+                ${/* Bez ikonice ispred mjere — oblici stoje ISPOD cijena, jednom za
+                      cijeli proizvod. Mjera je uvijek duzina × sirina. */''}
                 ${mjere.map(m=>{
-                  const dim = (p.dimenzije||[]).find(x => opisDim(x) === m);
                   return `
                   <div class="gotov-k-red">
-                    ${dim ? `<span class="gotov-k-ikona" title="${esc(oblikNaziv(dim.oblik))}">${oblikIkona(dim.oblik)}</span>` : ''}
                     <span class="gotov-k-mjera">${esc(m)}</span>
                     <span class="gotov-k-iznos">${fmv(poMjeri[m].cijena, val)}</span>
                   </div>
@@ -511,10 +533,7 @@ function gotovProizvod(p){
             <th>Izvedba</th>
             ${/* Ikonica oblika u zaglavlju kolone — okrugli i pravougaoni se razlikuju
                   na prvi pogled, a brojevi ostaju citljivi. */''}
-            ${mjere.map(m => {
-              const dim = (p.dimenzije||[]).find(x => opisDim(x) === m);
-              return `<th class="desno">${dim ? `<span class="th-ikona">${oblikIkona(dim.oblik)}</span>` : ''}${esc(m)}</th>`;
-            }).join('')}
+            ${mjere.map(m => `<th class="desno">${esc(m)}</th>`).join('')}
           </tr></thead>
           <tbody>${izbori.map(iz => `
             <tr>
