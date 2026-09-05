@@ -149,7 +149,7 @@
 .oblik-opcija .oblik-ikona{stroke:#c3c9d1;stroke-dasharray:2 2;}
 .oblik-opcija .oblik-mjera{color:#c3c9d1;}
 
-.gotov-lijevo{flex:0 0 180px;}
+.gotov-lijevo{flex:0 0 180px;align-self:flex-start;}
 .gotov-lijevo .gotov-slika{width:180px;}
 .gotov-dim-spisak{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px;}
 .gotov-dim{font-size:11px;font-weight:700;background:#eef2f8;color:#1f3864;padding:2px 8px;border-radius:5px;}
@@ -610,7 +610,25 @@ function gotovProizvod(p){
           ${p.slika_url
             ? `<img class="gotov-slika" src="${esc(p.slika_url)}" loading="lazy" alt="${esc(p.naziv)}">`
             : '<div class="nema-slike gotov-slika">🍽️</div>'}
+        </div>
+        <div class="gotov-tekst">
+          <div class="gotov-naziv">${esc(nazivJezik(p))}</div>
+          ${p.opis ? `<div class="gotov-opis">${esc(p.opis)}</div>` : ''}
 
+          ${/* Model postolja i konkretan materijal — kupcu to znaci, za razliku od
+                internih naziva grupa. Cijena vazi bas za njih. */''}
+          ${(p.sastojci||[]).length ? `<div class="gotov-sastojci">
+            ${p.sastojci.map(s=>`
+              <div class="gotov-sastojak">
+                <span class="s-naziv">${esc(s.naziv)}:</span>
+                <span class="s-artikal">${s.artikli.map(esc).join(' · ')}</span>
+              </div>`).join('')}
+          </div>` : ((p.materijali||[]).length ? `<div class="gotov-napomena">
+            Materijal: <b>${(p.materijali||[]).map(esc).join(', ')}</b>
+          </div>` : '')}
+
+          ${/* Mjere, oblici i ostale grupe idu DESNO, uz naziv — lijevo je bila samo
+                slika, pa je desna strana ostajala prazna dok se tekst gomilao ispod. */''}
           ${/* Dimenzije ISPOD SLIKE, pa svi moguci oblici ispod njih — kupac prvo vidi
                 kako sto izgleda, pa koje mjere i izvedbe postoje. */''}
           ${(p.dimenzije||[]).length ? `
@@ -630,30 +648,14 @@ function gotovProizvod(p){
                 od njih, ali po drugoj cijeni. */''}
           ${(p.sastojci||[]).some(s => (s.ostale_grupe||[]).length) ? `
             <div class="gotov-ostali">
-              <div class="gotov-ostali-nas">Dostupno i u:</div>
+              <div class="gotov-ostali-nas">${T('dostupno_i_u')}</div>
               ${p.sastojci.filter(s=>(s.ostale_grupe||[]).length).map(s=>`
                 <div class="gotov-ostali-red">
                   <span class="s-naziv">${esc(s.naziv)}:</span>
                   ${s.ostale_grupe.map(esc).join(' · ')}
                 </div>`).join('')}
-              <div class="gotov-ostali-nap">cijena na upit</div>
+              <div class="gotov-ostali-nap">${T('na_upit')}</div>
             </div>` : ''}
-        </div>
-        <div class="gotov-tekst">
-          <div class="gotov-naziv">${esc(nazivJezik(p))}</div>
-          ${p.opis ? `<div class="gotov-opis">${esc(p.opis)}</div>` : ''}
-
-          ${/* Model postolja i konkretan materijal — kupcu to znaci, za razliku od
-                internih naziva grupa. Cijena vazi bas za njih. */''}
-          ${(p.sastojci||[]).length ? `<div class="gotov-sastojci">
-            ${p.sastojci.map(s=>`
-              <div class="gotov-sastojak">
-                <span class="s-naziv">${esc(s.naziv)}:</span>
-                <span class="s-artikal">${s.artikli.map(esc).join(' · ')}</span>
-              </div>`).join('')}
-          </div>` : ((p.materijali||[]).length ? `<div class="gotov-napomena">
-            Materijal: <b>${(p.materijali||[]).map(esc).join(', ')}</b>
-          </div>` : '')}
 
           ${p.na_upit ? `<div class="gotov-upit">${T('cijena_na_upit')}</div>` : ''}
         </div>
