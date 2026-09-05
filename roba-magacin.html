@@ -4793,11 +4793,17 @@ async function gprPostaviSliku(pid, url){
 async function gprPrikaziCjenovnik(pid){
   const el = document.getElementById('gpr-cjen-prikaz-'+pid);
   if(!el) return;
+  el.innerHTML = '<div style="font-size:11px;color:#8b96a5;padding:4px;">Učitavanje cijena...</div>';
   try{
     const r = await fetch(`${API}/api/gotovi-proizvodi/${pid}/cjenovnik`);
     if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
     const c = await r.json();
-    if(!c.length){ el.innerHTML = ''; return; }   // nema snimljenih — ne pravi prazan okvir
+    if(!c.length){
+      el.innerHTML = `<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:7px;padding:9px 12px;font-size:11.5px;color:#8b6914;line-height:1.5;">
+        ⚠ Cjenovnik je prazan iako je označen kao snimljen.<br>
+        Klikni <b>▶ Izračunaj</b> pa <b>💾 Snimi cjenovnik</b>.</div>`;
+      return;
+    }
     // Redovi = izvedba, kolone = mjera — isto kako se stampa u katalogu
     const mjere = [...new Set(c.map(x=>x.dimenzija).filter(Boolean))];
     const izbori = [...new Set(c.map(x=>x.opis_izbora).filter(Boolean))];
@@ -4827,7 +4833,10 @@ async function gprPrikaziCjenovnik(pid){
         · snimio ${esc(c[0].snimio_ime||'')}
       </div>`;
   }catch(e){
-    el.innerHTML = '';   // tiho — cjenovnik je dopuna, ne smije rusiti prikaz proizvoda
+    /* Greska se PRIKAZUJE — tiho preskakanje je krilo uzrok (npr. tabela cjenovnika
+       ne postoji), pa je izgledalo kao da cijena jednostavno nema. */
+    el.innerHTML = `<div style="background:#fdecea;border:1px solid #f5c6cb;border-radius:7px;padding:9px 12px;font-size:11.5px;color:var(--red,#c0392b);">
+      ✗ Cjenovnik: ${esc(e.message)}</div>`;
   }
 }
 
@@ -5038,7 +5047,7 @@ function gprRenderDetalj(el, g){
 
   gprPopuniListe(g.id);
   setTimeout(()=>gprOblikPromjena(g.id), 30);   // popuni polja za podrazumijevani oblik
-  if(g.cjenovnik_kada) gprPrikaziCjenovnik(g.id);   // cijene se prikazuju odmah
+  gprPrikaziCjenovnik(g.id);   // cijene se prikazuju odmah, i greska ako je ima
 }
 
 /* Objekti i tipovi kupaca za racun — povlace se jednom po otvaranju */
