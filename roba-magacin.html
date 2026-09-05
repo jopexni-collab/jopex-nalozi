@@ -4247,9 +4247,15 @@ function gpgRender(){
             ${/* Broj mjera. Ranije je pisalo "0m" — licilo je na metre i lijepilo se uz
                   naziv. Sad se prikazuje samo UPOZORENJE kad mjera nema, jer bez njih
                   proizvod ne moze u katalog. */''}
-            ${!(p.broj_dimenzija||0)
-              ? '<span style="font-size:9.5px;color:var(--orange,#b8860b);" title="Nema nijednu mjeru — dodaj dimenzije da bi mogao u katalog">⚠</span>'
-              : `<span style="font-size:9.5px;color:#8b96a5;" title="${p.broj_dimenzija} ${p.broj_dimenzija===1?'mjera':'mjera'}">${p.broj_dimenzija}×</span>`}
+            ${/* Upozorava se samo kad proizvod STVARNO nije mjerljiv. Mjera moze doci i
+                  sa komponente ("Mjera dijela"), pa brojanje samo dimenzija nije dovoljno. */''}
+            ${p.mjerljiv === false
+              ? '<span style="font-size:9.5px;color:var(--orange,#b8860b);" title="Ploča se mjeri po m², a nema ni dimenziju proizvoda ni mjeru dijela — cijena se ne može izračunati">⚠</span>'
+              : (p.broj_dimenzija
+                  ? `<span style="font-size:9.5px;color:#8b96a5;" title="${p.broj_dimenzija} ${p.broj_dimenzija===1?'mjera':'mjera'}">${p.broj_dimenzija}×</span>`
+                  : (p.ima_mjeru_dijela
+                      ? '<span style="font-size:9.5px;color:#8b96a5;" title="Mjera je na komponenti (Mjera dijela)">◧</span>'
+                      : ''))}
             <button onclick="event.stopPropagation();gpgObrisiProizvod(${p.id},'${esc(p.naziv).replace(/'/g,"&apos;")}')" title="Obriši proizvod"
                     style="background:none;border:none;cursor:pointer;color:#c3c9d1;font-size:10px;padding:0 2px;"
                     onmouseover="this.style.color='var(--red,#c0392b)'" onmouseout="this.style.color='#c3c9d1'">🗑</button>
@@ -5747,8 +5753,10 @@ async function gprDodajDim(gid){
     const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
     if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
     if(poruka){ poruka.textContent = '✓ Dimenzija dodata'; poruka.style.color = 'var(--green,#1f8a4c)'; }
-    document.getElementById('gpr-dim-s-'+gid).value='';
-    document.getElementById('gpr-dim-v-'+gid).value='';
+    /* Ciste se DINAMICKA polja (gpr-dm-{gid}-{A,B,D,R}). Ranije su se cistila stara
+       "gpr-dim-s" i "gpr-dim-v", koja vise ne postoje — pa je poslije USPJESNOG
+       dodavanja pucalo "Cannot set properties of null". */
+    document.querySelectorAll(`[id^="gpr-dm-${gid}-"]`).forEach(p => { p.value = ''; });
     gprUcitajDetalj(gid); gprUcitaj();
   }catch(e){
     if(poruka){ poruka.textContent = '✗ ' + e.message; poruka.style.color = 'var(--red,#c0392b)'; }

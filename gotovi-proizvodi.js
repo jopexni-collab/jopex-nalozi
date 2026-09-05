@@ -152,9 +152,26 @@ router.use((req, res, next) => {
 router.get('/', async (req, res) => {
   try {
     const r = await pool.query(
+      /* Mjera moze doci sa DVA mjesta: dimenzija proizvoda (gotov_dimenzije) ili
+         mjera dijela na samoj komponenti (sirina_kom/visina_kom). Ranije se brojalo
+         samo prvo, pa je proizvod sa mjerom dijela pogresno bio oznacen kao "bez mjere". */
       `SELECT g.*,
               (SELECT COUNT(*) FROM gotov_stavke   s WHERE s.gotov_id = g.id)::int AS broj_stavki,
-              (SELECT COUNT(*) FROM gotov_dimenzije d WHERE d.gotov_id = g.id)::int AS broj_dimenzija
+              (SELECT COUNT(*) FROM gotov_dimenzije d WHERE d.gotov_id = g.id)::int AS broj_dimenzija,
+              EXISTS(SELECT 1 FROM gotov_stavke s
+                     WHERE s.gotov_id = g.id
+                       AND s.tip_kolicine IN ('povrsina','duzina')
+                       AND (s.sirina_kom IS NOT NULL OR s.visina_kom IS NOT NULL)) AS ima_mjeru_dijela,
+              /* Proizvod je mjerljiv ako ima dimenziju ILI mjeru dijela ILI su mu sve
+                 stavke komadne — tad mjera uopste ne treba. */
+              (
+                EXISTS(SELECT 1 FROM gotov_dimenzije d WHERE d.gotov_id = g.id)
+                OR EXISTS(SELECT 1 FROM gotov_stavke s WHERE s.gotov_id = g.id
+                          AND s.tip_kolicine IN ('povrsina','duzina')
+                          AND (s.sirina_kom IS NOT NULL OR s.visina_kom IS NOT NULL))
+                OR NOT EXISTS(SELECT 1 FROM gotov_stavke s WHERE s.gotov_id = g.id
+                              AND s.tip_kolicine IN ('povrsina','duzina'))
+              ) AS mjerljiv
        FROM gotovi_proizvodi g
        ${req.query.svi === '1' ? '' : 'WHERE g.aktivan = true'}
        ORDER BY g.naziv`
