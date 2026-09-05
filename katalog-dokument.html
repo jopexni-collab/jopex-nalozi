@@ -132,6 +132,17 @@
 .gotov-napomena{font-size:12px;color:#6b7a8d;margin-top:5px;}
 .gotov-k-mat{font-size:11px;color:#8b96a5;margin-top:2px;}
 @media print{ .oblik-ikona{stroke:#666;} }
+
+.gotov-uslov{font-size:11px;color:#8b96a5;margin-top:6px;line-height:1.5;}
+.oblik-uvod{font-size:10.5px;color:#8b96a5;align-self:center;margin-right:2px;}
+
+.oblici-legenda{border:1px solid var(--border,#ddd);border-radius:10px;padding:12px 14px;margin-bottom:16px;background:#fafbfc;
+  break-inside:avoid;page-break-inside:avoid;}
+.legenda-naslov{font-size:12px;font-weight:800;color:#6b7a8d;letter-spacing:.3px;margin-bottom:8px;}
+.legenda-red{display:flex;gap:16px;flex-wrap:wrap;}
+.legenda-stavka{display:inline-flex;flex-direction:column;align-items:center;gap:2px;}
+.legenda-ime{font-size:10px;color:#8b96a5;white-space:nowrap;}
+.legenda-nap{font-size:10.5px;color:#8b96a5;margin-top:8px;}
 </style>
 </head>
 <body>
@@ -259,6 +270,23 @@ function render(){
      se pravi, pa dolaze ispod, kao dopuna. */
   let html = '';
   if(gotovi.length){
+    /* LEGENDA na pocetku — svi oblici koji se u ovom katalogu pojavljuju, jednom.
+       Uz proizvode onda stoje samo sitne oznake, pa strana ostaje citljiva. */
+    const sviOblici = [...new Set(gotovi.flatMap(p => (p.dimenzije||[]).map(d => d.oblik)).filter(Boolean))];
+    if(sviOblici.length > 1){
+      html += `<div class="oblici-legenda">
+        <div class="legenda-naslov">Oblici stolova</div>
+        <div class="legenda-red">
+          ${sviOblici.map(o=>`
+            <span class="legenda-stavka">
+              ${oblikIkona(o)}
+              <span class="legenda-ime">${esc(oblikNaziv(o))}</span>
+            </span>`).join('')}
+        </div>
+        <div class="legenda-nap">Dostupnost oblika zavisi od postolja — uz svaki proizvod stoji šta nosi.</div>
+      </div>`;
+    }
+
     const poGrupi = {};
     gotovi.forEach(p => { (poGrupi[p.grupa_naziv||'Gotovi proizvodi'] ||= []).push(p); });
     /* Gotovi proizvodi postuju izabrani prikaz — u mrezi idu kao kartice jedna uz
@@ -389,14 +417,6 @@ function gotovProizvod(p){
             Materijal: <b>${(p.materijali||[]).map(esc).join(', ')}</b>
           </div>` : ''}
 
-          ${(p.dimenzije||[]).length ? `<div class="gotov-oblici">
-            ${p.dimenzije.map(d=>`
-              <span class="oblik-stavka" title="${esc(oblikNaziv(d.oblik))} ${esc(opisDim(d))}">
-                ${oblikIkona(d.oblik)}
-                <span class="oblik-mjera">${esc(opisDim(d))}</span>
-              </span>`).join('')}
-          </div>` : ''}
-
           ${p.na_upit ? '<div class="gotov-upit">Cijena na upit</div>' : ''}
         </div>
       </div>
@@ -421,8 +441,22 @@ function gotovProizvod(p){
                 return `<td class="desno">${tekst}</td>`;
               }).join('')}
             </tr>`).join('')}</tbody>
-        </table>`
+        </table>
+        <div class="gotov-uslov">
+          Cijena važi za navedeni <b>materijal</b> i <b>dimenziju</b>.
+          Druga izvedba ili mjera mijenja cijenu.
+        </div>`
       : (mjere.length ? `<div class="gotov-mjere">Dostupne mjere: ${mjere.map(esc).join(' · ')}</div>` : '')}
+
+      ${/* Oblici na DNU — diskretno, poslije cijena, jer su dopuna a ne glavna stvar */''}
+      ${(p.dimenzije||[]).length ? `<div class="gotov-oblici">
+        <span class="oblik-uvod">Dostupni oblici:</span>
+        ${p.dimenzije.map(d=>`
+          <span class="oblik-stavka" title="${esc(oblikNaziv(d.oblik))} ${esc(opisDim(d))}">
+            ${oblikIkona(d.oblik)}
+            <span class="oblik-mjera">${esc(opisDim(d))}</span>
+          </span>`).join('')}
+      </div>` : ''}
     </div>`;
 }
 

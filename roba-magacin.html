@@ -4882,6 +4882,8 @@ async function gprPrikaziCjenovnik(pid){
 }
 
 function gprRenderDetalj(el, g){
+  if(!window.__gprStavke) window.__gprStavke = {};
+  window.__gprStavke[g.id] = g.stavke || [];
 
   el.innerHTML = `
     <!-- Zaglavlje proizvoda: slika, naziv i osnovna podesavanja. Izmjene se cuvaju
@@ -5265,7 +5267,10 @@ function gprRedStavke(g, s, i){
                      style="width:60px;text-align:right;font:inherit;font-size:11px;padding:3px 5px;border:1px solid ${s.fiksna_cijena!=null?'var(--green,#1f8a4c)':'#ddd'};border-radius:4px;${s.fiksna_cijena!=null?'font-weight:700;color:var(--green,#1f8a4c);':''}">
             </td>
             <td style="padding:2px 6px;text-align:center;white-space:nowrap;">
-              ${s.roba_id ? `<button onclick="gprZamijeniArtikal(${s.id},${g.id},${s.sastojak_id||'null'},'${esc(s.grupa_izbora||'').replace(/'/g,"&apos;")}')"
+              ${s.roba_id ? `<button onclick="gprOblikArtikla(${s.roba_id},'${esc(s.roba_naziv||'').replace(/'/g,"&apos;")}',${g.id})"
+                      title="${(s.moguci_oblici||[]).length ? 'Nosi oblike: '+(s.moguci_oblici||[]).join(', ') : 'Nema ograničenja oblika — klikni da postaviš'}"
+                      style="background:none;border:none;cursor:pointer;font-size:11px;color:${(s.moguci_oblici||[]).length?'#6b4fa0':'#c3c9d1'};">⬡</button>
+                <button onclick="gprZamijeniArtikal(${s.id},${g.id},${s.sastojak_id||'null'},'${esc(s.grupa_izbora||'').replace(/'/g,"&apos;")}')"
                       title="Zamijeni artikal — zadržava faktor, maržu i mjere"
                       style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--blue,#1a5fa8);">⇄</button>` : ''}
               <button onclick="gprObrisiStavku(${s.id},${g.id})" title="Obriši stavku" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--red,#c0392b);">🗑</button>
@@ -5295,6 +5300,41 @@ function gprIzborIzPretrage(gid, id, naziv, sifra, jm){
   }
   gprIzaberiArtikal(gid, id, naziv, sifra, jm);
   gprDodajStavku(gid);
+}
+
+
+/* Oblici koje artikal (postolje) moze nositi. Stoji na ARTIKLU, ne u sastavnici —
+   isto postolje ide u vise stolova, pa bi se inace ponavljalo i razislo. */
+let gobRobaId = null, gobGid = null;
+
+function gprOblikArtikla(robaId, naziv, gid){
+  gobRobaId = robaId; gobGid = gid;
+  document.getElementById('gob-artikal').innerHTML = `<b>${esc(naziv)}</b>`;
+  const trenutni = (window.__gprPodaci?.[gid]?.stavke || [])
+    .concat(window.__gprStavke?.[gid] || [])
+    .find(x => x.roba_id === robaId)?.moguci_oblici || [];
+
+  document.getElementById('gob-izbor').innerHTML = Object.entries(GPR_OBLICI).map(([k,o])=>`
+    <label style="display:flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid var(--border,#ddd);border-radius:7px;cursor:pointer;font-size:12px;">
+      <input type="checkbox" value="${k}" ${trenutni.includes(k)?'checked':''}>
+      <span>${esc(o.lbl)}</span>
+    </label>`).join('');
+  document.getElementById('modal-gpr-oblici').style.display = 'flex';
+}
+
+async function gprSacuvajOblike(bezOgranicenja){
+  const izabrani = bezOgranicenja ? []
+    : [...document.querySelectorAll('#gob-izbor input:checked')].map(i=>i.value);
+  try{
+    const r = await fetch(`${API}/api/roba/${gobRobaId}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ moguci_oblici: izabrani }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error||`Server je vratio ${r.status}`);
+    document.getElementById('modal-gpr-oblici').style.display='none';
+    if(gobGid) await gprUcitajDetalj(gobGid);
+  }catch(e){ alert('✗ '+e.message); }
 }
 
 function gprZamijeniArtikal(sid, gid, sastojakId, grupa){
@@ -7699,6 +7739,25 @@ fetch(`${API}/api/auth/me`).then(r=>{
               style="padding:6px 13px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:5px;font-weight:700;cursor:pointer;font-size:12px;">Postavi</button>
       <button onclick="gprPostaviSliku(window.__gslProizvod, '')"
               style="padding:6px 13px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;font-size:12px;color:var(--red,#c0392b);">Ukloni sliku</button>
+    </div>
+  </div>
+</div>
+<div id="modal-gpr-oblici" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:920;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:17px;max-width:470px;width:94vw;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <h3 style="margin:0;font-size:15.5px;">⬡ Oblici koje nosi</h3>
+      <button onclick="document.getElementById('modal-gpr-oblici').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+    </div>
+    <div id="gob-artikal" style="font-size:12.5px;color:#6b7a8d;margin-bottom:12px;"></div>
+    <div style="font-size:11.5px;color:#6b7a8d;line-height:1.5;margin-bottom:11px;">
+      Neka postolja ne nose okrugle ni bačvaste ploče. Označi šta ovo postolje može —
+      kombinacije sa drugim oblicima se <b>neće ni računati ni štampati</b>.
+      <br>Ako ništa ne označiš, nema ograničenja.
+    </div>
+    <div id="gob-izbor" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:7px;"></div>
+    <div style="display:flex;gap:7px;margin-top:15px;">
+      <button onclick="gprSacuvajOblike()" style="flex:1;padding:9px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;">✓ Sačuvaj</button>
+      <button onclick="gprSacuvajOblike(true)" style="padding:9px 15px;border:1px solid #ddd;background:#fff;border-radius:7px;cursor:pointer;font-size:12.5px;">Bez ograničenja</button>
     </div>
   </div>
 </div>

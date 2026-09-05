@@ -400,6 +400,7 @@ router.get('/:id', async (req, res) => {
          jer se u sastavnici racuna cijena po komponenti, ne vrijednost zaliha. */
       `SELECT st.*, ro.sifra, ro.naziv AS roba_naziv, ro.jed_mjera, ro.grupa,
               ro.debljina_cm, ro.std_sirina, ro.std_visina, ro.naziv_gotov,
+              ro.moguci_oblici,
               sa.naziv AS sastojak_naziv, sa.redni_broj AS sastojak_red,
               sa.dozvoljene_grupe, sa.max_debljina, sa.obavezan,
               rp.cijena AS cijena_lager, rp.stanje AS stanje_lager,
@@ -782,7 +783,7 @@ router.get('/:id/cijena', async (req, res) => {
       /* Uz komponentu se povlaci i SLIKA — za vizuelni pregled dok se bira.
          Prednost ima slika gotovog proizvoda; ako je nema, uzima se glavna slika
          artikla (tekstura ploce, fotografija postolja). */
-      `SELECT st.*, ro.sifra, ro.naziv AS roba_naziv, ro.jed_mjera,
+      `SELECT st.*, ro.sifra, ro.naziv AS roba_naziv, ro.jed_mjera, ro.moguci_oblici,
               rp.cijena AS cijena_lager, po.valuta,
               COALESCE(
                 (SELECT COALESCE(thumb_url, url) FROM roba_slike
@@ -943,8 +944,21 @@ router.get('/:id/cijena', async (req, res) => {
 
     const dimenzije = d.rows.length ? d.rows : [null];
     const redovi = [];
+    let preskoceno = 0;
     for (const dim of dimenzije) {
-      for (const komb of kombinacijeZaRacun) redovi.push(racunaj(dim, komb));
+      for (const komb of kombinacijeZaRacun) {
+        /* NEMOGUCE KOMBINACIJE se ne racunaju. Neka postolja ne nose okrugle ni
+           bacvaste ploce — takav sto se ne moze napraviti, pa mu ni cijena ne treba.
+           Ogranicenje stoji na ARTIKLU (roba.moguci_oblici), ne u sastavnici, da se
+           ne ponavlja za svaki nov sto. */
+        if (dim?.oblik) {
+          const zabranjeno = [...obavezne, ...komb].some(st =>
+            Array.isArray(st.moguci_oblici) && st.moguci_oblici.length &&
+            !st.moguci_oblici.includes(dim.oblik));
+          if (zabranjeno) { preskoceno++; continue; }
+        }
+        redovi.push(racunaj(dim, komb));
+      }
     }
 
     res.json({
@@ -965,6 +979,8 @@ router.get('/:id/cijena', async (req, res) => {
         })),
       })),
       broj_kombinacija: sveKombinacije.length * dimenzije.length,
+      // Koliko je izostavljeno jer postolje ne nosi taj oblik
+      preskoceno_zbog_oblika: preskoceno,
       // Kad kombinacija ima previse, vraca se prvih 200 — vise od toga niko ne cita
       skraceno: sveKombinacije.length > MAX_KOMBINACIJA,
       cijene: redovi,

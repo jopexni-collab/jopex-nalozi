@@ -1348,7 +1348,7 @@ router.patch('/:id', preskociAkoNijeArtikal, async (req, res) => {
      jedini kljuc, i mijenjala bi vezu sa svim ranijim dokumentima.
      Svaka izmjena naziva se BILJEZI (ko, kada, sta je bilo prije). */
   const samoOpisna = Object.keys(req.body || {}).length > 0 && Object.keys(req.body || {})
-    .every(k => ['naziv','naziv_gotov','naziv_en','naziv_it','naziv_gotov_en','naziv_gotov_it'].includes(k));
+    .every(k => ['naziv','naziv_gotov','naziv_en','naziv_it','naziv_gotov_en','naziv_gotov_it','moguci_oblici'].includes(k));
   const smijeCijene = smijeMijenjatiCijene(req);
   const smijeOpisna = req.session?.user?.moze_roba_magacin || smijeCijene;
   if (req.session?.user?.rola !== 'admin'
@@ -1357,7 +1357,8 @@ router.patch('/:id', preskociAkoNijeArtikal, async (req, res) => {
     return res.status(403).json({ error: 'Nemate dozvolu za ovu izmjenu.' });
   try {
     const { naziv, jed_mjera, aktivan, cijena, stanje, objekt_id,
-            naziv_gotov, naziv_en, naziv_it, naziv_gotov_en, naziv_gotov_it } = req.body;
+            naziv_gotov, naziv_en, naziv_it, naziv_gotov_en, naziv_gotov_it,
+            moguci_oblici } = req.body;
 
     /* Trag izmjene naziva — upisuje se PRIJE promjene, dok se stara vrijednost jos zna.
        Sifra se ne mijenja nigdje u sistemu, pa se ovdje samo pamti radi lakseg trazenja. */
@@ -1391,6 +1392,9 @@ router.patch('/:id', preskociAkoNijeArtikal, async (req, res) => {
       naziv_it:       prazno(naziv_it),
       naziv_gotov_en: prazno(naziv_gotov_en),
       naziv_gotov_it: prazno(naziv_gotov_it),
+      /* Oblici koje artikal (postolje) moze nositi. Prazno = bez ogranicenja. */
+      moguci_oblici: moguci_oblici === undefined ? undefined
+        : (Array.isArray(moguci_oblici) && moguci_oblici.length ? moguci_oblici : null),
     };
     const sets = [], vals = [];
     let i = 1;
