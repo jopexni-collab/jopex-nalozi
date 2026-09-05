@@ -4787,6 +4787,50 @@ async function gprPostaviSliku(pid, url){
   }catch(e){ alert('✗ '+e.message); }
 }
 
+
+/* Pregled SNIMLJENOG cjenovnika — ono sto katalog stvarno koristi. Razlikuje se od
+   zivog racuna: ziv racun prati lager, snimljeni je zamrznut. */
+async function gprPrikaziCjenovnik(pid){
+  const el = document.getElementById('gpr-cjen-prikaz-'+pid);
+  if(!el) return;
+  try{
+    const r = await fetch(`${API}/api/gotovi-proizvodi/${pid}/cjenovnik`);
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.error||'Greška.'); }
+    const c = await r.json();
+    if(!c.length){ el.innerHTML = ''; return; }   // nema snimljenih — ne pravi prazan okvir
+    // Redovi = izvedba, kolone = mjera — isto kako se stampa u katalogu
+    const mjere = [...new Set(c.map(x=>x.dimenzija).filter(Boolean))];
+    const izbori = [...new Set(c.map(x=>x.opis_izbora).filter(Boolean))];
+    const nadji = (iz,mj) => c.find(x=>x.opis_izbora===iz && x.dimenzija===mj);
+    const fm = v => (Number(v)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+    el.innerHTML = `
+      <div style="font-size:12px;font-weight:800;margin-bottom:6px;">💾 Cjenovnik <span style="font-weight:400;color:#8b96a5;font-size:11px;">— ovo koristi katalog</span></div>
+      <div style="background:#fff;border:1px solid var(--green,#1f8a4c);border-radius:7px;overflow:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:11.5px;white-space:nowrap;">
+          <thead><tr style="background:var(--green,#1f8a4c);color:#fff;">
+            <th style="padding:4px 8px;text-align:left;">Izvedba</th>
+            ${mjere.map(m=>`<th style="padding:4px 8px;text-align:right;">${esc(m)}</th>`).join('')}
+          </tr></thead>
+          <tbody>${izbori.map((iz,i)=>`
+            <tr style="background:${i%2?'#f7f9fb':'#fff'};border-bottom:1px solid #eef0f3;">
+              <td style="padding:3px 8px;">${esc(iz)}</td>
+              ${mjere.map(m=>{
+                const x = nadji(iz,m);
+                return `<td style="padding:3px 8px;text-align:right;font-weight:700;">${x?fm(x.cijena)+' '+esc(x.valuta||'KM'):'—'}</td>`;
+              }).join('')}
+            </tr>`).join('')}</tbody>
+        </table>
+      </div>
+      <div style="font-size:10.5px;color:#8b96a5;margin-top:4px;">
+        ${c.length} ${c.length===1?'cijena':'cijena'}${c[0].tip_kupca?` · ${esc(c[0].tip_kupca)}`:''}${c[0].objekt_naziv?` · ${esc(c[0].objekt_naziv)}`:''}
+        · snimio ${esc(c[0].snimio_ime||'')}
+      </div>`;
+  }catch(e){
+    el.innerHTML = '';   // tiho — cjenovnik je dopuna, ne smije rusiti prikaz proizvoda
+  }
+}
+
 function gprRenderDetalj(el, g){
 
   el.innerHTML = `
@@ -4831,12 +4875,16 @@ function gprRenderDetalj(el, g){
                     background:${g.cjenovnik_kada?'#eef7f1':'#fff8e1'};
                     color:${g.cjenovnik_kada?'var(--green,#1f8a4c)':'#8b6914'};">
           ${g.cjenovnik_kada
-            ? `💾 Cjenovnik snimljen ${new Date(g.cjenovnik_kada).toLocaleString('sr-Latn-BA',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}`
-            : '⚠ Cjenovnik još nije snimljen — izračunaj cijene pa klikni „💾 Snimi cjenovnik". Bez toga se u katalogu prikazuje „na upit".'}
+            ? `💾 Snimljen ${new Date(g.cjenovnik_kada).toLocaleString('sr-Latn-BA',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}`
+            : '⚠ Cjenovnik još nije snimljen — izračunaj cijene pa klikni „💾 Snimi cjenovnik". Bez toga se u katalogu stoji „na upit".'}
           ${g.spreman_za_katalog?' · <b>✓ spreman za katalog</b>':''}
         </div>
       </div>
     </div>
+
+    <!-- Cijene stoje ODMAH, kao i slika — ne iza dugmeta. To je ono sto se najcesce
+         gleda, pa nema smisla traziti jos jedan klik. -->
+    <div id="gpr-cjen-prikaz-${g.id}" style="margin-bottom:14px;"></div>
 
     <div style="font-size:12px;font-weight:800;margin-bottom:7px;">Komponente</div>
     <div style="font-size:11px;color:#8b96a5;margin-bottom:8px;line-height:1.45;">
@@ -4990,6 +5038,7 @@ function gprRenderDetalj(el, g){
 
   gprPopuniListe(g.id);
   setTimeout(()=>gprOblikPromjena(g.id), 30);   // popuni polja za podrazumijevani oblik
+  if(g.cjenovnik_kada) gprPrikaziCjenovnik(g.id);   // cijene se prikazuju odmah
 }
 
 /* Objekti i tipovi kupaca za racun — povlace se jednom po otvaranju */

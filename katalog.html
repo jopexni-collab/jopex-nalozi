@@ -565,7 +565,11 @@ function katOsvjeziPregled(){
   katPregledTajmer = setTimeout(async ()=>{
     const grupe = katIzabraneGrupe();
     const el = document.getElementById('kat-pregled');
-    if(!grupe.length){ el.textContent='Izaberi bar jednu grupu proizvoda.'; return; }
+    /* Grupe materijala trebaju samo ako materijali ulaze u katalog. Za katalog
+       iskljucivo od gotovih proizvoda ta provjera nema smisla. */
+    if(katSta !== 'gotovi' && !grupe.length){ el.textContent='Izaberi bar jednu grupu proizvoda.'; return; }
+    if(katSta !== 'materijali' && !katIzabraniGotovi.size && katSta === 'gotovi'){
+      el.textContent='Izaberi bar jedan gotov proizvod.'; return; }
     const tipId = document.getElementById('kat-tip').value;
     try{
       const samoDost = document.getElementById('kat-samo-dostupno').checked;
@@ -584,7 +588,10 @@ function katOsvjeziPregled(){
 async function katNapravi(){
   const greska = document.getElementById('kat-greska');
   const grupe = katIzabraneGrupe();
-  if(!grupe.length){ greska.style.display='block'; greska.textContent='Izaberi bar jednu grupu proizvoda.'; return; }
+  if(katSta !== 'gotovi' && !grupe.length){
+    greska.style.display='block'; greska.textContent='Izaberi bar jednu grupu proizvoda.'; return; }
+  if((katSta === 'gotovi' || katSta === 'oba') && !katIzabraniGotovi.size && katSta === 'gotovi'){
+    greska.style.display='block'; greska.textContent='Izaberi bar jedan gotov proizvod.'; return; }
   const saCijenama = document.getElementById('kat-cijene').checked;
   const tipId = document.getElementById('kat-tip').value;
   if(saCijenama && !tipId){ greska.style.display='block'; greska.textContent='Za prikaz cijena izaberi vrstu kupca.'; return; }
