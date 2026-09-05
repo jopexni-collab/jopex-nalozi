@@ -42,7 +42,7 @@ router.get('/:token', async (req, res) => {
     let gotovi = [];
     if (kat.gotovi_proizvodi && Array.isArray(kat.gotovi_ids) && kat.gotovi_ids.length) {
       const gp = await pool.query(
-        `SELECT p.id, p.naziv, p.naziv_en, p.naziv_it, p.opis, p.slika_url,
+        `SELECT p.id, p.naziv, p.naziv_en, p.naziv_it, p.naziv_de, p.naziv_fr, p.opis, p.slika_url,
                 p.cjenovnik_kada, p.moguci_oblici, gp.naziv AS grupa_naziv, gp.oblik
          FROM gotovi_proizvodi p
          LEFT JOIN grupe_proizvoda gp ON gp.id = p.grupa_proizvoda_id
@@ -123,6 +123,10 @@ router.get('/:token', async (req, res) => {
     res.json({
       naslov: kat.naslov,
       sta_ulazi: kat.sta_ulazi || 'materijali',
+      /* Jezik i valuta prikaza — prevod naziva i preracun po fiksnom kursu rade se
+         u samom dokumentu, da se ne mijenja ono sto je snimljeno. */
+      jezik: kat.jezik || 'bs',
+      valuta: kat.valuta || 'KM',
       gotovi,
       kupac_naziv: kat.kupac_naziv,
       tip_naziv: kat.tip_naziv,

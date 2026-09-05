@@ -152,8 +152,8 @@ router.post('/', smijeSlati, async (req, res) => {
     const r = await pool.query(
       `INSERT INTO katalozi (javni_token, tip_kupca_id, tip_naziv, grupe, objekt_id,
                              prikaz, sa_cijenama, naslov, kupac_naziv, kreirao_id, kreirao_ime, samo_dostupno, debljine, sifre,
-                              gotovi_proizvodi, gotovi_ids, sta_ulazi)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id, javni_token`,
+                              gotovi_proizvodi, gotovi_ids, sta_ulazi, jezik, valuta)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id, javni_token`,
       [token, tip_kupca_id || null, tipNaziv, grupe, objekt_id || null,
        prikaz === 'lista' ? 'lista' : 'mreza', sa_cijenama !== false,
        naslov || null, kupac_naziv || null, u.id, u.ime_prezime, samo_dostupno === true,

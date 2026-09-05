@@ -181,6 +181,9 @@
 .gotov-ostali-nas{font-size:10px;color:#8b96a5;font-weight:700;letter-spacing:.2px;}
 .gotov-ostali-red{font-size:11px;color:#6b7a8d;line-height:1.5;}
 .gotov-ostali-nap{font-size:10px;color:#b8860b;margin-top:2px;}
+
+.gotov-k-ostali{font-size:10px;color:#8b96a5;margin-top:7px;padding-top:6px;border-top:1px solid #f2f3f5;line-height:1.5;}
+.gotov-k-upit-mali{color:#b8860b;margin-top:1px;}
 </style>
 </head>
 <body>
@@ -313,7 +316,7 @@ function render(){
     const sviOblici = [...new Set(gotovi.flatMap(p => (p.dimenzije||[]).map(d => d.oblik)).filter(Boolean))];
     if(sviOblici.length > 1){
       html += `<div class="oblici-legenda">
-        <div class="legenda-naslov">Oblici stolova</div>
+        <div class="legenda-naslov">${T('oblici')}</div>
         <div class="legenda-red">
           ${sviOblici.map(o=>`
             <span class="legenda-stavka">
@@ -321,12 +324,12 @@ function render(){
               <span class="legenda-ime">${esc(oblikNaziv(o))}</span>
             </span>`).join('')}
         </div>
-        <div class="legenda-nap">Dostupnost oblika zavisi od postolja — uz svaki proizvod stoji šta nosi.</div>
+        <div class="legenda-nap">${T('oblici_nap')}</div>
       </div>`;
     }
 
     const poGrupi = {};
-    gotovi.forEach(p => { (poGrupi[p.grupa_naziv||'Gotovi proizvodi'] ||= []).push(p); });
+    gotovi.forEach(p => { (poGrupi[p.grupa_naziv||T('gotovi')] ||= []).push(p); });
     /* Gotovi proizvodi postuju izabrani prikaz — u mrezi idu kao kartice jedna uz
        drugu, u listi jedan ispod drugog sa punom tabelom cijena. */
     html += Object.entries(poGrupi).map(([grupa, lista]) => `
@@ -340,7 +343,7 @@ function render(){
   if(podaci.stavke.length){
     const poGrupama = {};
     podaci.stavke.forEach(s => { (poGrupama[s.grupa||'Ostalo'] ||= []).push(s); });
-    if(gotovi.length) html += '<div class="grupa-naslov" style="margin-top:26px;">Materijali</div>';
+    if(gotovi.length) html += `<div class="grupa-naslov" style="margin-top:26px;">${T('materijali')}</div>`;
     html += Object.entries(poGrupama).map(([grupa, stavke]) => `
       <div class="grupa-naslov">${esc(grupa)}</div>
       <div class="${prikaz}">${stavke.map(s => prikaz==='mreza' ? kartica(s) : red(s)).join('')}</div>
@@ -406,14 +409,14 @@ function gotovKartica(p){
         ? `<img class="gotov-k-slika" src="${esc(p.slika_url)}" loading="lazy" alt="${esc(p.naziv)}">`
         : '<div class="nema-slike gotov-k-slika">🍽️</div>'}
       <div class="gotov-k-tijelo">
-        <div class="gotov-k-naziv">${esc(p.naziv)}</div>
+        <div class="gotov-k-naziv">${esc(nazivJezik(p))}</div>
         ${(p.sastojci||[]).length
           ? `<div class="gotov-k-mat">${p.sastojci.map(s=>esc(s.artikli.join(' · '))).join(' + ')}</div>`
           : ((p.materijali||[]).length ? `<div class="gotov-k-mat">${(p.materijali||[]).map(esc).join(', ')}</div>` : '')}
 
         ${podaci.sa_cijenama ? (
           p.na_upit || !mjere.length
-            ? '<div class="gotov-k-upit">Cijena na upit</div>'
+            ? `<div class="gotov-k-upit">${T('cijena_na_upit')}</div>`
             : `<div class="gotov-k-cijene">
                 ${/* Ikonica oblika ISPRED mjere — okrugli sto se odmah razlikuje od
                       pravougaonog, bez citanja brojeva. */''}
@@ -438,21 +441,96 @@ function gotovKartica(p){
               ${oblikIkona(o)}<span class="oblik-mjera">${esc(oblikKratko(o))}</span>
             </span>`).join('')}
         </div>` : ''}
+
+        ${/* I u kartici stoji sta se jos moze — ranije samo u linijskom prikazu. */''}
+        ${(p.sastojci||[]).some(s => (s.ostale_grupe||[]).length) ? `
+          <div class="gotov-k-ostali">
+            <b>${T('dostupno_i_u')}</b>
+            ${p.sastojci.filter(s=>(s.ostale_grupe||[]).length)
+              .map(s=>`${esc(s.naziv)}: ${s.ostale_grupe.map(esc).join(' · ')}`).join('<br>')}
+            <div class="gotov-k-upit-mali">${T('na_upit')}</div>
+          </div>` : ''}
       </div>
     </div>`;
 }
 
 /* Cijena sa valutom — fm() uvijek dodaje "KM", pa za EUR treba zasebno. */
 function fmv(v, valuta){
-  const val = (valuta||'KM').toUpperCase();
-  return val === 'KM' ? fm(v)
-    : (Number(v)||0).toLocaleString('bs-BA',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ' + val;
+  const p = uValutu(v, valuta);
+  return p.v.toLocaleString('bs-BA',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ' + p.val;
 }
 
 
 /* Sitne 2D ikonice oblika — kupcu odmah kazu kako sto izgleda, a ne zauzimaju mjesto.
    Crtaju se kao SVG: uvijek ostre, i pri stampi i na ekranu. */
 /* Kratak naziv za ispod ikonice — pun ide u opis koji se vidi prelaskom misa. */
+
+/* ═══ JEZICI ═══════════════════════════════════════════════════════════════════════
+   Katalog za inostranstvo. Nazivi proizvoda dolaze iz baze (naziv_en, naziv_it...),
+   a stalni tekst se prevodi ovdje. Ako prevoda nema, pada na osnovni jezik — bolje
+   nego prazno polje. */
+const PRIJEVODI = {
+  bs: { materijal:'Materijal', dostupno_i_u:'Dostupno i u:', na_upit:'cijena na upit',
+        cijena_na_upit:'Cijena na upit', izvedba:'Izvedba', postolje_ploca:'postolje + ploča',
+        cijena:'Cijena', mjera:'Mjera', dostupne_mjere:'Dostupne mjere:',
+        oblici:'Oblici stolova', materijali:'Materijali', gotovi:'Gotovi proizvodi',
+        uslov:'Cijena je za navedenu izvedbu i mjeru u zaglavlju kolone. Druga izvedba ili mjera mijenja cijenu.',
+        oblici_nap:'Dostupnost oblika zavisi od postolja — uz svaki proizvod stoji šta nosi.',
+        prazan:T('prazan') },
+  en: { materijal:'Material', dostupno_i_u:'Also available in:', na_upit:'price on request',
+        cijena_na_upit:'Price on request', izvedba:'Version', postolje_ploca:'base + top',
+        cijena:'Price', mjera:'Size', dostupne_mjere:'Available sizes:',
+        oblici:'Table shapes', materijali:'Materials', gotovi:'Finished products',
+        uslov:'Price applies to the version shown and the size in the column header. Other versions or sizes change the price.',
+        oblici_nap:'Shape availability depends on the base — each product shows what it supports.',
+        prazan:'The catalogue is empty.' },
+  it: { materijal:'Materiale', dostupno_i_u:'Disponibile anche in:', na_upit:'prezzo su richiesta',
+        cijena_na_upit:'Prezzo su richiesta', izvedba:'Versione', postolje_ploca:'base + piano',
+        cijena:'Prezzo', mjera:'Misura', dostupne_mjere:'Misure disponibili:',
+        oblici:'Forme dei tavoli', materijali:'Materiali', gotovi:'Prodotti finiti',
+        uslov:'Il prezzo vale per la versione indicata e la misura nell\'intestazione. Altre versioni o misure cambiano il prezzo.',
+        oblici_nap:'La disponibilità delle forme dipende dalla base — ogni prodotto indica cosa supporta.',
+        prazan:'Il catalogo è vuoto.' },
+  de: { materijal:'Material', dostupno_i_u:'Auch erhältlich in:', na_upit:'Preis auf Anfrage',
+        cijena_na_upit:'Preis auf Anfrage', izvedba:'Ausführung', postolje_ploca:'Gestell + Platte',
+        cijena:'Preis', mjera:'Maß', dostupne_mjere:'Verfügbare Maße:',
+        oblici:'Tischformen', materijali:'Materialien', gotovi:'Fertigprodukte',
+        uslov:'Der Preis gilt für die angegebene Ausführung und das Maß in der Spaltenüberschrift. Andere Ausführungen oder Maße ändern den Preis.',
+        oblici_nap:'Die Formauswahl hängt vom Gestell ab — bei jedem Produkt steht, was möglich ist.',
+        prazan:'Der Katalog ist leer.' },
+  fr: { materijal:'Matériau', dostupno_i_u:'Aussi disponible en :', na_upit:'prix sur demande',
+        cijena_na_upit:'Prix sur demande', izvedba:'Version', postolje_ploca:'piètement + plateau',
+        cijena:'Prix', mjera:'Dimension', dostupne_mjere:'Dimensions disponibles :',
+        oblici:'Formes de tables', materijali:'Matériaux', gotovi:'Produits finis',
+        uslov:'Le prix s\'applique à la version indiquée et à la dimension en tête de colonne. Une autre version ou dimension modifie le prix.',
+        oblici_nap:'Les formes disponibles dépendent du piètement — chaque produit indique ce qu\'il permet.',
+        prazan:'Le catalogue est vide.' },
+};
+
+function T(kljuc){
+  const j = podaci?.jezik || 'bs';
+  return (PRIJEVODI[j] && PRIJEVODI[j][kljuc]) || PRIJEVODI.bs[kljuc] || kljuc;
+}
+
+/* Naziv na izabranom jeziku; ako prevoda nema, ostaje osnovni. */
+function nazivJezik(o){
+  const j = podaci?.jezik || 'bs';
+  if(j === 'bs') return o.naziv;
+  return o['naziv_' + j] || o.naziv;
+}
+
+/* Preracun u valutu kataloga. Kurs EUR/KM je FIKSAN, pa je pretvaranje tacno. */
+const KURS_EUR = 1.95583;
+function uValutu(iznos, izVal){
+  const cilj = (podaci?.valuta || 'KM').toUpperCase();
+  const iz = (izVal || 'KM').toUpperCase();
+  let v = Number(iznos) || 0;
+  if(iz === cilj) return { v, val: cilj };
+  if(iz === 'KM' && cilj === 'EUR') return { v: v / KURS_EUR, val: 'EUR' };
+  if(iz === 'EUR' && cilj === 'KM') return { v: v * KURS_EUR, val: 'KM' };
+  return { v, val: iz };
+}
+
 function oblikKratko(o){
   return { PRAV:'pravoug.', KVAD:'kvadrat', KRUG:'okrugli', OVAL:'ovalni',
            BACVA:'bačva', ZAOB:'zaobljen', I:'pravougli', L:'L', U:'U', V:'V',
@@ -540,7 +618,7 @@ function gotovProizvod(p){
             </div>` : ''}
         </div>
         <div class="gotov-tekst">
-          <div class="gotov-naziv">${esc(p.naziv)}</div>
+          <div class="gotov-naziv">${esc(nazivJezik(p))}</div>
           ${p.opis ? `<div class="gotov-opis">${esc(p.opis)}</div>` : ''}
 
           ${/* Model postolja i konkretan materijal — kupcu to znaci, za razliku od
@@ -555,7 +633,7 @@ function gotovProizvod(p){
             Materijal: <b>${(p.materijali||[]).map(esc).join(', ')}</b>
           </div>` : '')}
 
-          ${p.na_upit ? '<div class="gotov-upit">Cijena na upit</div>' : ''}
+          ${p.na_upit ? `<div class="gotov-upit">${T('cijena_na_upit')}</div>` : ''}
         </div>
       </div>
 
@@ -583,10 +661,9 @@ function gotovProizvod(p){
             </tr>`).join('')}</tbody>
         </table>
         <div class="gotov-uslov">
-          Cijena je za <b>navedenu izvedbu</b> (postolje + ploča) i <b>mjeru</b> u zaglavlju kolone.
-          Druga izvedba ili mjera mijenja cijenu.
+${T('uslov')}
         </div>`
-      : (mjere.length ? `<div class="gotov-mjere">Dostupne mjere: ${mjere.map(esc).join(' · ')}</div>` : '')}
+      : (mjere.length ? `<div class="gotov-mjere">${T('dostupne_mjere')} ${mjere.map(esc).join(' · ')}</div>` : '')}
 
       ${/* Kad proizvod nema unesenih dimenzija, ikonice se nemaju odakle crtati.
             Umjesto tihe praznine kaze se sta fali — inace izgleda kao da ne radi. */''}
