@@ -62,8 +62,11 @@ router.get('/:token', async (req, res) => {
       /* Dimenzije sa OBLIKOM — katalog uz cijenu pokazuje i kako sto izgleda
          (pravougaoni, okrugli, bacvasti...), sto kupcu govori vise od same brojke. */
       const dim = (await pool.query(
+        /* Samo mjere oznacene za katalog — ostale se racunaju, ali se ne stampaju. */
         `SELECT gotov_id, oblik, mjere, moguci_oblici, sirina, visina, precnik, naziv
-         FROM gotov_dimenzije WHERE gotov_id = ANY($1::int[]) ORDER BY redosled, id`,
+         FROM gotov_dimenzije
+         WHERE gotov_id = ANY($1::int[]) AND COALESCE(u_katalogu, true) = true
+         ORDER BY redosled, id`,
         [kat.gotovi_ids]
       )).rows;
 

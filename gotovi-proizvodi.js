@@ -804,6 +804,7 @@ router.patch('/dimenzija/:did', async (req, res) => {
     sets.push(`moguci_oblici=$${i++}`); vals.push(m.length ? m : null);
   }
   if ('naziv' in req.body) { sets.push(`naziv=$${i++}`); vals.push(req.body.naziv || null); }
+  if ('u_katalogu' in req.body) { sets.push(`u_katalogu=$${i++}`); vals.push(req.body.u_katalogu === true); }
 
   if (!sets.length) return res.status(400).json({ error: 'Nema polja za izmjenu.' });
   vals.push(req.params.did);
