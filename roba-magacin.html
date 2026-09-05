@@ -4804,8 +4804,10 @@ async function gprPrikaziCjenovnik(pid){
         Klikni <b>▶ Izračunaj</b> pa <b>💾 Snimi cjenovnik</b>.</div>`;
       return;
     }
-    // Redovi = izvedba, kolone = mjera — isto kako se stampa u katalogu
+    /* Redovi = izvedba, kolone = mjera. Ako proizvod NEMA dimenzija, mjere su prazne —
+       tad se prikazuje jedna kolona "Cijena", inace bi tabela imala samo naziv bez cijene. */
     const mjere = [...new Set(c.map(x=>x.dimenzija).filter(Boolean))];
+    const bezMjera = !mjere.length;
     const izbori = [...new Set(c.map(x=>x.opis_izbora).filter(Boolean))];
     const nadji = (iz,mj) => c.find(x=>x.opis_izbora===iz && x.dimenzija===mj);
     const fm = v => (Number(v)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -4816,18 +4818,30 @@ async function gprPrikaziCjenovnik(pid){
         <table style="width:100%;border-collapse:collapse;font-size:11.5px;white-space:nowrap;">
           <thead><tr style="background:var(--green,#1f8a4c);color:#fff;">
             <th style="padding:4px 8px;text-align:left;">Izvedba</th>
-            ${mjere.map(m=>`<th style="padding:4px 8px;text-align:right;">${esc(m)}</th>`).join('')}
+            ${bezMjera ? '<th style="padding:4px 8px;text-align:right;">Cijena</th>'
+                       : mjere.map(m=>`<th style="padding:4px 8px;text-align:right;">${esc(m)}</th>`).join('')}
           </tr></thead>
           <tbody>${izbori.map((iz,i)=>`
             <tr style="background:${i%2?'#f7f9fb':'#fff'};border-bottom:1px solid #eef0f3;">
               <td style="padding:3px 8px;">${esc(iz)}</td>
-              ${mjere.map(m=>{
+              ${bezMjera ? (()=>{
+                const x = c.find(y=>y.opis_izbora===iz);
+                return `<td style="padding:3px 8px;text-align:right;font-weight:700;">${x?fm(x.cijena)+' '+esc(x.valuta||'KM'):'—'}</td>`;
+              })() : mjere.map(m=>{
                 const x = nadji(iz,m);
                 return `<td style="padding:3px 8px;text-align:right;font-weight:700;">${x?fm(x.cijena)+' '+esc(x.valuta||'KM'):'—'}</td>`;
               }).join('')}
             </tr>`).join('')}</tbody>
         </table>
       </div>
+      ${bezMjera ? `<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:7px 10px;font-size:11px;color:#8b6914;margin-top:6px;line-height:1.5;">
+        ⚠ Proizvod nema nijednu <b>dimenziju</b> — bez nje se površina ploče ne može izračunati,
+        pa u cijeni učestvuje samo ono što se mjeri po komadu. Dodaj mjere ispod pa snimi ponovo.
+      </div>` : ''}
+      ${c.every(x=>!Number(x.cijena)) ? `<div style="background:#fdecea;border:1px solid #f5c6cb;border-radius:6px;padding:7px 10px;font-size:11px;color:var(--red,#c0392b);margin-top:6px;line-height:1.5;">
+        ⚠ Sve cijene su nula — komponente nemaju cijenu u izabranom objektu (kolona <b>Lager</b> piše „nema").
+        Unesi cijene u lageru ili upiši <b>Fiksnu</b> cijenu na komponenti.
+      </div>` : ''}
       <div style="font-size:10.5px;color:#8b96a5;margin-top:4px;">
         ${c.length} ${c.length===1?'cijena':'cijena'}${c[0].tip_kupca?` · ${esc(c[0].tip_kupca)}`:''}${c[0].objekt_naziv?` · ${esc(c[0].objekt_naziv)}`:''}
         · snimio ${esc(c[0].snimio_ime||'')}
@@ -5055,6 +5069,7 @@ function gprRenderDetalj(el, g){
 /* Izabrani objekat po proizvodu — cuva se van prikaza, da ponovno iscrtavanje ne
    pokrece novo ucitavanje (to je pravilo petlju i treperenje). */
 const gprObjekat = {};
+const gprPonovoUcitano = {};   // da se detalj ne ucitava u krug
 
 function gprPostaviObjekat(id, vrijednost){
   if(gprObjekat[id] === vrijednost) return;   // nema promjene — nema ucitavanja
@@ -5072,9 +5087,18 @@ async function gprPopuniListe(id){
         /* Izabrani objekat se pamti VAN prikaza. Ranije se postavljao ovdje pa se
            pozivalo ponovno ucitavanje — a ono opet dodje ovamo, i tako u krug
            (padajuca lista je treperila). Sad se vrijednost samo VRATI, bez poziva. */
+        /* Prvo ucitavanje detalja ide BEZ objekta — padajuca lista tad jos ne postoji,
+           pa cijene i stanje iz lagera ne stignu (kolona Lager pise "nema").
+           Kad se objekat ovdje postavi, detalj se ucita JOS JEDNOM, ali samo tada —
+           zastavica sprjecava petlju koja je ranije pravila treperenje. */
+        const trebaPonovo = !gprObjekat[id];
         if(!gprObjekat[id]){
           const podr = o.find(x=>/aleksandrovac/i.test(x.naziv)) || o[0];
           if(podr) gprObjekat[id] = String(podr.id);
+        }
+        if(trebaPonovo && gprObjekat[id] && !gprPonovoUcitano[id]){
+          gprPonovoUcitano[id] = true;
+          setTimeout(()=>gprUcitajDetalj(id), 40);
         }
         sel.innerHTML = '<option value="">— objekat —</option>' +
           o.map(x=>`<option value="${x.id}" ${String(x.id)===gprObjekat[id]?'selected':''}>${esc(x.naziv)}</option>`).join('');
