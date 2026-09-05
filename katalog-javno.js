@@ -34,11 +34,24 @@ router.get('/:token', async (req, res) => {
       : podaci.stavke.map(({ cijena, cijena_bez_pdv, pdv_iznos, ...ostalo }) => ostalo);
     // Katalog samo sa gotovim proizvodima ne salje materijale
     if (kat.sta_ulazi === 'gotovi') stavke = [];
+    else if (jezik !== 'bs') stavke = stavke.map(s => ({ ...s, grupa: pr(s.grupa) }));
 
     /* GOTOVI PROIZVODI — sastavnice sa zamrznutim cjenovnikom.
        Cijene se NE racunaju ovdje uzivo: katalog mora pokazivati ono sto je bilo
        snimljeno, inace bi se odstampana cijena razlikovala od one na ekranu.
        Proizvod bez snimljenog cjenovnika prolazi — uz njega stoji "na upit". */
+    /* Rjecnik prijevoda — baza i unos ostaju na nasem jeziku, prijevod se trazi tek
+       ovdje. Sto nije prevedeno ostaje kako jeste, pa katalog nikad nije prazan. */
+    const jezik = kat.jezik || 'bs';
+    let prijevodi = {};
+    if (jezik !== 'bs') {
+      try {
+        const { mapaPrijevoda } = require('./prijevodi');
+        prijevodi = await mapaPrijevoda(jezik);
+      } catch (e) { /* bez rjecnika ide na nasem */ }
+    }
+    const pr = t => (t && prijevodi[String(t).toLowerCase()]) || t;
+
     let gotovi = [];
     if (kat.gotovi_proizvodi && Array.isArray(kat.gotovi_ids) && kat.gotovi_ids.length) {
       const gp = await pool.query(
@@ -88,6 +101,8 @@ router.get('/:token', async (req, res) => {
 
       gotovi = gp.rows.map(p => ({
         ...p,
+        naziv: pr(p.naziv),
+        grupa_naziv: pr(p.grupa_naziv),
         // Bez cijena se ne salju uopste — ne mogu se izvuci ni alatima pregledaca
         cijene: kat.sa_cijenama ? cijene.filter(x => x.gotov_id === p.id) : [],
         na_upit: kat.sa_cijenama && !cijene.some(x => x.gotov_id === p.id),
@@ -108,15 +123,15 @@ router.get('/:token', async (req, res) => {
           return Object.values(po)
             .sort((a, b) => a.redni - b.redni)
             .map(s => ({
-              naziv: s.naziv,
+              naziv: pr(s.naziv),
               artikli: [...new Set(s.artikli)],
               // Grupe koje su dozvoljene, a nisu iskoristene — kupac ih moze traziti
               ostale_grupe: [...s.dozvoljene].filter(g =>
-                ![...s.grupe].some(x => String(x).toLowerCase() === String(g).toLowerCase())),
+                ![...s.grupe].some(x => String(x).toLowerCase() === String(g).toLowerCase())).map(pr),
             }));
         })(),
 
-        materijali: [...new Set(mat.filter(x => x.gotov_id === p.id).map(x => x.grupa))],
+        materijali: [...new Set(mat.filter(x => x.gotov_id === p.id).map(x => pr(x.grupa)))],
       }));
     }
 
