@@ -138,13 +138,6 @@
 .gotov-uslov{font-size:11px;color:#8b96a5;margin-top:6px;line-height:1.5;}
 .oblik-uvod{font-size:10.5px;color:#8b96a5;align-self:center;margin-right:2px;}
 
-.oblici-legenda{border:1px solid var(--border,#ddd);border-radius:10px;padding:12px 14px;margin-bottom:16px;background:#fafbfc;
-  break-inside:avoid;page-break-inside:avoid;}
-.legenda-naslov{font-size:12px;font-weight:800;color:#6b7a8d;letter-spacing:.3px;margin-bottom:8px;}
-.legenda-red{display:flex;gap:16px;flex-wrap:wrap;}
-.legenda-stavka{display:inline-flex;flex-direction:column;align-items:center;gap:2px;}
-.legenda-ime{font-size:10px;color:#8b96a5;white-space:nowrap;}
-.legenda-nap{font-size:10.5px;color:#8b96a5;margin-top:8px;}
 
 .oblik-opcija .oblik-ikona{stroke:#c3c9d1;stroke-dasharray:2 2;}
 .oblik-opcija .oblik-mjera{color:#c3c9d1;}
@@ -184,7 +177,23 @@
 
 .gotov-k-ostali{font-size:10px;color:#8b96a5;margin-top:7px;padding-top:6px;border-top:1px solid #f2f3f5;line-height:1.5;}
 .gotov-k-upit-mali{color:#b8860b;margin-top:1px;}
+
+/* Podnozje sa podacima o firmi — diskretno, ali prisutno na svakoj odstampanoj strani */
+.kat-podnozje{margin-top:26px;padding-top:14px;border-top:1px solid var(--border,#ddd);
+  text-align:center;color:#6b7a8d;line-height:1.6;}
+.kp-firma{font-size:14px;font-weight:800;color:#1f3864;}
+.kp-red{font-size:11.5px;}
+@media print{
+  .kat-podnozje{margin-top:18px;padding-top:10px;border-top:1px solid #ccc;}
+  .kp-red{font-size:10px;}
+}
+
+.kp-qr{display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:10px;}
+.kp-qr img,.kp-qr canvas{display:block;}
+.kp-qr-tekst{font-size:10.5px;color:#6b7a8d;text-decoration:none;}
+@media print{ .kp-qr-tekst{color:#666;} }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 <div class="traka">
@@ -209,6 +218,25 @@
     <div id="info-posiljaoca" style="margin-top:4px;"></div>
   </footer>
 </div>
+  <!-- Podaci o firmi — isti kao na ponudi, da kupac ima kontakt na svakoj strani
+       kad se katalog odstampa. -->
+  <div class="kat-podnozje">
+    <div class="kp-firma">JoPeX d.o.o.</div>
+    <div class="kp-red">Auto-Put, Aleksandrovačka petlja bb · 78255 Aleksandrovac</div>
+    <div class="kp-red">
+      ☎️ +387 51/42 52 50 &nbsp;·&nbsp; 📱 +387 65 512 868 &nbsp;·&nbsp;
+      🌐 jpx.ba &nbsp;·&nbsp; ✉️ jpx.doc@gmail.com
+    </div>
+
+    <!-- QR do lokacije na karti. Koristi se ista biblioteka kao za naljepnice u
+         lageru. Ako se ne ucita, ostaje obicna veza — katalog radi i bez QR-a. -->
+    <div class="kp-qr">
+      <div id="kat-qr"></div>
+      <a href="https://maps.app.goo.gl/yLYDmNK9PeHRy81j8"
+         target="_blank" rel="noopener" class="kp-qr-tekst" id="kat-qr-tekst">📍 Lokacija na karti</a>
+    </div>
+  </div>
+
 
 <script>
 /* ═══ JEZICI ═══════════════════════════════════════════════════════════════════════
@@ -305,6 +333,7 @@ async function ucitaj(){
     /* Dugmad i naslovi oznaceni sa data-t prevode se odjednom — inace bi u
        katalogu za Italiju ostali na nasem jeziku. */
     document.querySelectorAll('[data-t]').forEach(el => { el.textContent = T(el.dataset.t); });
+    nacrtajQR();
     document.documentElement.lang = IZBOR.jezik;
     prikaz = d.prikaz === 'lista' ? 'lista' : 'mreza';
 
@@ -398,22 +427,6 @@ function render(){
      se pravi, pa dolaze ispod, kao dopuna. */
   let html = '';
   if(gotovi.length){
-    /* LEGENDA na pocetku — svi oblici koji se u ovom katalogu pojavljuju, jednom.
-       Uz proizvode onda stoje samo sitne oznake, pa strana ostaje citljiva. */
-    const sviOblici = [...new Set(gotovi.flatMap(p => (p.dimenzije||[]).map(d => d.oblik)).filter(Boolean))];
-    if(sviOblici.length > 1){
-      html += `<div class="oblici-legenda">
-        <div class="legenda-naslov">${T('oblici')}</div>
-        <div class="legenda-red">
-          ${sviOblici.map(o=>`
-            <span class="legenda-stavka">
-              ${oblikIkona(o)}
-              <span class="legenda-ime">${esc(oblikNaziv(o))}</span>
-            </span>`).join('')}
-        </div>
-        <div class="legenda-nap">${T('oblici_nap')}</div>
-      </div>`;
-    }
 
     const poGrupi = {};
     gotovi.forEach(p => { (poGrupi[p.grupa_naziv||T('gotovi')] ||= []).push(p); });
@@ -534,7 +547,7 @@ function gotovKartica(p){
           <div class="gotov-k-ostali">
             <b>${T('dostupno_i_u')}</b>
             ${p.sastojci.filter(s=>(s.ostale_grupe||[]).length)
-              .map(s=>`${esc(s.naziv)}: ${s.ostale_grupe.map(esc).join(' · ')}`).join('<br>')}
+              .map(s=>`${esc(s.naziv)} — ${s.ostale_grupe.map(esc).join(' · ')}`).join('<br>')}
             <div class="gotov-k-upit-mali">${T('na_upit')}</div>
           </div>` : ''}
       </div>
@@ -651,7 +664,7 @@ function gotovProizvod(p){
               <div class="gotov-ostali-nas">${T('dostupno_i_u')}</div>
               ${p.sastojci.filter(s=>(s.ostale_grupe||[]).length).map(s=>`
                 <div class="gotov-ostali-red">
-                  <span class="s-naziv">${esc(s.naziv)}:</span>
+                  <span class="s-naziv">${esc(s.naziv)}</span>
                   ${s.ostale_grupe.map(esc).join(' · ')}
                 </div>`).join('')}
               <div class="gotov-ostali-nap">${T('na_upit')}</div>
@@ -745,6 +758,24 @@ if((window.opener && !window.opener.closed) || history.length > 1 || document.re
 }
 
 ucitaj();
+
+/* QR do lokacije. Crta se tek kad se biblioteka ucita; ako ne uspije, ostaje obicna
+   veza ispod — katalog se svejedno moze odstampati. */
+const MAPA_URL = 'https://maps.app.goo.gl/yLYDmNK9PeHRy81j8';
+
+function nacrtajQR(){
+  const el = document.getElementById('kat-qr');
+  if(!el || typeof QRCode === 'undefined') return;
+  try{
+    el.innerHTML = '';
+    new QRCode(el, {
+      text: MAPA_URL, width: 84, height: 84,
+      colorDark: '#1f3864', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M,
+    });
+  }catch(e){ /* ostaje veza ispod */ }
+}
+
 </script>
 </body>
 </html>
