@@ -180,7 +180,8 @@
 
 /* Podnozje sa podacima o firmi — diskretno, ali prisutno na svakoj odstampanoj strani */
 .kat-podnozje{margin-top:26px;padding-top:14px;border-top:1px solid var(--border,#ddd);
-  text-align:center;color:#6b7a8d;line-height:1.6;}
+  color:#6b7a8d;line-height:1.6;display:flex;align-items:center;justify-content:center;gap:22px;flex-wrap:wrap;}
+.kp-podaci{text-align:center;}
 .kp-firma{font-size:14px;font-weight:800;color:#1f3864;}
 .kp-red{font-size:11.5px;}
 @media print{
@@ -188,10 +189,19 @@
   .kp-red{font-size:10px;}
 }
 
-.kp-qr{display:flex;flex-direction:column;align-items:center;gap:3px;margin-top:10px;}
+.kp-qr{display:flex;flex-direction:column;align-items:center;gap:2px;flex:0 0 auto;}
 .kp-qr img,.kp-qr canvas{display:block;}
 .kp-qr-tekst{font-size:10.5px;color:#6b7a8d;text-decoration:none;}
 @media print{ .kp-qr-tekst{color:#666;} }
+
+.gotov-sastojci{display:flex;gap:7px;flex-wrap:wrap;align-items:baseline;margin-top:6px;}
+.gotov-sastojak{font-size:12px;line-height:1.5;}
+.gotov-ostali{display:flex;gap:7px;flex-wrap:wrap;align-items:baseline;
+  margin-top:8px;padding-top:7px;border-top:1px solid #eef0f3;}
+.gotov-ostali-red{font-size:11px;color:#6b7a8d;}
+.gotov-ostali-nas{font-size:10px;color:#8b96a5;font-weight:700;letter-spacing:.2px;}
+.gotov-ostali-nap{font-size:10px;color:#b8860b;}
+.gotov-ostali-tacka{color:#c3c9d1;font-size:10px;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -214,26 +224,25 @@
   <div id="sadrzaj"><div class="ucitavanje">Učitavanje kataloga...</div></div>
 
   <footer>
-    <div id="podaci-firme">JoPeX — kamen i obrada</div>
     <div id="info-posiljaoca" style="margin-top:4px;"></div>
   </footer>
 </div>
   <!-- Podaci o firmi — isti kao na ponudi, da kupac ima kontakt na svakoj strani
        kad se katalog odstampa. -->
+  <!-- QR stoji DESNO od podataka, ne ispod — tako podnozje zauzima jedan red manje. -->
   <div class="kat-podnozje">
-    <div class="kp-firma">JoPeX d.o.o.</div>
-    <div class="kp-red">Auto-Put, Aleksandrovačka petlja bb · 78255 Aleksandrovac</div>
-    <div class="kp-red">
-      ☎️ +387 51/42 52 50 &nbsp;·&nbsp; 📱 +387 65 512 868 &nbsp;·&nbsp;
-      🌐 jpx.ba &nbsp;·&nbsp; ✉️ jpx.doc@gmail.com
+    <div class="kp-podaci">
+      <div class="kp-firma">JoPeX d.o.o.</div>
+      <div class="kp-red">Auto-Put, Aleksandrovačka petlja bb · 78255 Aleksandrovac</div>
+      <div class="kp-red">
+        ☎️ +387 51/42 52 50 &nbsp;·&nbsp; 📱 +387 65 512 868 &nbsp;·&nbsp;
+        🌐 jpx.ba &nbsp;·&nbsp; ✉️ jpx.doc@gmail.com
+      </div>
     </div>
-
-    <!-- QR do lokacije na karti. Koristi se ista biblioteka kao za naljepnice u
-         lageru. Ako se ne ucita, ostaje obicna veza — katalog radi i bez QR-a. -->
     <div class="kp-qr">
       <div id="kat-qr"></div>
       <a href="https://maps.app.goo.gl/yLYDmNK9PeHRy81j8"
-         target="_blank" rel="noopener" class="kp-qr-tekst" id="kat-qr-tekst">📍 Lokacija na karti</a>
+         target="_blank" rel="noopener" class="kp-qr-tekst">📍 Lokacija</a>
     </div>
   </div>
 
@@ -632,10 +641,10 @@ function gotovProizvod(p){
                 internih naziva grupa. Cijena vazi bas za njih. */''}
           ${(p.sastojci||[]).length ? `<div class="gotov-sastojci">
             ${p.sastojci.map(s=>`
-              <div class="gotov-sastojak">
+              <span class="gotov-sastojak">
                 <span class="s-naziv">${esc(s.naziv)}:</span>
                 <span class="s-artikal">${s.artikli.map(esc).join(' · ')}</span>
-              </div>`).join('')}
+              </span>`).join('<span class="gotov-ostali-tacka">·</span>')}
           </div>` : ((p.materijali||[]).length ? `<div class="gotov-napomena">
             Materijal: <b>${(p.materijali||[]).map(esc).join(', ')}</b>
           </div>` : '')}
@@ -657,17 +666,15 @@ function gotovProizvod(p){
                   </span>`).join('')}
             </div>` : ''}
 
-          ${/* Grupe koje su dozvoljene a nisu upotrijebljene — sto se moze napraviti i
-                od njih, ali po drugoj cijeni. */''}
+          ${/* "Dostupno i u" ide u JEDAN red, ne kao blok ispod — tako se ne razvlaci
+                po visini i sve stoji u istoj liniji. */''}
           ${(p.sastojci||[]).some(s => (s.ostale_grupe||[]).length) ? `
             <div class="gotov-ostali">
-              <div class="gotov-ostali-nas">${T('dostupno_i_u')}</div>
-              ${p.sastojci.filter(s=>(s.ostale_grupe||[]).length).map(s=>`
-                <div class="gotov-ostali-red">
-                  <span class="s-naziv">${esc(s.naziv)}</span>
-                  ${s.ostale_grupe.map(esc).join(' · ')}
-                </div>`).join('')}
-              <div class="gotov-ostali-nap">${T('na_upit')}</div>
+              <span class="gotov-ostali-nas">${T('dostupno_i_u')}</span>
+              ${p.sastojci.filter(s=>(s.ostale_grupe||[]).length)
+                .map(s=>`<span class="gotov-ostali-red"><span class="s-naziv">${esc(s.naziv)}</span> ${s.ostale_grupe.map(esc).join(' · ')}</span>`)
+                .join('<span class="gotov-ostali-tacka">·</span>')}
+              <span class="gotov-ostali-nap">${T('na_upit')}</span>
             </div>` : ''}
 
           ${p.na_upit ? `<div class="gotov-upit">${T('cijena_na_upit')}</div>` : ''}
