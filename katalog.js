@@ -9,15 +9,14 @@ const crypto = require('crypto');
 const pool = require('./db');
 const { izracunajCijenu, pdvStopa } = require('./cijene');
 
+
 // Svako ko radi sa kupcima moze slati katalog — blagajnik, prodaja, teren, ugovaranje.
 // Namjerno siroko: "svako u firmi moze doci u situaciji da nesto proda".
+/* Katalog smije praviti SVAKO ko je prijavljen — namjerno, jer svako u firmi moze doci
+   u situaciju da nesto proda. Katalog ne otkriva nista sto kupac ionako ne bi vidio. */
 function smijeSlati(req, res, next) {
-  const u = req.session?.user;
-  if (u?.rola === 'admin' || u?.moze_prodavati || u?.komercijalista_teren ||
-      u?.moze_ugovarati || u?.moze_roba_magacin) return next();
-  const jeBlagajnik = u?.id != null;
-  if (jeBlagajnik) return next();
-  return res.status(403).json({ error: 'Nemate dozvolu za slanje kataloga.' });
+  if (req.session?.user) return next();
+  return res.status(401).json({ error: 'Niste prijavljeni.' });
 }
 
 // GET /api/katalog/grupe?objekt_id=X — koje grupe proizvoda uopste postoje u tom lageru
