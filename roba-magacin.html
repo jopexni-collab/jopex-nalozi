@@ -3789,7 +3789,11 @@ function renderLagerRedovi(){
           ? `<span style="color:#1f8a4c;">${esc(s.naziv_gotov)}</span>`
           : '<span style="color:#dfe3e8;">—</span>'
       }<button onclick="otvoriGotovProizvod(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}','${esc(s.naziv_gotov||'').replace(/'/g,"&apos;")}')" title="Naziv gotovog proizvoda i prevodi" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:3px;">✎</button></td>
-      <td style="padding:1px 5px;color:#6b7a8d;">${esc(s.grupa||'—')}</td>
+      <td style="padding:1px 5px;color:#6b7a8d;white-space:nowrap;">
+        ${s.grupa ? esc(s.grupa) : '<span style="color:var(--orange,#b8860b);">— bez grupe</span>'}
+        <button onclick="izmijeniGrupu(${s.id},'${esc(s.sifra)}','${esc(s.grupa||'').replace(/'/g,"&apos;")}',event)"
+                title="Svrstaj u grupu" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>
+      </td>
       <td style="padding:1px 5px;text-align:center;color:#6b7a8d;">
         ${s.debljina_cm??'—'}
         ${currentUser?.rola==='admin'?`<button onclick="otvoriIzmjenuDebljine(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.debljina_cm??'null'})" title="Promijeni debljinu" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
@@ -8114,6 +8118,50 @@ async function naSacuvaj(){
   }
 }
 
+
+/* Svrstavanje artikla u grupu. Nudi SAMO postojece grupe — nova varijanta naziva
+   ("quartz" i "Quartz") razdvojila bi istu robu na dva mjesta. */
+async function izmijeniGrupu(id, sifra, trenutna, ev){
+  if(ev) ev.stopPropagation();
+  let grupe = [];
+  try{
+    const r = await fetch(`${API}/api/roba/liste-grupa`);
+    if(r.ok){
+      const d = await r.json();
+      grupe = [...new Set((Array.isArray(d)?d:d.grupe||[])
+        .map(x => typeof x === 'string' ? x : x.grupa).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    }
+  }catch(e){}
+
+  const izbor = document.getElementById('mg-izbor-grupe');
+  document.getElementById('mg-sifra').textContent = sifra;
+  izbor.innerHTML = '<option value="">— bez grupe —</option>' + grupe.map(g=>
+    `<option value="${esc(g)}" ${g===trenutna?'selected':''}>${esc(g)}</option>`).join('');
+  document.getElementById('mg-poruka').textContent = '';
+  document.getElementById('modal-grupa-artikla').dataset.id = id;
+  document.getElementById('modal-grupa-artikla').style.display = 'flex';
+}
+
+async function sacuvajGrupuArtikla(){
+  const m = document.getElementById('modal-grupa-artikla');
+  const id = m.dataset.id;
+  const grupa = document.getElementById('mg-izbor-grupe').value;
+  const poruka = document.getElementById('mg-poruka');
+  poruka.textContent = 'Čuvam...'; poruka.style.color = '#8b96a5';
+  try{
+    const r = await fetch(`${API}/api/roba/${id}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ grupa: grupa || null }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    poruka.textContent = '✓ Sačuvano'; poruka.style.color = 'var(--green,#1f8a4c)';
+    setTimeout(()=>{ m.style.display='none'; ucitajLagerListu(); }, 600);
+  }catch(e){
+    poruka.textContent = '✗ ' + e.message; poruka.style.color = 'var(--red,#c0392b)';
+  }
+}
+
 </script>
 
 
@@ -8434,6 +8482,24 @@ async function naSacuvaj(){
         ✓ Sačuvaj artikal
       </button>
       <span id="na-poruka" style="font-size:11.5px;color:#8b96a5;flex:1;"></span>
+    </div>
+  </div>
+</div>
+<div id="modal-grupa-artikla" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:935;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:17px;max-width:400px;width:94vw;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">
+      <h3 style="margin:0;font-size:15.5px;">✎ Grupa artikla</h3>
+      <button onclick="document.getElementById('modal-grupa-artikla').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+    </div>
+    <div style="font-size:12.5px;margin-bottom:5px;">Šifra <b id="mg-sifra"></b></div>
+    <div style="font-size:11px;color:#6b7a8d;line-height:1.5;margin-bottom:10px;">
+      Nude se samo <b>postojeće grupe</b> — nova varijanta istog naziva razdvojila bi
+      istu robu na dva mjesta.
+    </div>
+    <select id="mg-izbor-grupe" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:7px;font:inherit;font-size:13px;"></select>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:14px;">
+      <button onclick="sacuvajGrupuArtikla()" style="flex:1;padding:9px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;">✓ Sačuvaj</button>
+      <span id="mg-poruka" style="font-size:11.5px;color:#8b96a5;"></span>
     </div>
   </div>
 </div>

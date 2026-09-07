@@ -1348,7 +1348,8 @@ router.patch('/:id', preskociAkoNijeArtikal, async (req, res) => {
      jedini kljuc, i mijenjala bi vezu sa svim ranijim dokumentima.
      Svaka izmjena naziva se BILJEZI (ko, kada, sta je bilo prije). */
   const samoOpisna = Object.keys(req.body || {}).length > 0 && Object.keys(req.body || {})
-    .every(k => ['naziv','naziv_gotov','naziv_en','naziv_it','naziv_gotov_en','naziv_gotov_it','moguci_oblici'].includes(k));
+    .every(k => ['naziv','naziv_gotov','naziv_en','naziv_it','naziv_gotov_en','naziv_gotov_it',
+                 'moguci_oblici','grupa','debljina_cm','std_sirina','std_visina'].includes(k));
   const smijeCijene = smijeMijenjatiCijene(req);
   const smijeOpisna = req.session?.user?.moze_roba_magacin || smijeCijene;
   if (req.session?.user?.rola !== 'admin'
@@ -1358,7 +1359,7 @@ router.patch('/:id', preskociAkoNijeArtikal, async (req, res) => {
   try {
     const { naziv, jed_mjera, aktivan, cijena, stanje, objekt_id,
             naziv_gotov, naziv_en, naziv_it, naziv_gotov_en, naziv_gotov_it,
-            moguci_oblici } = req.body;
+            moguci_oblici, grupa, debljina_cm, std_sirina, std_visina } = req.body;
 
     /* Trag izmjene naziva — upisuje se PRIJE promjene, dok se stara vrijednost jos zna.
        Sifra se ne mijenja nigdje u sistemu, pa se ovdje samo pamti radi lakseg trazenja. */
@@ -1395,6 +1396,13 @@ router.patch('/:id', preskociAkoNijeArtikal, async (req, res) => {
       /* Oblici koje artikal (postolje) moze nositi. Prazno = bez ogranicenja. */
       moguci_oblici: moguci_oblici === undefined ? undefined
         : (Array.isArray(moguci_oblici) && moguci_oblici.length ? moguci_oblici : null),
+
+      /* Grupa i dimenzije table — opisni podaci koji nedostaju kod rucno unesenih
+         artikala. Ranije su se mogli postaviti samo uvozom. */
+      grupa:        grupa === undefined ? undefined : (String(grupa).trim() || null),
+      debljina_cm:  debljina_cm === undefined ? undefined : (parseFloat(debljina_cm) || null),
+      std_sirina:   std_sirina === undefined ? undefined : (parseFloat(std_sirina) || null),
+      std_visina:   std_visina === undefined ? undefined : (parseFloat(std_visina) || null),
     };
     const sets = [], vals = [];
     let i = 1;

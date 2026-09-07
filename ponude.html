@@ -9640,8 +9640,16 @@ function _pozNaStrani(k){
 // Pravi PO JEDNU SLIKU za svaku stranu pozicija. Za ekran je jedan visok
 // crtez u redu, ali za stampu i ponudu je losе - slika ne stane na A4 pa
 // pregledac ostavi pola prazne stranice. Zato se za dokumente razdvaja.
+// Koliko pozicija ide na JEDNU sliku u dokumentu. Na ekranu moze biti vise
+// (skroluje se), ali u radnom nalogu slika mora stati na A4 landscape:
+// sadrzaj je ~718px, zaglavlje i tabela uzmu ~160, pa crtezu ostaje ~558px.
+// Preko tri klupice slika prelazi stranicu i kote se odsijecaju.
+var POZ_PO_STRANI_DOK=2;
 function _slikeCrteza(){
   var svePoz=(typeof imaPozicije==='function'&&imaPozicije()&&(pozicije||[]).length);
+  // Za dokumente se privremeno koristi manja podjela
+  var staroPoStrani=POZ_PO_STRANI;
+  if(svePoz&&POZ_PO_STRANI>POZ_PO_STRANI_DOK) POZ_PO_STRANI=POZ_PO_STRANI_DOK;
   var brStr=svePoz?_pozBrojStrana():1;
   var stara=_pozStrana, staroSve=_SAMO_JEDNA_STRANA;
   var slike=[];
@@ -9659,6 +9667,7 @@ function _slikeCrteza(){
     document.body.removeChild(pc);
   }
   _pozStrana=stara; _SAMO_JEDNA_STRANA=staroSve;
+  POZ_PO_STRANI=staroPoStrani;   // vrati korisnikovu postavku za ekran
   return slike;
 }
 // Kad je true, crta se samo tekuca strana (za dokumente), inace sve odjednom
@@ -9694,7 +9703,12 @@ function _pozRaspored(n){
   n=Math.max(1,n||1);
   // Jedna po redu - klupice su duge i uske, pa je tako crtez najveci.
   return {uRedu:1, redova:n,
-          padX:56, padY:74, razmakX:64, razmakY:76, donjaRezerva:34};
+          padX:56, padY:74, razmakX:64, razmakY:76,
+          // Ispod ZADNJE klupice mora ostati mjesta za njenu kotu: ona je
+          // 18px ispod ploce, ima tekst (~12px) i strelice, a moze biti i
+          // pomjerena nize ako izbjegava simbol. Sa 34px je zadnja kota
+          // zavrsavala na samoj ivici platna i bila odsjecena.
+          donjaRezerva:64};
 }
 // Visina platna koja stvarno stane sve pozicije
 // Mjerilo je isto za SVE strane, pa su klupice medjusobno uporedive
@@ -10950,7 +10964,25 @@ function genRadniNalog(returnHtml){try{
       '.rn-poz tfoot td{background:#e8eef8;padding:5px 6px;border-top:2px solid #1a3f7a;}'+
       '.rn-poz tr.rn-zid td{background:#f3eef8;color:#5a3a78;font-size:10.5px;padding:5px 6px;border-top:1.5px solid #b89dd4;}'+
       '.rn-poz tr.rn-podnaslov td{background:#dde6f3;color:#1a3f7a;font-size:8.5px;font-weight:700;letter-spacing:.5px;padding:2px 6px;}'+
-      '@media print{body{margin:0;padding:0;}@page{size:A4 landscape;margin:10mm;}.rn-stavka{page-break-inside:avoid;margin:8px 12px;border:1.5pt solid #1a3f7a;}.rn-hd{-webkit-print-color-adjust:exact;print-color-adjust:exact;}.rn-stavka-hd{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}'+
+      '@media print{'+
+      'body{margin:0;padding:0;}'+
+      '@page{size:A4 landscape;margin:10mm;}'+
+      /* Blok stavke se NE lomi ako moze stati; ako je visi od stranice,
+         mora smjeti da se prelomi - inace ga pregledac odsijeca. */
+      '.rn-stavka{page-break-inside:auto;break-inside:auto;margin:8px 12px;border:1.5pt solid #1a3f7a;}'+
+      '.rn-stavka-hd{page-break-after:avoid;break-after:avoid;'+
+        '-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+
+      /* Crtez sa kotama mora ostati na okupu i stati na stranicu */
+      '.rn-crtez{page-break-inside:avoid;break-inside:avoid;}'+
+      '.rn-crtez img{max-height:150mm;width:auto;max-width:100%;display:block;margin:0 auto;}'+
+      /* .rn-body sadrzi SVE slike - ne smije se drzati na okupu, inace bi
+         kod vise klupica sve pokusale stati na jednu stranicu. Svaka slika
+         (.rn-crtez) se cuva pojedinacno, sto je i dovoljno. */
+      '.rn-body{page-break-inside:auto;break-inside:auto;}'+
+      'table{page-break-inside:auto;} tr{page-break-inside:avoid;}'+
+      'thead{display:table-header-group;}'+
+      '.rn-hd{-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+
+    '}'+
     '</style></head><body>'+
     '<div class="rn-hd">'+
       '<div><div class="rn-hd-firma">JoPeX d.o.o.</div><div style="font-size:12px;opacity:.8">Radni nalog za CNC obradu</div></div>'+
