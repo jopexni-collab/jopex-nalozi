@@ -389,6 +389,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
   <button type="button" class="glavni-tab-btn" data-tab="uporedi" onclick="prebaciGlavniTabRM('uporedi')">⚖️ Uporedi PJ</button>
   <button type="button" class="glavni-tab-btn" data-tab="gotovi" onclick="prebaciGlavniTabRM('gotovi')">🍽️ Gotovi proizvodi</button>
+  <a href="prijevodi.html" class="glavni-tab-btn" style="text-decoration:none;display:inline-flex;align-items:center;" title="Prijevodi naziva za katalog na stranom jeziku">🌍 Prijevodi</a>
   <button type="button" class="glavni-tab-btn" data-tab="akcije" onclick="prebaciGlavniTabRM('akcije')">🏷️ Akcije</button>
   <button type="button" class="glavni-tab-btn" data-tab="kretanje" onclick="prebaciGlavniTabRM('kretanje')">📈 Kretanje robe</button>
   <button type="button" class="glavni-tab-btn" data-tab="uvoz" onclick="prebaciGlavniTabRM('uvoz')">📥 Uvoz robe</button>
@@ -749,6 +750,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <select id="lager-objekat"><option value="">— izaberi prodajni objekat —</option></select>
     <div class="ce-row">
       <button class="ce-tip-btn" onclick="ucitajLagerListu()">Prikaži</button>
+      <button class="ce-tip-btn" style="color:var(--green,#1f8a4c);font-weight:700;" onclick="otvoriNovArtikal()">➕ Nova šifra</button>
       <button class="ce-tip-btn" onclick="otvoriRucniUnos()">✏️ Ručni unos</button>
       <button class="ce-tip-btn" onclick="izvezLagerListu()">📥 Izvezi u XLSX</button>
       <button class="ce-tip-btn" style="color:var(--red);" id="btn-obrisi-lager" onclick="otvoriBrisanjeLagera()">🗑️ Obriši lager</button>
@@ -7974,6 +7976,144 @@ fetch(`${API}/api/auth/me`).then(r=>{
     el.textContent = 'Greška: ' + e.message + (e.lineno ? ' — red ' + e.lineno : '') + '  (klikni da skloniš)';
   });
 })();
+
+/* ═══ NOVA ŠIFRA ═══════════════════════════════════════════════════════════════════
+   Artikal se pravi jednom (tabela roba) i vidi se u svim objektima; cijena i stanje
+   idu u roba_pj, po objektu. Bez toga bi se ista roba lako zavela dvaput. */
+async function otvoriNovArtikal(){
+  const m = document.getElementById('modal-nov-artikal');
+  ['na-sifra','na-naziv','na-grupa','na-debljina','na-tabla-s','na-tabla-v','na-cijena','na-stanje']
+    .forEach(id => { const e = document.getElementById(id); if(e) e.value = ''; });
+  document.getElementById('na-sve-pj').checked = false;
+  document.getElementById('na-poruka').textContent = '';
+  document.getElementById('na-sifra-poruka').textContent = '';
+
+  // Objekti — preuzimaju se iz vec ucitane liste lagera
+  const izvor = document.getElementById('lager-objekat');
+  const cilj = document.getElementById('na-objekat');
+  if(izvor && cilj){
+    cilj.innerHTML = [...izvor.options].filter(o=>o.value)
+      .map(o=>`<option value="${o.value}" ${o.value===izvor.value?'selected':''}>${esc(o.textContent)}</option>`).join('');
+  }
+
+  // Postojece grupe kao prijedlog — da se ne izmisljaju nove varijante istog naziva
+  try{
+    const r = await fetch(`${API}/api/roba/liste-grupa`);
+    if(r.ok){
+      const d = await r.json();
+      const grupe = [...new Set((Array.isArray(d)?d:d.grupe||[]).map(x=>typeof x==='string'?x:x.grupa).filter(Boolean))];
+      document.getElementById('na-grupe-lista').innerHTML = grupe.map(g=>`<option value="${esc(g)}">`).join('');
+    }
+  }catch(e){ /* prijedlog nije nuzan */ }
+
+  m.style.display = 'flex';
+  setTimeout(()=>document.getElementById('na-sifra')?.focus(), 60);
+}
+
+/* Provjera da sifra vec ne postoji — duplikat je najcesca greska pri rucnom unosu. */
+let naProvjeraTajmer = null;
+function naProvjeriSifru(){
+  clearTimeout(naProvjeraTajmer);
+  naProvjeraTajmer = setTimeout(async ()=>{
+    const s = document.getElementById('na-sifra').value.trim();
+    const p = document.getElementById('na-sifra-poruka');
+    if(!s){ p.textContent = ''; return; }
+    try{
+      const r = await fetch(`${API}/api/roba?q=${encodeURIComponent(s)}&limit=5`);
+      if(!r.ok) return;
+      const d = await r.json();
+      const lista = Array.isArray(d) ? d : (d.stavke || d.rows || []);
+      const isti = lista.find(x => String(x.sifra) === s);
+      if(isti){
+        p.textContent = `⚠ Šifra već postoji: ${isti.naziv}`;
+        p.style.color = 'var(--orange,#b8860b)';
+      }else{
+        p.textContent = '✓ slobodna';
+        p.style.color = 'var(--green,#1f8a4c)';
+      }
+    }catch(e){ p.textContent = ''; }
+  }, 400);
+}
+
+async function naSacuvaj(){
+  const broj = v => { const n = parseFloat(String(v||'').replace(',','.')); return isNaN(n) ? 0 : n; };
+  const sifra = document.getElementById('na-sifra').value.trim();
+  const naziv = document.getElementById('na-naziv').value.trim();
+  const poruka = document.getElementById('na-poruka');
+  const dugme = document.getElementById('na-dugme');
+
+  if(!sifra || !naziv){
+    poruka.textContent = 'Šifra i naziv su obavezni.'; poruka.style.color = 'var(--orange,#b8860b)';
+    return;
+  }
+  const objektId = document.getElementById('na-objekat').value;
+  if(!objektId){
+    poruka.textContent = 'Izaberi objekat.'; poruka.style.color = 'var(--orange,#b8860b)';
+    return;
+  }
+
+  dugme.disabled = true;
+  poruka.textContent = 'Čuvam...'; poruka.style.color = '#8b96a5';
+  try{
+    const r = await fetch(`${API}/api/roba`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        sifra, naziv,
+        jed_mjera: document.getElementById('na-jm').value,
+        cijena: broj(document.getElementById('na-cijena').value),
+        stanje: broj(document.getElementById('na-stanje').value),
+        objekt_id: objektId,
+      }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+
+    /* Grupa, debljina i dimenzije table idu zasebno — ruta za dodavanje ih ne prima,
+       pa se dopisuju odmah poslije, na novonastali artikal. */
+    const dopuna = {};
+    const g = document.getElementById('na-grupa').value.trim();
+    const deb = broj(document.getElementById('na-debljina').value);
+    const ts = broj(document.getElementById('na-tabla-s').value);
+    const tv = broj(document.getElementById('na-tabla-v').value);
+    if(g) dopuna.grupa = g;
+    if(deb) dopuna.debljina_cm = deb;
+    if(ts) dopuna.std_sirina = ts;
+    if(tv) dopuna.std_visina = tv;
+    if(Object.keys(dopuna).length && d.id){
+      await fetch(`${API}/api/roba/${d.id}`,{
+        method:'PATCH', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(dopuna),
+      }).catch(()=>{});
+    }
+
+    // Ista cijena u svim objektima — stanje ostaje samo tamo gdje je uneseno
+    let uSvim = 0;
+    if(document.getElementById('na-sve-pj').checked && d.id){
+      const cijena = broj(document.getElementById('na-cijena').value);
+      const svi = [...document.getElementById('na-objekat').options].map(o=>o.value).filter(v=>v && v!==objektId);
+      for(const oid of svi){
+        const ok = await fetch(`${API}/api/roba`,{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ sifra, naziv, jed_mjera: document.getElementById('na-jm').value,
+                                 cijena, stanje: 0, objekt_id: oid }),
+        }).then(x=>x.ok).catch(()=>false);
+        if(ok) uSvim++;
+      }
+    }
+
+    poruka.innerHTML = `✓ Sačuvano${uSvim?` · cijena u još ${uSvim} ${uSvim===1?'objektu':'objekta'}`:''}`;
+    poruka.style.color = 'var(--green,#1f8a4c)';
+    setTimeout(()=>{
+      document.getElementById('modal-nov-artikal').style.display = 'none';
+      if(typeof ucitajLagerListu === 'function') ucitajLagerListu();
+    }, 900);
+  }catch(e){
+    poruka.textContent = '✗ ' + e.message; poruka.style.color = 'var(--red,#c0392b)';
+  }finally{
+    dugme.disabled = false;
+  }
+}
+
 </script>
 
 
@@ -8201,6 +8341,99 @@ fetch(`${API}/api/auth/me`).then(r=>{
     <div style="display:flex;gap:7px;align-items:center;margin-top:15px;">
       <button onclick="gprSacuvajDim()" style="flex:1;padding:9px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;">✓ Sačuvaj</button>
       <span id="gud-poruka" style="font-size:11.5px;color:#8b96a5;"></span>
+    </div>
+  </div>
+</div>
+<div id="modal-nov-artikal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:930;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:18px;max-width:520px;width:95vw;max-height:92vh;overflow:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <h3 style="margin:0;font-size:16px;">➕ Nova šifra</h3>
+      <button onclick="document.getElementById('modal-nov-artikal').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+    </div>
+
+    <div style="font-size:11.5px;color:#6b7a8d;line-height:1.5;margin-bottom:13px;">
+      Artikal se pravi <b>jednom</b> i vidi se u svim objektima. Cijena i stanje upisuju
+      se <b>po objektu</b> — u ostalima će stajati „nema" dok se i tamo ne unesu.
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;">
+      <label style="grid-column:1/2;">
+        <span style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Šifra *</span>
+        <input type="text" id="na-sifra" oninput="naProvjeriSifru()" placeholder="npr. 9101"
+               style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;font:inherit;font-size:12.5px;">
+        <span id="na-sifra-poruka" style="font-size:10.5px;color:#8b96a5;"></span>
+      </label>
+      <label style="grid-column:2/3;">
+        <span style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Jedinica mjere</span>
+        <select id="na-jm" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;font:inherit;font-size:12.5px;">
+          <option value="m2">m2 — kvadrat</option>
+          <option value="m1">m1 — dužni</option>
+          <option value="kom">kom — komad</option>
+          <option value="kg">kg</option>
+          <option value="sat">sat</option>
+        </select>
+      </label>
+
+      <label style="grid-column:1/3;">
+        <span style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Naziv *</span>
+        <input type="text" id="na-naziv" placeholder="npr. Quartz Bianco 2cm"
+               style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;font:inherit;font-size:12.5px;">
+      </label>
+
+      <label>
+        <span style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Grupa</span>
+        <input type="text" id="na-grupa" list="na-grupe-lista" placeholder="npr. quartz"
+               style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;font:inherit;font-size:12.5px;">
+        <datalist id="na-grupe-lista"></datalist>
+      </label>
+      <label>
+        <span style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Debljina (cm)</span>
+        <input type="text" inputmode="decimal" id="na-debljina" placeholder="2"
+               style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;font:inherit;font-size:12.5px;">
+      </label>
+
+      <label style="grid-column:1/3;">
+        <span style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Dimenzija table (mm) — širina × visina</span>
+        <span style="display:flex;gap:6px;align-items:center;">
+          <input type="text" inputmode="numeric" id="na-tabla-s" placeholder="3200"
+                 style="flex:1;padding:7px 9px;border:1px solid #ccc;border-radius:6px;font:inherit;font-size:12.5px;">
+          <span style="color:#8b96a5;">×</span>
+          <input type="text" inputmode="numeric" id="na-tabla-v" placeholder="1600"
+                 style="flex:1;padding:7px 9px;border:1px solid #ccc;border-radius:6px;font:inherit;font-size:12.5px;">
+        </span>
+      </label>
+    </div>
+
+    <div style="margin-top:14px;padding:11px 12px;background:#f7f8fa;border-radius:8px;">
+      <div style="font-size:11.5px;font-weight:700;color:#555;margin-bottom:7px;">Cijena i stanje</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;">
+        <label>
+          <span style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Objekat *</span>
+          <select id="na-objekat" style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;font:inherit;font-size:12.5px;"></select>
+        </label>
+        <label>
+          <span style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Cijena</span>
+          <input type="text" inputmode="decimal" id="na-cijena" placeholder="0,00"
+                 style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;font:inherit;font-size:12.5px;">
+        </label>
+        <label>
+          <span style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Stanje</span>
+          <input type="text" inputmode="decimal" id="na-stanje" placeholder="0,00"
+                 style="width:100%;padding:7px 9px;border:1px solid #ccc;border-radius:6px;font:inherit;font-size:12.5px;">
+        </label>
+      </div>
+      <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;margin-top:9px;">
+        <input type="checkbox" id="na-sve-pj">
+        Ista cijena u <b>svim objektima</b> <span style="color:#8b96a5;font-size:11px;">(stanje ostaje samo u izabranom)</span>
+      </label>
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;margin-top:15px;">
+      <button onclick="naSacuvaj()" id="na-dugme"
+              style="flex:1;padding:10px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;">
+        ✓ Sačuvaj artikal
+      </button>
+      <span id="na-poruka" style="font-size:11.5px;color:#8b96a5;flex:1;"></span>
     </div>
   </div>
 </div>
