@@ -2821,6 +2821,26 @@ function otvorUzStranu(t,i,duz,odmak,w,h){
           [ox+f.nx*h, oy+f.ny*h]];
 }
 // Bounding box tog (moguce zarotiranog) otvora - za crtanje i provjere.
+// Mjere stola. Crtez je citao polja sto-a/sto-b, a obracun dims.A/dims.B -
+// a dims se nikad nije osvjezavao iz polja, pa je ponuda racunala zastarjele
+// (podrazumijevane) mjere. Sada oba koriste OVU funkciju.
+function _stoMjere(it){
+  var a=it||items[activeIdx];
+  var sh=(a&&a!==items[activeIdx])?a.shape:shape;
+  var d=(a&&a!==items[activeIdx])?(a.dims||{}):dims;
+  if(sh==='skica'){
+    var bb=_bbPolyTj((d&&d._tj)||[]);
+    return {a:bb.w, b:bb.h};
+  }
+  var inp=(a&&a.inputs)||{};
+  // Polja imaju prednost - ona su ono sto korisnik vidi i mijenja
+  var A=(a===items[activeIdx])?gi('sto-a'):_broj(inp['sto-a']);
+  var B=(a===items[activeIdx])?gi('sto-b'):_broj(inp['sto-b']);
+  if(!(A>0)) A=_broj(d&&d.A)||1600;
+  if(!(B>0)) B=_broj(d&&d.B)||900;
+  if(sh==='okrugao') B=A;
+  return {a:A, b:B};
+}
 function _bbPolyTj(t){
   var mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
   t.forEach(function(q){
@@ -7268,9 +7288,8 @@ function calcItemCost(){
     rows+=trow('Ugradnja',kk+' kom',_editableUnitPrice(gi('kl-u'),'','setItemFieldPrice',[activeIdx,'kl-u']),f(gi('kl-u')*kk));
     rows+=trow('Mjerenje','1',_editableUnitPrice(gi('kl-m'),'','setItemFieldPrice',[activeIdx,'kl-m']),f(gi('kl-m')));
   } else if(tip==='sto'){
-    var _bbS0=(shape==='skica')?_bbPolyTj((dims&&dims._tj)||[]):null;
-    var stoA2=_bbS0?_bbS0.w:(dims.A||0);
-    var stoB2=_bbS0?_bbS0.h:((shape==='okrugao')?stoA2:(dims.B||0));
+    var _sm0=_stoMjere();
+    var stoA2=_sm0.a, stoB2=_sm0.b;
     var stoBr2=Math.max(1,gi('sto-br')||1);
     var m3o=(stoA2*stoB2)/1e6*stoBr2;
     mat=Math.round(m3o*gi('mat-c')*100)/100;
@@ -7400,9 +7419,8 @@ function refresh(){
     usl=gi('kl-u')*k+gi('kl-m');
     uk=mat+iv+usl; pov=m2.toFixed(4)+' m² ('+k+' kom)';
   } else if(tip==='sto'){
-    var _bbS=(shape==='skica')?_bbPolyTj((dims&&dims._tj)||[]):null;
-    var stoA=_bbS?_bbS.w:(dims.A||0);
-    var stoB=_bbS?_bbS.h:((shape==='okrugao')?stoA:(dims.B||0));
+    var _sm=_stoMjere();
+    var stoA=_sm.a, stoB=_sm.b;
     var stoBr=Math.max(1,gi('sto-br')||1);
     var m3=(stoA*stoB)/1e6*stoBr; // obracun: max sirina x max visina (bounding box) x kom
     mat=Math.round(m3*gi('mat-c')*100)/100;
@@ -8848,9 +8866,8 @@ function getCanvasSizeForItem(){
     return {w:_baseW, h:_hasExt?Math.max(_baseH+100,560):_baseH};
   }
   if(tip==='sto'){
-    var _bbS2=(shape==='skica')?_bbPolyTj((dims&&dims._tj)||[]):null;
-    var stoA=_bbS2?_bbS2.w:(gi('sto-a')||1600);
-    var stoB=_bbS2?_bbS2.h:((shape==='okrugao')?stoA:(gi('sto-b')||900));
+    var _sm2=_stoMjere();
+    var stoA=_sm2.a, stoB=_sm2.b;
     var ratioSto=stoA>0?(stoB/stoA):0.6;
     var wSto=900, hSto=Math.min(700,Math.max(380,Math.round(wSto*ratioSto*1.15)));
     return {w:wSto, h:hSto};
@@ -12103,6 +12120,10 @@ function _generisiNazivPonude(){
 
 async function _cloudSaveCore(){
   if(!_currentUser) throw new Error('Niste prijavljeni.');
+  // Prazna ponuda se NE cuva - inace bi pregazila postojecu dobru verziju
+  if(!items || !items.length){
+    throw new Error('Ponuda nema nijednu stavku \u2014 nema se \u0161ta sa\u010duvati.');
+  }
   const naziv = _generisiNazivPonude();
   if(!_autorPonude && _currentUser){
     _autorPonude={id:_currentUser.id||null, ime:_currentUser.ime_prezime||''};
@@ -12907,6 +12928,17 @@ function _ukupnoSvihStavki(){
 
 // Pomoćna — izvuci podatke projekta za cloud čuvanje
 function _getProjectData(){
+  // STAVKE su najvaznije - one se citaju prve i bez zastite od greske.
+  // Sve ostalo je dodatak: ako neki dio pukne, snima se bez njega umjesto
+  // da se izgubi cijela ponuda. (Ranije je bilo obrnuto: jedna greska bilo
+  // gdje vracala je praznu ponudu, koja bi pregazila dobru na oblaku.)
+  if(typeof items==='undefined' || !items || !items.length){
+    throw new Error('Nema nijedne stavke.');
+  }
+  function _bez(fn,zamjena,ime){
+    try{ return fn(); }
+    catch(e){ console.error('_getProjectData/'+ime+':',e); return zamjena; }
+  }
   try{
     return {
       version: 1,
@@ -12915,12 +12947,13 @@ function _getProjectData(){
         tel: (document.getElementById('kl-tel')||{}).value||'',
         adr: (document.getElementById('kl-adr')||{}).value||'',
       },
-      items: typeof items!=='undefined'?items:[],
+      items: items,
       activeIdx: typeof activeIdx!=='undefined'?activeIdx:0,
-      cjenovnik: _snimiCjenovnik(),  // cijene profila i rezanja (globalna polja)
-      lagerPJ: LAGER_PJ, matKoef: MAT_KOEF,
-      ostalo: _snimiOstalo(),        // popust, kontakt referenta, kategorija
-      ukupno: _ukupnoSvihStavki(),   // kontrolni iznos u trenutku cuvanja
+      cjenovnik: _bez(_snimiCjenovnik,{},'cjenovnik'),
+      lagerPJ: (typeof LAGER_PJ!=='undefined')?LAGER_PJ:[],
+      matKoef: (typeof MAT_KOEF!=='undefined')?MAT_KOEF:3,
+      ostalo: _bez(_snimiOstalo,{},'ostalo'),
+      ukupno: _bez(_ukupnoSvihStavki,null,'ukupno'),   // kontrolni iznos
       autor: _autorPonude,  // ko je NAPRAVIO ponudu (ne mijenja se pri izmjeni)
       ponuda: _ponudaInfo, // red u tabeli ponuda (da se pregazi, ne duplira)
       nalog: _nalogInfo,   // veza ponuda -> radni nalog (za revizije)
@@ -12928,7 +12961,14 @@ function _getProjectData(){
       dodatniRad: _dodatniRad,
       timestamp: new Date().toISOString(),
     };
-  }catch(e){ return {version:1,items:[]}; }
+  }catch(e){
+    // NIKAD ne vracati praznu ponudu - to je tiho brisalo sve stavke i
+    // snimalo prazan zapis preko dobrog. Radije se prijavi greska, pa
+    // cuvanje stane i korisnik zna da nesto nije u redu.
+    console.error('_getProjectData:',e);
+    throw new Error('Ponuda se ne mo\u017ee pripremiti za \u010duvanje: '+(e.message||e)
+      +'\n\nNi\u0161ta nije sa\u010duvano \u2014 podaci na ekranu su netaknuti.');
+  }
 }
 
 // Zamjena _apiUrl funkcije — uvijek vraća relativni URL
