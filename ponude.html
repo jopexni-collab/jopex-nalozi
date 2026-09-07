@@ -9694,7 +9694,7 @@ function _pozRaspored(n){
   n=Math.max(1,n||1);
   // Jedna po redu - klupice su duge i uske, pa je tako crtez najveci.
   return {uRedu:1, redova:n,
-          padX:56, padY:74, razmakX:64, razmakY:64, donjaRezerva:30};
+          padX:56, padY:74, razmakX:64, razmakY:76, donjaRezerva:34};
 }
 // Visina platna koja stvarno stane sve pozicije
 // Mjerilo je isto za SVE strane, pa su klupice medjusobno uporedive
@@ -9884,9 +9884,12 @@ function _crtajStranuPozicija(ctx,W,lista,m,strIdx,brStr,svi){
     }
     // KOTE - duplim klikom se mijenjaju
     // Kota duzine nize, da ne pokrije zonu donje ivice (obrada strane A)
-    kota(ctx,0,B+34,A,B+34,Math.round(p.a||0)+' mm',_pozEditDesc(i,'a'));
+    // Kota mora biti OSJETNO blize svojoj ploci nego sljedecoj. Ranije je
+    // bila 34 px ispod svoje, a razmak do sljedece 64 - pa je ispadala
+    // bliza donjem crtezu (30 px) nego svom.
+    kota(ctx,0,B+18,A,B+18,Math.round(p.a||0)+' mm',_pozEditDesc(i,'a'));
     // Kota sirine ide LIJEVO - desno je broj komada, pa se ne sudaraju
-    kota(ctx,-20,0,-20,B,Math.round(p.b||0)+' mm',_pozEditDesc(i,'b'));
+    kota(ctx,-16,0,-16,B,Math.round(p.b||0)+' mm',_pozEditDesc(i,'b'));
 
     // Redni broj i broj komada
     ctx.fillStyle='#7a4fa0'; ctx.font='bold 15px Segoe UI,Arial';
