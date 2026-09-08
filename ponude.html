@@ -3904,7 +3904,10 @@ function _ledDuzina(){
     if(!ids.length) return;
     var kom=Math.max(1,p.kom||1);
     ids.forEach(function(id){
-      var d=(id==='A-zad'||id==='D-pred')?(p.a||0):(p.b||0);
+  // Kod LUCNE klupice se obrada mjeri po DUZINI LUKA, ne po tetivi
+  var _Ld=_pozLuk(p);
+  var d=_Ld ? (_lukStrane(_Ld)[id]||0)
+            : ((id==='A-zad'||id==='D-pred')?(p.a||0):(p.b||0));
       uk+=d/1000*kom;
     });
   });
@@ -4343,7 +4346,10 @@ function _pozProf(p,segId){
 // Duzina koja se STVARNO obradjuje na toj strani (mm). Kod klupica se bocna
 // strana cesto polira samo na vidljivom pocetku (3-5 cm), ne cijelom duzinom.
 function _pozDuzObrade(p,segId,duzA,duzB){
-  var puna=(segId==='A-zad'||segId==='D-pred')?duzA:duzB;
+  // Kod lucne klupice puna duzina strane je duzina LUKA
+  var _Lo=_pozLuk(p);
+  var puna=_Lo ? (_lukStrane(_Lo)[segId]||0)
+               : ((segId==='A-zad'||segId==='D-pred')?duzA:duzB);
   var d=_pozBd(p,segId);
   return (d>0&&d<puna)?d:puna;
 }
@@ -4362,7 +4368,9 @@ function _pozSazetak(p){
   var strane=_pozStrane(), dijelovi=[], izuz=0;
   strane.forEach(function(sd){
     var pr=_pozProf(p,sd.id);
-    var puna=(sd.id==='A-zad'||sd.id==='D-pred')?(p.a||0):(p.b||0);
+    var _Lp=_pozLuk(p);
+    var puna=_Lp ? (_lukStrane(_Lp)[sd.id]||0)
+                 : ((sd.id==='A-zad'||sd.id==='D-pred')?(p.a||0):(p.b||0));
     var d=_pozBd(p,sd.id);
     var djelim=(d>0&&d<puna);
     if(p.ob&&p.ob[sd.id]!=null) izuz++;
@@ -4723,6 +4731,36 @@ function buildPozicijeTabelu(){
               return '<option value="'+kt+'"'+(_pozKomTip(p)===kt?' selected':'')+'>'+KomTipLbl[kt]+'</option>';
             }).join('')+'</select></div>';
         }
+      }
+      // Lucna klupica - isjecak prstena umjesto pravougaonika
+      var _L=_pozLuk(p);
+      h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'
+        +'<b style="font-size:11px;color:#1d8a6e;min-width:13px">\u25dc</b>'
+        +'<label style="font-size:10px;color:#8a93a3;display:flex;align-items:center;gap:4px;'
+        +'cursor:pointer"><input type="checkbox"'+(_L?' checked':'')
+        +' onchange="pozLukUkljuci('+i+',this.checked)"> lu\u010dna (isje\u010dak prstena)</label>'
+        +'</div>';
+      if(_L){
+        var _bbL=_lukBB(_L), _stL=_lukStrane(_L);
+        h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap;'
+          +'padding:5px 7px;background:#eefaf6;border:1px solid #bde3d6;border-radius:5px">'
+          +'<label style="font-size:10px;color:#6b7a8d">R vanjski</label>'
+          +'<input type="text" inputmode="decimal" value="'+_L.rv+'" style="width:60px;font:inherit;'
+          +'font-size:11px;padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;text-align:right"'
+          +' onchange="fixComma(this);pozLukPolje('+i+',\'rv\',this.value)">'
+          +'<label style="font-size:10px;color:#6b7a8d">R unutra\u0161nji</label>'
+          +'<input type="text" inputmode="decimal" value="'+_L.ru+'" style="width:60px;font:inherit;'
+          +'font-size:11px;padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;text-align:right"'
+          +' onchange="fixComma(this);pozLukPolje('+i+',\'ru\',this.value)">'
+          +'<label style="font-size:10px;color:#6b7a8d">Ugao</label>'
+          +'<input type="text" inputmode="decimal" value="'+_L.ug+'" style="width:48px;font:inherit;'
+          +'font-size:11px;padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;text-align:right"'
+          +' onchange="fixComma(this);pozLukPolje('+i+',\'ug\',this.value)">'
+          +'<span style="font-size:10px;color:#8a93a3">\u00b0</span>'
+          +'<div style="width:100%;font-size:9.5px;color:#1d8a6e;padding-top:3px">'
+          +'\u0161irina '+(_L.rv-_L.ru)+' mm \u00b7 vanjski luk '+_stL['A-zad']+' mm \u00b7 '
+          +'unutra\u0161nji '+_stL['D-pred']+' mm \u00b7 tabla '+_bbL.w+'\u00d7'+_bbL.h+' mm</div>'
+          +'</div>';
       }
       h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'
         +'<b style="font-size:11px;color:#b8860b;min-width:13px">\u25dc</b>'
@@ -9543,6 +9581,91 @@ function _pozEditDesc(i,polje){
       syncToActive(); buildPozicijeTabelu(); refresh();
     }};
 }
+// ── LUČNA KLUPICA (isječak prstena) ──────────────────────────────
+// Zadaje se vanjskim i unutrašnjim poluprečnikom i uglom. Sirina klupice
+// je razlika poluprecnika, a duzina se mjeri po SREDNJEM luku - to je ono
+// sto se stvarno rezuje i ugradjuje.
+// Podaci stoje u p.luk = {rv, ru, ug}; a i b se IZVODE iz njih, da svi
+// postojeci racuni (bruto povrsina, nesting, popis za nalog) rade nepromijenjeni.
+function _pozLuk(p){
+  var L=p&&p.luk;
+  if(!L) return null;
+  var rv=_broj(L.rv)||0, ru=_broj(L.ru)||0, ug=_broj(L.ug)||0;
+  if(!(rv>0&&ru>=0&&rv>ru&&ug>0)) return null;
+  return {rv:rv, ru:ru, ug:Math.min(360,ug)};
+}
+// Tjemena isjecka - uzorkuje se luk, pa se iz njih racuna sve ostalo.
+// Isjecak je simetrican oko USPRAVNE ose, otvor gleda nadolje.
+function _lukTacke(L,korak){
+  var n=Math.max(8,Math.ceil((L.ug/(korak||4))));
+  var pola=L.ug*Math.PI/180/2;
+  var t=[], i;
+  for(i=0;i<=n;i++){                      // vanjski luk, lijevo -> desno
+    var a=-pola+(2*pola)*i/n;
+    t.push([L.rv*Math.sin(a), -L.rv*Math.cos(a)]);
+  }
+  for(i=n;i>=0;i--){                      // unutrasnji luk, nazad
+    var b=-pola+(2*pola)*i/n;
+    t.push([L.ru*Math.sin(b), -L.ru*Math.cos(b)]);
+  }
+  return t;
+}
+// Bounding box isjecka - to je mjera table koja se stvarno trosi
+function _lukBB(L){
+  var t=_lukTacke(L,2);
+  var mnx=Infinity,mxx=-Infinity,mny=Infinity,mxy=-Infinity;
+  t.forEach(function(q){
+    if(q[0]<mnx)mnx=q[0]; if(q[0]>mxx)mxx=q[0];
+    if(q[1]<mny)mny=q[1]; if(q[1]>mxy)mxy=q[1];
+  });
+  return {w:Math.round(mxx-mnx), h:Math.round(mxy-mny), mnx:mnx, mny:mny};
+}
+// Duzina SREDNJEG luka - po njoj se racuna obrada ivica
+function _lukDuzina(L){
+  return Math.round((L.rv+L.ru)/2*(L.ug*Math.PI/180));
+}
+// Duzine pojedinih strana: A = vanjski luk, D = unutrasnji, B i C = celo
+function _lukStrane(L){
+  return {
+    'A-zad':  Math.round(L.rv*(L.ug*Math.PI/180)),
+    'D-pred': Math.round(L.ru*(L.ug*Math.PI/180)),
+    'B-lev':  Math.round(L.rv-L.ru),
+    'C-des':  Math.round(L.rv-L.ru)
+  };
+}
+// Uskladi a/b sa lukom - poziva se poslije svake izmjene poluprecnika/ugla
+function _lukUskladi(p){
+  var L=_pozLuk(p);
+  if(!L) return;
+  var bb=_lukBB(L);
+  p.a=bb.w;                 // bruto sirina table
+  p.b=bb.h;                 // bruto visina table
+}
+function pozLukPolje(i,polje,val){
+  var p=pozicije[i]; if(!p) return;
+  p.luk=p.luk||{rv:1000,ru:750,ug:90};
+  p.luk[polje]=Math.max(0,_broj(val));
+  // Vanjski mora biti veci od unutrasnjeg
+  if(polje==='ru'&&p.luk.ru>=p.luk.rv) p.luk.rv=p.luk.ru+100;
+  if(polje==='rv'&&p.luk.rv<=p.luk.ru) p.luk.ru=Math.max(0,p.luk.rv-100);
+  if(polje==='ug') p.luk.ug=Math.max(1,Math.min(360,p.luk.ug));
+  _lukUskladi(p);
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
+function pozLukUkljuci(i,da){
+  var p=pozicije[i]; if(!p) return;
+  if(da){
+    // Zadane mjere iz postojecih: sirina ostaje, poluprecnik pretpostavimo
+    var sir=Math.max(50,p.b||250);
+    p.luk={rv:1000, ru:Math.max(0,1000-sir), ug:90};
+    _lukUskladi(p);
+  } else {
+    delete p.luk;
+    p.a=1200; p.b=250;
+  }
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
+
 // ── RADIJUS UGLOVA PO POZICIJI ───────────────────────────────────
 // Kao kod kuhinje, ali svaka klupica ima svoja cetiri ugla. Uglovi su
 // numerisani po smjeru kazaljke pocevsi od gornjeg-lijevog:
@@ -9784,14 +9907,37 @@ function _crtajStranuPozicija(ctx,W,lista,m,strIdx,brStr,svi){
     // Cijela ploca je klikabilna - otvara svoj red u lijevom panelu.
     // Registruje se PRVA, pa manje zone (kote, ivice, uglovi) imaju prednost.
     _regClickRect(0,0,A,B,'.poz-red[data-pi="'+i+'"]',null);
+    // LUCNA klupica se crta kao isjecak prstena, obicna kao pravougaonik
+    var _Lc=_pozLuk(p);
+    if(_Lc){
+      var _bbc=_lukBB(_Lc);
+      var _tc=_lukTacke(_Lc,2);
+      ctx.beginPath();
+      _tc.forEach(function(q,qi){
+        var X=(q[0]-_bbc.mnx)*sc, Y=(q[1]-_bbc.mny)*sc;
+        if(qi===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y);
+      });
+      ctx.closePath();
+      ctx.fillStyle='#fff'; ctx.fill();
+      ctx.strokeStyle='#000'; ctx.lineWidth=1.2;
+      ctx.setLineDash([9,3,1.4,3]); ctx.stroke(); ctx.setLineDash([]);
+      // Poluprecnici i ugao uz sam luk
+      ctx.save();
+      ctx.fillStyle='#1d8a6e'; ctx.font='bold 9px Segoe UI,Arial';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('R'+_Lc.rv+' / R'+_Lc.ru+' \u00b7 '+_Lc.ug+'\u00b0', A/2, B*0.62);
+      ctx.restore();
+      _kotaPrepreka(A/2,B*0.62,30);
+    } else {
     // Ploca sa zaobljenim uglovima (radijus po uglu, kao kod kuhinje)
     var rpx=[0,1,2,3].map(function(u){ return _pozR(p,u)*sc; });
     _zaobljenPut(ctx,A,B,rpx);
     ctx.fillStyle='#fff'; ctx.fill();
     ctx.strokeStyle='#000'; ctx.lineWidth=1.2;
     ctx.setLineDash([9,3,1.4,3]); ctx.stroke(); ctx.setLineDash([]);
+    }
     // Klik na ugao mijenja radijus; oznaka R se pise samo kad postoji
-    var uglPoz=[[0,0],[A,0],[A,B],[0,B]];
+    var uglPoz=_Lc?[]:[[0,0],[A,0],[A,B],[0,B]];
     uglPoz.forEach(function(up,u){
       var rmm=_pozR(p,u);
       _regClickRect(up[0]-9,up[1]-9,18,18,'.poz-red[data-pi="'+i+'"]',_pozREditDesc(i,u));
