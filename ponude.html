@@ -1328,8 +1328,10 @@ var SHAPES=[
    def:{},
    hasOrient:false, slobodan:true},
   {id:'G', lbl:'G oblik',
-   dims:[{l:'A',h:'Gornja dužina'},{l:'B',h:'Lijeva visina'},{l:'C',h:'Desna visina'},{l:'D',h:'Donja dužina'},{l:'E',h:'Gorn. unutar. pomak'},{l:'F',h:'Lijeva unutar. širina'},{l:'G',h:'Donja unutar. dužina'},{l:'H',h:'Donja unutar. širina'}],
-   def:{A:3000,B:3000,C:2000,D:2000,E:635,F:635,G:635,H:635},
+   dims:[{l:'A',h:'Ukupna dužina'},{l:'C',h:'Ukupna dubina'},
+         {l:'F',h:'Širina krakova'},
+         {l:'G',h:'Dužina poluostrva'},{l:'H',h:'Širina poluostrva'}],
+   def:{A:3000,C:2400,F:600,G:900,H:600},
    hasOrient:false}
 ];
 
@@ -1384,8 +1386,20 @@ function getShapeOutline(sh,d,vOrientArg){
     return [[0,tallH-B4],[A4,tallH-C4],[A4,tallH],[0,tallH]];
   }
   if(sh==='G'){
-    var A5=d.A||0,C5=d.C||0,E5=d.E||0,F5=d.F||0,G5=d.G||0,H5=d.H||0;
-    return [[0,0],[A5,0],[A5,C5],[A5-G5,C5],[A5-G5,C5-H5],[E5,C5-H5],[E5,F5],[0,F5]];
+    // G kuhinja = U oblik SA POLUOSTRVOM. Ranija kontura je davala
+    // stepenicu bez lijevog kraka, a polja B i D se nisu ni koristila.
+    //   A - ukupna duzina, C - ukupna dubina
+    //   F - sirina krakova (dubina ploce)
+    //   G - duzina poluostrva, H - njegova sirina
+    var A5=d.A||0, C5=d.C||0, F5=d.F||0, G5=d.G||0, H5=d.H||0;
+    if(!(A5>0&&C5>0&&F5>0)) return [];
+    // poluostrvo ne smije preci preko lijevog kraka
+    var G6=Math.max(0,Math.min(G5, A5-2*F5));
+    var H6=Math.max(0,Math.min(H5, C5-F5));
+    if(!(G6>0&&H6>0))   // bez poluostrva ostaje obican U
+      return [[0,0],[A5,0],[A5,C5],[A5-F5,C5],[A5-F5,F5],[F5,F5],[F5,C5],[0,C5]];
+    return [[0,0],[A5,0],[A5,C5],[A5-F5-G6,C5],[A5-F5-G6,C5-H6],[A5-F5,C5-H6],
+            [A5-F5,F5],[F5,F5],[F5,C5],[0,C5]];
   }
   return [];
 }
@@ -4721,6 +4735,13 @@ function buildPozicijeTabelu(){
           +'<input type="text" inputmode="decimal" value="'+_L.ru+'" style="width:60px;font:inherit;'
           +'font-size:11px;padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;text-align:right"'
           +' onchange="fixComma(this);pozLukPolje('+i+',\'ru\',this.value)">'
+          +'<label style="font-size:10px;color:#6b7a8d">Ekscentricitet e</label>'
+          +'<input type="text" inputmode="decimal" value="'+_lukEks(_L)+'" '
+          +'style="width:56px;font:inherit;font-size:11px;padding:2px 4px;'
+          +'border:1px solid #dde2ea;border-radius:3px;text-align:right"'
+          +' onchange="fixComma(this);pozLukEks('+i+',this.value)">'
+          +'<span style="font-size:9px;color:#8a93a3">mm \u2014 pomak centra iznad '
+          +'linije spoja (0 = polukrug)</span>'
           +'<label style="font-size:10px;color:#6b7a8d">Ugao</label>'
           +'<input type="text" inputmode="decimal" value="'+_L.ug+'" style="width:48px;font:inherit;'
           +'font-size:11px;padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;text-align:right"'
@@ -4786,7 +4807,8 @@ function buildPozicijeTabelu(){
           +'<span style="font-size:9px;color:#8a93a3">mogu\u0107e '
           +_lukRasponPomaka(_L,'B').min+'\u2013+'+_lukRasponPomaka(_L,'B').max+' mm</span>'
           +'<div style="width:100%;font-size:9.5px;color:#1d8a6e;padding-top:3px">'
-          +'\u0161irina '+(_L.rv-_L.ru)+' mm \u00b7 vanjski luk '+_stL['A-zad']+' mm \u00b7 '
+          +'\u0161irina trake '+(_L.rv-_L.ru)+' mm \u00b7 e '+_lukEks(_L)+' mm'
+          +' \u00b7 vanjski luk '+_stL['A-zad']+' mm \u00b7 '
           +'unutra\u0161nji '+_stL['D-pred']+' mm \u00b7 \u010delo B '+_stL['B-lev']+' mm'
           +(_L.kb?(' \u2014 unutra\u0161nja ivica '+(_L.kb>0?'uvu\u010dena':'izvu\u010dena')
             +' '+_lukPomakCela(_L,'B').prava+' mm'):'')
@@ -6188,12 +6210,26 @@ function getIvSegs(sh,d){
     {id:'A-pred',lbl:'A',len:d.A||0},{id:'B-lev', lbl:'B',len:d.B||0},
     {id:'C-des', lbl:'C',len:d.C||0},{id:'D-zad', lbl:'D',len:d.A||0}
   ];
-  if(sh==='G') return [
-    {id:'A-zad', lbl:'A',len:d.A||0},{id:'B-lev', lbl:'B',len:d.B||0},
-    {id:'C-des', lbl:'C',len:d.C||0},{id:'D-pred',lbl:'D',len:d.D||0},
-    {id:'E-iv',  lbl:'E',len:d.E||0},{id:'F-iv',  lbl:'F',len:d.F||0},
-    {id:'G-iv',  lbl:'G',len:d.G||0},{id:'H-iv',  lbl:'H',len:d.H||0}
-  ];
+  if(sh==='G'){
+    // Strane se IZVODE iz konture - ranije su citale polja B i D kojih
+    // vise nema, pa su te strane imale duzinu 0.
+    var kG=getShapeOutline('G',d,0);
+    if(!kG.length) return [];
+    var opisG=['stra\u017enja','desni krak (vani)','poluostrvo (dno)',
+               'poluostrvo (\u010delo)','poluostrvo (gore)','desni krak (unutra)',
+               'stra\u017enja (unutra)','lijevi krak (unutra)','lijevi krak (dno)',
+               'lijevi krak (vani)'];
+    var slova='ABCDEFGHIJ';
+    var izl=[];
+    for(var q=0;q<kG.length;q++){
+      var a=kG[q], b=kG[(q+1)%kG.length];
+      var duz=Math.round(Math.hypot(b[0]-a[0], b[1]-a[1]));
+      if(duz<1) continue;
+      izl.push({id:slova[izl.length]+'-g', lbl:slova[izl.length], len:duz,
+                fullLbl:slova[izl.length]+' \u2013 '+(opisG[q]||'')});
+    }
+    return izl;
+  }
   if(sh==='radijus'||sh==='okrugao'||sh==='jajasto'||sh==='oblutak'||sh==='bure'||sh==='fbure'){
     // Sto - JEDNA obrada za CIJELI sto (nije moguće različito obraditi
     // pojedine strane stola, bez obzira na oblik)
@@ -8662,7 +8698,8 @@ function buildPozicijeRN(){
   function lukOpis(p){
     var L=_pozLuk(p); if(!L) return '';
     var st=_lukStrane(L);
-    var t='R'+L.rv+'/'+L.ru+' \u00b7 '+L.ug+'\u00b0 \u00b7 luk '+st['A-zad']+'/'+st['D-pred']+' mm';
+    var t='Rs'+L.rv+'/Ru'+L.ru+' \u00b7 d'+(L.rv-L.ru)+' \u00b7 e'+_lukEks(L)
+      +' \u00b7 '+L.ug+'\u00b0 \u00b7 luk '+st['A-zad']+'/'+st['D-pred']+' mm';
     if(L.sp) t+=' \u00b7 otvor '+L.sp+' mm (splo\u0161teno)';
     ['B','C'].forEach(function(kr){
       var sid=(kr==='B')?'B-lev':'C-des';
@@ -9882,6 +9919,26 @@ function pozLukTetiva(i,polje,val){
       _lukUskladi(p);
     }
   }
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
+// ── EKSCENTRICITET ───────────────────────────────────────────────
+// Neki projektanti zadaju luk preko pomaka centra iznad linije spoja.
+// Veza:  e = -Rs * cos(ugao/2),  odnosno  ugao = 2*arccos(-e/Rs)
+//   e = 0   polukrug (centar na liniji spoja)
+//   e > 0   centar IZNAD linije, luk prelazi 180 stepeni
+//   e < 0   centar ISPOD, luk je manji od 180
+function _lukEks(L){
+  return Math.round(-L.rv*Math.cos(L.ug*Math.PI/360));
+}
+function _lukUgaoIzEks(rv,e){
+  var c=Math.max(-1,Math.min(1,-_broj(e)/rv));
+  return Math.round(2*Math.acos(c)*180/Math.PI*10)/10;
+}
+function pozLukEks(i,val){
+  var p=pozicije[i]; if(!p||!p.luk) return;
+  var L=_pozLuk(p); if(!L) return;
+  p.luk.ug=Math.max(1,Math.min(360,_lukUgaoIzEks(L.rv,val)));
+  _lukUskladi(p);
   syncToActive(); buildPozicijeTabelu(); refresh();
 }
 // Iz ZADANOG pomaka unutrasnje ivice nadji potrebno zakosenje.
