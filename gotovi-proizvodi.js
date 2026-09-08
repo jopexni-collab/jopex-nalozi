@@ -1081,14 +1081,19 @@ router.get('/:id/cijena', async (req, res) => {
     /* Sastojak oznacen sa "sve ulaze" NIJE izbor izmedju alternativa — sve njegove
        stavke idu zajedno. Tako se pravi sto sa DVIJE ploce na jednom postolju:
        obje se racunaju, svaka sa svojom mjerom i materijalom. */
-    const sviZajedno = new Set();
+    /* Sastojci grupe — treba i njihovo "definise", da se zna koja stavka uzima koje
+       mjere (sto sa dvije table: prvi sastojak Duzina/Sirina, drugi Duzina B/Sirina B). */
+    let sastojciGrupe = [];
     if (proizvod.grupa_proizvoda_id) {
       const sg = await pool.query(
-        'SELECT id FROM grupa_sastojci WHERE grupa_id=$1 AND sve_ulaze = true',
+        'SELECT id, naziv, definise, sve_ulaze, redni_broj FROM grupa_sastojci WHERE grupa_id=$1 ORDER BY redni_broj, id',
         [proizvod.grupa_proizvoda_id]
       ).catch(() => ({ rows: [] }));
-      for (const x of sg.rows) sviZajedno.add(String(x.id));
+      sastojciGrupe = sg.rows;
     }
+    const sviZajedno = new Set(
+      sastojciGrupe.filter(x => x.sve_ulaze).map(x => String(x.id))
+    );
     const zajedno = x => x.sastojak_id && sviZajedno.has(String(x.sastojak_id));
 
     const obavezne = s.rows.filter(x => !x.grupa_izbora || zajedno(x));
