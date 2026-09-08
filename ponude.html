@@ -9703,12 +9703,12 @@ function _pozRaspored(n){
   n=Math.max(1,n||1);
   // Jedna po redu - klupice su duge i uske, pa je tako crtez najveci.
   return {uRedu:1, redova:n,
-          padX:56, padY:74, razmakX:64, razmakY:76,
+          padX:50, padY:74, razmakX:64, razmakY:62,   // padY nosi zaglavlje sa uputom
           // Ispod ZADNJE klupice mora ostati mjesta za njenu kotu: ona je
           // 18px ispod ploce, ima tekst (~12px) i strelice, a moze biti i
           // pomjerena nize ako izbjegava simbol. Sa 34px je zadnja kota
           // zavrsavala na samoj ivici platna i bila odsjecena.
-          donjaRezerva:64};
+          donjaRezerva:52};
 }
 // Visina platna koja stvarno stane sve pozicije
 // Mjerilo je isto za SVE strane, pa su klupice medjusobno uporedive
@@ -9901,9 +9901,9 @@ function _crtajStranuPozicija(ctx,W,lista,m,strIdx,brStr,svi){
     // Kota mora biti OSJETNO blize svojoj ploci nego sljedecoj. Ranije je
     // bila 34 px ispod svoje, a razmak do sljedece 64 - pa je ispadala
     // bliza donjem crtezu (30 px) nego svom.
-    kota(ctx,0,B+18,A,B+18,Math.round(p.a||0)+' mm',_pozEditDesc(i,'a'));
+    kota(ctx,0,B+13,A,B+13,Math.round(p.a||0)+' mm',_pozEditDesc(i,'a'));
     // Kota sirine ide LIJEVO - desno je broj komada, pa se ne sudaraju
-    kota(ctx,-16,0,-16,B,Math.round(p.b||0)+' mm',_pozEditDesc(i,'b'));
+    kota(ctx,-13,0,-13,B,Math.round(p.b||0)+' mm',_pozEditDesc(i,'b'));
 
     // Redni broj i broj komada
     ctx.fillStyle='#7a4fa0'; ctx.font='bold 15px Segoe UI,Arial';
@@ -10898,12 +10898,18 @@ function genRadniNalog(returnHtml){try{
         '<span class="rn-mat">'+ms+'</span>'+
       '</div>'+
       '<div class="rn-body">'+
-        _slike.map(function(sl,si){
-          return '<div class="rn-crtez">'
-            +(_slike.length>1?('<div style="font-size:10px;color:#6b7a8d;padding:2px 8px;'
-              +'background:#f0f4fa">Crte\u017e '+(si+1)+'/'+_slike.length+'</div>'):'')
+        // SVE slike idu u JEDAN .rn-crtez, jedna ISPOD druge. Ranije je svaka
+        // bila svoj .rn-crtez, a .rn-body je flex red - pa su se poredale
+        // jedna PORED druge i stisnule na trecinu sirine.
+        '<div class="rn-crtez">'
+        +_slike.map(function(sl,si){
+          return '<div class="rn-slika">'
+            +(_slike.length>1?('<div style="font-size:9.5px;color:#6b7a8d;padding:1px 6px;'
+              +'background:#f0f4fa;border-radius:3px;margin-bottom:0;line-height:1.4;'
+              +'display:inline-block">Crte\u017e '+(si+1)+'/'+_slike.length+'</div>'):'')
             +'<img src="'+sl+'" style="width:100%;display:block"></div>';
-        }).join('')+
+        }).join('')
+        +'</div>'+
         '<div class="rn-right">'+
           '<table class="rn-dims">'+
             '<thead><tr><th>Dim.</th><th>Opis</th><th>Vrijednost</th></tr></thead>'+
@@ -10950,7 +10956,7 @@ function genRadniNalog(returnHtml){try{
       '.rn-tip{font-size:15px;font-weight:700;}'+
       '.rn-mat{margin-left:auto;font-size:12.5px;font-weight:600;opacity:1;}'+
       '.rn-body{display:flex;gap:0;}'+
-      '.rn-crtez{flex:1;padding:8px;border-right:1px solid #dde2ea;}'+
+      '.rn-crtez{flex:1;min-width:0;padding:8px;border-right:1px solid #dde2ea;}.rn-slika{margin-bottom:6px;}.rn-slika:last-child{margin-bottom:0;}'+
       '.rn-right{width:240px;flex-shrink:0;align-self:start;padding:0 8px;}'+
       '.rn-dims{width:100%;border-collapse:collapse;font-size:12px;}'+
       '.rn-dims th{background:#e8eef8;padding:5px 8px;text-align:left;border-bottom:1px solid #c8d4e8;}'+
@@ -10973,8 +10979,9 @@ function genRadniNalog(returnHtml){try{
       '.rn-stavka-hd{page-break-after:avoid;break-after:avoid;'+
         '-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+
       /* Crtez sa kotama mora ostati na okupu i stati na stranicu */
-      '.rn-crtez{page-break-inside:avoid;break-inside:avoid;}'+
-      '.rn-crtez img{max-height:150mm;width:auto;max-width:100%;display:block;margin:0 auto;}'+
+      '.rn-crtez{page-break-inside:auto;break-inside:auto;}'+
+      '.rn-slika{page-break-inside:avoid;break-inside:avoid;margin-bottom:5px;}'+
+      '.rn-slika img{max-height:150mm;width:auto;max-width:100%;display:block;margin:0 auto;}'+
       /* .rn-body sadrzi SVE slike - ne smije se drzati na okupu, inace bi
          kod vise klupica sve pokusale stati na jednu stranicu. Svaka slika
          (.rn-crtez) se cuva pojedinacno, sto je i dovoljno. */
