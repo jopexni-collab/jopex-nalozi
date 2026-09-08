@@ -1160,13 +1160,17 @@ router.get('/:id/cijena', async (req, res) => {
            razlicite mjere unutar istog proizvoda.
            Ranije je mjera dijela nadjacavala dimenziju, pa su sve mjere stola davale
            istu povrsinu — a time i istu cijenu. */
-        /* Druga ploca (B) racuna se iz SVOJIH mjera u dimenziji — inace bi obje uzele
-           istu povrsinu, pa bi sto sa manjom drugom plocom ispao skuplji nego sto jeste. */
-        const jeDrugaPloca = zajedno(st) && plocaStavke.indexOf(st) === 1 && mjereB;
+        /* Povrsina se racuna iz mjera koje NJEN SASTOJAK odredjuje — inace bi obje
+           table uzele istu, pa bi sto sa manjom drugom tablom ispao skuplji. */
+        const ms = st.tip_kolicine === 'povrsina' || st.tip_kolicine === 'duzina'
+          ? mjereStavke(st) : null;
+        const svoje = ms && ms.duzina && ms.sirina
+          && (ms.duzina !== vm.duzina || ms.sirina !== vm.sirina);
+
         const dimIma = m2 > 0;
         const vlastita = !dimIma && (st.sirina_kom != null || st.visina_kom != null);
-        const mv = jeDrugaPloca
-          ? mjereOblika('PRAV', { A: mjereB.duzina, B: mjereB.sirina })
+        const mv = svoje
+          ? mjereOblika('PRAV', { A: ms.duzina, B: ms.sirina })
           : vlastita
             ? mjereOblika('I', { A: st.sirina_kom, B: st.visina_kom })
             : { m2, m1 };
@@ -1214,16 +1218,22 @@ router.get('/:id/cijena', async (req, res) => {
       const visinaOpis = vm.visina ? `H${Math.round(vm.visina)}`
                        : (vm.debljina ? `${Math.round(vm.debljina)}mm` : '');
 
-      /* Sto sa DVIJE PLOCE: mjere obje stoje u ISTOJ dimenziji (A i B), jer je to
-         jedan proizvod sa jednom cijenom. Prva ploca uzima duzina/sirina, druga
-         duzina_b/sirina_b. Ako druge mjere nema, obje ploce koriste istu. */
-      const plocaStavke = [...obavezne, ...izabrane].filter(zajedno);
-      const mjereB = (vm.duzina_b && vm.sirina_b)
-        ? { duzina: vm.duzina_b, sirina: vm.sirina_b } : null;
+      /* Svaka povrsinska stavka uzima mjere koje NJEN SASTOJAK odredjuje.
+         Sto sa dvije table ima dva sastojka: prvi odredjuje Duzinu i Sirinu, drugi
+         Duzinu B i Sirinu B. Tako svaka tabla racuna svoju povrsinu, a u naslovu
+         stoje obje — A i B. */
+      function mjereStavke(st) {
+        const sast = sastojciGrupe.find(x => String(x.id) === String(st.sastojak_id));
+        const def = sast?.definise || [];
+        if (def.includes('duzina_b') || def.includes('sirina_b'))
+          return { duzina: vm.duzina_b, sirina: vm.sirina_b };
+        return { duzina: vm.duzina, sirina: vm.sirina };
+      }
 
-      const ploce = plocaStavke.length > 1
-        ? plocaStavke.map((st, i) => {
-            const m = (i === 0 || !mjereB) ? vm : mjereB;
+      const povrsinske = [...obavezne, ...izabrane].filter(st => st.tip_kolicine === 'povrsina');
+      const ploce = povrsinske.length > 1
+        ? povrsinske.map((st, i) => {
+            const m = mjereStavke(st);
             const d = Math.round(m.duzina || st.sirina_kom || 0);
             const s = Math.round(m.sirina || st.visina_kom || 0);
             return {
@@ -1231,7 +1241,7 @@ router.get('/:id/cijena', async (req, res) => {
               mjera: `${d}×${s}`,
               artikal: st.roba_naziv || st.opis || '',
             };
-          })
+          }).filter(p => p.mjera !== '0×0')
         : [];
 
       return {
