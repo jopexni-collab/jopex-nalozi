@@ -9181,7 +9181,7 @@ function drawK(ctx,W,H){
       edgeLbl(ctx,A-D/2,B-10,'D','D-pred','h');
       // Kote
       kota(ctx,0,-46,A,-46,d.A+' mm',_dimEditDesc('A'),'[data-d="A"]');
-      kota(ctx,A+26,0,A+26,B,d.B+' mm',_dimEditDesc('B'),'[data-d="B"]');
+      kota(ctx,A+30,0,A+30,B,d.B+' mm',_dimEditDesc('B'),'[data-d="B"]');
       kota(ctx,-28,0,-28,C,d.C+' mm',_dimEditDesc('C'),'[data-d="C"]');
       kota(ctx,A-D,B+26,A,B+26,d.D+' mm',_dimEditDesc('D'),'[data-d="D"]');
       var _eX1v=VGl2, _eY1v=C, _eX2v=A-D, _eY2v=B-VFl2;
@@ -9645,6 +9645,8 @@ function _pozNaStrani(k){
 // sadrzaj je ~718px, zaglavlje i tabela uzmu ~160, pa crtezu ostaje ~558px.
 // Preko tri klupice slika prelazi stranicu i kote se odsijecaju.
 var POZ_PO_STRANI_DOK=3;
+// Prostor desno od ploce: kota sirine, broj komada i legenda
+var DESNA_REZERVA=210;
 function _slikeCrteza(){
   var svePoz=(typeof imaPozicije==='function'&&imaPozicije()&&(pozicije||[]).length);
   // Za dokumente se privremeno koristi manja podjela
@@ -9703,7 +9705,7 @@ function _pozRaspored(n){
   n=Math.max(1,n||1);
   // Jedna po redu - klupice su duge i uske, pa je tako crtez najveci.
   return {uRedu:1, redova:n,
-          padX:50, padY:74, razmakX:64, razmakY:62,   // padY nosi zaglavlje sa uputom
+          padX:64, padY:74, razmakX:64, razmakY:62,   // padY nosi zaglavlje sa uputom
           // Ispod ZADNJE klupice mora ostati mjesta za njenu kotu: ona je
           // 18px ispod ploce, ima tekst (~12px) i strelice, a moze biti i
           // pomjerena nize ako izbjegava simbol. Sa 34px je zadnja kota
@@ -9716,7 +9718,10 @@ function _pozMjerilo(W){
   var g=_pozRaspored(1);
   var maxA=1,maxB=1;
   (pozicije||[]).forEach(function(p){ if((p.a||0)>maxA)maxA=p.a||0; if((p.b||0)>maxB)maxB=p.b||0; });
-  var celijaW=W-g.padX*2;
+  // Desno od ploce stoje: kota sirine (~40px), broj komada (~55px) i
+  // legenda obrade (~185px). Bez te rezerve bi kod duge klupice broj
+  // komada upao u legendu.
+  var celijaW=W-g.padX*2-DESNA_REZERVA;
   var sc=Math.min(celijaW/Math.max(maxA,1)*0.82, 190/Math.max(maxB,1));
   return {sc:sc, visinaReda:maxB*sc, g:g};
 }
@@ -9837,12 +9842,18 @@ function _crtajStranuPozicija(ctx,W,lista,m,strIdx,brStr,svi){
       var mxs=(g[0]+g[2])/2, mys=(g[1]+g[3])/2;
       var dxs=A/2-mxs, dys=B/2-mys, dls=Math.hypot(dxs,dys)||1;
       var vodoravna=(sd.id==='A-zad'||sd.id==='D-pred');
-      // Koliko prostora ima UNUTAR ploce upravno na ovu stranu
       var prostor=vodoravna?B:A;
-      // Dvije oznake (gornja i donja) trebaju po ~26 px svaka
-      var unutra=(prostor>=58);
-      var pomak=unutra?13:-15;   // negativno = van ploce
+      // Duge strane (A i D) UVIJEK idu unutar ploce - one nose obradu koju
+      // pogon najcesce gleda. Da se ne sudare kod uske ploce, razmicu se
+      // DUZ ivice: A na cetvrtinu, D na tri cetvrtine.
+      var unutra=vodoravna?true:(prostor>=58);
+      var pomak=unutra?Math.min(20,Math.max(10,prostor*0.28)):-15;
       var tx2=mxs+dxs/dls*pomak, ty2=mys+dys/dls*pomak;
+      if(vodoravna){
+        // pomjeri duz strane da se gornja i donja oznaka ne poklope
+        var uz=(sd.id==='D-pred')?0.28:0.72;
+        tx2=A*uz;
+      }
       ctx.save();
       ctx.font='bold 9.5px Segoe UI,Arial';
       ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -9902,28 +9913,34 @@ function _crtajStranuPozicija(ctx,W,lista,m,strIdx,brStr,svi){
     // bila 34 px ispod svoje, a razmak do sljedece 64 - pa je ispadala
     // bliza donjem crtezu (30 px) nego svom.
     kota(ctx,0,B+13,A,B+13,Math.round(p.a||0)+' mm',_pozEditDesc(i,'a'));
-    // Kota sirine ide LIJEVO - desno je broj komada, pa se ne sudaraju
-    kota(ctx,-13,0,-13,B,Math.round(p.b||0)+' mm',_pozEditDesc(i,'b'));
+    // Kota sirine ide DESNO - lijevo je sad redni broj klupice.
+    // Slovo C stoji uz desnu ivicu IZNUTRA, pa kota mora dalje od nje
+    kota(ctx,A+26,0,A+26,B,Math.round(p.b||0)+' mm',_pozEditDesc(i,'b'));
 
     // Redni broj i broj komada
+    // Redni broj ide LIJEVO od ploce, na njenu sredinu. Ranije je stajao
+    // IZNAD, tacno ispod kote prethodne klupice - pa je izgledalo da ta kota
+    // pripada donjem crtezu.
     ctx.fillStyle='#7a4fa0'; ctx.font='bold 15px Segoe UI,Arial';
-    ctx.textAlign='left'; ctx.textBaseline='bottom';
+    ctx.textAlign='right'; ctx.textBaseline='middle';
     var oznaka=jeZidnaKlupica()
       ? ((((p.zid!=null?p.zid:0))+1)+'.'+_zidoviRedniBroj(i))
       : String(i+1)+'.';
-    ctx.fillText(oznaka,0,-9);
+    ctx.fillText(oznaka,-30,B/2);
+    _kotaPrepreka(-38,B/2,16);
     // Broj komada DESNO od ploce, kao kod stepenica - ne crta se N puta
     var kom=Math.max(1,p.kom||1);
     ctx.font='bold 20px Segoe UI,Arial'; ctx.fillStyle='#1a5fa8';
     ctx.textAlign='left'; ctx.textBaseline='middle';
-    ctx.fillText('\u00d7'+kom,A+30,B/2);
+    ctx.fillText('\u00d7'+kom,A+96,B/2);
     ctx.font='9.5px Segoe UI,Arial'; ctx.fillStyle='#8a93a3';
-    ctx.fillText('kom',A+30,B/2+16);
-    _regClickRect(A+26,B/2-16,54,38,'.poz-red[data-pi="'+i+'"]',_pozEditDesc(i,'kom'));
+    ctx.fillText('kom',A+96,B/2+16);
+    _regClickRect(A+92,B/2-16,54,38,'.poz-red[data-pi="'+i+'"]',_pozEditDesc(i,'kom'));
     if(p.nap){
       ctx.font='10px Segoe UI,Arial'; ctx.fillStyle='#8a93a3';
-      ctx.textAlign='right';
-      ctx.fillText(p.nap,A,-9);
+      ctx.textAlign='left'; ctx.textBaseline='bottom';
+      ctx.fillText(p.nap,0,-6);
+      _kotaPrepreka(30,-9,20);
     }
     _flushKotes();
     ctx.restore();
