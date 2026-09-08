@@ -266,6 +266,21 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
   .vw{display:none!important;}
   #vw-pon{display:block!important;}
   .pon{box-shadow:none!important;border-radius:0!important;max-width:100%!important;}
+  /* Stavka se drzi na okupu ako moze; ako je visa od stranice, mora smjeti
+     da se prelomi - inace pregledac ostavi praznu stranicu i odsijece je. */
+  .p-item{page-break-inside:auto;break-inside:auto;}
+  .p-img-wrap{page-break-inside:avoid;break-inside:avoid;}
+  .p-item-hd{page-break-after:avoid;break-after:avoid;
+             page-break-inside:avoid;break-inside:avoid;}
+  /* Tabela se lomi po redovima, zaglavlje se ponavlja */
+  table{page-break-inside:auto;}
+  tr{page-break-inside:avoid;break-inside:avoid;}
+  thead{display:table-header-group;}
+  tfoot{display:table-footer-group;}
+  /* Ne ostavljaj usamljen red na kraju ili pocetku stranice */
+  p,td,li{orphans:3;widows:3;}
+  /* Zbirni blok i dodatni rad idu zajedno */
+  .p-zbir,.p-total{page-break-inside:avoid;break-inside:avoid;}
   /* PDV/iznosi blok - crn tekst pri printu */
   #pon-doc div[style*="background:#1a3f7a"],
   #pon-doc div[style*="background: #1a3f7a"]{
@@ -9059,7 +9074,12 @@ function getCanvasSizeForItem(){
     }
     var _ratio=(_bbH>0&&_bbW>0)?(_bbH/_bbW):0.3;
     var _baseW=_hasExt?1000:900;
-    var _baseH=Math.min(750,Math.max(380,Math.round(_baseW*_ratio*1.15)));
+    // Visina se racuna iz STVARNE razmjere (koju diktira sirina), a ne iz
+    // odnosa stranica - inace kod plitkih ploca ostane siroka bijela traka.
+    // 96 je bocni rub u drawK, 0.97 njegov faktor; 104 je gornji+donji rub.
+    var _scW=(_baseW-192)/Math.max(_bbW,1)*0.97;
+    var _potrebna=Math.round(_bbH*_scW)+104;
+    var _baseH=Math.min(750,Math.max(300,_potrebna));
     return {w:_baseW, h:_hasExt?Math.max(_baseH+100,560):_baseH};
   }
   if(tip==='sto'){
@@ -9096,6 +9116,9 @@ function drawK(ctx,W,H){
   applyComputedDims(getShape(shape));
   var _hasExtT=Object.keys(extState).some(function(k){return extState[k]==='on'&&(k==='A-zad'||k==='D-zad');});
   var PAD=(_hasExtT?116:96),d=dims,sh=shape;
+  // Uspravni rub moze biti manji od bocnog - bocno stoje kote i legenda,
+  // a gore i dolje samo naslov i kota, pa 96 tamo pravi bijelu traku.
+  var PADY=(_hasExtT?76:52);
   var bbW,bbH;
   if(sh==='I'){bbW=d.A||1;bbH=d.B||1;}
   else if(sh==='L'){bbW=d.A||1;bbH=d.B||1;}
@@ -9122,12 +9145,12 @@ function drawK(ctx,W,H){
   // Ako nema produžetaka - scale na max kao i prije
   var totalW=bbW+extL+extR;
   var totalH=bbH+extT+extB;
-  var scBase=Math.min((W-PAD*2)/Math.max(bbW,1),(H-PAD*2)/Math.max(bbH,1))*0.97;
-  var scExt=Math.min((W-PAD*2)/Math.max(totalW,1),(H-PAD*2)/Math.max(totalH,1))*0.97;
+  var scBase=Math.min((W-PAD*2)/Math.max(bbW,1),(H-PADY*2)/Math.max(bbH,1))*0.97;
+  var scExt=Math.min((W-PAD*2)/Math.max(totalW,1),(H-PADY*2)/Math.max(totalH,1))*0.97;
   var sc=(extL+extR+extT+extB>0)?scExt:scBase;
   _lastSc=sc; _edgeLabelLog=[];
   var KOTA_L=62; // prostor za vertikalne kote lijevo
-  var ox=KOTA_L+extL*sc+(W-PAD-KOTA_L-totalW*sc)/2, oy=PAD+extT*sc+(H-PAD*2-totalH*sc)/2;
+  var ox=KOTA_L+extL*sc+(W-PAD-KOTA_L-totalW*sc)/2, oy=PADY+extT*sc+(H-PADY*2-totalH*sc)/2;
   ctx.save();ctx.translate(ox,oy);
 
   var A=(d.A||0)*sc,B=(d.B||0)*sc,C=(d.C||0)*sc,D=(d.D||0)*sc;
@@ -10336,7 +10359,9 @@ function _pozPlatnoVisina(W){
     var uStrani=_pozNaStrani(k).length;
     h+=m.g.padY+uStrani*m.visinaReda+m.g.razmakY*(uStrani-1)+m.g.donjaRezerva;
   }
-  return Math.round(Math.max(300,Math.min(9000,h)));
+  // Donja granica je bila 300 px, pa je kod jedne niske klupice ostajala
+  // prazna traka od stotinjak piksela. Legenda i naslov traze oko 230.
+  return Math.round(Math.max(230,Math.min(9000,h)));
 }
 // Crtez SVAKE pozicije zasebno, sa rednim brojem i kotama koje se mogu
 // mijenjati duplim klikom - isto kao kod kuhinje. Rasporedjuju se u mrezu.
