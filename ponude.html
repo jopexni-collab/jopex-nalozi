@@ -2476,7 +2476,9 @@ function loadItemInputs(){
   var _sn=ge('stavka-naziv');
   if(_sn) _sn.value=(_a&&_a.naziv)?_a.naziv:'';
   try{ _osPrimijeniNaslove(); }catch(e){}
-  try{ buildDodatniRad(); }catch(e){}
+  // Panel se NE gradi ponovo dok se u njemu kuca - inace bi se polje
+  // presложило poslije svake cifre i kursor bi se izgubio.
+  try{ if(!_kucaUPanelu('dodatni-rad-con')) buildDodatniRad(); }catch(e){}
   var _wkl=ge('kl-poz-wrap'); if(_wkl) _wkl.style.display=(tip==='kl')?'':'none';
   var _wst=ge('st-poz-wrap'); if(_wst) _wst.style.display=gc('cb-st-poz')?'':'none';
 }
@@ -3260,7 +3262,7 @@ function setTip(t){
     var el=ge('tab-'+x); if(el) el.className='tip-tab'+(x===t?' on':'');
   });
   var os=ge('os-wrap'); if(os) os.style.display=(t==='os')?'':'none';
-  try{ buildOstaloPanel(); }catch(e){}
+  try{ if(!_kucaUPanelu('os-wrap')) buildOstaloPanel(); }catch(e){}
   // Prebacivanje taba mora prikazati i TABELU POZICIJA, ne samo dugmad
   // podtipa. Bez ovoga klik na "Klupica" pokaze prazan panel dok se ne
   // doda stavka - a dio za unos raznih dimenzija izgleda kao da je nestao.
@@ -3342,7 +3344,8 @@ function setOsUslugaCijena(idx,ui,v){
   var a=items[idx];
   if(!a||!a.ostalo||!a.ostalo.usl||!a.ostalo.usl[ui]) return;
   a.ostalo.usl[ui].cijena=_broj(v);
-  if(idx===activeIdx) buildOstaloPanel();
+  // ne gradi panel dok se u njemu kuca
+  if(idx===activeIdx && !_kucaUPanelu('os-wrap')) buildOstaloPanel();
   refresh();
 }
 function osDodajUslugu(){
@@ -12939,6 +12942,18 @@ function _vratiOstalo(o){
   });
 }
 // Ukupan iznos u trenutku cuvanja - sluzi kao kontrola pri ucitavanju.
+// Da li korisnik trenutno kuca u nekom polju unutar datog bloka
+function _kucaUPanelu(idBloka){
+  try{
+    var a=document.activeElement;
+    if(!a||(a.tagName!=='INPUT'&&a.tagName!=='SELECT'&&a.tagName!=='TEXTAREA')) return false;
+    var blok=ge(idBloka);
+    if(!blok) return false;
+    var el=a;
+    while(el){ if(el===blok) return true; el=el.parentNode; }
+    return false;
+  }catch(e){ return false; }
+}
 function _dodatniRadUk(){
   return (_dodatniRad||[]).reduce(function(z,x){ return z+(_broj(x.cijena)||0); },0);
 }
@@ -12958,7 +12973,12 @@ function drUkloni(i){
 function drPolje(i,polje,v){
   if(!_dodatniRad[i]) return;
   _dodatniRad[i][polje]=(polje==='cijena')?_broj(v):String(v||'');
-  if(polje==='cijena') refresh();
+  if(polje==='cijena'){
+    // Samo zbir i ukupan iznos - polje ostaje netaknuto dok se u njemu kuca
+    var z=ge('dr-zbir');
+    if(z) z.innerHTML='Ukupno: '+fmtBroj(_dodatniRadUk(),2)+' KM';
+    refresh();
+  }
 }
 function buildDodatniRad(){
   var con=ge('dodatni-rad-con'); if(!con) return;
@@ -12982,8 +13002,9 @@ function buildDodatniRad(){
         +'color:#c0392b;cursor:pointer;font-size:14px;padding:0 3px">\u2715</button></div>';
     });
     var uk=_dodatniRadUk();
-    if(uk>0) h+='<div style="text-align:right;font-size:11px;color:#1a5fa8;font-weight:700;'
-      +'padding:2px 30px 4px 0">Ukupno: '+fmtBroj(uk,2)+' KM</div>';
+    h+='<div id="dr-zbir" style="text-align:right;font-size:11px;color:#1a5fa8;'
+      +'font-weight:700;padding:2px 30px 4px 0">'
+      +(uk>0?('Ukupno: '+fmtBroj(uk,2)+' KM'):'')+'</div>';
   }
   h+='<button type="button" onclick="drDodaj()" style="width:100%;padding:6px;background:none;'
     +'border:1px dashed #1a5fa8;color:#1a5fa8;border-radius:5px;cursor:pointer;font:inherit;'
