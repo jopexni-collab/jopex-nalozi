@@ -4582,6 +4582,20 @@ function gpgPrikaziSastojak(g, sid){
           Obavezan
         </label>
       </div>
+      <!-- Sto sa DVIJE ploce na jednom postolju: obje ulaze, svaka sa svojom mjerom
+           i materijalom. Bez ovoga bi se druga ploca shvatila kao alternativa prvoj. -->
+      <label style="display:flex;align-items:center;gap:8px;padding:8px 10px;margin-top:9px;border-radius:7px;cursor:pointer;
+                    border:1px solid ${s.sve_ulaze?'#1f8a4c':'var(--border,#ddd)'};background:${s.sve_ulaze?'#eef7f1':'#fff'};">
+        <input type="checkbox" ${s.sve_ulaze?'checked':''} onchange="gpgIzmjeni(${s.id},'sve_ulaze',this.checked,${g.id})">
+        <span style="font-size:12px;">
+          <b>Sve stavke ulaze zajedno</b>
+          <span style="display:block;font-size:10.5px;color:#8b96a5;line-height:1.45;margin-top:2px;">
+            Za sto sa <b>dvije ploče</b> na jednom postolju — obje se računaju, svaka sa
+            svojom mjerom. Isključeno znači da su stavke <b>alternative</b> i bira se jedna.
+          </span>
+        </span>
+      </label>
+
       <div style="font-size:10.5px;color:#8b96a5;margin-top:7px;line-height:1.5;">
         Ograničenja rade <b>na serveru</b> — artikli van njih se ni ne nude pri sastavljanju.
         <b>Obavezan</b> znači da sastojak mora imati bar jedan artikal; neobavezan se može preskočiti.
@@ -5101,11 +5115,12 @@ function gprRenderDetalj(el, g){
           const sastojci = g.sastojci_grupe || [];
           let out = '', br = 0;
 
-          const zaglavlje = (naziv, broj, sid, ogr, red) => `
+          const zaglavlje = (naziv, broj, sid, ogr, red, sveUlaze) => `
             <tr style="background:#e8eef7;">
               <td colspan="${trebaMjeraDijela?16:15}" style="padding:5px 8px;">
                 ${red?`<span style="display:inline-block;min-width:17px;height:17px;line-height:17px;text-align:center;background:#1f3864;color:#fff;border-radius:4px;font-size:10px;font-weight:800;margin-right:5px;">${red}</span>`:''}
                 <b style="font-size:11.5px;color:#1f3864;">${esc(naziv)}</b>
+                ${sveUlaze ? '<span style="font-size:9.5px;background:#eef7f1;color:var(--green,#1f8a4c);padding:1px 7px;border-radius:4px;font-weight:700;margin-left:5px;" title="Sve stavke ulaze zajedno — nisu alternative">sve zajedno</span>' : ''}
                 <span style="font-size:10.5px;color:#6b7a8d;"> — ${broj} ${broj===1?'stavka':'stavki'}${broj>1?', bira se jedna':''}</span>
                 ${ogr?`<span style="font-size:10px;color:#8b96a5;"> · ${esc(ogr)}</span>`:''}
                 <button onclick="gprDodajUGrupu(${g.id},'${esc(naziv).replace(/'/g,"&apos;")}',${sid||'null'})"
@@ -5123,7 +5138,7 @@ function gprRenderDetalj(el, g){
               s.max_debljina ? `do ${s.max_debljina} cm` : null,
               s.tip_kolicine==='povrsina' ? 'm²' : s.tip_kolicine==='duzina' ? 'm¹' : 'kom',
             ].filter(Boolean).join(' · ');
-            out += zaglavlje(s.naziv, moje.length, s.id, ogr, s.redni_broj);
+            out += zaglavlje(s.naziv, moje.length, s.id, ogr, s.redni_broj, s.sve_ulaze);
             if(moje.length) out += moje.map(x => gprRedStavke(g, x, br++)).join('');
             else out += `<tr><td colspan="${trebaMjeraDijela?16:15}" style="padding:7px 8px 7px 26px;color:#8b96a5;font-size:11px;">
               Prazno${s.obavezan?' — <b style="color:var(--red,#c0392b);">obavezan sastojak</b>':''}. Klikni „+ Dodaj".
@@ -5373,9 +5388,13 @@ const TIP = { kom:'komad', povrsina:'m² (iz dimenzija)', duzina:'m¹ (obim)' };
 /* Mjera dijela treba samo kad proizvod ima VISE povrsinskih sastojaka. Kod stola je
    jedan (ploca), pa mjera dolazi iz dimenzija proizvoda i kolona bi samo zbunjivala. */
 function gprTrebaMjeraDijela(g){
+  /* Kolona treba kad proizvod ima vise povrsinskih sastojaka (stepenice) ILI kad neki
+     sastojak prima vise stavki zajedno (sto sa dvije ploce) — tad svaka ploca ima
+     svoju mjeru, pa se ne moze uzeti dimenzija proizvoda. */
   const povrsinskih = (g.sastojci_grupe || []).filter(s => s.tip_kolicine === 'povrsina').length
     || (g.stavke || []).filter(s => s.tip_kolicine === 'povrsina').length;
-  return povrsinskih > 1;
+  const imaZajedno = (g.sastojci_grupe || []).some(s => s.sve_ulaze);
+  return povrsinskih > 1 || imaZajedno;
 }
 
 function gprRedStavke(g, s, i){

@@ -9831,14 +9831,20 @@ function _lukLuci(L,korak){
   // Ravne noge: USPRAVNO navise od krajeva luka
   // Noge idu OD luka, ne ka njemu. Tjeme luka je na -R, krajevi su nize,
   // pa noga produzava jos nize (+y).
+  // Noge idu OD luka. Duzina se mjeri na VANJSKOM luku, a unutrasnja se
+  // OBREZUJE na istu liniju - celo je ravan vodoravan rez, pa je ukupna
+  // visina tacno dubina + noga. (Bez obrezivanja bi unutrasnja zavrsavala
+  // nize, jer njen luk zavrsava blize centru.)
   var ng=_lukNoge(L);
   if(ng.b>0){
-    van.unshift([van[0][0], van[0][1]+ng.b]);
-    unu.unshift([unu[0][0], unu[0][1]+ng.b]);
+    var yB=van[0][1]+ng.b;
+    van.unshift([van[0][0], yB]);
+    unu.unshift([unu[0][0], yB]);
   }
   if(ng.c>0){
-    van.push([van[van.length-1][0], van[van.length-1][1]+ng.c]);
-    unu.push([unu[unu.length-1][0], unu[unu.length-1][1]+ng.c]);
+    var yC=van[van.length-1][1]+ng.c;
+    van.push([van[van.length-1][0], yC]);
+    unu.push([unu[unu.length-1][0], yC]);
   }
   return {van:van, unu:unu};
 }

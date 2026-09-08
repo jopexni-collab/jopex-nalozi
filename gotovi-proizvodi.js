@@ -1066,10 +1066,23 @@ router.get('/:id/cijena', async (req, res) => {
     /* Stavke se dijele na OBAVEZNE i GRUPE IZBORA.
        Obavezne ulaze uvijek. Iz svake grupe izbora ulazi TACNO JEDNA — inače bi se
        sabrala sva postolja odjednom, što bi dalo besmislenu cijenu. */
-    const obavezne = s.rows.filter(x => !x.grupa_izbora);
+    /* Sastojak oznacen sa "sve ulaze" NIJE izbor izmedju alternativa — sve njegove
+       stavke idu zajedno. Tako se pravi sto sa DVIJE ploce na jednom postolju:
+       obje se racunaju, svaka sa svojom mjerom i materijalom. */
+    const sviZajedno = new Set();
+    if (proizvod.grupa_proizvoda_id) {
+      const sg = await pool.query(
+        'SELECT id FROM grupa_sastojci WHERE grupa_id=$1 AND sve_ulaze = true',
+        [proizvod.grupa_proizvoda_id]
+      ).catch(() => ({ rows: [] }));
+      for (const x of sg.rows) sviZajedno.add(String(x.id));
+    }
+    const zajedno = x => x.sastojak_id && sviZajedno.has(String(x.sastojak_id));
+
+    const obavezne = s.rows.filter(x => !x.grupa_izbora || zajedno(x));
     const grupe = {};
     for (const x of s.rows) {
-      if (!x.grupa_izbora) continue;
+      if (!x.grupa_izbora || zajedno(x)) continue;
       (grupe[x.grupa_izbora] = grupe[x.grupa_izbora] || []).push(x);
     }
     const imenaGrupa = Object.keys(grupe);
