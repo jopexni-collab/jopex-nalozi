@@ -1086,7 +1086,7 @@ router.get('/:id/cijena', async (req, res) => {
     let sastojciGrupe = [];
     if (proizvod.grupa_proizvoda_id) {
       const sg = await pool.query(
-        'SELECT id, naziv, definise, sve_ulaze, redni_broj FROM grupa_sastojci WHERE grupa_id=$1 ORDER BY redni_broj, id',
+        'SELECT id, naziv, definise, sve_ulaze, redni_broj, tip_kolicine FROM grupa_sastojci WHERE grupa_id=$1 ORDER BY redni_broj, id',
         [proizvod.grupa_proizvoda_id]
       ).catch(() => ({ rows: [] }));
       sastojciGrupe = sg.rows;
@@ -1094,6 +1094,13 @@ router.get('/:id/cijena', async (req, res) => {
     const sviZajedno = new Set(
       sastojciGrupe.filter(x => x.sve_ulaze).map(x => String(x.id))
     );
+
+    /* Poredak povrsinskih sastojaka: prvi je tabla A, drugi tabla B. Time se dvije
+       table razlikuju bez ikakvog dodatnog podesavanja. */
+    const redosledPovrsinskih = new Map();
+    sastojciGrupe
+      .filter(x => x.tip_kolicine === 'povrsina')
+      .forEach((x, i) => redosledPovrsinskih.set(String(x.id), i));
     const zajedno = x => x.sastojak_id && sviZajedno.has(String(x.sastojak_id));
 
     const obavezne = s.rows.filter(x => !x.grupa_izbora || zajedno(x));
@@ -1158,8 +1165,17 @@ router.get('/:id/cijena', async (req, res) => {
       const mjereStavke = (st) => {
         const sast = sastojciGrupe.find(x => String(x.id) === String(st.sastojak_id));
         const def = sast?.definise || [];
+
+        // Ako je sastojak izricito oznacen da odredjuje mjere B, to ima prednost
         if (def.includes('duzina_b') || def.includes('sirina_b'))
           return { duzina: vm.duzina_b, sirina: vm.sirina_b };
+
+        /* Inace SAM odredjuje: prvi povrsinski sastojak je tabla A, drugi je tabla B.
+           Redoslijed ide po rednom broju sastojka. Bez ovoga bi obje table uzele istu
+           mjeru, pa bi u naslovu pisalo "A: 800×600 + B: 800×600" — sto nije tacno. */
+        if (sast && redosledPovrsinskih.get(String(sast.id)) === 1 && vm.duzina_b && vm.sirina_b)
+          return { duzina: vm.duzina_b, sirina: vm.sirina_b };
+
         return { duzina: vm.duzina, sirina: vm.sirina };
       };
       const razrada = [];
