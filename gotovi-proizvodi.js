@@ -1145,6 +1145,23 @@ router.get('/:id/cijena', async (req, res) => {
     function racunaj(dim, izabrane) {
       const osnovne = mjere(dim);
       const m2 = osnovne.m2, m1 = osnovne.m1;
+
+      /* Mjere dimenzije i opis visine — trebaju i petlji ispod i naslovu na kraju,
+         pa se racunaju ODMAH. Ranije su stajale nize, pa je petlja pucala. */
+      const vm = dim?.mjere || {};
+      const visinaOpis = vm.visina ? `H${Math.round(vm.visina)}`
+                       : (vm.debljina ? `${Math.round(vm.debljina)}mm` : '');
+
+      /* Svaka povrsinska stavka uzima mjere koje NJEN SASTOJAK odredjuje.
+         Sto sa dvije table ima dva sastojka: prvi odredjuje Duzinu i Sirinu, drugi
+         Duzinu B i Sirinu B — pa svaka tabla racuna svoju povrsinu. */
+      const mjereStavke = (st) => {
+        const sast = sastojciGrupe.find(x => String(x.id) === String(st.sastojak_id));
+        const def = sast?.definise || [];
+        if (def.includes('duzina_b') || def.includes('sirina_b'))
+          return { duzina: vm.duzina_b, sirina: vm.sirina_b };
+        return { duzina: vm.duzina, sirina: vm.sirina };
+      };
       const razrada = [];
       let osnovica = 0, nepotpuno = false;
 
@@ -1219,22 +1236,6 @@ router.get('/:id/cijena', async (req, res) => {
       /* Sto sa VISE PLOCA — svaka ima svoju mjeru, pa se oznacavaju A, B, C...
          Bez toga bi u katalogu stajala samo jedna mjera, a kupac bi mislio da je sto
          manji nego sto jeste. */
-      const vm = dim?.mjere || {};
-      const visinaOpis = vm.visina ? `H${Math.round(vm.visina)}`
-                       : (vm.debljina ? `${Math.round(vm.debljina)}mm` : '');
-
-      /* Svaka povrsinska stavka uzima mjere koje NJEN SASTOJAK odredjuje.
-         Sto sa dvije table ima dva sastojka: prvi odredjuje Duzinu i Sirinu, drugi
-         Duzinu B i Sirinu B. Tako svaka tabla racuna svoju povrsinu, a u naslovu
-         stoje obje — A i B. */
-      function mjereStavke(st) {
-        const sast = sastojciGrupe.find(x => String(x.id) === String(st.sastojak_id));
-        const def = sast?.definise || [];
-        if (def.includes('duzina_b') || def.includes('sirina_b'))
-          return { duzina: vm.duzina_b, sirina: vm.sirina_b };
-        return { duzina: vm.duzina, sirina: vm.sirina };
-      }
-
       const povrsinske = [...obavezne, ...izabrane].filter(st => st.tip_kolicine === 'povrsina');
       const ploce = povrsinske.length > 1
         ? povrsinske.map((st, i) => {
