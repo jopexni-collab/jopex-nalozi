@@ -4454,6 +4454,7 @@ const GPR_MJERE = {
   sirina:   { lbl:'Širina' },
   duzina_b: { lbl:'Dužina B' },
   sirina_b: { lbl:'Širina B' },
+  visina_b: { lbl:'Visina B' },
   visina:   { lbl:'Visina' },
   debljina: { lbl:'Debljina' },
   precnik:  { lbl:'Prečnik' },
@@ -4994,8 +4995,13 @@ function gprOpisDim(d){
   if(m.duzina || m.sirina){
     let osnovno = [v('duzina'), v('sirina')].filter(Boolean).join('×');
     // Druga ploca — "A: 800×600 + B: 400×600"
-    if(m.duzina_b && m.sirina_b)
-      osnovno = `A: ${osnovno} + B: ${v('duzina_b')}×${v('sirina_b')}`;
+    if(m.duzina_b && m.sirina_b){
+      // Razlicite visine -> svaka tabla nosi svoju
+      if(m.visina_b && m.visina_b !== m.visina)
+        osnovno = `A: ${osnovno} H${v('visina')} + B: ${v('duzina_b')}×${v('sirina_b')} H${v('visina_b')}`;
+      else
+        osnovno = `A: ${osnovno} + B: ${v('duzina_b')}×${v('sirina_b')}`;
+    }
     const dodaci = [];
     if(m.visina)   dodaci.push('H' + v('visina'));
     if(m.debljina) dodaci.push(v('debljina') + 'mm');
@@ -5524,6 +5530,10 @@ async function gprZamijeniPotvrda(sid, noviId, noviNaziv, sifra, gid, stariNaziv
 
     // Racun vise ne odgovara sastavnici — odbacuje se, da se ne snimi zastarjelo
     if(window.__gprPodaci) delete window.__gprPodaci[gid];
+    /* Brise se i PRIKAZ racuna — inace na ekranu ostaje stara razrada sa artiklom
+       koji je upravo zamijenjen, pa izgleda kao da izmjena nije prosla. */
+    const cont = document.getElementById('gpr-cijene-'+gid);
+    if(cont) cont.innerHTML = '<div style="padding:12px;text-align:center;color:#8b96a5;font-size:12px;">Sastavnica je promijenjena — klikni „▶ Izračunaj" za novu cijenu.</div>';
     gprOznaciZastarjelim(gid);
     await gprUcitajDetalj(gid);
 
@@ -5890,6 +5900,10 @@ async function gprDodajStavku(gid){
     /* Stari racun se odbacuje — komponente su se promijenile, pa bi snimanje
        zamrznulo cijene koje vise ne odgovaraju sastavnici. */
     if(window.__gprPodaci) delete window.__gprPodaci[gid];
+    /* Brise se i PRIKAZ racuna — inace na ekranu ostaje stara razrada sa artiklom
+       koji je upravo zamijenjen, pa izgleda kao da izmjena nije prosla. */
+    const cont = document.getElementById('gpr-cijene-'+gid);
+    if(cont) cont.innerHTML = '<div style="padding:12px;text-align:center;color:#8b96a5;font-size:12px;">Sastavnica je promijenjena — klikni „▶ Izračunaj" za novu cijenu.</div>';
     gprOznaciZastarjelim(gid);
     gprUcitajDetalj(gid); gprUcitaj();
   }catch(e){ alert('✗ '+e.message); }
@@ -6015,7 +6029,7 @@ function gprOblikPromjena(gid){
      proizvod sa jednom cijenom. Polja B se nude samo ako grupa to dozvoljava. */
   /* Dvije table = DVA povrsinska sastojka. Tad se traze i mjere druge table (B) —
      bez ikakvog dodatnog podesavanja, jer se to iz same grupe vidi. */
-  const mjereB = gprTrebaMjereB(g) && !jeKruzni ? ['duzina_b','sirina_b'] : [];
+  const mjereB = gprTrebaMjereB(g) && !jeKruzni ? ['duzina_b','sirina_b','visina_b'] : [];
 
   const lista = [...osnovne, ...mjereB, ...odSastojaka].map(k => [k, GPR_MJERE[k]?.lbl || k]);
 
@@ -6038,7 +6052,7 @@ async function gprDodajDim(gid){
   const odSastojaka = [...new Set((g?.sastojci_grupe || []).flatMap(s => s.definise || []))]
     .filter(k => !['duzina','sirina','precnik'].includes(k));
   const osnovne = jeKruzni ? ['precnik'] : ob === 'KVAD' ? ['duzina'] : ['duzina','sirina'];
-  const mjereB = gprTrebaMjereB(g) && !jeKruzni ? ['duzina_b','sirina_b'] : [];
+  const mjereB = gprTrebaMjereB(g) && !jeKruzni ? ['duzina_b','sirina_b','visina_b'] : [];
   const def = { dims: [...osnovne, ...mjereB, ...odSastojaka].map(k => [k, GPR_MJERE[k]?.lbl || k]) };
   const mjere = {};
   for(const [k, opis] of def.dims){
@@ -6053,7 +6067,7 @@ async function gprDodajDim(gid){
     }
     const v = broj(polje.value);
     // Mjere druge ploce su NEOBAVEZNE — sto moze imati i samo jednu
-    if(!v && (k === 'duzina_b' || k === 'sirina_b')) continue;
+    if(!v && (k === 'duzina_b' || k === 'sirina_b' || k === 'visina_b')) continue;
     if(!v){
       const p = document.getElementById('gpr-dim-poruka-'+gid);
       if(p){ p.textContent = `Unesi mjeru ${k} (${opis}) u milimetrima.`; p.style.color = 'var(--orange,#b8860b)'; }
@@ -6083,6 +6097,10 @@ async function gprDodajDim(gid){
       if(prvo) prvo.focus();
     }, 80);
     if(window.__gprPodaci) delete window.__gprPodaci[gid];
+    /* Brise se i PRIKAZ racuna — inace na ekranu ostaje stara razrada sa artiklom
+       koji je upravo zamijenjen, pa izgleda kao da izmjena nije prosla. */
+    const cont = document.getElementById('gpr-cijene-'+gid);
+    if(cont) cont.innerHTML = '<div style="padding:12px;text-align:center;color:#8b96a5;font-size:12px;">Sastavnica je promijenjena — klikni „▶ Izračunaj" za novu cijenu.</div>';
     gprOznaciZastarjelim(gid);   // nova mjera = nova cijena, cjenovnik treba azurirati
     /* Ciste se DINAMICKA polja (gpr-dm-{gid}-{A,B,D,R}). Ranije su se cistila stara
        "gpr-dim-s" i "gpr-dim-v", koja vise ne postoje — pa je poslije USPJESNOG

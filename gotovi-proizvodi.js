@@ -43,12 +43,13 @@ const PRAVOUGAONI = ['PRAV', 'KVAD', 'OVAL', 'BACVA', 'ZAOB', 'I', 'L', 'U', 'V'
 
 /* Mjere druge ploce — sto sa dvije table ima A i B u ISTOJ dimenziji, jer je to jedan
    proizvod sa jednom cijenom. Prazno znaci da ploce B nema. */
-const MJERE_B = ['duzina_b', 'sirina_b'];
+const MJERE_B = ['duzina_b', 'sirina_b', 'visina_b'];
 
 const MJERE = {
   duzina:   { lbl: 'Dužina',   kratko: 'D' },
   duzina_b: { lbl: 'Dužina B', kratko: 'D₂' },
   sirina_b: { lbl: 'Širina B', kratko: 'Š₂' },
+  visina_b: { lbl: 'Visina B', kratko: 'V₂' },
   sirina:   { lbl: 'Širina',   kratko: 'Š' },
   visina:   { lbl: 'Visina',   kratko: 'V' },
   debljina: { lbl: 'Debljina', kratko: 'd' },
@@ -157,7 +158,11 @@ function opisOblika(oblik, m) {
   /* Imenovane mjere: "1600×900" ili "1600×900×720" kad je visina unesena. */
   if (m?.duzina || m?.sirina) {
     let d = [v('duzina'), v('sirina')].filter(Boolean).join('×');
-    if (m.duzina_b && m.sirina_b) d = `A: ${d} + B: ${v('duzina_b')}×${v('sirina_b')}`;
+    if (m.duzina_b && m.sirina_b) {
+      d = (m.visina_b && m.visina_b !== m.visina)
+        ? `A: ${d} H${v('visina')} + B: ${v('duzina_b')}×${v('sirina_b')} H${v('visina_b')}`
+        : `A: ${d} + B: ${v('duzina_b')}×${v('sirina_b')}`;
+    }
     const dodaci = [];
     if (m.visina) dodaci.push(`H${v('visina')}`);
     if (m.debljina) dodaci.push(`${v('debljina')}mm`);
@@ -1168,15 +1173,15 @@ router.get('/:id/cijena', async (req, res) => {
 
         // Ako je sastojak izricito oznacen da odredjuje mjere B, to ima prednost
         if (def.includes('duzina_b') || def.includes('sirina_b'))
-          return { duzina: vm.duzina_b, sirina: vm.sirina_b };
+          return { duzina: vm.duzina_b, sirina: vm.sirina_b, visina: vm.visina_b || vm.visina };
 
         /* Inace SAM odredjuje: prvi povrsinski sastojak je tabla A, drugi je tabla B.
            Redoslijed ide po rednom broju sastojka. Bez ovoga bi obje table uzele istu
            mjeru, pa bi u naslovu pisalo "A: 800×600 + B: 800×600" — sto nije tacno. */
         if (sast && redosledPovrsinskih.get(String(sast.id)) === 1 && vm.duzina_b && vm.sirina_b)
-          return { duzina: vm.duzina_b, sirina: vm.sirina_b };
+          return { duzina: vm.duzina_b, sirina: vm.sirina_b, visina: vm.visina_b || vm.visina };
 
-        return { duzina: vm.duzina, sirina: vm.sirina };
+        return { duzina: vm.duzina, sirina: vm.sirina, visina: vm.visina };
       };
       const razrada = [];
       let osnovica = 0, nepotpuno = false;
@@ -1228,9 +1233,14 @@ router.get('/:id/cijena', async (req, res) => {
           : (cijena || 0) * faktor * (1 + marza / 100);
         const iznos = jedinicna * kol;
         osnovica += iznos;
+        /* Naziv sekcije ide iz SASTOJKA, ne iz starog teksta zapisanog na stavci.
+           Stavke unesene ranije jos nose naziv koji vise ne postoji (npr. "ploča"
+           umjesto "tabla"), pa bi se u razradi vidjela sekcija koje nema u grupi. */
+        const sastojakSt = sastojciGrupe.find(x => String(x.id) === String(st.sastojak_id));
+
         razrada.push({
           stavka_id: st.id,
-          grupa_izbora: st.grupa_izbora || null,
+          grupa_izbora: sastojakSt?.naziv || st.grupa_izbora || null,
           naziv: st.roba_naziv || st.opis, sifra: st.sifra,
           slika: st.slika || null,
           kolicina: +kol.toFixed(3),
@@ -1260,6 +1270,7 @@ router.get('/:id/cijena', async (req, res) => {
         return {
           oznaka: String.fromCharCode(65 + i),
           mjera: `${d}×${s}`,
+          visina: m.visina ? Math.round(m.visina) : null,
           artikal: st.roba_naziv || st.opis || '',
         };
       }).filter(p => p.mjera !== '0×0');
@@ -1277,15 +1288,20 @@ router.get('/:id/cijena', async (req, res) => {
            koliko i tlocrt. Ispada npr. "A: 800×600 · H422 + B: 400×600 · H422". */
         /* Visina je zajednicka za obje ploce — pise se JEDNOM na kraju, ne uz svaku.
            Ispada "A: 800×600 + B: 400×600 · H422". */
+        /* Ako table imaju RAZLICITE visine, svaka nosi svoju; inace visina ide jednom
+           na kraju, da se ne ponavlja. */
         dimenzija: ploce.length > 1
-          ? ploce.map(p => `${p.oznaka}: ${p.mjera}`).join(' + ') + (visinaOpis ? ' · ' + visinaOpis : '')
+          ? (new Set(ploce.map(p => p.visina)).size > 1
+              ? ploce.map(p => `${p.oznaka}: ${p.mjera}${p.visina ? ` H${p.visina}` : ''}`).join(' + ')
+              : ploce.map(p => `${p.oznaka}: ${p.mjera}`).join(' + ') + (visinaOpis ? ' · ' + visinaOpis : ''))
           : dim ? (dim.naziv || (dim.mjere && dim.oblik
           ? opisOblika(dim.oblik, dim.mjere)
           : (dim.oblik === 'krug' || dim.precnik
              ? `Ø${Math.round(dim.precnik)}`
              : `${Math.round(dim.sirina)}×${Math.round(dim.visina)}`))) : null,
         izbor: izabrane.map(x => ({
-          grupa: x.grupa_izbora, stavka_id: x.id,
+          grupa: (sastojciGrupe.find(s => String(s.id) === String(x.sastojak_id))?.naziv)
+                 || x.grupa_izbora, stavka_id: x.id,
           naziv: x.roba_naziv || x.opis, sifra: x.sifra,
           slika: x.slika || null,
         })),
