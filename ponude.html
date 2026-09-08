@@ -9644,7 +9644,7 @@ function _pozNaStrani(k){
 // (skroluje se), ali u radnom nalogu slika mora stati na A4 landscape:
 // sadrzaj je ~718px, zaglavlje i tabela uzmu ~160, pa crtezu ostaje ~558px.
 // Preko tri klupice slika prelazi stranicu i kote se odsijecaju.
-var POZ_PO_STRANI_DOK=2;
+var POZ_PO_STRANI_DOK=3;
 function _slikeCrteza(){
   var svePoz=(typeof imaPozicije==='function'&&imaPozicije()&&(pozicije||[]).length);
   // Za dokumente se privremeno koristi manja podjela
@@ -10951,6 +10951,13 @@ function genRadniNalog(returnHtml){try{
       '.rn-meta{padding:12px 24px;background:#f0f4fa;border-bottom:2px solid #1a3f7a;display:flex;gap:32px;}'+
       '.rn-meta div{font-size:13px;} .rn-meta b{color:#1a3f7a;}'+
       '.rn-stavka{margin:16px 24px;border:2px solid #1a3f7a;border-radius:6px;page-break-inside:avoid;}'+
+      /* Uzak prozor: isto kao pri stampi - crtez pun, tabela ispod */
+      '@media (max-width:1000px){'+
+        '.rn-body{display:block;}'+
+        '.rn-crtez{width:100%;border-right:none;}'+
+        '.rn-right{width:100%;padding:0 8px 8px;}'+
+        '.rn-stavka{margin:10px 8px;}'+
+      '}'+
       '.rn-stavka-hd{background:#1a3f7a;color:#fff;padding:8px 14px;display:flex;align-items:center;gap:14px;}'+
       '.rn-br{background:#fff;color:#1a3f7a;font-weight:700;font-size:16px;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;}'+
       '.rn-tip{font-size:15px;font-weight:700;}'+
@@ -10985,7 +10992,13 @@ function genRadniNalog(returnHtml){try{
       /* .rn-body sadrzi SVE slike - ne smije se drzati na okupu, inace bi
          kod vise klupica sve pokusale stati na jednu stranicu. Svaka slika
          (.rn-crtez) se cuva pojedinacno, sto je i dovoljno. */
-      '.rn-body{page-break-inside:auto;break-inside:auto;}'+
+      /* Crtez ide PUNOM SIRINOM, a tabela mjera ISPOD njega. Ranije su
+         stajali jedan pored drugog: bocni blok od 240px je na uspravnoj
+         stranici ostavljao crtezu manje od pola sirine, pa je bio neupotrebljiv. */
+      '.rn-body{display:block!important;page-break-inside:auto;break-inside:auto;}'+
+      '.rn-crtez{width:100%!important;border-right:none!important;padding:6px 8px!important;}'+
+      '.rn-right{width:100%!important;padding:0 8px 8px!important;}'+
+      '.rn-right table{width:100%;}'+
       'table{page-break-inside:auto;} tr{page-break-inside:avoid;}'+
       'thead{display:table-header-group;}'+
       '.rn-hd{-webkit-print-color-adjust:exact;print-color-adjust:exact;}'+
