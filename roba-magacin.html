@@ -5974,6 +5974,25 @@ async function gprPromjenaOblika(pid){
   }
 }
 
+
+/* Treba li obrazac da trazi mjere DRUGE table (B).
+   Gleda se na tri nacina, jer se sastojci grupe ne moraju uvijek dovuci uz proizvod:
+     1. dva sastojka koja se mjere po m²
+     2. sastojak izricito oznacen da odredjuje duzinu/sirinu B
+     3. dvije povrsinske STAVKE u razlicitim sastojcima — to uvijek stize svjeze */
+function gprTrebaMjereB(g){
+  if(!g) return false;
+  const sg = g.sastojci_grupe || [];
+
+  if(sg.filter(s => s.tip_kolicine === 'povrsina').length > 1) return true;
+  if(sg.some(s => (s.definise||[]).some(k => k === 'duzina_b' || k === 'sirina_b'))) return true;
+  if(sg.some(s => s.sve_ulaze)) return true;
+
+  const povrsinskeStavke = (g.stavke || []).filter(s => s.tip_kolicine === 'povrsina');
+  const razlicitiSastojci = new Set(povrsinskeStavke.map(s => String(s.sastojak_id || '')));
+  return razlicitiSastojci.size > 1;
+}
+
 function gprOblikPromjena(gid){
   const cont = document.getElementById('gpr-dim-polja-'+gid);
   if(!cont) return;
@@ -5996,9 +6015,7 @@ function gprOblikPromjena(gid){
      proizvod sa jednom cijenom. Polja B se nude samo ako grupa to dozvoljava. */
   /* Dvije table = DVA povrsinska sastojka. Tad se traze i mjere druge table (B) —
      bez ikakvog dodatnog podesavanja, jer se to iz same grupe vidi. */
-  const povrsinskih = (g?.sastojci_grupe || []).filter(s => s.tip_kolicine === 'povrsina').length;
-  const imaDvijePloce = povrsinskih > 1 || (g?.sastojci_grupe || []).some(s => s.sve_ulaze);
-  const mjereB = (imaDvijePloce && !jeKruzni) ? ['duzina_b','sirina_b'] : [];
+  const mjereB = gprTrebaMjereB(g) && !jeKruzni ? ['duzina_b','sirina_b'] : [];
 
   const lista = [...osnovne, ...mjereB, ...odSastojaka].map(k => [k, GPR_MJERE[k]?.lbl || k]);
 
@@ -6021,9 +6038,7 @@ async function gprDodajDim(gid){
   const odSastojaka = [...new Set((g?.sastojci_grupe || []).flatMap(s => s.definise || []))]
     .filter(k => !['duzina','sirina','precnik'].includes(k));
   const osnovne = jeKruzni ? ['precnik'] : ob === 'KVAD' ? ['duzina'] : ['duzina','sirina'];
-  const povrsinskih = (g?.sastojci_grupe || []).filter(s => s.tip_kolicine === 'povrsina').length;
-  const imaDvijePloce = povrsinskih > 1 || (g?.sastojci_grupe || []).some(s => s.sve_ulaze);
-  const mjereB = (imaDvijePloce && !jeKruzni) ? ['duzina_b','sirina_b'] : [];
+  const mjereB = gprTrebaMjereB(g) && !jeKruzni ? ['duzina_b','sirina_b'] : [];
   const def = { dims: [...osnovne, ...mjereB, ...odSastojaka].map(k => [k, GPR_MJERE[k]?.lbl || k]) };
   const mjere = {};
   for(const [k, opis] of def.dims){
