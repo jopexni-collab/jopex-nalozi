@@ -730,7 +730,10 @@ router.post('/:id/dimenzije', async (req, res) => {
     /* Ako je uneseno samo jedno od dva polja za plocu B, to je propust — bolje javiti
        nego tiho racunati sa polovicnim podatkom. */
     if ((cisto.duzina_b && !cisto.sirina_b) || (!cisto.duzina_b && cisto.sirina_b))
-      return res.status(400).json({ error: 'Za drugu ploču unesite i dužinu i širinu.' });
+      return res.status(400).json({
+        error: `Za drugu tablu unesite i dužinu i širinu. Primljeno: ` +
+               `dužina B = ${cisto.duzina_b ?? '(prazno)'}, širina B = ${cisto.sirina_b ?? '(prazno)'}.`,
+      });
     if (!Object.keys(cisto).length)
       return res.status(400).json({ error: 'Unesite bar jednu mjeru.' });
     const premale = Object.entries(cisto).filter(([k, v]) => k !== 'debljina' && v < 20);
@@ -1122,6 +1125,22 @@ router.get('/:id/cijena', async (req, res) => {
     }
     const imenaGrupa = Object.keys(grupe);
 
+    /* Naziv sekcije u izborniku ide iz SASTOJKA. Stavke unesene ranije jos nose stari
+       tekst (npr. "ploča"), pa bi se dolje vidjela sekcija koje u grupi vise nema. */
+    const nazivGrupe = (g) => {
+      const prva = grupe[g]?.[0];
+      const sast = sastojciGrupe.find(x => String(x.id) === String(prva?.sastojak_id));
+      if (!sast) return g;
+
+      /* Ako dva sastojka imaju ISTI naziv (npr. dvije "tabla"), dodaje im se oznaka
+         A i B — inace se u izborniku vide dvije sekcije istog imena i ne zna se
+         koja je koja. Oznaka prati redoslijed povrsinskih sastojaka. */
+      const istoime = sastojciGrupe.filter(x => x.naziv === sast.naziv);
+      if (istoime.length < 2) return sast.naziv;
+      const i = istoime.findIndex(x => String(x.id) === String(sast.id));
+      return `${sast.naziv} ${String.fromCharCode(65 + i)}`;
+    };
+
     /* Sve kombinacije izbora. Sa 3 postolja i 4 ploče to je 12 varijanti po dimenziji.
        Granica od 200 stiti od slucaja gdje bi neko dodao previse grupa i srusio prikaz. */
     function kombinacije() {
@@ -1243,10 +1262,17 @@ router.get('/:id/cijena', async (req, res) => {
            Stavke unesene ranije jos nose naziv koji vise ne postoji (npr. "ploča"
            umjesto "tabla"), pa bi se u razradi vidjela sekcija koje nema u grupi. */
         const sastojakSt = sastojciGrupe.find(x => String(x.id) === String(st.sastojak_id));
+        const nazivSt = (() => {
+          if (!sastojakSt) return st.grupa_izbora || null;
+          const istoime = sastojciGrupe.filter(x => x.naziv === sastojakSt.naziv);
+          if (istoime.length < 2) return sastojakSt.naziv;
+          const i = istoime.findIndex(x => String(x.id) === String(sastojakSt.id));
+          return `${sastojakSt.naziv} ${String.fromCharCode(65 + i)}`;
+        })();
 
         razrada.push({
           stavka_id: st.id,
-          grupa_izbora: sastojakSt?.naziv || st.grupa_izbora || null,
+          grupa_izbora: nazivSt,
           naziv: st.roba_naziv || st.opis, sifra: st.sifra,
           slika: st.slika || null,
           kolicina: +kol.toFixed(3),
@@ -1306,8 +1332,7 @@ router.get('/:id/cijena', async (req, res) => {
              ? `Ø${Math.round(dim.precnik)}`
              : `${Math.round(dim.sirina)}×${Math.round(dim.visina)}`))) : null,
         izbor: izabrane.map(x => ({
-          grupa: (sastojciGrupe.find(s => String(s.id) === String(x.sastojak_id))?.naziv)
-                 || x.grupa_izbora, stavka_id: x.id,
+          grupa: nazivGrupe(x.grupa_izbora) || x.grupa_izbora, stavka_id: x.id,
           naziv: x.roba_naziv || x.opis, sifra: x.sifra,
           slika: x.slika || null,
         })),
@@ -1351,11 +1376,11 @@ router.get('/:id/cijena', async (req, res) => {
       tip_kupca: tipNaziv,
       zaokruzi_na: zaokruzi,
       grupe_izbora: imenaGrupa.map(g => ({
-        naziv: g,
+        naziv: nazivGrupe(g),
         opcije: grupe[g].map(x => ({ stavka_id: x.id, naziv: x.roba_naziv || x.opis, sifra: x.sifra })),
       })),
       grupe_izbora: imenaGrupa.map(g => ({
-        naziv: g,
+        naziv: nazivGrupe(g),
         opcije: grupe[g].map(x => ({
           stavka_id: x.id, naziv: x.roba_naziv || x.opis, sifra: x.sifra,
           podrazumijevana: x.podrazumijevana,

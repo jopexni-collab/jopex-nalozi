@@ -5160,6 +5160,24 @@ function gprRenderDetalj(el, g){
             </td></tr>`;
           }
 
+          /* ZALUTALE STAVKE — one koje ne pripadaju nijednom sastojku ove grupe.
+             Nastaju kad se sastojak obrise ili preimenuje. Ranije se NISU vidjele,
+             a i dalje su ulazile u racun — pa su se dolje u izborniku pojavljivali
+             artikli kojih u sastavnici nema. */
+          const idSastojaka = new Set(sastojci.map(s => s.id));
+          const zalutale = stavke.filter(x => !x.sastojak_id || !idSastojaka.has(x.sastojak_id));
+          if(zalutale.length){
+            out += `<tr style="background:#fdecea;">
+              <td colspan="${trebaMjeraDijela?16:15}" style="padding:6px 9px;">
+                <b style="font-size:11.5px;color:var(--red,#c0392b);">⚠ Ne pripadaju nijednom sastojku (${zalutale.length})</b>
+                <span style="font-size:10.5px;color:#8b6914;display:block;line-height:1.5;margin-top:2px;">
+                  Ove stavke <b>ulaze u cijenu</b>, a nisu ni u jednom sastojku — ostale su
+                  poslije brisanja ili preimenovanja sastojka. Obriši ih ili premjesti sa ⇄.
+                </span>
+              </td></tr>`;
+            out += zalutale.map(x => gprRedStavke(g, x, br++)).join('');
+          }
+
           // Stavke koje ne pripadaju nijednom sastojku (ručno dodate ili starije)
           const van = stavke.filter(x => !x.sastojak_id);
           if(van.length){
