@@ -4431,6 +4431,16 @@ function buildPozicijeTabelu(){
     +'<div style="background:#eef4fb;border:1px solid #c8d9ee;border-radius:6px;padding:8px 10px;margin-bottom:8px">'
     +'<div style="font-size:10px;font-weight:700;color:#134a85;margin-bottom:6px;letter-spacing:.5px">'
     +'VA\u017dI ZA SVE POZICIJE</div>';
+  // Lucne klupice - prekidac za SVE pozicije, odmah ispod naslova
+  h+='<div style="display:flex;gap:6px;align-items:center;margin-bottom:7px;flex-wrap:wrap;'
+    +'padding:5px 7px;background:#eefaf6;border:1px solid #bde3d6;border-radius:5px">'
+    +'<b style="font-size:12px;color:#1d8a6e">\u25dc</b>'
+    +'<label style="font-size:11px;color:#1d8a6e;font-weight:600;display:flex;'
+    +'align-items:center;gap:5px;cursor:pointer"><input type="checkbox"'
+    +(_imaLuka()?' checked':'')+' onchange="pozSveLuk(this.checked)"> '
+    +'lu\u010dne klupice (isje\u010dak prstena)</label>'
+    +'<span style="font-size:9.5px;color:#8a93a3">R vanjski, R unutra\u0161nji i ugao '
+    +'zadaju se po poziciji (\u270e)</span></div>';
   strane.forEach(function(sd){
     // Sta je trenutno postavljeno za sve (ako su svi redovi isti)
     // Prikazuje se PODRAZUMIJEVANA vrijednost (ivSt / pozBdDef), a narandzasti
@@ -4684,6 +4694,62 @@ function buildPozicijeTabelu(){
     // Meni za izmjenu - SAMO za otvoreni red
     if(otv){
       h+='<div class="poz-meni">';
+      // Lucna klupica - isjecak prstena umjesto pravougaonika
+      var _L=_pozLuk(p);
+      h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'
+        +'<b style="font-size:11px;color:#1d8a6e;min-width:13px">\u25dc</b>'
+        +'<label style="font-size:10px;color:#8a93a3;display:flex;align-items:center;gap:4px;'
+        +'cursor:pointer"><input type="checkbox"'+(_L?' checked':'')
+        +' onchange="pozLukUkljuci('+i+',this.checked)"> lu\u010dna (isje\u010dak prstena)</label>'
+        +'</div>';
+      if(_L){
+        var _bbL=_lukBB(_L), _stL=_lukStrane(_L);
+        h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap;'
+          +'padding:5px 7px;background:#eefaf6;border:1px solid #bde3d6;border-radius:5px">'
+          +'<label style="font-size:10px;color:#6b7a8d">R vanjski</label>'
+          +'<input type="text" inputmode="decimal" value="'+_L.rv+'" style="width:60px;font:inherit;'
+          +'font-size:11px;padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;text-align:right"'
+          +' onchange="fixComma(this);pozLukPolje('+i+',\'rv\',this.value)">'
+          +'<label style="font-size:10px;color:#6b7a8d">R unutra\u0161nji</label>'
+          +'<input type="text" inputmode="decimal" value="'+_L.ru+'" style="width:60px;font:inherit;'
+          +'font-size:11px;padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;text-align:right"'
+          +' onchange="fixComma(this);pozLukPolje('+i+',\'ru\',this.value)">'
+          +'<label style="font-size:10px;color:#6b7a8d">Ugao</label>'
+          +'<input type="text" inputmode="decimal" value="'+_L.ug+'" style="width:48px;font:inherit;'
+          +'font-size:11px;padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;text-align:right"'
+          +' onchange="fixComma(this);pozLukPolje('+i+',\'ug\',this.value)">'
+          +'<span style="font-size:10px;color:#8a93a3">\u00b0</span>'
+          +'<div style="width:100%;height:1px;background:#bde3d6;margin:4px 0"></div>'
+          +'<label style="font-size:10px;color:#6b7a8d">Otvor (\u0161irina)</label>'
+          +'<input type="text" inputmode="decimal" value="'+(_L.sp||'')+'" '
+          +'placeholder="'+_lukPrirodnaSirina(_L)+'" style="width:62px;font:inherit;'
+          +'font-size:11px;padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;'
+          +'text-align:right" onchange="fixComma(this);pozLukPolje('+i+',\'sp\',this.value)">'
+          +'<span style="font-size:9px;color:#8a93a3">prazno = kru\u017enica ('
+          +_lukPrirodnaSirina(_L)+' mm), ve\u0107e = splo\u0161teno</span>'
+          +'<div style="width:100%;height:1px;background:#bde3d6;margin:4px 0"></div>'
+          +'<label style="font-size:10px;color:#6b7a8d">Zako\u0161en kraj B</label>'
+          +'<input type="text" inputmode="decimal" value="'+(_L.kb||0)+'" style="width:44px;'
+          +'font:inherit;font-size:11px;padding:2px 4px;border:1px solid #dde2ea;'
+          +'border-radius:3px;text-align:right"'
+          +' onchange="fixComma(this);pozLukPolje('+i+',\'kb\',this.value)">'
+          +'<span style="font-size:10px;color:#8a93a3">\u00b0</span>'
+          +'<label style="font-size:10px;color:#6b7a8d">kraj C</label>'
+          +'<input type="text" inputmode="decimal" value="'+(_L.kc||0)+'" style="width:44px;'
+          +'font:inherit;font-size:11px;padding:2px 4px;border:1px solid #dde2ea;'
+          +'border-radius:3px;text-align:right"'
+          +' onchange="fixComma(this);pozLukPolje('+i+',\'kc\',this.value)">'
+          +'<span style="font-size:9px;color:#8a93a3">skra\u0107uje unutra\u0161nji luk \u2014 za nastavak</span>'
+          +'<div style="width:100%;font-size:9.5px;color:#1d8a6e;padding-top:3px">'
+          +'\u0161irina '+(_L.rv-_L.ru)+' mm \u00b7 vanjski luk '+_stL['A-zad']+' mm \u00b7 '
+          +'unutra\u0161nji '+_stL['D-pred']+' mm \u00b7 \u010delo B '+_stL['B-lev']+' mm'
+          +(_L.kb?(' pod '+_lukUgaoCela(_L,'B')+'\u00b0'):'')
+          +' \u00b7 \u010delo C '+_stL['C-des']+' mm'
+          +(_L.kc?(' pod '+_lukUgaoCela(_L,'C')+'\u00b0'):'')
+          +' \u00b7 tabla '+_bbL.w+'\u00d7'+_bbL.h+' mm</div>'
+          +'</div>';
+      }
+
       strane.forEach(function(sd){
         var izuz=(p.ob&&p.ob[sd.id]!=null);
         var bd=(p.bd&&p.bd[sd.id]!=null)?p.bd[sd.id]:'';
@@ -4731,36 +4797,6 @@ function buildPozicijeTabelu(){
               return '<option value="'+kt+'"'+(_pozKomTip(p)===kt?' selected':'')+'>'+KomTipLbl[kt]+'</option>';
             }).join('')+'</select></div>';
         }
-      }
-      // Lucna klupica - isjecak prstena umjesto pravougaonika
-      var _L=_pozLuk(p);
-      h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'
-        +'<b style="font-size:11px;color:#1d8a6e;min-width:13px">\u25dc</b>'
-        +'<label style="font-size:10px;color:#8a93a3;display:flex;align-items:center;gap:4px;'
-        +'cursor:pointer"><input type="checkbox"'+(_L?' checked':'')
-        +' onchange="pozLukUkljuci('+i+',this.checked)"> lu\u010dna (isje\u010dak prstena)</label>'
-        +'</div>';
-      if(_L){
-        var _bbL=_lukBB(_L), _stL=_lukStrane(_L);
-        h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap;'
-          +'padding:5px 7px;background:#eefaf6;border:1px solid #bde3d6;border-radius:5px">'
-          +'<label style="font-size:10px;color:#6b7a8d">R vanjski</label>'
-          +'<input type="text" inputmode="decimal" value="'+_L.rv+'" style="width:60px;font:inherit;'
-          +'font-size:11px;padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;text-align:right"'
-          +' onchange="fixComma(this);pozLukPolje('+i+',\'rv\',this.value)">'
-          +'<label style="font-size:10px;color:#6b7a8d">R unutra\u0161nji</label>'
-          +'<input type="text" inputmode="decimal" value="'+_L.ru+'" style="width:60px;font:inherit;'
-          +'font-size:11px;padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;text-align:right"'
-          +' onchange="fixComma(this);pozLukPolje('+i+',\'ru\',this.value)">'
-          +'<label style="font-size:10px;color:#6b7a8d">Ugao</label>'
-          +'<input type="text" inputmode="decimal" value="'+_L.ug+'" style="width:48px;font:inherit;'
-          +'font-size:11px;padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;text-align:right"'
-          +' onchange="fixComma(this);pozLukPolje('+i+',\'ug\',this.value)">'
-          +'<span style="font-size:10px;color:#8a93a3">\u00b0</span>'
-          +'<div style="width:100%;font-size:9.5px;color:#1d8a6e;padding-top:3px">'
-          +'\u0161irina '+(_L.rv-_L.ru)+' mm \u00b7 vanjski luk '+_stL['A-zad']+' mm \u00b7 '
-          +'unutra\u0161nji '+_stL['D-pred']+' mm \u00b7 tabla '+_bbL.w+'\u00d7'+_bbL.h+' mm</div>'
-          +'</div>';
       }
       h+='<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px;flex-wrap:wrap">'
         +'<b style="font-size:11px;color:#b8860b;min-width:13px">\u25dc</b>'
@@ -8575,6 +8611,16 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
 function buildPozicijeRN(){
   if(!imaPozicije()||!(pozicije||[]).length) return '';
   var strane=_pozStrane();
+  // Opis luka za pogon: poluprecnici, ugao i zakoseni krajevi
+  function lukOpis(p){
+    var L=_pozLuk(p); if(!L) return '';
+    var st=_lukStrane(L);
+    var t='R'+L.rv+'/'+L.ru+' \u00b7 '+L.ug+'\u00b0 \u00b7 luk '+st['A-zad']+'/'+st['D-pred']+' mm';
+    if(L.sp) t+=' \u00b7 otvor '+L.sp+' mm (splo\u0161teno)';
+    t+=' \u00b7 \u010delo B '+st['B-lev']+' mm pod '+_lukUgaoCela(L,'B')+'\u00b0';
+    t+=' \u00b7 \u010delo C '+st['C-des']+' mm pod '+_lukUgaoCela(L,'C')+'\u00b0';
+    return t;
+  }
   var h='<table class="rn-poz"><thead><tr>'
     +'<th>#</th><th>Du\u017eina \u00d7 \u0161irina<br><small style="font-weight:400;opacity:.8">mm</small></th><th>Kom</th>'
   // Puni opisi u zaglavlju - gola slova A/B/C/D nisu dovoljna operateru
@@ -8619,11 +8665,15 @@ function buildPozicijeRN(){
       }
     }
     h+='<tr><td><b>'+(zidniPrikaz?_zidoviRedniBroj(i):(i+1))+'</b></td>'
-      +'<td><b>'+(p.a||0)+'\u00d7'+(p.b||0)+'</b></td>'
+      +'<td><b>'+(p.a||0)+'\u00d7'+(p.b||0)+'</b>'
+        +(lukOpis(p)?('<div style="font-size:9px;color:#1d8a6e;font-weight:600">\u25dc '
+          +lukOpis(p)+'</div>'):'')+'</td>'
       +'<td style="text-align:center"><b>'+kom+'</b></td>';
     strane.forEach(function(sd){
       var pr=_pozProf(p,sd.id);
-      var puna=(sd.id==='A-zad'||sd.id==='D-pred')?(p.a||0):(p.b||0);
+      var _Lr=_pozLuk(p);
+      var puna=_Lr ? (_lukStrane(_Lr)[sd.id]||0)
+                   : ((sd.id==='A-zad'||sd.id==='D-pred')?(p.a||0):(p.b||0));
       var d=_pozBd(p,sd.id);
       var djelim=(d>0&&d<puna);
       // Simbol + naziv obrade, a kod djelimicne i ODAKLE se mjeri tih N mm
@@ -9592,23 +9642,81 @@ function _pozLuk(p){
   if(!L) return null;
   var rv=_broj(L.rv)||0, ru=_broj(L.ru)||0, ug=_broj(L.ug)||0;
   if(!(rv>0&&ru>=0&&rv>ru&&ug>0)) return null;
-  return {rv:rv, ru:ru, ug:Math.min(360,ug)};
+  ug=Math.min(360,ug);
+  // Zakosen zavrsni rez: unutrasnji luk se skrati za toliko stepeni na
+  // svakom kraju, pa celo ide ukoso umjesto radijalno. Sluzi za nastavak
+  // na sljedeci komad ili na ravnu klupicu.
+  var kb=Math.max(0,Math.min(ug/2-0.5,_broj(L.kb)||0));   // lijevi kraj (B)
+  var kc=Math.max(0,Math.min(ug/2-0.5,_broj(L.kc)||0));   // desni kraj (C)
+  // SPLJOSTENJE: stvarni otvor je cesto siri nego sto daje kruznica.
+  // Ako je zadan, luk se razvlaci po sirini u elipsu. 0 = čista kružnica.
+  var sp=Math.max(0,_broj(L.sp)||0);
+  return {rv:rv, ru:ru, ug:ug, kb:kb, kc:kc, sp:sp};
 }
 // Tjemena isjecka - uzorkuje se luk, pa se iz njih racuna sve ostalo.
 // Isjecak je simetrican oko USPRAVNE ose, otvor gleda nadolje.
-function _lukTacke(L,korak){
-  var n=Math.max(8,Math.ceil((L.ug/(korak||4))));
+// Sve pozicije odjednom u lucne (ili nazad) - prekidac u "VAZI ZA SVE"
+function pozSveLuk(da){
+  (pozicije||[]).forEach(function(p,i){ pozLukUkljuciTiho(i,da); });
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
+function _imaLuka(){
+  return (typeof pozicije!=='undefined'&&pozicije||[]).some(function(p){ return !!_pozLuk(p); });
+}
+function pozLukUkljuciTiho(i,da){
+  var p=pozicije[i]; if(!p) return;
+  if(da){
+    if(p.luk) return;
+    var sir=Math.max(50,p.b||250);
+    p.luk={rv:1000, ru:Math.max(0,1000-sir), ug:90};
+    _lukUskladi(p);
+  } else {
+    if(!p.luk) return;
+    delete p.luk;
+    p.a=1200; p.b=250;
+  }
+}
+// Sirina koju bi luk imao kao cista kruznica
+function _lukPrirodnaSirina(L){
   var pola=L.ug*Math.PI/180/2;
-  var t=[], i;
-  for(i=0;i<=n;i++){                      // vanjski luk, lijevo -> desno
+  return Math.round((L.ug>=180)?(2*L.rv):(2*L.rv*Math.sin(pola)));
+}
+// Koliko se luk razvlaci po sirini da se dobije zadani otvor
+function _lukKx(L){
+  if(!L.sp) return 1;
+  var pola=L.ug*Math.PI/180/2;
+  // prirodna sirina kruznice: kod ugla <=180 to je tetiva, iznad puni precnik
+  var prir=(L.ug>=180)?(2*L.rv):(2*L.rv*Math.sin(pola));
+  if(!(prir>0)) return 1;
+  return L.sp/prir;
+}
+// Vanjski i unutrasnji luk kao nizovi tacaka (vec spljosteni)
+function _lukLuci(L,korak){
+  var n=Math.max(24,Math.ceil((L.ug/(korak||2))));
+  var pola=L.ug*Math.PI/180/2, rad=Math.PI/180;
+  var kb=(L.kb||0)*rad, kc=(L.kc||0)*rad;
+  var kx=_lukKx(L);
+  var van=[], unu=[], i;
+  for(i=0;i<=n;i++){
     var a=-pola+(2*pola)*i/n;
-    t.push([L.rv*Math.sin(a), -L.rv*Math.cos(a)]);
+    van.push([L.rv*Math.sin(a)*kx, -L.rv*Math.cos(a)]);
   }
-  for(i=n;i>=0;i--){                      // unutrasnji luk, nazad
-    var b=-pola+(2*pola)*i/n;
-    t.push([L.ru*Math.sin(b), -L.ru*Math.cos(b)]);
+  var u1=-pola+kb, u2=pola-kc;
+  for(i=0;i<=n;i++){
+    var b=u1+(u2-u1)*i/n;
+    unu.push([L.ru*Math.sin(b)*kx, -L.ru*Math.cos(b)]);
   }
-  return t;
+  return {van:van, unu:unu};
+}
+// Duzina izlomljene linije - tako se mjeri i elipsa, koja nema formulu
+function _duzPoly(t){
+  var d=0;
+  for(var i=1;i<t.length;i++) d+=Math.hypot(t[i][0]-t[i-1][0], t[i][1]-t[i-1][1]);
+  return d;
+}
+function _lukTacke(L,korak){
+  var q=_lukLuci(L,korak);
+  return q.van.concat(q.unu.slice().reverse());
 }
 // Bounding box isjecka - to je mjera table koja se stvarno trosi
 function _lukBB(L){
@@ -9626,12 +9734,38 @@ function _lukDuzina(L){
 }
 // Duzine pojedinih strana: A = vanjski luk, D = unutrasnji, B i C = celo
 function _lukStrane(L){
+  // Duzine se mjere po UZORKOVANOJ liniji - tako rade i kruznica i elipsa
+  var q=_lukLuci(L,0.5);
+  var v=q.van, u=q.unu;
+  function celo(p1,p2){ return Math.round(Math.hypot(p2[0]-p1[0], p2[1]-p1[1])); }
   return {
-    'A-zad':  Math.round(L.rv*(L.ug*Math.PI/180)),
-    'D-pred': Math.round(L.ru*(L.ug*Math.PI/180)),
-    'B-lev':  Math.round(L.rv-L.ru),
-    'C-des':  Math.round(L.rv-L.ru)
+    'A-zad':  Math.round(_duzPoly(v)),
+    'D-pred': Math.round(_duzPoly(u)),
+    'B-lev':  celo(v[0], u[0]),
+    'C-des':  celo(v[v.length-1], u[u.length-1])
   };
+}
+// Ugao pod kojim celo sijece radijus - to pogon treba za postavku sjeciva
+// Ugao koji CELO gradi sa VANJSKOM ivicom na tom kraju.
+// 90 stepeni = pravi rez (celo upravno na luk). Manje ili vise od toga
+// znaci da je kraj zakosen - to je broj koji pogon postavlja na masini.
+function _lukUgaoCela(L,kraj){
+  var q=_lukLuci(L,0.5), v=q.van, u=q.unu;
+  var naB=(kraj==='B');
+  var p1=naB?v[0]:v[v.length-1];
+  var p2=naB?u[0]:u[u.length-1];
+  // tangenta vanjskog luka, usmjerena U KOMAD
+  var t=naB?v[1]:v[v.length-2];
+  var tx=t[0]-p1[0], ty=t[1]-p1[1];
+  var cx=p2[0]-p1[0], cy=p2[1]-p1[1];
+  var cos=(tx*cx+ty*cy)/((Math.hypot(tx,ty)||1)*(Math.hypot(cx,cy)||1));
+  return Math.round(Math.acos(Math.max(-1,Math.min(1,cos)))*180/Math.PI*10)/10;
+}
+// Odstupanje od pravog reza, sa predznakom
+function _lukOtklon(L,kraj){
+  var a=_lukUgaoCela(L,kraj);
+  var d=Math.round((a-90)*10)/10;
+  return (d>0?'+':'')+d;
 }
 // Uskladi a/b sa lukom - poziva se poslije svake izmjene poluprecnika/ugla
 function _lukUskladi(p){
@@ -9649,6 +9783,17 @@ function pozLukPolje(i,polje,val){
   if(polje==='ru'&&p.luk.ru>=p.luk.rv) p.luk.rv=p.luk.ru+100;
   if(polje==='rv'&&p.luk.rv<=p.luk.ru) p.luk.ru=Math.max(0,p.luk.rv-100);
   if(polje==='ug') p.luk.ug=Math.max(1,Math.min(360,p.luk.ug));
+  // Zakosenje ne smije pojesti vise od polovine luka na jednom kraju
+  if(polje==='sp'){
+    // Otvor manji od prirodnog bi izvrnuo oblik; 0 znaci "kruznica"
+    var pr=_lukPrirodnaSirina({rv:p.luk.rv,ug:p.luk.ug});
+    if(p.luk.sp>0&&p.luk.sp<pr*0.5) p.luk.sp=Math.round(pr*0.5);
+    if(!p.luk.sp) delete p.luk.sp;
+  }
+  if(polje==='kb'||polje==='kc'){
+    var gr=Math.max(0,(p.luk.ug||90)/2-0.5);
+    p.luk[polje]=Math.max(0,Math.min(gr,p.luk[polje]));
+  }
   _lukUskladi(p);
   syncToActive(); buildPozicijeTabelu(); refresh();
 }
@@ -9925,7 +10070,12 @@ function _crtajStranuPozicija(ctx,W,lista,m,strIdx,brStr,svi){
       ctx.save();
       ctx.fillStyle='#1d8a6e'; ctx.font='bold 9px Segoe UI,Arial';
       ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText('R'+_Lc.rv+' / R'+_Lc.ru+' \u00b7 '+_Lc.ug+'\u00b0', A/2, B*0.62);
+      var _opisL='R'+_Lc.rv+' / R'+_Lc.ru+' \u00b7 '+_Lc.ug+'\u00b0';
+      if(_Lc.sp) _opisL+=' \u00b7 otvor '+_Lc.sp+' mm';
+      if(_Lc.kb||_Lc.kc)
+        _opisL+='  (kraj '+(_Lc.kb?('B '+_Lc.kb+'\u00b0'):'')
+          +(_Lc.kb&&_Lc.kc?', ':'')+(_Lc.kc?('C '+_Lc.kc+'\u00b0'):'')+')';
+      ctx.fillText(_opisL, A/2, B*0.62);
       ctx.restore();
       _kotaPrepreka(A/2,B*0.62,30);
     } else {
@@ -9952,16 +10102,52 @@ function _crtajStranuPozicija(ctx,W,lista,m,strIdx,brStr,svi){
       }
     });
 
-    // Obrada ivica - puna linija, kod djelimicne samo pocetni dio
+    // Obrada ivica - puna linija, kod djelimicne samo pocetni dio.
+    // Kod LUCNE klupice A i D nisu prave nego lukovi, pa se linija obrade
+    // crta po tackama luka umjesto kao duz od ugla do ugla.
     var geo={'D-pred':[0,0,A,0],'B-lev':[0,B,0,0],'C-des':[A,B,A,0],'A-zad':[0,B,A,B]};
+    var _lukPts=null;
+    if(_Lc){
+      var _q=_lukLuci(_Lc,2), _bb2=_lukBB(_Lc);
+      var _pre=function(t){ return t.map(function(q){
+        return [(q[0]-_bb2.mnx)*sc, (q[1]-_bb2.mny)*sc]; }); };
+      // A = vanjski luk (zadnja), D = unutrasnji (prednja)
+      _lukPts={'A-zad':_pre(_q.van), 'D-pred':_pre(_q.unu)};
+      var _av=_lukPts['A-zad'], _du=_lukPts['D-pred'];
+      geo['B-lev']=[_av[0][0],_av[0][1],_du[0][0],_du[0][1]];
+      geo['C-des']=[_av[_av.length-1][0],_av[_av.length-1][1],
+                    _du[_du.length-1][0],_du[_du.length-1][1]];
+    }
+    // Crta obradu po nizu tacaka, sa istim uzorkom kakav ima drawIv
+    function _ivPoLuku(pts,od,doK,prof){
+      if(!pts||pts.length<2) return;
+      var i0=Math.max(0,Math.floor(od*(pts.length-1)));
+      var i1=Math.min(pts.length-1,Math.ceil(doK*(pts.length-1)));
+      for(var q=i0;q<i1;q++)
+        drawIv(ctx,pts[q][0],pts[q][1],pts[q+1][0],pts[q+1][1],prof);
+    }
     strane.forEach(function(sd){
       var pr=_pozProf(p,sd.id);
-      var puna=(sd.id==='A-zad'||sd.id==='D-pred')?(p.a||0):(p.b||0);
+      var puna=_Lc ? (_lukStrane(_Lc)[sd.id]||0)
+                   : ((sd.id==='A-zad'||sd.id==='D-pred')?(p.a||0):(p.b||0));
       var d=_pozBd(p,sd.id);
       var dj=(d>0&&d<puna);
       var g=geo[sd.id];
+      var _pts=_lukPts&&_lukPts[sd.id];
       if(pr&&pr!=='none'){
-        if(dj){
+        if(_pts){
+          // LUCNA strana - prati krivinu
+          var dio2=dj?Math.max(0.12,Math.min(0.85,d/Math.max(puna,1))):1;
+          _ivPoLuku(_pts,0,dio2,pr);
+          if(dj){
+            ctx.save(); ctx.strokeStyle='#e8a800'; ctx.lineWidth=2.4; ctx.setLineDash([4,3]);
+            ctx.beginPath();
+            var _s0=Math.floor(dio2*(_pts.length-1));
+            ctx.moveTo(_pts[_s0][0],_pts[_s0][1]);
+            for(var q2=_s0+1;q2<_pts.length;q2++) ctx.lineTo(_pts[q2][0],_pts[q2][1]);
+            ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+          }
+        } else if(dj){
           var dio=Math.max(0.12,Math.min(0.85,d/Math.max(puna,1)));
           var mx=g[0]+(g[2]-g[0])*dio, my=g[1]+(g[3]-g[1])*dio;
           drawIv(ctx,g[0],g[1],mx,my,pr);
@@ -9984,11 +10170,26 @@ function _crtajStranuPozicija(ctx,W,lista,m,strIdx,brStr,svi){
         lx=Math.min(g[0],g[2])-7;     lw=14;
         ly=Math.min(g[1],g[3])+uvuci; lh=Math.max(10,Math.abs(g[3]-g[1])-uvuci*2);
       }
-      _regClickRect(lx,ly,lw,lh,'.poz-red[data-pi="'+i+'"]',_pozIvEditDesc(i,sd.id));
+      if(_pts){
+        // LUCNA strana - zona prati krivinu: niz malih kvadrata duz luka
+        var _kor=Math.max(1,Math.floor(_pts.length/24));
+        for(var z=0;z<_pts.length;z+=_kor){
+          var zp=_pts[z];
+          _regClickRect(zp[0]-7,zp[1]-7,14,14,'.poz-red[data-pi="'+i+'"]',
+            _pozIvEditDesc(i,sd.id));
+        }
+      } else {
+        _regClickRect(lx,ly,lw,lh,'.poz-red[data-pi="'+i+'"]',_pozIvEditDesc(i,sd.id));
+      }
       // Slovo strane + simbol obrade. Uvlaci se KA CENTRU samo ako ima
       // mjesta; kod uskih pozicija (npr. klupica 1200x120) bi se gornja i
       // donja oznaka preklopile, pa se tada izbacuju VAN ploce.
       var mxs=(g[0]+g[2])/2, mys=(g[1]+g[3])/2;
+      if(_pts){
+        // sredina LUKA, malo uvucena ka unutra
+        var _sr=_pts[Math.floor(_pts.length/2)];
+        mxs=_sr[0]; mys=_sr[1];
+      }
       var dxs=A/2-mxs, dys=B/2-mys, dls=Math.hypot(dxs,dys)||1;
       var vodoravna=(sd.id==='A-zad'||sd.id==='D-pred');
       var prostor=vodoravna?B:A;
