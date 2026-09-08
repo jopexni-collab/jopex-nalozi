@@ -4740,8 +4740,21 @@ function buildPozicijeTabelu(){
           +'style="width:56px;font:inherit;font-size:11px;padding:2px 4px;'
           +'border:1px solid #dde2ea;border-radius:3px;text-align:right"'
           +' onchange="fixComma(this);pozLukEks('+i+',this.value)">'
-          +'<span style="font-size:9px;color:#8a93a3">mm \u2014 pomak centra iznad '
-          +'linije spoja (0 = polukrug)</span>'
+          +'<span style="font-size:9px;color:#8a93a3">mm \u2014 koliko je rez ISPOD '
+          +'centra (0 = kroz centar)</span>'
+          +'<div style="width:100%"></div>'
+          +'<label style="font-size:10px;color:#6b7a8d">Ravne noge B</label>'
+          +'<input type="text" inputmode="decimal" value="'+(_L.nb||0)+'" '
+          +'style="width:52px;font:inherit;font-size:11px;padding:2px 4px;'
+          +'border:1px solid #dde2ea;border-radius:3px;text-align:right"'
+          +' onchange="fixComma(this);pozLukPolje('+i+',\'nb\',this.value)">'
+          +'<label style="font-size:10px;color:#6b7a8d">C</label>'
+          +'<input type="text" inputmode="decimal" value="'+(_L.nc||0)+'" '
+          +'style="width:52px;font:inherit;font-size:11px;padding:2px 4px;'
+          +'border:1px solid #dde2ea;border-radius:3px;text-align:right"'
+          +' onchange="fixComma(this);pozLukPolje('+i+',\'nc\',this.value)">'
+          +'<span style="font-size:9px;color:#8a93a3">mm \u2014 pravo navi\u0161e '
+          +'od krajeva luka</span>'
           +'<label style="font-size:10px;color:#6b7a8d">Ugao</label>'
           +'<input type="text" inputmode="decimal" value="'+_L.ug+'" style="width:48px;font:inherit;'
           +'font-size:11px;padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;text-align:right"'
@@ -4808,6 +4821,9 @@ function buildPozicijeTabelu(){
           +_lukRasponPomaka(_L,'B').min+'\u2013+'+_lukRasponPomaka(_L,'B').max+' mm</span>'
           +'<div style="width:100%;font-size:9.5px;color:#1d8a6e;padding-top:3px">'
           +'\u0161irina trake '+(_L.rv-_L.ru)+' mm \u00b7 e '+_lukEks(_L)+' mm'
+          +' \u00b7 dubina luka '+_lukDubina(_L)+' mm'
+          +((_L.nb||_L.nc)?(' \u00b7 ukupna visina '
+            +(_lukDubina(_L)+Math.max(_L.nb||0,_L.nc||0))+' mm'):'')
           +' \u00b7 vanjski luk '+_stL['A-zad']+' mm \u00b7 '
           +'unutra\u0161nji '+_stL['D-pred']+' mm \u00b7 \u010delo B '+_stL['B-lev']+' mm'
           +(_L.kb?(' \u2014 unutra\u0161nja ivica '+(_L.kb>0?'uvu\u010dena':'izvu\u010dena')
@@ -8699,7 +8715,9 @@ function buildPozicijeRN(){
     var L=_pozLuk(p); if(!L) return '';
     var st=_lukStrane(L);
     var t='Rs'+L.rv+'/Ru'+L.ru+' \u00b7 d'+(L.rv-L.ru)+' \u00b7 e'+_lukEks(L)
-      +' \u00b7 '+L.ug+'\u00b0 \u00b7 luk '+st['A-zad']+'/'+st['D-pred']+' mm';
+      +' \u00b7 '+L.ug+'\u00b0 \u00b7 dubina '+_lukDubina(L)
+      +' \u00b7 luk '+st['A-zad']+'/'+st['D-pred']+' mm'
+      +((L.nb||L.nc)?(' \u00b7 noge '+(L.nb||0)+'/'+(L.nc||0)+' mm'):'');
     if(L.sp) t+=' \u00b7 otvor '+L.sp+' mm (splo\u0161teno)';
     ['B','C'].forEach(function(kr){
       var sid=(kr==='B')?'B-lev':'C-des';
@@ -9742,7 +9760,9 @@ function _pozLuk(p){
   // SPLJOSTENJE: stvarni otvor je cesto siri nego sto daje kruznica.
   // Ako je zadan, luk se razvlaci po sirini u elipsu. 0 = čista kružnica.
   var sp=Math.max(0,_broj(L.sp)||0);
-  return {rv:rv, ru:ru, ug:ug, kb:kb, kc:kc, sp:sp};
+  // Ravne noge na krajevima
+  var nb=Math.max(0,_broj(L.nb)||0), nc=Math.max(0,_broj(L.nc)||0);
+  return {rv:rv, ru:ru, ug:ug, kb:kb, kc:kc, sp:sp, nb:nb, nc:nc};
 }
 // Tjemena isjecka - uzorkuje se luk, pa se iz njih racuna sve ostalo.
 // Isjecak je simetrican oko USPRAVNE ose, otvor gleda nadolje.
@@ -9787,6 +9807,12 @@ function _lukKx(L){
   return L.sp/prir;
 }
 // Vanjski i unutrasnji luk kao nizovi tacaka (vec spljosteni)
+// Ravne noge na krajevima luka. Projekti ih cesto daju kao "od oba kraja
+// luka povuci vertikale navise" - komad se nastavlja pravo poslije luka.
+// Duzina je u mm; 0 znaci bez noge.
+function _lukNoge(L){
+  return {b:Math.max(0,_broj(L.nb)||0), c:Math.max(0,_broj(L.nc)||0)};
+}
 function _lukLuci(L,korak){
   var n=Math.max(24,Math.ceil((L.ug/(korak||2))));
   var pola=L.ug*Math.PI/180/2, rad=Math.PI/180;
@@ -9801,6 +9827,18 @@ function _lukLuci(L,korak){
   for(i=0;i<=n;i++){
     var b=u1+(u2-u1)*i/n;
     unu.push([L.ru*Math.sin(b)*kx, -L.ru*Math.cos(b)]);
+  }
+  // Ravne noge: USPRAVNO navise od krajeva luka
+  // Noge idu OD luka, ne ka njemu. Tjeme luka je na -R, krajevi su nize,
+  // pa noga produzava jos nize (+y).
+  var ng=_lukNoge(L);
+  if(ng.b>0){
+    van.unshift([van[0][0], van[0][1]+ng.b]);
+    unu.unshift([unu[0][0], unu[0][1]+ng.b]);
+  }
+  if(ng.c>0){
+    van.push([van[van.length-1][0], van[van.length-1][1]+ng.c]);
+    unu.push([unu[unu.length-1][0], unu[unu.length-1][1]+ng.c]);
   }
   return {van:van, unu:unu};
 }
@@ -9923,17 +9961,19 @@ function pozLukTetiva(i,polje,val){
 }
 // ── EKSCENTRICITET ───────────────────────────────────────────────
 // Neki projektanti zadaju luk preko pomaka centra iznad linije spoja.
-// Veza:  e = -Rs * cos(ugao/2),  odnosno  ugao = 2*arccos(-e/Rs)
-//   e = 0   polukrug (centar na liniji spoja)
-//   e > 0   centar IZNAD linije, luk prelazi 180 stepeni
-//   e < 0   centar ISPOD, luk je manji od 180
+// Veza:  e = Rs * cos(ugao/2),  odnosno  ugao = 2*arccos(e/Rs)
+//   e = 0   polukrug (rez kroz centar)
+//   e > 0   rez je e ISPOD centra, luk je MANJI od 180 (dubina Rs-e)
+//   e < 0   rez je iznad centra, luk prelazi 180
 function _lukEks(L){
-  return Math.round(-L.rv*Math.cos(L.ug*Math.PI/360));
+  return Math.round(L.rv*Math.cos(L.ug*Math.PI/360));
 }
 function _lukUgaoIzEks(rv,e){
-  var c=Math.max(-1,Math.min(1,-_broj(e)/rv));
+  var c=Math.max(-1,Math.min(1,_broj(e)/rv));
   return Math.round(2*Math.acos(c)*180/Math.PI*10)/10;
 }
+// Dubina luka: od linije reza do tjemena. Rs - e.
+function _lukDubina(L){ return Math.round(L.rv-_lukEks(L)); }
 function pozLukEks(i,val){
   var p=pozicije[i]; if(!p||!p.luk) return;
   var L=_pozLuk(p); if(!L) return;
