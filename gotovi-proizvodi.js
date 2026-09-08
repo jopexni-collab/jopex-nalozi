@@ -1194,7 +1194,7 @@ router.get('/:id/cijena', async (req, res) => {
       /* Sto sa VISE PLOCA — svaka ima svoju mjeru, pa se oznacavaju A, B, C...
          Bez toga bi u katalogu stajala samo jedna mjera, a kupac bi mislio da je sto
          manji nego sto jeste. */
-      const ploce = [...obavezne, ...komb]
+      const ploce = [...obavezne, ...izabrane]
         .filter(st => zajedno(st) && (st.sirina_kom || st.visina_kom))
         .map((st, i) => ({
           oznaka: String.fromCharCode(65 + i),          // A, B, C...
