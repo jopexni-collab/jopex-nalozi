@@ -4438,9 +4438,15 @@ function buildPozicijeTabelu(){
     +'<label style="font-size:11px;color:#1d8a6e;font-weight:600;display:flex;'
     +'align-items:center;gap:5px;cursor:pointer"><input type="checkbox"'
     +(_imaLuka()?' checked':'')+' onchange="pozSveLuk(this.checked)"> '
-    +'lu\u010dne klupice (isje\u010dak prstena)</label>'
-    +'<span style="font-size:9.5px;color:#8a93a3">R vanjski, R unutra\u0161nji i ugao '
-    +'zadaju se po poziciji (\u270e)</span></div>';
+    +'sve pozicije su lu\u010dne</label>'
+    +(function(){
+      var b=_brojLucnih();
+      if(b.lucnih&&b.lucnih<b.ukupno)
+        return '<span style="font-size:9.5px;color:#c0392b;font-weight:600">'
+          +b.lucnih+' od '+b.ukupno+' je lu\u010dno</span>';
+      return '<span style="font-size:9.5px;color:#8a93a3">prebacuje sve odjednom \u2014 '
+        +'mjere se zadaju po poziciji, na \u270e</span>';
+    })()+'</div>';
   strane.forEach(function(sd){
     // Sta je trenutno postavljeno za sve (ako su svi redovi isti)
     // Prikazuje se PODRAZUMIJEVANA vrijednost (ivSt / pozBdDef), a narandzasti
@@ -4700,7 +4706,8 @@ function buildPozicijeTabelu(){
         +'<b style="font-size:11px;color:#1d8a6e;min-width:13px">\u25dc</b>'
         +'<label style="font-size:10px;color:#8a93a3;display:flex;align-items:center;gap:4px;'
         +'cursor:pointer"><input type="checkbox"'+(_L?' checked':'')
-        +' onchange="pozLukUkljuci('+i+',this.checked)"> lu\u010dna (isje\u010dak prstena)</label>'
+        +' onchange="pozLukUkljuci('+i+',this.checked)"> ova pozicija je lu\u010dna</label>'
+        +'<span style="font-size:9px;color:#8a93a3">isje\u010dak prstena</span>'
         +'</div>';
       if(_L){
         var _bbL=_lukBB(_L), _stL=_lukStrane(_L);
@@ -9709,6 +9716,11 @@ function pozSveLuk(da){
 }
 function _imaLuka(){
   return (typeof pozicije!=='undefined'&&pozicije||[]).some(function(p){ return !!_pozLuk(p); });
+}
+// Koliko je pozicija lucno - da gornja kvacica moze pokazati i "neke"
+function _brojLucnih(){
+  var poz=(typeof pozicije!=='undefined'&&pozicije)||[];
+  return {lucnih:poz.filter(function(p){ return !!_pozLuk(p); }).length, ukupno:poz.length};
 }
 function pozLukUkljuciTiho(i,da){
   var p=pozicije[i]; if(!p) return;
