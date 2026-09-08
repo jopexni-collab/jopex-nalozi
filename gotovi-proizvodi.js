@@ -964,13 +964,14 @@ router.post('/:id/snimi-cijene', async (req, res) => {
       await client.query(
         `INSERT INTO gotov_cjenovnik
            (gotov_id, cjenovnik_id, kombinacija, opis_izbora, dimenzija, povrsina_m2, cijena, valuta,
-            objekt_id, objekt_naziv, tip_kupca_id, tip_kupca, popust_posto, snimio_id, snimio_ime)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+            objekt_id, objekt_naziv, tip_kupca_id, tip_kupca, popust_posto, snimio_id, snimio_ime, ploce)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
         [req.params.id, cjenovnikId, r.kombinacija || null, r.opis_izbora || null, r.dimenzija || null,
          broj(r.povrsina_m2), broj(r.cijena), req.body?.valuta || 'KM',
          parseInt(req.body?.objekt_id) || null, req.body?.objekt_naziv || null,
          parseInt(req.body?.tip_kupca_id) || null, req.body?.tip_kupca || null,
-         broj(r.popust_posto), u.id, u.ime_prezime]
+         broj(r.popust_posto), u.id, u.ime_prezime,
+         Array.isArray(r.ploce) && r.ploce.length ? JSON.stringify(r.ploce) : null]
       );
     }
     await client.query('UPDATE gotovi_proizvodi SET cjenovnik_kada=now() WHERE id=$1', [req.params.id]);
@@ -1189,11 +1190,26 @@ router.get('/:id/cijena', async (req, res) => {
          Kupcu se prikazuje i puna cijena i usteda, jer to i jeste smisao popusta. */
       const popust = osnovica * (popustPosto / 100);
       const konacna = zaokruziNa(osnovica - popust);
+
+      /* Sto sa VISE PLOCA — svaka ima svoju mjeru, pa se oznacavaju A, B, C...
+         Bez toga bi u katalogu stajala samo jedna mjera, a kupac bi mislio da je sto
+         manji nego sto jeste. */
+      const ploce = [...obavezne, ...komb]
+        .filter(st => zajedno(st) && (st.sirina_kom || st.visina_kom))
+        .map((st, i) => ({
+          oznaka: String.fromCharCode(65 + i),          // A, B, C...
+          mjera: `${Math.round(st.sirina_kom || 0)}×${Math.round(st.visina_kom || 0)}`,
+          artikal: st.roba_naziv || st.opis || '',
+        }));
+
       return {
+        ploce: ploce.length > 1 ? ploce : null,
         dimenzija_id: dim?.id || null,
         sirina: dim ? +dim.sirina : null,
         visina: dim ? +dim.visina : null,
-        dimenzija: dim ? (dim.naziv || (dim.mjere && dim.oblik
+        dimenzija: ploce.length > 1
+          ? ploce.map(p => `${p.oznaka}: ${p.mjera}`).join(' + ')
+          : dim ? (dim.naziv || (dim.mjere && dim.oblik
           ? opisOblika(dim.oblik, dim.mjere)
           : (dim.oblik === 'krug' || dim.precnik
              ? `Ø${Math.round(dim.precnik)}`

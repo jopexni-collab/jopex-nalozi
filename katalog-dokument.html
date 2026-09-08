@@ -202,6 +202,14 @@
 .gotov-ostali-nas{font-size:10px;color:#8b96a5;font-weight:700;letter-spacing:.2px;}
 .gotov-ostali-nap{font-size:10px;color:#b8860b;}
 .gotov-ostali-tacka{color:#c3c9d1;font-size:10px;}
+
+/* Sto sa vise ploca — svaka svoja mjera, oznacene A i B */
+.gotov-ploce{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;}
+.gotov-ploca{display:inline-flex;align-items:baseline;gap:5px;font-size:11px;}
+.pl-oznaka{display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;
+  background:#1f3864;color:#fff;border-radius:3px;font-size:9px;font-weight:800;}
+.pl-mjera{font-weight:700;color:#1a2733;}
+.pl-artikal{color:#8b96a5;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -500,7 +508,8 @@ function gotovKartica(p){
   for(const x of cijene){
     const k = x.dimenzija || '—';
     const v = Number(x.cijena) || 0;
-    if(!poMjeri[k] || v < poMjeri[k].cijena) poMjeri[k] = { cijena: v, izvedba: x.opis_izbora };
+    if(!poMjeri[k] || v < poMjeri[k].cijena)
+      poMjeri[k] = { cijena: v, izvedba: x.opis_izbora, ploce: x.ploce || null };
   }
   const mjere = Object.keys(poMjeri);
   const viseIzvedbi = new Set(cijene.map(x=>x.opis_izbora)).size > 1;
@@ -534,9 +543,18 @@ function gotovKartica(p){
                 ${mjere.map(m=>{
                   return `
                   <div class="gotov-k-red">
-                    <span class="gotov-k-mjera">${esc(m)}</span>
+                    <span class="gotov-k-mjera">${poMjeri[m].ploce ? T('mjera') : esc(m)}</span>
                     <span class="gotov-k-iznos">${fmv(poMjeri[m].cijena, val)}</span>
                   </div>
+                  ${/* Sto sa vise ploca — svaka svoja mjera, oznacene A i B. */''}
+                  ${poMjeri[m].ploce ? `<div class="gotov-ploce">
+                    ${poMjeri[m].ploce.map(p=>`
+                      <div class="gotov-ploca">
+                        <span class="pl-oznaka">${esc(p.oznaka)}</span>
+                        <span class="pl-mjera">${esc(p.mjera)}</span>
+                        ${p.artikal ? `<span class="pl-artikal">${esc(p.artikal)}</span>` : ''}
+                      </div>`).join('')}
+                  </div>` : ''}
                   ${viseIzvedbi && poMjeri[m].izvedba
                     ? `<div class="gotov-k-izvedba">${esc(poMjeri[m].izvedba)}</div>` : ''}`;
                 }).join('')}

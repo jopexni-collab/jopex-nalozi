@@ -66,7 +66,7 @@ router.get('/:token', async (req, res) => {
 
       const cijene = kat.sa_cijenama
         ? (await pool.query(
-            `SELECT gotov_id, opis_izbora, dimenzija, povrsina_m2, cijena, valuta
+            `SELECT gotov_id, opis_izbora, dimenzija, povrsina_m2, cijena, valuta, ploce
              FROM gotov_cjenovnik WHERE gotov_id = ANY($1::int[])
              ORDER BY dimenzija, opis_izbora`, [kat.gotovi_ids]
           )).rows

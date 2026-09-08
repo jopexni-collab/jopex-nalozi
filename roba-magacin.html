@@ -6192,6 +6192,7 @@ async function gprSnimiCijene(pid, tiho){
           opis_izbora: (x.izbor||[]).map(y=>y.naziv).join(' + '),
           dimenzija: x.dimenzija, povrsina_m2: x.povrsina_m2,
           cijena: x.cijena, popust_posto: x.popust_posto,
+          ploce: x.ploce || null,   // sto sa vise ploca — A, B...
         })),
       }),
     });
