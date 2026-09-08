@@ -557,7 +557,7 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
         Crtež je <b>samo polazna tačka</b>: poslije ispravi mjere i zaključaj prave uglove.</div>
       <div class="r2" style="margin-bottom:6px">
         <div class="fg"><label>Najduža strana (mm)</label>
-          <input type="number" id="sk-najduza" value="3000" min="100" step="10"></div>
+          <input type="text" inputmode="decimal" id="sk-najduza" value="3000" min="100" step="10"></div>
         <div class="fg" style="display:flex;align-items:flex-end">
           <button type="button" onclick="skicaOcisti()"
             style="width:100%;font:inherit;font-size:11px;padding:7px;border:1px solid #dde2ea;
@@ -2964,7 +2964,7 @@ function gi(id){var e=ge(id);if(!e)return 0;return _broj(e.value);}
 // U polju se ZADRZAVA zarez kako ga korisnik kuca; pretvaranje u broj radi
 // _broj(). Ranije je fixComma odmah mijenjao zarez u tacku, pa je izgledalo
 // kao da polje "ne prima" zarez. Polja moraju biti type="text"
-// inputmode="decimal" - <input type="number"> odbija zarez i isprazni se.
+// inputmode="decimal" - <input type="text" inputmode="decimal"> odbija zarez i isprazni se.
 function fixComma(el){
   if(!el) return;
   var v=String(el.value||'');
@@ -4457,7 +4457,7 @@ function buildPozicijeTabelu(){
       +'flex:1;min-width:118px;background:'+(sviIsti?'#fff':'#fff8f0')+'">'
       +optProf(zaSve,null)+'</select>'
       +(sviIsti?'':'<span style="font-size:9.5px;color:#e67e22" title="Neki redovi imaju svoj izbor">\u26a0</span>')
-      +'<input type="number" min="0" placeholder="cijela" value="'+(bdDef||'')+'"'
+      +'<input type="text" inputmode="decimal" min="0" placeholder="cijela" value="'+(bdDef||'')+'"'
       +' title="Obradi samo prvih N mm (vidljivi dio)"'
       +' onchange="pozSveBocna(\''+sd.id+'\',this.value)" style="width:70px;font-size:11px;'
       +'padding:3px 5px;border:1px solid '+(bdIsti?'#dde2ea':'#e67e22')+';border-radius:4px;text-align:right">'
@@ -4595,7 +4595,7 @@ function buildPozicijeTabelu(){
         +' oninput="fixComma(this);zidSirina('+z.zid+',this.value)">'
         +'<span style="font-size:10px;color:#8a93a3">mm</span>'
         +'<label style="font-size:10px;color:#6b7a8d;margin-left:4px">Ukupno</label>'
-        +'<input type="number" min="1" id="zid-uk-'+z.zid+'" value="'+ukD+'" style="width:74px;font:inherit;'
+        +'<input type="text" inputmode="decimal" min="1" id="zid-uk-'+z.zid+'" value="'+ukD+'" style="width:74px;font:inherit;'
         +'font-size:11.5px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;text-align:right">'
         +'<span style="font-size:10px;color:#8a93a3">mm</span>'
         +'<button type="button" onclick="podijeliZid('+z.zid+')" style="font:inherit;font-size:10.5px;'
@@ -4675,7 +4675,7 @@ function buildPozicijeTabelu(){
            +'padding:0 2px">\ud83d\udd12</button>') : '')
       +'<span>\u00d7</span>'
       +(jeZidnaKlupica()
-        ? ('<input type="number" value="'+(p.b||0)+'" readonly title="\u0160irina se mijenja na nivou zida"'
+        ? ('<input type="text" inputmode="decimal" value="'+(p.b||0)+'" readonly title="\u0160irina se mijenja na nivou zida"'
            +' style="background:#f0f2f5;color:#8a93a3;cursor:not-allowed">')
         : ('<input type="text" inputmode="decimal" min="1" value="'+(p.b||0)+'" data-poz="'+i+'" data-pol="b"'
            +' onkeydown="pozEnter(event,'+i+',\'b\')" oninput="fixComma(this);pozPolje('+i+',\'b\',this.value)">'))
@@ -4720,6 +4720,24 @@ function buildPozicijeTabelu(){
           +' onchange="fixComma(this);pozLukPolje('+i+',\'ug\',this.value)">'
           +'<span style="font-size:10px;color:#8a93a3">\u00b0</span>'
           +'<div style="width:100%;height:1px;background:#bde3d6;margin:4px 0"></div>'
+          +'<div style="width:100%;height:1px;background:#bde3d6;margin:4px 0"></div>'
+          +'<div style="width:100%;font-size:9.5px;color:#6b7a8d;font-weight:600;'
+          +'padding-bottom:2px">Ili unesi mjereno na terenu \u2014 polupre\u010dnik se ra\u010duna</div>'
+          +'<label style="font-size:10px;color:#6b7a8d">Tetiva</label>'
+          +'<input type="text" inputmode="decimal" value="'+((_L._t&&_L._t.c)||'')+'" '
+          +'placeholder="'+_lukTetivaIz(_L).tetiva+'" style="width:62px;font:inherit;'
+          +'font-size:11px;padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;'
+          +'text-align:right" onchange="fixComma(this);pozLukTetiva('+i+',\'c\',this.value)">'
+          +'<label style="font-size:10px;color:#6b7a8d">Apotema (visina luka)</label>'
+          +'<input type="text" inputmode="decimal" value="'+((_L._t&&_L._t.h)||'')+'" '
+          +'placeholder="'+_lukTetivaIz(_L).strelica+'" style="width:62px;font:inherit;'
+          +'font-size:11px;padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;'
+          +'text-align:right" onchange="fixComma(this);pozLukTetiva('+i+',\'h\',this.value)">'
+          +'<div style="width:100%;font-size:9px;color:#8a93a3;padding-bottom:2px">'
+          +'sada: tetiva '+_lukTetivaIz(_L).tetiva+' \u00b7 visina luka '
+          +_lukTetivaIz(_L).strelica+' \u00b7 od sredi\u0161ta do tetive '
+          +_lukTetivaIz(_L).apotema+' mm</div>'
+          +'<div style="width:100%;height:1px;background:#bde3d6;margin:4px 0"></div>'
           +'<label style="font-size:10px;color:#6b7a8d">Otvor (\u0161irina)</label>'
           +'<input type="text" inputmode="decimal" value="'+(_L.sp||'')+'" '
           +'placeholder="'+_lukPrirodnaSirina(_L)+'" style="width:62px;font:inherit;'
@@ -4728,24 +4746,46 @@ function buildPozicijeTabelu(){
           +'<span style="font-size:9px;color:#8a93a3">prazno = kru\u017enica ('
           +_lukPrirodnaSirina(_L)+' mm), ve\u0107e = splo\u0161teno</span>'
           +'<div style="width:100%;height:1px;background:#bde3d6;margin:4px 0"></div>'
-          +'<label style="font-size:10px;color:#6b7a8d">Zako\u0161en kraj B</label>'
-          +'<input type="text" inputmode="decimal" value="'+(_L.kb||0)+'" style="width:44px;'
-          +'font:inherit;font-size:11px;padding:2px 4px;border:1px solid #dde2ea;'
-          +'border-radius:3px;text-align:right"'
-          +' onchange="fixComma(this);pozLukPolje('+i+',\'kb\',this.value)">'
+          +'<div style="width:100%;font-size:9.5px;color:#6b7a8d;font-weight:600;'
+          +'padding-bottom:2px">Ugao \u010dela prema vanjskoj ivici (90\u00b0 = pravi rez)</div>'
+          +'<label style="font-size:10px;color:#6b7a8d">kraj B</label>'
+          +'<input type="text" inputmode="decimal" value="'+_lukUgaoCela(_L,'B')+'" '
+          +'style="width:54px;font:inherit;font-size:11px;padding:2px 4px;'
+          +'border:1px solid #dde2ea;border-radius:3px;text-align:right"'
+          +' onchange="fixComma(this);pozLukUgaoCela('+i+',\'B\',this.value)">'
           +'<span style="font-size:10px;color:#8a93a3">\u00b0</span>'
           +'<label style="font-size:10px;color:#6b7a8d">kraj C</label>'
-          +'<input type="text" inputmode="decimal" value="'+(_L.kc||0)+'" style="width:44px;'
-          +'font:inherit;font-size:11px;padding:2px 4px;border:1px solid #dde2ea;'
-          +'border-radius:3px;text-align:right"'
-          +' onchange="fixComma(this);pozLukPolje('+i+',\'kc\',this.value)">'
-          +'<span style="font-size:9px;color:#8a93a3">skra\u0107uje unutra\u0161nji luk \u2014 za nastavak</span>'
+          +'<input type="text" inputmode="decimal" value="'+_lukUgaoCela(_L,'C')+'" '
+          +'style="width:54px;font:inherit;font-size:11px;padding:2px 4px;'
+          +'border:1px solid #dde2ea;border-radius:3px;text-align:right"'
+          +' onchange="fixComma(this);pozLukUgaoCela('+i+',\'C\',this.value)">'
+          +'<span style="font-size:10px;color:#8a93a3">\u00b0</span>'
+          +'<span style="font-size:9px;color:#8a93a3">mogu\u0107e '
+          +_lukRasponUgla(_L,'B').min+'\u2013'+_lukRasponUgla(_L,'B').max+'\u00b0</span>'
+          +'<div style="width:100%;font-size:9.5px;color:#6b7a8d;font-weight:600;'
+          +'padding:3px 0 2px">Ili pomak unutra\u0161nje ivice (+ uvu\u010dena, \u2212 izvu\u010dena)</div>'
+          +'<label style="font-size:10px;color:#6b7a8d">kraj B</label>'
+          +'<input type="text" inputmode="decimal" value="'+_lukPomakZnak(_L,'B')+'" '
+          +'style="width:60px;font:inherit;font-size:11px;padding:2px 4px;'
+          +'border:1px solid #dde2ea;border-radius:3px;text-align:right"'
+          +' onchange="fixComma(this);pozLukPomak('+i+',\'B\',this.value)">'
+          +'<span style="font-size:10px;color:#8a93a3">mm</span>'
+          +'<label style="font-size:10px;color:#6b7a8d">kraj C</label>'
+          +'<input type="text" inputmode="decimal" value="'+_lukPomakZnak(_L,'C')+'" '
+          +'style="width:60px;font:inherit;font-size:11px;padding:2px 4px;'
+          +'border:1px solid #dde2ea;border-radius:3px;text-align:right"'
+          +' onchange="fixComma(this);pozLukPomak('+i+',\'C\',this.value)">'
+          +'<span style="font-size:10px;color:#8a93a3">mm</span>'
+          +'<span style="font-size:9px;color:#8a93a3">mogu\u0107e '
+          +_lukRasponPomaka(_L,'B').min+'\u2013+'+_lukRasponPomaka(_L,'B').max+' mm</span>'
           +'<div style="width:100%;font-size:9.5px;color:#1d8a6e;padding-top:3px">'
           +'\u0161irina '+(_L.rv-_L.ru)+' mm \u00b7 vanjski luk '+_stL['A-zad']+' mm \u00b7 '
           +'unutra\u0161nji '+_stL['D-pred']+' mm \u00b7 \u010delo B '+_stL['B-lev']+' mm'
-          +(_L.kb?(' pod '+_lukUgaoCela(_L,'B')+'\u00b0'):'')
+          +(_L.kb?(' \u2014 unutra\u0161nja ivica '+(_L.kb>0?'uvu\u010dena':'izvu\u010dena')
+            +' '+_lukPomakCela(_L,'B').prava+' mm'):'')
           +' \u00b7 \u010delo C '+_stL['C-des']+' mm'
-          +(_L.kc?(' pod '+_lukUgaoCela(_L,'C')+'\u00b0'):'')
+          +(_L.kc?(' \u2014 unutra\u0161nja ivica '+(_L.kc>0?'uvu\u010dena':'izvu\u010dena')
+            +' '+_lukPomakCela(_L,'C').prava+' mm'):'')
           +' \u00b7 tabla '+_bbL.w+'\u00d7'+_bbL.h+' mm</div>'
           +'</div>';
       }
@@ -5963,7 +6003,7 @@ function buildDimTable(){
     rows+='<tr>'
       +'<td class="dim-lbl">'+dd.l+'</td>'
       +'<td class="dim-desc">'+dd.h+'</td>'
-      +'<td><input class="dim-inp" type="number" data-d="'+dd.l
+      +'<td><input class="dim-inp" type="text" inputmode="decimal" data-d="'+dd.l
       +'" value="'+(dims[dd.l]||600)+'" min="10"'
       +' oninput="saveDim(this);rebuildAll()"></td>'
       +'<td class="dim-unit">mm</td></tr>';
@@ -5975,7 +6015,7 @@ function buildDimTable(){
       var exprMap={'kosi':'|C-D|×1.41','auto':'A-|C-D|','A-diff':'A-|C-D|','C+D+diff':'C+|C-D|+D'};
       var expr=exprMap[sh.computed[k]]||sh.computed[k];'<td class="dim-lbl" style="color:var(--gold)">'+k+'</td>'
         +'<td class="dim-desc" style="color:var(--muted)">= '+expr+' (automatski)</td>'
-        +'<td><input class="dim-inp" id="computed-'+k+'" type="number" value="'+val
+        +'<td><input class="dim-inp" id="computed-'+k+'" type="text" inputmode="decimal" value="'+val
         +'" readonly style="background:#f8f6ee;color:var(--muted);cursor:default;border-color:#e0d8b0"></td>'
         +'<td class="dim-unit">mm</td></tr>';
     });
@@ -6062,7 +6102,7 @@ function buildExtSection(){
       +'<input type="checkbox"'+(on?' checked':'')+' data-side="'+end.id+'" onchange="extToggle(this)">'
       +'<span class="ivlbl">'+end.lbl+'</span>';
     if(on){
-      html+='<input type="number" value="'+hval+'" min="100" data-side="'+end.id+'"'
+      html+='<input type="text" inputmode="decimal" value="'+hval+'" min="100" data-side="'+end.id+'"'
         +' oninput="extHeightChanged(this)"'
         +' style="width:72px;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:12px;text-align:right">'
         +'<span style="font-size:10px;color:var(--muted)">mm</span>';
@@ -7686,7 +7726,7 @@ function _openInlineEditor(region,clientX,clientY){
       return '<option value="'+o.value+'"'+(String(o.value)===String(curVal)?' selected':'')+'>'+o.label+'</option>';
     }).join('')+'</select>';
   } else if(ed.kind==='number'){
-    html='<input id="inline-ed-input" type="number" autofocus value="'+(curVal!=null?curVal:0)+'"'
+    html='<input id="inline-ed-input" type="text" inputmode="decimal" autofocus value="'+(curVal!=null?curVal:0)+'"'
       +(ed.min!=null?' min="'+ed.min+'"':'')+(ed.max!=null?' max="'+ed.max+'"':'')+' step="'+(ed.step||1)+'">'
       +(ed.unit?'<span class="inline-ed-unit">'+ed.unit+'</span>':'');
   } else {
@@ -8617,8 +8657,12 @@ function buildPozicijeRN(){
     var st=_lukStrane(L);
     var t='R'+L.rv+'/'+L.ru+' \u00b7 '+L.ug+'\u00b0 \u00b7 luk '+st['A-zad']+'/'+st['D-pred']+' mm';
     if(L.sp) t+=' \u00b7 otvor '+L.sp+' mm (splo\u0161teno)';
-    t+=' \u00b7 \u010delo B '+st['B-lev']+' mm pod '+_lukUgaoCela(L,'B')+'\u00b0';
-    t+=' \u00b7 \u010delo C '+st['C-des']+' mm pod '+_lukUgaoCela(L,'C')+'\u00b0';
+    ['B','C'].forEach(function(kr){
+      var sid=(kr==='B')?'B-lev':'C-des';
+      t+=' \u00b7 \u010delo '+kr+' '+st[sid]+' mm pod '+_lukUgaoCela(L,kr)+'\u00b0';
+      var pm=_lukPomakZnak(L,kr);
+      if(pm) t+=' (unutra\u0161nja ivica '+(pm>0?'\u2212':'+')+Math.abs(pm)+' mm)';
+    });
     return t;
   }
   var h='<table class="rn-poz"><thead><tr>'
@@ -9563,12 +9607,12 @@ function drawK(ctx,W,H){
       // Horizontalni produzetak - kota linija horizontalno, na sredini visine (Y)
       var midY=(ay+by)/2;
       var k1x=ax+nx*hh, k1y=midY;
-      kota(ctx,ax+nx*2,midY,k1x,k1y,(extState[end.id+'_h']||900)+' mm',_extHeightEditDesc(end.id),'#ext-con input[type="number"][data-side="'+end.id+'"]');
+      kota(ctx,ax+nx*2,midY,k1x,k1y,(extState[end.id+'_h']||900)+' mm',_extHeightEditDesc(end.id),'#ext-con input[data-side="'+end.id+'"]');
     } else {
       // Vertikalni produzetak - kota linija vertikalno, na sredini sirine (X)
       var midX=(ax+bx)/2;
       var k1x2=midX, k1y2=ay+ny*hh;
-      kota(ctx,midX,ay+ny*2,k1x2,k1y2,(extState[end.id+'_h']||900)+' mm',_extHeightEditDesc(end.id),'#ext-con input[type="number"][data-side="'+end.id+'"]');
+      kota(ctx,midX,ay+ny*2,k1x2,k1y2,(extState[end.id+'_h']||900)+' mm',_extHeightEditDesc(end.id),'#ext-con input[data-side="'+end.id+'"]');
     }
     ctx.setLineDash([]);ctx.restore();
 
@@ -9646,8 +9690,11 @@ function _pozLuk(p){
   // Zakosen zavrsni rez: unutrasnji luk se skrati za toliko stepeni na
   // svakom kraju, pa celo ide ukoso umjesto radijalno. Sluzi za nastavak
   // na sljedeci komad ili na ravnu klupicu.
-  var kb=Math.max(0,Math.min(ug/2-0.5,_broj(L.kb)||0));   // lijevi kraj (B)
-  var kc=Math.max(0,Math.min(ug/2-0.5,_broj(L.kc)||0));   // desni kraj (C)
+  // Zakosenje smije biti i NEGATIVNO - tada je unutrasnji luk duzi od
+  // vanjskog, pa celo gradi ugao VECI od 90 stepeni.
+  var gr=ug/2-0.5;
+  var kb=Math.max(-gr,Math.min(gr,_broj(L.kb)||0));   // lijevi kraj (B)
+  var kc=Math.max(-gr,Math.min(gr,_broj(L.kc)||0));   // desni kraj (C)
   // SPLJOSTENJE: stvarni otvor je cesto siri nego sto daje kruznica.
   // Ako je zadan, luk se razvlaci po sirini u elipsu. 0 = čista kružnica.
   var sp=Math.max(0,_broj(L.sp)||0);
@@ -9708,6 +9755,18 @@ function _lukLuci(L,korak){
   }
   return {van:van, unu:unu};
 }
+// Luk uvucen za `uv` mm od svoje ivice ka sredini klupice. Kanali idu
+// paralelno sa ivicom, a kod luka to znaci luk drugog poluprecnika.
+function _lukUvucen(L,segId,uv,sc){
+  var kop=Object.assign({},L);
+  if(segId==='A-zad') kop.rv=L.rv-uv;
+  else                kop.ru=L.ru+uv;
+  if(kop.rv<=kop.ru) return null;
+  var q=_lukLuci(kop,2);
+  var bb=_lukBB(L);
+  var t=(segId==='A-zad')?q.van:q.unu;
+  return t.map(function(x){ return [(x[0]-bb.mnx)*sc, (x[1]-bb.mny)*sc]; });
+}
 // Duzina izlomljene linije - tako se mjeri i elipsa, koja nema formulu
 function _duzPoly(t){
   var d=0;
@@ -9761,7 +9820,151 @@ function _lukUgaoCela(L,kraj){
   var cos=(tx*cx+ty*cy)/((Math.hypot(tx,ty)||1)*(Math.hypot(cx,cy)||1));
   return Math.round(Math.acos(Math.max(-1,Math.min(1,cos)))*180/Math.PI*10)/10;
 }
+// ── TETIVA I APOTEMA ─────────────────────────────────────────────
+// Na terenu se poluprecnik ne moze izmjeriti, ali tetiva i visina luka
+// mogu. Iz njih se racuna sve ostalo.
+//   c = tetiva (razmak krajeva vanjskog luka)
+//   h = strelica / apotema tetive (visina od tetive do tjemena luka)
+//   R = (c^2/4 + h^2) / (2h)
+//   a = R - h  (rastojanje od sredista do tetive)
+function _lukIzTetive(c,h){
+  c=Math.abs(_broj(c)); h=Math.abs(_broj(h));
+  if(!(c>0&&h>0)) return null;
+  var R=(c*c/4 + h*h)/(2*h);
+  if(!(R>0)) return null;
+  // pola ugla: sin = (c/2)/R, ali kod h > R luk prelazi polukrug
+  var s=Math.min(1,(c/2)/R);
+  var pola=Math.asin(s)*180/Math.PI;
+  var ug=(h>R)?(360-2*pola):(2*pola);
+  return {rv:Math.round(R), ug:Math.round(ug*10)/10, apotema:Math.round(R-h)};
+}
+// Obrnuto - iz luka izvuci tetivu, strelicu i apotemu
+function _lukTetivaIz(L){
+  var q=_lukLuci(L,0.5), v=q.van;
+  var p1=v[0], p2=v[v.length-1];
+  var c=Math.hypot(p2[0]-p1[0], p2[1]-p1[1]);
+  // tjeme luka je tacka najdalja od tetive
+  var ux=(p2[0]-p1[0])/(c||1), uy=(p2[1]-p1[1])/(c||1);
+  var maxD=0;
+  v.forEach(function(t){
+    var dx=t[0]-p1[0], dy=t[1]-p1[1];
+    var d=Math.abs(dx*uy-dy*ux);      // rastojanje tacke od tetive
+    if(d>maxD) maxD=d;
+  });
+  return {tetiva:Math.round(c), strelica:Math.round(maxD),
+          apotema:Math.round(L.rv-maxD)};
+}
+function pozLukTetiva(i,polje,val){
+  var p=pozicije[i]; if(!p||!p.luk) return;
+  p.luk._t=p.luk._t||{};
+  p.luk._t[polje]=Math.max(0,_broj(val));
+  var t=p.luk._t;
+  if(t.c>0&&t.h>0){
+    var r=_lukIzTetive(t.c,t.h);
+    if(r){
+      var sir=Math.max(10,p.luk.rv-p.luk.ru);   // sirina klupice ostaje
+      p.luk.rv=r.rv;
+      p.luk.ru=Math.max(0,r.rv-sir);
+      p.luk.ug=r.ug;
+      delete p.luk.sp;                          // tetiva odredjuje oblik
+      _lukUskladi(p);
+    }
+  }
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
+// Iz ZADANOG pomaka unutrasnje ivice nadji potrebno zakosenje.
+// Pomak je u mm, sa predznakom:
+//   +  unutrasnja ivica UVUCENA (kraci unutrasnji luk, ugao ispod 90)
+//   -  unutrasnja ivica IZVUCENA (duzi unutrasnji luk, ugao iznad 90)
+function _lukKbIzPomaka(L,kraj,pomak){
+  var p=_broj(pomak);
+  if(!p) return 0;
+  var gr=L.ug/2-0.5;
+  function pomakZa(k){
+    var kop=Object.assign({},L);
+    kop[(kraj==='B')?'kb':'kc']=k;
+    var r=_lukPomakCela(kop,kraj);
+    return r.prava*((k>=0)?1:-1);
+  }
+  var lo=-gr, hi=gr;   // pomakZa(lo) najmanji (negativan), hi najveci
+  if(p<=pomakZa(lo)) return Math.round(lo*10)/10;
+  if(p>=pomakZa(hi)) return Math.round(hi*10)/10;
+  for(var i=0;i<60;i++){
+    var sr=(lo+hi)/2;
+    if(pomakZa(sr)<p) lo=sr; else hi=sr;
+  }
+  return Math.round((lo+hi)/2*10)/10;
+}
+// Pomak sa predznakom, za prikaz u polju
+function _lukPomakZnak(L,kraj){
+  var k=((kraj==='B')?L.kb:L.kc)||0;
+  if(!k) return 0;
+  var r=_lukPomakCela(L,kraj);
+  return Math.round(r.prava*((k>=0)?1:-1));
+}
+function pozLukPomak(i,kraj,val){
+  var p=pozicije[i]; if(!p||!p.luk) return;
+  var L=_pozLuk(p); if(!L) return;
+  p.luk[(kraj==='B')?'kb':'kc']=_lukKbIzPomaka(L,kraj,val);
+  _lukUskladi(p);
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
+// Raspon pomaka koji se moze postici
+function _lukRasponPomaka(L,kraj){
+  var gr=L.ug/2-0.5;
+  function pz(k){
+    var kop=Object.assign({},L);
+    kop[(kraj==='B')?'kb':'kc']=k;
+    return Math.round(_lukPomakCela(kop,kraj).prava*((k>=0)?1:-1));
+  }
+  return {min:pz(-gr), max:pz(gr)};
+}
+// Iz ZADANOG ugla cela nadji potrebno zakosenje. Veza je monotona
+// (vece zakosenje = manji ugao), pa se rjesava polovljenjem intervala.
+function _lukKbIzUgla(L,kraj,ciljUgao){
+  var gr=L.ug/2-0.5;
+  function ugaoZa(k){
+    var kop=Object.assign({},L);
+    kop[(kraj==='B')?'kb':'kc']=k;
+    return _lukUgaoCela(kop,kraj);
+  }
+  var lo=-gr, hi=gr;
+  // ugaoZa(lo) je najveci, ugaoZa(hi) najmanji
+  if(ciljUgao>=ugaoZa(lo)) return Math.round(lo*10)/10;
+  if(ciljUgao<=ugaoZa(hi)) return Math.round(hi*10)/10;
+  for(var i=0;i<60;i++){
+    var sr=(lo+hi)/2;
+    if(ugaoZa(sr)>ciljUgao) lo=sr; else hi=sr;
+  }
+  return Math.round((lo+hi)/2*10)/10;
+}
+// Raspon uglova koji se moze postici na ovom luku
+function _lukRasponUgla(L,kraj){
+  var gr=L.ug/2-0.5;
+  function ugaoZa(k){
+    var kop=Object.assign({},L);
+    kop[(kraj==='B')?'kb':'kc']=k;
+    return _lukUgaoCela(kop,kraj);
+  }
+  return {min:Math.round(ugaoZa(gr)), max:Math.round(ugaoZa(-gr))};
+}
 // Odstupanje od pravog reza, sa predznakom
+// Koliko se unutrasnja tacka pomjeri u odnosu na pravi (90-stepeni) rez.
+// Arhitekte to daju kao mjeru: koliko je unutrasnja ivica pomjerena u
+// odnosu na okomicu na vanjsku. Vraca i po pravoj (tetiva) i po luku.
+function _lukPomakCela(L,kraj){
+  var bez=Object.assign({},L);
+  bez[(kraj==='B')?'kb':'kc']=0;
+  var q0=_lukLuci(bez,0.5), q1=_lukLuci(L,0.5);
+  var i0=(kraj==='B')?0:(q0.unu.length-1);
+  var i1=(kraj==='B')?0:(q1.unu.length-1);
+  var p0=q0.unu[i0], p1=q1.unu[i1];
+  return {
+    prava: Math.round(Math.hypot(p1[0]-p0[0], p1[1]-p0[1])),
+    luk:   Math.round(Math.abs(_duzPoly(q1.unu)-_duzPoly(q0.unu))),
+    znak:  ((((kraj==='B')?L.kb:L.kc)||0)>=0)?1:-1
+  };
+}
 function _lukOtklon(L,kraj){
   var a=_lukUgaoCela(L,kraj);
   var d=Math.round((a-90)*10)/10;
@@ -9775,10 +9978,20 @@ function _lukUskladi(p){
   p.a=bb.w;                 // bruto sirina table
   p.b=bb.h;                 // bruto visina table
 }
+// Unos UGLA cela - preracunava se u zakosenje
+function pozLukUgaoCela(i,kraj,val){
+  var p=pozicije[i]; if(!p||!p.luk) return;
+  var L=_pozLuk(p); if(!L) return;
+  var cilj=_broj(val);
+  if(!(cilj>0)){ p.luk[(kraj==='B')?'kb':'kc']=0; }
+  else p.luk[(kraj==='B')?'kb':'kc']=_lukKbIzUgla(L,kraj,cilj);
+  _lukUskladi(p);
+  syncToActive(); buildPozicijeTabelu(); refresh();
+}
 function pozLukPolje(i,polje,val){
   var p=pozicije[i]; if(!p) return;
   p.luk=p.luk||{rv:1000,ru:750,ug:90};
-  p.luk[polje]=Math.max(0,_broj(val));
+  p.luk[polje]=(polje==='kb'||polje==='kc')?_broj(val):Math.max(0,_broj(val));
   // Vanjski mora biti veci od unutrasnjeg
   if(polje==='ru'&&p.luk.ru>=p.luk.rv) p.luk.rv=p.luk.ru+100;
   if(polje==='rv'&&p.luk.rv<=p.luk.ru) p.luk.ru=Math.max(0,p.luk.rv-100);
@@ -9792,7 +10005,7 @@ function pozLukPolje(i,polje,val){
   }
   if(polje==='kb'||polje==='kc'){
     var gr=Math.max(0,(p.luk.ug||90)/2-0.5);
-    p.luk[polje]=Math.max(0,Math.min(gr,p.luk[polje]));
+    p.luk[polje]=Math.max(-gr,Math.min(gr,p.luk[polje]));
   }
   _lukUskladi(p);
   syncToActive(); buildPozicijeTabelu(); refresh();
@@ -9958,7 +10171,7 @@ function buildPozNav(){
     +'<span style="font-size:11px;color:#6b7a8d;font-weight:600">'
     +n+' pozicija na '+_pozBrojStrana()+' strana</span>'
     +'<span style="font-size:10px;color:#8a93a3;margin-left:auto">po strani:</span>'
-    +'<input type="number" min="1" max="20" value="'+POZ_PO_STRANI+'" style="width:48px;'
+    +'<input type="text" inputmode="decimal" min="1" max="20" value="'+POZ_PO_STRANI+'" style="width:48px;'
     +'font:inherit;font-size:11px;padding:3px 5px;border:1px solid #dde2ea;border-radius:4px;'
     +'text-align:right" onchange="pozPoStrani(this.value)"></div>';
 }
@@ -10409,6 +10622,16 @@ function drawKlSematski(ctx,W,H){
     var kd=17;
     ctx.save(); ctx.strokeStyle='#1d8a6e'; ctx.lineWidth=1.8; ctx.setLineDash([6,3]);
     _kanalStrane(kanJed).forEach(function(id){
+      // Kod LUCNE klupice kanal prati krivinu, uvucen za kd od svoje ivice
+      if(_Lc&&(id==='A-zad'||id==='D-pred')){
+        var _pk=_lukUvucen(_Lc,id,kd/sc,sc);
+        if(_pk&&_pk.length>1){
+          ctx.beginPath(); ctx.moveTo(_pk[0][0],_pk[0][1]);
+          for(var w=1;w<_pk.length;w++) ctx.lineTo(_pk[w][0],_pk[w][1]);
+          ctx.stroke();
+        }
+        return;
+      }
       if(id==='D-pred') { ctx.beginPath(); ctx.moveTo(0,kd);    ctx.lineTo(A,kd);    ctx.stroke(); }
       if(id==='A-zad')  { ctx.beginPath(); ctx.moveTo(0,B-kd);  ctx.lineTo(A,B-kd);  ctx.stroke(); }
       if(id==='B-lev')  { ctx.beginPath(); ctx.moveTo(kd,0);    ctx.lineTo(kd,B);    ctx.stroke(); }
@@ -10437,6 +10660,16 @@ function drawKlSematski(ctx,W,H){
     var ld=34;
     ctx.save(); ctx.strokeStyle='#b8860b'; ctx.lineWidth=2.2; ctx.setLineDash([2,3]);
     _kanalStrane(ledJed).forEach(function(id){
+      // LED kanal isto prati luk
+      if(_Lc&&(id==='A-zad'||id==='D-pred')){
+        var _pl=_lukUvucen(_Lc,id,ld/sc,sc);
+        if(_pl&&_pl.length>1){
+          ctx.beginPath(); ctx.moveTo(_pl[0][0],_pl[0][1]);
+          for(var w2=1;w2<_pl.length;w2++) ctx.lineTo(_pl[w2][0],_pl[w2][1]);
+          ctx.stroke();
+        }
+        return;
+      }
       if(id==='D-pred') { ctx.beginPath(); ctx.moveTo(0,ld);     ctx.lineTo(A,ld);     ctx.stroke(); }
       if(id==='A-zad')  { ctx.beginPath(); ctx.moveTo(0,B-ld);   ctx.lineTo(A,B-ld);   ctx.stroke(); }
       if(id==='B-lev')  { ctx.beginPath(); ctx.moveTo(ld,B-ld);  ctx.lineTo(ld,ld);    ctx.stroke(); }
@@ -10827,7 +11060,7 @@ function _editableUnitPrice(kmPrice,unitSuffix,onchangeFnName,onchangeArgs){
   var argsStr=onchangeArgs.map(function(a){return typeof a==='number'?a:"'"+String(a).replace(/'/g,"\\'")+"'";}).join(',');
   // Sirina je bila 54px, pa je cetvorocifreni iznos (1.250,75) bio odsjecen.
   // Sada se racuna prema duzini broja. Polje je type=text jer <input
-  // type="number"> odbija zarez, a mi ga koristimo kao decimalni razdvajac.
+  // type="text" inputmode="decimal"> odbija zarez, a mi ga koristimo kao decimalni razdvajac.
   var _txt=fmtBroj(disp,2);
   // Sirina prema STVARNOJ duzini teksta: cifra ~6.7px, tacka/zarez ~3.4px
   // na 12px Segoe UI, plus 30px za padding, okvir i rezervu.
@@ -11535,7 +11768,7 @@ function genPon(currency){
           '<span style="font-size:13px;font-weight:600">'+f(uk)+'</span>'+
         '</div>'+
         (function(){
-          var popustInputHtml='<input type="number" value="'+(popustPct||'')+'" placeholder="0" '
+          var popustInputHtml='<input type="text" inputmode="decimal" value="'+(popustPct||'')+'" placeholder="0" '
             +'onchange="setPonPopust(this.value)" '
             +'style="width:40px;border:1px solid rgba(255,255,255,.5);border-radius:3px;padding:3px 5px;'
             +'text-align:center;font:inherit;font-size:12px;background:rgba(255,255,255,.15);color:#fff">';
@@ -13056,7 +13289,7 @@ async function otvoriLager(){
     +'oninput="_lagerFilter()" style="flex:1;min-width:150px;font:inherit;font-size:13px;'
     +'padding:7px 9px;border:1px solid #dde2ea;border-radius:6px">'
     +'<label style="font-size:11px;color:#6b7a8d">Koeficijent</label>'
-    +'<input id="lager-koef" type="number" min="1" step="0.1" value="'+MAT_KOEF+'" '
+    +'<input id="lager-koef" type="text" inputmode="decimal" min="1" step="0.1" value="'+MAT_KOEF+'" '
     +'oninput="_lagerFilter()" style="width:60px;font:inherit;font-size:13px;padding:7px;'
     +'border:1px solid #1a5fa8;border-radius:6px;text-align:right;font-weight:700;color:#134a85">'
     +'<span style="font-size:11px;color:#8a93a3">\u00d7 nabavna</span></div>'
