@@ -4995,15 +4995,19 @@ function gprOpisDim(d){
   if(m.duzina || m.sirina){
     let osnovno = [v('duzina'), v('sirina')].filter(Boolean).join('×');
     // Druga ploca — "A: 800×600 + B: 400×600"
+    /* Kad tabla A i B imaju RAZLICITE visine, svaka nosi svoju u samom opisu — pa se
+       visina NE dodaje jos jednom na kraju. Ranije je izlazilo "... H490 · H990". */
+    let visineUOpisu = false;
     if(m.duzina_b && m.sirina_b){
-      // Razlicite visine -> svaka tabla nosi svoju
-      if(m.visina_b && m.visina_b !== m.visina)
+      if(m.visina_b && m.visina_b !== m.visina){
         osnovno = `A: ${osnovno} H${v('visina')} + B: ${v('duzina_b')}×${v('sirina_b')} H${v('visina_b')}`;
-      else
+        visineUOpisu = true;
+      } else {
         osnovno = `A: ${osnovno} + B: ${v('duzina_b')}×${v('sirina_b')}`;
+      }
     }
     const dodaci = [];
-    if(m.visina)   dodaci.push('H' + v('visina'));
+    if(m.visina && !visineUOpisu) dodaci.push('H' + v('visina'));
     if(m.debljina) dodaci.push(v('debljina') + 'mm');
     return osnovno + (dodaci.length ? ' · ' + dodaci.join(' · ') : '');
   }
@@ -5994,6 +5998,18 @@ async function gprPromjenaOblika(pid){
      1. dva sastojka koja se mjere po m²
      2. sastojak izricito oznacen da odredjuje duzinu/sirinu B
      3. dvije povrsinske STAVKE u razlicitim sastojcima — to uvijek stize svjeze */
+
+/* Naziv polja. Kad proizvod ima DVIJE table, mjere prve dobijaju "A" — inace bi se
+   "Dužina" i "Dužina B" citale kao da je prva zajednicka. */
+function gprOznakaMjere(k, dvijeTable){
+  const osnovni = GPR_MJERE[k]?.lbl || k;
+  if(!dvijeTable) return osnovni;
+  if(k === 'duzina') return 'Dužina A';
+  if(k === 'sirina') return 'Širina A';
+  if(k === 'visina') return 'Visina A';
+  return osnovni;
+}
+
 function gprTrebaMjereB(g){
   if(!g) return false;
   const sg = g.sastojci_grupe || [];
@@ -6029,9 +6045,16 @@ function gprOblikPromjena(gid){
      proizvod sa jednom cijenom. Polja B se nude samo ako grupa to dozvoljava. */
   /* Dvije table = DVA povrsinska sastojka. Tad se traze i mjere druge table (B) —
      bez ikakvog dodatnog podesavanja, jer se to iz same grupe vidi. */
-  const mjereB = gprTrebaMjereB(g) && !jeKruzni ? ['duzina_b','sirina_b','visina_b'] : [];
+  /* Redoslijed: prvo SVE mjere table A (ukljucujuci visinu), pa sve mjere table B.
+     Ranije je visina A stajala na kraju, iza mjera table B — sto se nije citalo. */
+  const dvijeTable = gprTrebaMjereB(g) && !jeKruzni;
+  const visinaIDeb = odSastojaka.filter(k => k === 'visina' || k === 'debljina');
+  const ostaloOdSastojaka = odSastojaka.filter(k => k !== 'visina' && k !== 'debljina');
 
-  const lista = [...osnovne, ...mjereB, ...odSastojaka].map(k => [k, GPR_MJERE[k]?.lbl || k]);
+  const lista = dvijeTable
+    ? [...osnovne, ...visinaIDeb, 'duzina_b', 'sirina_b', ...(visinaIDeb.includes('visina') ? ['visina_b'] : []), ...ostaloOdSastojaka]
+        .map(k => [k, gprOznakaMjere(k, true)])
+    : [...osnovne, ...odSastojaka].map(k => [k, GPR_MJERE[k]?.lbl || k]);
 
   cont.innerHTML = lista.map(([k, opis])=>`
     <span style="display:inline-flex;align-items:center;gap:3px;">
@@ -6052,8 +6075,12 @@ async function gprDodajDim(gid){
   const odSastojaka = [...new Set((g?.sastojci_grupe || []).flatMap(s => s.definise || []))]
     .filter(k => !['duzina','sirina','precnik'].includes(k));
   const osnovne = jeKruzni ? ['precnik'] : ob === 'KVAD' ? ['duzina'] : ['duzina','sirina'];
-  const mjereB = gprTrebaMjereB(g) && !jeKruzni ? ['duzina_b','sirina_b','visina_b'] : [];
-  const def = { dims: [...osnovne, ...mjereB, ...odSastojaka].map(k => [k, GPR_MJERE[k]?.lbl || k]) };
+  const dvijeTable = gprTrebaMjereB(g) && !jeKruzni;
+  const visinaIDeb = odSastojaka.filter(k => k === 'visina' || k === 'debljina');
+  const ostaloOdSastojaka = odSastojaka.filter(k => k !== 'visina' && k !== 'debljina');
+  const def = { dims: (dvijeTable
+    ? [...osnovne, ...visinaIDeb, 'duzina_b', 'sirina_b', ...(visinaIDeb.includes('visina') ? ['visina_b'] : []), ...ostaloOdSastojaka]
+    : [...osnovne, ...odSastojaka]).map(k => [k, gprOznakaMjere(k, dvijeTable)]) };
   const mjere = {};
   for(const [k, opis] of def.dims){
     const polje = document.getElementById(`gpr-dm-${gid}-${k}`);

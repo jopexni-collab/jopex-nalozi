@@ -158,13 +158,19 @@ function opisOblika(oblik, m) {
   /* Imenovane mjere: "1600×900" ili "1600×900×720" kad je visina unesena. */
   if (m?.duzina || m?.sirina) {
     let d = [v('duzina'), v('sirina')].filter(Boolean).join('×');
+    /* Kad tabla A i B imaju RAZLICITE visine, svaka nosi svoju u samom opisu — pa se
+       visina NE dodaje jos jednom na kraju. Ranije je izlazilo "... H490 · H990". */
+    let visineUOpisu = false;
     if (m.duzina_b && m.sirina_b) {
-      d = (m.visina_b && m.visina_b !== m.visina)
-        ? `A: ${d} H${v('visina')} + B: ${v('duzina_b')}×${v('sirina_b')} H${v('visina_b')}`
-        : `A: ${d} + B: ${v('duzina_b')}×${v('sirina_b')}`;
+      if (m.visina_b && m.visina_b !== m.visina) {
+        d = `A: ${d} H${v('visina')} + B: ${v('duzina_b')}×${v('sirina_b')} H${v('visina_b')}`;
+        visineUOpisu = true;
+      } else {
+        d = `A: ${d} + B: ${v('duzina_b')}×${v('sirina_b')}`;
+      }
     }
     const dodaci = [];
-    if (m.visina) dodaci.push(`H${v('visina')}`);
+    if (m.visina && !visineUOpisu) dodaci.push(`H${v('visina')}`);
     if (m.debljina) dodaci.push(`${v('debljina')}mm`);
     return d + (dodaci.length ? ' · ' + dodaci.join(' · ') : '');
   }
