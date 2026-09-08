@@ -41,8 +41,14 @@ const KRUZNI = ['KRUG'];
 const STOLOVI = ['PRAV', 'KVAD', 'OVAL', 'BACVA', 'ZAOB'];
 const PRAVOUGAONI = ['PRAV', 'KVAD', 'OVAL', 'BACVA', 'ZAOB', 'I', 'L', 'U', 'V', 'N', 'G'];
 
+/* Mjere druge ploce — sto sa dvije table ima A i B u ISTOJ dimenziji, jer je to jedan
+   proizvod sa jednom cijenom. Prazno znaci da ploce B nema. */
+const MJERE_B = ['duzina_b', 'sirina_b'];
+
 const MJERE = {
   duzina:   { lbl: 'Dužina',   kratko: 'D' },
+  duzina_b: { lbl: 'Dužina B', kratko: 'D₂' },
+  sirina_b: { lbl: 'Širina B', kratko: 'Š₂' },
   sirina:   { lbl: 'Širina',   kratko: 'Š' },
   visina:   { lbl: 'Visina',   kratko: 'V' },
   debljina: { lbl: 'Debljina', kratko: 'd' },
@@ -150,7 +156,8 @@ function opisOblika(oblik, m) {
   const v = k => Math.round(parseFloat(m?.[k]) || 0);
   /* Imenovane mjere: "1600×900" ili "1600×900×720" kad je visina unesena. */
   if (m?.duzina || m?.sirina) {
-    const d = [v('duzina'), v('sirina')].filter(Boolean).join('×');
+    let d = [v('duzina'), v('sirina')].filter(Boolean).join('×');
+    if (m.duzina_b && m.sirina_b) d = `A: ${d} + B: ${v('duzina_b')}×${v('sirina_b')}`;
     const dodaci = [];
     if (m.visina) dodaci.push(`H${v('visina')}`);
     if (m.debljina) dodaci.push(`${v('debljina')}mm`);
@@ -709,6 +716,10 @@ router.post('/:id/dimenzije', async (req, res) => {
     } else if (!cisto.duzina || !cisto.sirina) {
       return res.status(400).json({ error: 'Unesite dužinu i širinu.' });
     }
+    /* Ako je uneseno samo jedno od dva polja za plocu B, to je propust — bolje javiti
+       nego tiho racunati sa polovicnim podatkom. */
+    if ((cisto.duzina_b && !cisto.sirina_b) || (!cisto.duzina_b && cisto.sirina_b))
+      return res.status(400).json({ error: 'Za drugu ploču unesite i dužinu i širinu.' });
     if (!Object.keys(cisto).length)
       return res.status(400).json({ error: 'Unesite bar jednu mjeru.' });
     const premale = Object.entries(cisto).filter(([k, v]) => k !== 'debljina' && v < 20);
@@ -1149,11 +1160,16 @@ router.get('/:id/cijena', async (req, res) => {
            razlicite mjere unutar istog proizvoda.
            Ranije je mjera dijela nadjacavala dimenziju, pa su sve mjere stola davale
            istu povrsinu — a time i istu cijenu. */
+        /* Druga ploca (B) racuna se iz SVOJIH mjera u dimenziji — inace bi obje uzele
+           istu povrsinu, pa bi sto sa manjom drugom plocom ispao skuplji nego sto jeste. */
+        const jeDrugaPloca = zajedno(st) && plocaStavke.indexOf(st) === 1 && mjereB;
         const dimIma = m2 > 0;
         const vlastita = !dimIma && (st.sirina_kom != null || st.visina_kom != null);
-        const mv = vlastita
-          ? mjereOblika('I', { A: st.sirina_kom, B: st.visina_kom })
-          : { m2, m1 };
+        const mv = jeDrugaPloca
+          ? mjereOblika('PRAV', { A: mjereB.duzina, B: mjereB.sirina })
+          : vlastita
+            ? mjereOblika('I', { A: st.sirina_kom, B: st.visina_kom })
+            : { m2, m1 };
         const kol = st.tip_kolicine === 'povrsina' ? mv.m2 * mnozilac
                   : st.tip_kolicine === 'duzina'   ? mv.m1 * mnozilac
                   : mnozilac;
@@ -1194,21 +1210,41 @@ router.get('/:id/cijena', async (req, res) => {
       /* Sto sa VISE PLOCA — svaka ima svoju mjeru, pa se oznacavaju A, B, C...
          Bez toga bi u katalogu stajala samo jedna mjera, a kupac bi mislio da je sto
          manji nego sto jeste. */
-      const ploce = [...obavezne, ...izabrane]
-        .filter(st => zajedno(st) && (st.sirina_kom || st.visina_kom))
-        .map((st, i) => ({
-          oznaka: String.fromCharCode(65 + i),          // A, B, C...
-          mjera: `${Math.round(st.sirina_kom || 0)}×${Math.round(st.visina_kom || 0)}`,
-          artikal: st.roba_naziv || st.opis || '',
-        }));
+      const vm = dim?.mjere || {};
+      const visinaOpis = vm.visina ? `H${Math.round(vm.visina)}`
+                       : (vm.debljina ? `${Math.round(vm.debljina)}mm` : '');
+
+      /* Sto sa DVIJE PLOCE: mjere obje stoje u ISTOJ dimenziji (A i B), jer je to
+         jedan proizvod sa jednom cijenom. Prva ploca uzima duzina/sirina, druga
+         duzina_b/sirina_b. Ako druge mjere nema, obje ploce koriste istu. */
+      const plocaStavke = [...obavezne, ...izabrane].filter(zajedno);
+      const mjereB = (vm.duzina_b && vm.sirina_b)
+        ? { duzina: vm.duzina_b, sirina: vm.sirina_b } : null;
+
+      const ploce = plocaStavke.length > 1
+        ? plocaStavke.map((st, i) => {
+            const m = (i === 0 || !mjereB) ? vm : mjereB;
+            const d = Math.round(m.duzina || st.sirina_kom || 0);
+            const s = Math.round(m.sirina || st.visina_kom || 0);
+            return {
+              oznaka: String.fromCharCode(65 + i),
+              mjera: `${d}×${s}`,
+              artikal: st.roba_naziv || st.opis || '',
+            };
+          })
+        : [];
 
       return {
         ploce: ploce.length > 1 ? ploce : null,
         dimenzija_id: dim?.id || null,
         sirina: dim ? +dim.sirina : null,
         visina: dim ? +dim.visina : null,
+        /* Uz mjere ploca ide i VISINA proizvoda, ako je unesena — kupcu je bitna
+           koliko i tlocrt. Ispada npr. "A: 800×600 · H422 + B: 400×600 · H422". */
+        /* Visina je zajednicka za obje ploce — pise se JEDNOM na kraju, ne uz svaku.
+           Ispada "A: 800×600 + B: 400×600 · H422". */
         dimenzija: ploce.length > 1
-          ? ploce.map(p => `${p.oznaka}: ${p.mjera}`).join(' + ')
+          ? ploce.map(p => `${p.oznaka}: ${p.mjera}`).join(' + ') + (visinaOpis ? ' · ' + visinaOpis : '')
           : dim ? (dim.naziv || (dim.mjere && dim.oblik
           ? opisOblika(dim.oblik, dim.mjere)
           : (dim.oblik === 'krug' || dim.precnik

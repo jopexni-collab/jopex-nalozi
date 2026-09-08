@@ -4452,6 +4452,8 @@ function gpgZavrsiSastojak(gid){
 const GPR_MJERE = {
   duzina:   { lbl:'Dužina' },
   sirina:   { lbl:'Širina' },
+  duzina_b: { lbl:'Dužina B' },
+  sirina_b: { lbl:'Širina B' },
   visina:   { lbl:'Visina' },
   debljina: { lbl:'Debljina' },
   precnik:  { lbl:'Prečnik' },
@@ -4990,7 +4992,10 @@ function gprOpisDim(d){
   // Nov zapis — imenovane mjere
   if(m.precnik) return 'Ø' + v('precnik') + (m.visina ? ' · H' + v('visina') : '');
   if(m.duzina || m.sirina){
-    const osnovno = [v('duzina'), v('sirina')].filter(Boolean).join('×');
+    let osnovno = [v('duzina'), v('sirina')].filter(Boolean).join('×');
+    // Druga ploca — "A: 800×600 + B: 400×600"
+    if(m.duzina_b && m.sirina_b)
+      osnovno = `A: ${osnovno} + B: ${v('duzina_b')}×${v('sirina_b')}`;
     const dodaci = [];
     if(m.visina)   dodaci.push('H' + v('visina'));
     if(m.debljina) dodaci.push(v('debljina') + 'mm');
@@ -5987,7 +5992,12 @@ function gprOblikPromjena(gid){
                 : ob === 'KVAD' ? ['duzina']
                 : ['duzina','sirina'];
 
-  const lista = [...osnovne, ...odSastojaka].map(k => [k, GPR_MJERE[k]?.lbl || k]);
+  /* Sto sa DVIJE PLOCE — mjere obje stoje u istom redu (A i B), jer je to jedan
+     proizvod sa jednom cijenom. Polja B se nude samo ako grupa to dozvoljava. */
+  const imaDvijePloce = (g?.sastojci_grupe || []).some(s => s.sve_ulaze);
+  const mjereB = (imaDvijePloce && !jeKruzni) ? ['duzina_b','sirina_b'] : [];
+
+  const lista = [...osnovne, ...mjereB, ...odSastojaka].map(k => [k, GPR_MJERE[k]?.lbl || k]);
 
   cont.innerHTML = lista.map(([k, opis])=>`
     <span style="display:inline-flex;align-items:center;gap:3px;">
@@ -6008,7 +6018,9 @@ async function gprDodajDim(gid){
   const odSastojaka = [...new Set((g?.sastojci_grupe || []).flatMap(s => s.definise || []))]
     .filter(k => !['duzina','sirina','precnik'].includes(k));
   const osnovne = jeKruzni ? ['precnik'] : ob === 'KVAD' ? ['duzina'] : ['duzina','sirina'];
-  const def = { dims: [...osnovne, ...odSastojaka].map(k => [k, GPR_MJERE[k]?.lbl || k]) };
+  const imaDvijePloce = (g?.sastojci_grupe || []).some(s => s.sve_ulaze);
+  const mjereB = (imaDvijePloce && !jeKruzni) ? ['duzina_b','sirina_b'] : [];
+  const def = { dims: [...osnovne, ...mjereB, ...odSastojaka].map(k => [k, GPR_MJERE[k]?.lbl || k]) };
   const mjere = {};
   for(const [k, opis] of def.dims){
     const polje = document.getElementById(`gpr-dm-${gid}-${k}`);
@@ -6021,6 +6033,8 @@ async function gprDodajDim(gid){
       return;
     }
     const v = broj(polje.value);
+    // Mjere druge ploce su NEOBAVEZNE — sto moze imati i samo jednu
+    if(!v && (k === 'duzina_b' || k === 'sirina_b')) continue;
     if(!v){
       const p = document.getElementById('gpr-dim-poruka-'+gid);
       if(p){ p.textContent = `Unesi mjeru ${k} (${opis}) u milimetrima.`; p.style.color = 'var(--orange,#b8860b)'; }
