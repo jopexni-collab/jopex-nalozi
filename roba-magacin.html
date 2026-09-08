@@ -6371,28 +6371,21 @@ function gprRenderCijene(cont, d){
             }).join('')}
           </div>`).join('')}
 
+        ${/* Mjere se biraju GORE, u tabeli "Dimenzije" — tamo stoje i cijene i oznaka
+              za katalog. Ovdje je samo prekidac za prikaz, bez ponavljanja spiska. */''}
         ${dimenzije.length>1?`
           <div style="margin-bottom:8px;">
-            <div style="font-size:10px;color:#6b7a8d;font-weight:800;margin-bottom:3px;">DIMENZIJA</div>
-            ${/* Uz svaku mjeru stoji NJENA CIJENA i kvadratic "ide u katalog" —
-                  tako se sve vidi na jednom mjestu, bez zasebne tabele iznad. */''}
-            ${dimenzije.map(dv=>{
-              const akt = String(dv.dimenzija_id)===String(tekuci.dimenzija_id);
-              const meta = nadji(tekuciIds, dv.dimenzija_id);
-              const izvorna = (window.__gprPodaciDetalj?.[d.id]?.dimenzije || [])
-                .find(x => String(x.id) === String(dv.dimenzija_id));
-              const uKat = izvorna ? (izvorna.u_katalogu !== false) : true;
-              return `<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px;font-size:11.5px;background:${akt?'#f3f0f8':'transparent'};">
-                <input type="radio" name="gpr-dim-${d.id}" ${akt?'checked':''} title="Prikaži ovu mjeru"
-                       onchange="gprIzaberi(${d.id},'${meta?kljuc(meta):''}')" style="cursor:pointer;">
-                <span style="flex:1;cursor:pointer;" onclick="this.parentElement.querySelector('input[type=radio]').click()">
-                  ${esc(dv.dimenzija||'—')}
-                  <span style="color:#8b96a5;font-size:9.5px;"> ${dv.povrsina_m2?dv.povrsina_m2.toFixed(3)+' m²':''}</span>
-                </span>
-                <b style="font-size:11.5px;white-space:nowrap;">${fm(meta?meta.cijena:dv.cijena)}</b>
-              </div>`;
-            }).join('')}
-
+            <div style="font-size:10px;color:#6b7a8d;font-weight:800;margin-bottom:3px;">MJERA</div>
+            <select onchange="gprIzaberi(${d.id}, this.value)"
+                    style="width:100%;font:inherit;font-size:11.5px;padding:5px 8px;border:1px solid #ccc;border-radius:6px;">
+              ${dimenzije.map(dv=>{
+                const meta = nadji(tekuciIds, dv.dimenzija_id);
+                const akt = String(dv.dimenzija_id)===String(tekuci.dimenzija_id);
+                return `<option value="${meta?kljuc(meta):''}" ${akt?'selected':''}>
+                  ${esc(dv.dimenzija||'—')}${meta?` — ${fm(meta.cijena)}`:''}
+                </option>`;
+              }).join('')}
+            </select>
           </div>`:''}
       </div>
 

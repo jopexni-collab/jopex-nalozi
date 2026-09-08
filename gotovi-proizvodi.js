@@ -1253,18 +1253,20 @@ router.get('/:id/cijena', async (req, res) => {
          Bez toga bi u katalogu stajala samo jedna mjera, a kupac bi mislio da je sto
          manji nego sto jeste. */
       const povrsinske = [...obavezne, ...izabrane].filter(st => st.tip_kolicine === 'povrsina');
-      const ploce = povrsinske.length > 1
-        ? povrsinske.map((st, i) => {
-            const m = mjereStavke(st);
-            const d = Math.round(m.duzina || st.sirina_kom || 0);
-            const s = Math.round(m.sirina || st.visina_kom || 0);
-            return {
-              oznaka: String.fromCharCode(65 + i),
-              mjera: `${d}×${s}`,
-              artikal: st.roba_naziv || st.opis || '',
-            };
-          }).filter(p => p.mjera !== '0×0')
-        : [];
+      const sve = povrsinske.map((st, i) => {
+        const m = mjereStavke(st);
+        const d = Math.round(m.duzina || st.sirina_kom || 0);
+        const s = Math.round(m.sirina || st.visina_kom || 0);
+        return {
+          oznaka: String.fromCharCode(65 + i),
+          mjera: `${d}×${s}`,
+          artikal: st.roba_naziv || st.opis || '',
+        };
+      }).filter(p => p.mjera !== '0×0');
+
+      /* Oznake A i B se pisu SAMO kad se mjere stvarno razlikuju. Ako su obje table
+         iste velicine, "A: 800×600 + B: 800×600" samo zbunjuje — dovoljno je 800×600. */
+      const ploce = (sve.length > 1 && new Set(sve.map(p => p.mjera)).size > 1) ? sve : [];
 
       return {
         ploce: ploce.length > 1 ? ploce : null,
