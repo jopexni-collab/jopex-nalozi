@@ -666,9 +666,8 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
         <button id="msa-btn-grupa" class="ce-tip-btn" style="flex:1;font-size:12px;"
                 title="Ova slika predstavlja CIJELU GRUPU u katalogu — kad se katalog pravi po grupama, uzima se ona"
                 onclick="msaPostaviGrupnu()">🗂 Glavna za grupu</button>
-        ${/* Oznaka "gotov proizvod" se vise NE postavlja u lageru — slika gotovog
-              proizvoda bira se u samim Gotovim proizvodima. Element ostaje skriven,
-              da kod koji ga jos dira ne puca. */''}
+        <!-- Oznaka "gotov proizvod" se vise NE postavlja u lageru — bira se u samim
+             Gotovim proizvodima. Element ostaje skriven, da kod koji ga jos dira ne puca. -->
         <button id="msa-btn-gotov" style="display:none;" onclick="msaPrekidacGotov()"></button>
         <button class="ce-tip-btn" style="flex:0 0 auto;font-size:12px;background:var(--red,#c0392b);color:#fff;" onclick="msaObrisiTrenutnu()">🗑 Obriši (undo)</button>
       </div>
@@ -2283,35 +2282,18 @@ function msaPrikaziTrenutnu(){
   document.getElementById('msa-karusel-img').src=s.url;
   document.getElementById('msa-brojac').textContent=`${msaTrenutniIndeks+1}/${msaSlike.length}`;
   const btnGlavna=document.getElementById('msa-btn-glavna');
+  /* if i else moraju ostati SPOJENI — moj raniji blok se ubacio izmedju njih, pa
+     dugme nikad nije vracano u pocetno stanje i prikaz je pucao. */
   if(s.glavna){ btnGlavna.textContent='★ Glavna slika'; btnGlavna.disabled=true; btnGlavna.style.opacity='.6'; }
+  else{ btnGlavna.textContent='☆ Postavi kao glavnu'; btnGlavna.disabled=false; btnGlavna.style.opacity='1'; }
+
   const btnGrupa = document.getElementById('msa-btn-grupa');
   if(btnGrupa){
     btnGrupa.textContent = s.grupa_glavna ? '🗂 Glavna za grupu ✓' : '🗂 Glavna za grupu';
     btnGrupa.style.background = s.grupa_glavna ? '#eef2f8' : '';
     btnGrupa.style.fontWeight = s.grupa_glavna ? '700' : '';
   }
-  else{ btnGlavna.textContent='☆ Postavi kao glavnu'; btnGlavna.disabled=false; btnGlavna.style.opacity='1'; }
 
-  /* Gotov proizvod je ZASEBNA oznaka od glavne — ista slika moze biti i jedno i drugo,
-     ili samo jedno. Zato se ne iskljucuje kad je slika glavna, nego se samo prebacuje. */
-  /* Podsjetnik: ako artikal ima slike ali NIJEDNA nije oznacena kao gotov proizvod,
-     to se ovdje kaze — inace se u sastavnici i katalogu ne bi imalo sta prikazati. */
-  const traka = document.getElementById('msa-podsjetnik');
-  if(traka){
-    const imaGotov = msaSlike.some(x=>x.gotov_proizvod);
-    traka.style.display = (msaSlike.length && !imaGotov) ? 'block' : 'none';
-  }
-
-  const btnGotov=document.getElementById('msa-btn-gotov');
-  if(btnGotov){
-    if(s.gotov_proizvod){
-      btnGotov.textContent='🍽️ Gotov proizvod ✓';
-      btnGotov.style.background='var(--green,#1f8a4c)'; btnGotov.style.color='#fff';
-    } else {
-      btnGotov.textContent='🍽️ Gotov proizvod';
-      btnGotov.style.background=''; btnGotov.style.color='';
-    }
-  }
 }
 // Prikaz preko CELOG ekrana — klik na sliku u karuselu (isto kao u radnim nalozima).
 function msaOtvoriPuniEkran(){
@@ -2370,7 +2352,7 @@ async function msaPrekidacGotov(){
 /* Slika koja predstavlja CIJELU GRUPU u katalogu. Razlicita od glavne slike artikla:
    kad se katalog pravi po grupama, jedan materijal ima jednu sliku. */
 async function msaPostaviGrupnu(){
-  const s = msaSlike?.[msaTekuca];
+  const s = msaSlike?.[msaTrenutniIndeks];
   if(!s) return;
   const btn = document.getElementById('msa-btn-grupa');
   const staroTxt = btn.textContent;
@@ -2385,7 +2367,7 @@ async function msaPostaviGrupnu(){
     // Oznaka se skida sa ostalih slika te grupe — samo jedna predstavlja grupu
     for(const x of msaSlike) x.grupa_glavna = false;
     s.grupa_glavna = d.grupa_glavna;
-    msaPrikazi();
+    msaPrikaziTrenutnu();
     if(typeof ucitajLagerListu === 'function') ucitajLagerListu();
   }catch(e){
     alert('✗ ' + e.message);
