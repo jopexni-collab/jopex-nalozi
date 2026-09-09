@@ -256,6 +256,10 @@ main{max-width:760px;margin:0 auto;padding:20px 16px 40px;}
 </div>
 
 <script>
+/* Izabrani artikli se pamte i kad nisu na ekranu — pri promjeni grupe ili pretrage
+   lista se prepisuje, pa bi se izbor inace izgubio. */
+const katIzabraniArtikli = new Set();
+
 /* ═══ UNOS BROJEVA — zarez kao decimala ═══════════════════════════════════════════
    ZAREZ je uvijek decimala, TACKA razdvaja hiljade (1.234,56). Ako zareza nema, tacka
    se cita kao decimala — radi kompatibilnosti sa postojecim podacima i Excel unosom.
@@ -510,16 +514,37 @@ function katIzabraneDebljine(){
 // Ako NIJEDAN artikal nije cekiran — vraca prazan niz (znaci: idu svi iz grupa).
 // Ako su SVI cekirani — takodje prazan niz, jer je to isto kao "bez filtera" (i krace).
 function katUpisaneSifre(){
-  const sve = document.querySelectorAll('#kat-artikli input[type=checkbox]');
-  const cekirane = document.querySelectorAll('#kat-artikli input[type=checkbox]:checked');
-  if(!cekirane.length || cekirane.length === sve.length) return [];
-  return [...cekirane].map(i=>i.value);
+  /* Cita se iz ZAPAMCENOG spiska, ne sa ekrana. Ranije su se uzimali samo artikli
+     koji su trenutno prikazani — pa je pri promjeni grupe ostajao samo posljednji
+     izbor, a sve ranije izabrano se gubilo. */
+  for(const el of document.querySelectorAll('#kat-artikli input[type=checkbox]')){
+    if(el.checked) katIzabraniArtikli.add(el.value);
+    else katIzabraniArtikli.delete(el.value);
+  }
+  if(!katIzabraniArtikli.size) return [];
+
+  /* Ako su izabrani BAS SVI artikli ucitanih grupa, spisak se ne salje — katalog tad
+     uzima cijele grupe, sto je i brze i tacnije kad se lager u medjuvremenu promijeni. */
+  const sviUcitani = (katArtikliLista || []).map(s => String(s.sifra));
+  const sviIzabrani = sviUcitani.length && sviUcitani.every(s => katIzabraniArtikli.has(s));
+  if (sviIzabrani && katIzabraniArtikli.size === sviUcitani.length) return [];
+
+  return [...katIzabraniArtikli];
 }
 
 /* Spisak stvarnih artikala iz izabranih grupa/debljina — da se ne mora pamtiti sifra.
    Ucitava se ISTOM rutom kao pregled, pa su brojevi uvijek usklađeni sa onim sto ce
    stvarno uci u katalog. */
 let katArtikliLista = [];
+
+
+
+function katArtikalPromjena(el){
+  if(el.checked) katIzabraniArtikli.add(el.value);
+  else katIzabraniArtikli.delete(el.value);
+  katOsvjeziInfoArtikala();
+  katOsvjeziPregled();
+}
 
 async function katUcitajArtikle(){
   const grupe = katIzabraneGrupe();
@@ -548,11 +573,17 @@ function katRenderArtikle(){
     cont.innerHTML = '<div style="color:#8b96a5;font-size:12px;padding:4px;">Izaberi grupe pa će se ovdje pojaviti artikli.</div>';
     return;
   }
-  // Cekirani izbor se PAMTI dok se lista ponovo iscrtava (npr. pri pretrazi).
-  const vecCekirane = new Set([...document.querySelectorAll('#kat-artikli input:checked')].map(i=>i.value));
+  /* Izbor se pamti u ZASEBNOM spisku, ne cita se sa ekrana. Ranije se citao iz onoga
+     sto je trenutno prikazano — pa se pri promjeni grupe ili pretrage sve prethodno
+     izabrano gubilo, jer tih redova vise nije bilo. */
+  for(const el of document.querySelectorAll('#kat-artikli input[type=checkbox]')){
+    if(el.checked) katIzabraniArtikli.add(el.value);
+    else katIzabraniArtikli.delete(el.value);
+  }
+  const vecCekirane = katIzabraniArtikli;
   cont.innerHTML = prikaz.map(s=>`
     <label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;cursor:pointer;border-bottom:1px solid #f5f5f7;">
-      <input type="checkbox" value="${katEsc(s.sifra)}" ${vecCekirane.has(String(s.sifra))?'checked':''} onchange="katOsvjeziInfoArtikala();katOsvjeziPregled()">
+      <input type="checkbox" value="${katEsc(s.sifra)}" ${vecCekirane.has(String(s.sifra))?'checked':''} onchange="katArtikalPromjena(this)">
       <span style="color:#999;min-width:42px;">${katEsc(s.sifra)}</span>
       <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${katEsc(s.naziv)}</span>
       ${s.debljina_cm?`<span style="color:#8b96a5;font-size:10.5px;">${s.debljina_cm} cm</span>`:''}
@@ -569,7 +600,11 @@ function katArtikliSvi(oznaceno){
 
 function katOsvjeziInfoArtikala(){
   const sve = document.querySelectorAll('#kat-artikli input').length;
-  const cek = document.querySelectorAll('#kat-artikli input:checked').length;
+  for(const el of document.querySelectorAll('#kat-artikli input[type=checkbox]')){
+    if(el.checked) katIzabraniArtikli.add(el.value);
+    else katIzabraniArtikli.delete(el.value);
+  }
+  const cek = katIzabraniArtikli.size;
   document.getElementById('kat-artikli-info').textContent =
     (!cek || cek===sve)
       ? `Idu svi artikli (${katArtikliLista.length}).`
