@@ -189,6 +189,7 @@ main{max-width:760px;margin:0 auto;padding:20px 16px 40px;}
     <div id="kat-filteri-blok" style="display:none;margin-bottom:14px;">
       <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:5px;">Suzi izbor <span style="font-weight:400;color:#8b96a5;">(opciono)</span></label>
       <div id="kat-debljine-blok" style="display:none;margin-bottom:8px;">
+        <div id="kat-debljine-naslov" style="font-size:11px;color:#6b7a8d;font-weight:700;margin-bottom:4px;">Debljine</div>
         <div style="font-size:11.5px;color:#8b96a5;margin-bottom:4px;">Debljina (cm) — ako ne izabereš ništa, idu sve:</div>
         <div id="kat-debljine" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
       </div>
@@ -364,11 +365,15 @@ async function otvoriPosaljiKatalogGrupe(){
             </label>
             ${lista.map(g=>`
               <div style="display:flex;align-items:center;gap:8px;padding:3px 0 3px 18px;font-size:12.5px;">
-                <label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;">
-                  <input type="checkbox" value="${katEsc(g.grupa)}" onchange="katGrupaPromjena(this)">
-                  <span style="flex:1;">${katEsc(g.grupa)}</span>
-                  <span style="color:#8b96a5;font-size:11px;">${g.broj}</span>
-                </label>
+                <input type="checkbox" value="${katEsc(g.grupa)}" onchange="katGrupaPromjena(this)"
+                       title="Uključi grupu u katalog" style="cursor:pointer;">
+                ${/* Klik na NAZIV otvara granu — strelica je bila premala i trazila
+                      poseban pokret. Kvadratic ostaje samo za izbor. */''}
+                <span class="kat-grana" data-grupa="${katEsc(g.grupa)}" onclick="katGranaGrupe(this)"
+                      title="Prikaži artikle ove grupe" style="flex:1;cursor:pointer;">
+                  ${katEsc(g.grupa)}
+                </span>
+                <span style="color:#8b96a5;font-size:11px;">${g.broj}</span>
                 ${/* Po grupi se bira: SAMO GRUPA (jedna slika, debljine ispod, bez cijena)
                       ili SA ARTIKLIMA (svaki artikal svoj red i svoju cijenu). */''}
                 <button type="button" class="kat-nacin" data-grupa="${katEsc(g.grupa)}"
@@ -377,9 +382,7 @@ async function otvoriPosaljiKatalogGrupe(){
                         style="font-size:10px;padding:2px 8px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;white-space:nowrap;">
                   📄 sa artiklima
                 </button>
-                <button type="button" class="kat-grana" data-grupa="${katEsc(g.grupa)}"
-                        onclick="katGranaGrupe(this)" title="Prikaži artikle ove grupe"
-                        style="font-size:11px;padding:2px 7px;border:none;background:none;cursor:pointer;color:#8b96a5;">▸</button>
+
               </div>
               ${/* Artikli TE grupe kao podstavke — ranije su svi artikli svih grupa
                     bili u jednom spisku, pa se nije znalo sta je odakle. */''}
@@ -652,22 +655,31 @@ function katOsvjeziInfoArtikala(){
 }
 
 async function katUcitajDebljine(){
-  const grupe = katIzabraneGrupe();
-  const blokF = document.getElementById('kat-filteri-blok');
+  /* Debljine se traze za OTVORENU grupu — svaka ima svoje. Kad nijedna nije otvorena,
+     uzimaju se iz svih izabranih, jer tad filter vazi na sve. */
+  const grupe = katOtvorenaGrupa ? [katOtvorenaGrupa] : katIzabraneGrupe();
   const blokD = document.getElementById('kat-debljine-blok');
-  blokF.style.display = grupe.length ? 'block' : 'none';
-  if(!grupe.length){ blokD.style.display='none'; return; }
+  if(!grupe.length){ if(blokD) blokD.style.display='none'; return; }
   try{
-    const r = await fetch(`${API}/api/katalog/debljine?grupe=${encodeURIComponent(grupe.join(','))}`);
+    const r = await fetch(`${API}/api/katalog/debljine?grupe=${encodeURIComponent(grupe.join(','))}`
+      + (katObjektId?`&objekt_id=${katObjektId}`:''));
     const d = await r.json();
-    if(!Array.isArray(d) || !d.length){ blokD.style.display='none'; return; }
-    blokD.style.display='block';
+    if(!d.length){ if(blokD) blokD.style.display='none'; return; }
+    if(blokD) blokD.style.display='block';
+
+    const naslov = document.getElementById('kat-debljine-naslov');
+    if(naslov) naslov.textContent = katOtvorenaGrupa
+      ? `Debljine — ${katOtvorenaGrupa}`
+      : 'Debljine (sve izabrane grupe)';
+
+    const vec = new Set([...document.querySelectorAll('#kat-debljine input:checked')].map(x=>x.value));
     document.getElementById('kat-debljine').innerHTML = d.map(x=>`
       <label style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid #ddd;border-radius:14px;font-size:12px;cursor:pointer;background:#fff;">
-        <input type="checkbox" value="${x.debljina_cm}" onchange="katOsvjeziGrane();katOsvjeziPregled()">
+        <input type="checkbox" value="${x.debljina_cm}" ${vec.has(String(x.debljina_cm))?'checked':''}
+               onchange="katOsvjeziGrane();katOsvjeziPregled()">
         ${x.debljina_cm} cm <span style="color:#8b96a5;font-size:10.5px;">(${x.broj})</span>
       </label>`).join('');
-  }catch(e){ blokD.style.display='none'; }
+  }catch(e){ if(blokD) blokD.style.display='none'; }
 }
 
 // Živi pregled — koliko artikala ulazi u katalog (da se ne pošalje prazan ili ogroman).
@@ -1074,11 +1086,13 @@ async function katGranaGrupe(btn){
   if(katOtvorenaGrupa === grupa){
     katOtvorenaGrupa = null;
     katOznaciGranu();
+    katUcitajDebljine();
     katRenderArtikleGrupe(null);
     return;
   }
   katOtvorenaGrupa = grupa;
   katOznaciGranu();
+  katUcitajDebljine();   // svaka grupa ima svoje debljine
 
   if(!katArtikliPoGrupi.has(grupa)){
     blok.innerHTML = '<div style="font-size:11.5px;color:#8b96a5;padding:8px;">Učitavanje...</div>';
@@ -1101,8 +1115,7 @@ async function katGranaGrupe(btn){
 function katOznaciGranu(){
   document.querySelectorAll('.kat-grana').forEach(b => {
     const otv = b.dataset.grupa === katOtvorenaGrupa;
-    b.textContent = otv ? '▾' : '▸';
-    b.style.color = otv ? 'var(--blue,#1a5fa8)' : '#8b96a5';
+    b.style.color = otv ? 'var(--blue,#1a5fa8)' : '';
     b.style.fontWeight = otv ? '700' : '';
 
     /* Cijeli red se oboji — sama strelica je premala da se primijeti koja je grana
