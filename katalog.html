@@ -664,7 +664,7 @@ async function katUcitajDebljine(){
     blokD.style.display='block';
     document.getElementById('kat-debljine').innerHTML = d.map(x=>`
       <label style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border:1px solid #ddd;border-radius:14px;font-size:12px;cursor:pointer;background:#fff;">
-        <input type="checkbox" value="${x.debljina_cm}" onchange="katUcitajArtikle();katOsvjeziPregled()">
+        <input type="checkbox" value="${x.debljina_cm}" onchange="katOsvjeziGrane();katOsvjeziPregled()">
         ${x.debljina_cm} cm <span style="color:#8b96a5;font-size:10.5px;">(${x.broj})</span>
       </label>`).join('');
   }catch(e){ blokD.style.display='none'; }
@@ -1104,6 +1104,16 @@ function katOznaciGranu(){
     b.textContent = otv ? '▾' : '▸';
     b.style.color = otv ? 'var(--blue,#1a5fa8)' : '#8b96a5';
     b.style.fontWeight = otv ? '700' : '';
+
+    /* Cijeli red se oboji — sama strelica je premala da se primijeti koja je grana
+       otvorena, pa se nije znalo na sta se donji prozor odnosi. */
+    const red = b.parentElement;
+    if(red){
+      red.style.background = otv ? '#e8eef7' : '';
+      red.style.borderRadius = otv ? '6px' : '';
+      red.style.marginLeft = otv ? '-4px' : '';
+      red.style.paddingLeft = otv ? '22px' : '';
+    }
   });
 }
 
@@ -1147,6 +1157,19 @@ function katRenderArtikleGrupe(grupa){
         </label>`).join('')}
     </div>
     <div style="font-size:10.5px;color:#8b96a5;margin-top:5px;">${lista.length} artikala u ovoj grupi</div>`;
+}
+
+/* Kad se promijeni filter debljina, zapamceni artikli grana vise ne odgovaraju —
+   brisu se i otvorena grana se ucitava ponovo. Bez toga bi donji prozor pokazivao
+   stari spisak, a suzenje bi izgledalo kao da nema ucinka. */
+function katOsvjeziGrane(){
+  katArtikliPoGrupi.clear();
+  if(!katOtvorenaGrupa){ katRenderArtikleGrupe(null); return; }
+  const btn = document.querySelector(`.kat-grana[data-grupa="${CSS.escape(katOtvorenaGrupa)}"]`);
+  const grupa = katOtvorenaGrupa;
+  katOtvorenaGrupa = null;                 // da katGranaGrupe ne shvati kao zatvaranje
+  if(btn) katGranaGrupe(btn);
+  else katOtvorenaGrupa = grupa;
 }
 
 function katSviUGrupi(grupa, ukljuci){
