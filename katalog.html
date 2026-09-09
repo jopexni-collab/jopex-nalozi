@@ -256,6 +256,11 @@ main{max-width:760px;margin:0 auto;padding:20px 16px 40px;}
 </div>
 
 <script>
+/* Izbor grupa i nacin prikaza pamte se ZASEBNO — spisak grupa se prepisuje pri
+   svakoj pretrazi, pa bi se ono sto je ranije izabrano inace izgubilo. */
+const katIzabraneGrupeSpisak = new Set();
+const katNacinGrupe = new Map();   // naziv grupe -> true ako ide kao cjelina
+
 /* Izabrani artikli se pamte i kad nisu na ekranu — pri promjeni grupe ili pretrage
    lista se prepisuje, pa bi se izbor inace izgubio. */
 const katIzabraniArtikli = new Set();
@@ -349,6 +354,8 @@ async function otvoriPosaljiKatalogGrupe(){
     // kategorija, npr. sav granit, bez prebiranja po pojedinacnim grupama.
     const poMaster = {};
     grupe.forEach(g => { (poMaster[g.master_naziv || '⏳ Nerazvrstano'] ||= []).push(g); });
+    /* Poslije iscrtavanja vraca se ono sto je vec bilo izabrano. */
+    setTimeout(katVratiIzborGrupa, 0);
     document.getElementById('kat-grupe').innerHTML = grupe.length
       ? Object.entries(poMaster).map(([master, lista]) => `
           <div style="margin-bottom:6px;">
@@ -360,7 +367,7 @@ async function otvoriPosaljiKatalogGrupe(){
             ${lista.map(g=>`
               <div style="display:flex;align-items:center;gap:8px;padding:3px 0 3px 18px;font-size:12.5px;">
                 <label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;">
-                  <input type="checkbox" value="${katEsc(g.grupa)}" onchange="katUcitajDebljine();katUcitajArtikle();katOsvjeziPregled()">
+                  <input type="checkbox" value="${katEsc(g.grupa)}" onchange="katGrupaPromjena(this)">
                   <span style="flex:1;">${katEsc(g.grupa)}</span>
                   <span style="color:#8b96a5;font-size:11px;">${g.broj}</span>
                 </label>
@@ -506,6 +513,13 @@ function katPostaviPrikaz(p){
    Kad se izaberu grupe, ucitaju se debljine koje u njima postoje. Ako se nista ne
    izabere, ide sve — filter je samo suzavanje. */
 function katIzabraneGrupe(){
+  /* Cita se iz zapamcenog spiska — kvadratici na ekranu pokazuju samo ono sto je
+     trenutno pronadjeno pretragom. */
+  for(const el of document.querySelectorAll('#kat-grupe input[type=checkbox][value]')){
+    if(el.checked) katIzabraneGrupeSpisak.add(el.value);
+    else katIzabraneGrupeSpisak.delete(el.value);
+  }
+  if(katIzabraneGrupeSpisak.size) return [...katIzabraneGrupeSpisak];
   return [...document.querySelectorAll('#kat-grupe input[value]:checked')].map(i=>i.value);
 }
 function katIzabraneDebljine(){
@@ -1034,9 +1048,33 @@ async function katPrevediSve(){
 
 /* Nacin prikaza PO GRUPI. "Samo grupa" daje jednu sliku i spisak debljina, bez cijena —
    jer grupa sa vise debljina nema jednu cijenu. "Sa artiklima" je red po artikal. */
+
+function katGrupaPromjena(el){
+  if(el.checked) katIzabraneGrupeSpisak.add(el.value);
+  else katIzabraneGrupeSpisak.delete(el.value);
+  katUcitajDebljine(); katUcitajArtikle(); katOsvjeziPregled();
+}
+
+/* Vraca kvadratice i prekidace na zapamceno stanje. Zove se poslije svakog
+   iscrtavanja spiska grupa — inace bi pretraga ponistila raniji izbor. */
+function katVratiIzborGrupa(){
+  document.querySelectorAll('#kat-grupe input[type=checkbox][value]').forEach(el => {
+    el.checked = katIzabraneGrupeSpisak.has(el.value);
+  });
+  document.querySelectorAll('.kat-nacin').forEach(btn => {
+    const samo = katNacinGrupe.get(btn.dataset.grupa) === true;
+    btn.dataset.samo = samo ? '1' : '0';
+    btn.textContent = samo ? '🗂 samo grupa' : '📄 sa artiklima';
+    btn.style.background = samo ? '#f3f0f8' : '#fff';
+    btn.style.color = samo ? '#6b4fa0' : '';
+    btn.style.borderColor = samo ? '#d6cce8' : '#ddd';
+  });
+}
+
 function katPrekidacNacina(btn){
   const samo = btn.dataset.samo === '1';
   btn.dataset.samo = samo ? '0' : '1';
+  katNacinGrupe.set(btn.dataset.grupa, !samo);   // pamti se i kad spisak nestane
 
   /* Kad grupa predje u "samo grupa", njeni pojedinacno izabrani artikli se brisu iz
      izbora — inace bi ostali zapamceni, a nigdje se ne bi vidjeli. */
@@ -1059,9 +1097,14 @@ function katPrekidacNacina(btn){
 }
 
 function katGrupeSamo(){
-  return [...document.querySelectorAll('.kat-nacin')]
-    .filter(b => b.dataset.samo === '1')
-    .map(b => b.dataset.grupa);
+  for(const b of document.querySelectorAll('.kat-nacin')){
+    if(b.dataset.samo === '1') katNacinGrupe.set(b.dataset.grupa, true);
+  }
+  // Samo one koje su i IZABRANE — nacin bez izbora nema ucinka
+  const izabrane = new Set(katIzabraneGrupe());
+  return [...katNacinGrupe.entries()]
+    .filter(([g, samo]) => samo && izabrane.has(g))
+    .map(([g]) => g);
 }
 
 </script>
