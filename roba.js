@@ -2381,7 +2381,7 @@ router.get('/:id/log-naziva', preskociAkoNijeArtikal, zahtijevaRobaMagacin, asyn
 router.get('/:id/slike', preskociAkoNijeArtikal, zahtijevaProdaju, async (req, res) => {
   try {
     const r = await pool.query(
-      'SELECT id, url, thumb_url, redosled, glavna, gotov_proizvod FROM roba_slike WHERE roba_id=$1 ORDER BY glavna DESC, redosled ASC',
+      'SELECT id, url, thumb_url, redosled, glavna, gotov_proizvod, grupa_glavna FROM roba_slike WHERE roba_id=$1 ORDER BY glavna DESC, redosled ASC',
       [req.params.id]
     );
     res.json(r.rows);

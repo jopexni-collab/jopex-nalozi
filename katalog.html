@@ -377,7 +377,13 @@ async function otvoriPosaljiKatalogGrupe(){
                         style="font-size:10px;padding:2px 8px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;white-space:nowrap;">
                   📄 sa artiklima
                 </button>
-              </div>`).join('')}
+                <button type="button" class="kat-grana" data-grupa="${katEsc(g.grupa)}"
+                        onclick="katGranaGrupe(this)" title="Prikaži artikle ove grupe"
+                        style="font-size:11px;padding:2px 7px;border:none;background:none;cursor:pointer;color:#8b96a5;">▸</button>
+              </div>
+              ${/* Artikli TE grupe kao podstavke — ranije su svi artikli svih grupa
+                    bili u jednom spisku, pa se nije znalo sta je odakle. */''}
+              <div class="kat-artikli-grupe" data-grupa="${katEsc(g.grupa)}" style="display:none;padding-left:34px;"></div>`).join('')}
           </div>`).join('')
       : '<div style="color:#8b96a5;font-size:12px;padding:6px;">Nema grupa proizvoda.</div>';
 
@@ -1049,6 +1055,78 @@ async function katPrevediSve(){
 /* Nacin prikaza PO GRUPI. "Samo grupa" daje jednu sliku i spisak debljina, bez cijena —
    jer grupa sa vise debljina nema jednu cijenu. "Sa artiklima" je red po artikal. */
 
+
+/* Grananje grupe — artikli se ucitavaju TEK kad se grupa otvori i stoje ISPOD nje.
+   Ranije su svi artikli svih izabranih grupa bili u jednom ravnom spisku, pa se nije
+   znalo koji je odakle. */
+const katArtikliPoGrupi = new Map();
+
+async function katGranaGrupe(btn){
+  const grupa = btn.dataset.grupa;
+  const blok = document.querySelector(`.kat-artikli-grupe[data-grupa="${CSS.escape(grupa)}"]`);
+  if(!blok) return;
+
+  if(blok.style.display !== 'none'){ blok.style.display = 'none'; btn.textContent = '▸'; return; }
+  btn.textContent = '▾';
+  blok.style.display = 'block';
+
+  if(!katArtikliPoGrupi.has(grupa)){
+    blok.innerHTML = '<div style="font-size:11px;color:#8b96a5;padding:4px;">Učitavanje...</div>';
+    try{
+      const tipId = document.getElementById('kat-tip').value;
+      const samoDost = document.getElementById('kat-samo-dostupno').checked;
+      const deb = katIzabraneDebljine();
+      const r = await fetch(`${API}/api/katalog/pregled?grupe=${encodeURIComponent(grupa)}`
+        + (katObjektId?`&objekt_id=${katObjektId}`:'') + (tipId?`&tip_kupca_id=${tipId}`:'')
+        + (samoDost?'&samo_dostupno=true':'')
+        + (deb.length?`&debljine=${deb.join(',')}`:''));
+      const d = await r.json();
+      katArtikliPoGrupi.set(grupa, d.stavke || []);
+    }catch(e){ katArtikliPoGrupi.set(grupa, []); }
+  }
+  katRenderArtikleGrupe(grupa);
+}
+
+function katRenderArtikleGrupe(grupa){
+  const blok = document.querySelector(`.kat-artikli-grupe[data-grupa="${CSS.escape(grupa)}"]`);
+  if(!blok) return;
+  const lista = katArtikliPoGrupi.get(grupa) || [];
+
+  if(katNacinGrupe.get(grupa) === true){
+    blok.innerHTML = `<div style="font-size:11px;color:#6b4fa0;padding:5px 4px;line-height:1.45;">
+      🗂 Grupa ide <b>kao cjelina</b> — pojedinačni artikli se ne biraju.</div>`;
+    return;
+  }
+  if(!lista.length){
+    blok.innerHTML = '<div style="font-size:11px;color:#8b96a5;padding:4px;">Nema artikala.</div>';
+    return;
+  }
+  blok.innerHTML = `
+    <div style="display:flex;gap:6px;padding:3px 0;">
+      <button type="button" onclick="katSviUGrupi('${katEsc(grupa)}',true)" style="font-size:10px;padding:1px 8px;border:1px solid #ddd;background:#fff;border-radius:4px;cursor:pointer;">Sve</button>
+      <button type="button" onclick="katSviUGrupi('${katEsc(grupa)}',false)" style="font-size:10px;padding:1px 8px;border:1px solid #ddd;background:#fff;border-radius:4px;cursor:pointer;">Ništa</button>
+      <span style="font-size:10px;color:#8b96a5;align-self:center;">${lista.length} art.</span>
+    </div>
+    ${lista.map(s=>`
+      <label style="display:flex;align-items:center;gap:7px;padding:2px 0;font-size:11.5px;cursor:pointer;">
+        <input type="checkbox" value="${katEsc(s.sifra)}" ${katIzabraniArtikli.has(String(s.sifra))?'checked':''}
+               onchange="katArtikalPromjena(this)">
+        <span style="color:#8b96a5;min-width:44px;">${katEsc(s.sifra)}</span>
+        <span style="flex:1;">${katEsc(s.naziv)}</span>
+        ${s.debljina_cm?`<span style="color:#8b96a5;font-size:10px;">${String(s.debljina_cm).replace('.',',')} cm</span>`:''}
+      </label>`).join('')}`;
+}
+
+function katSviUGrupi(grupa, ukljuci){
+  for(const s of (katArtikliPoGrupi.get(grupa) || [])){
+    if(ukljuci) katIzabraniArtikli.add(String(s.sifra));
+    else katIzabraniArtikli.delete(String(s.sifra));
+  }
+  katRenderArtikleGrupe(grupa);
+  katOsvjeziInfoArtikala();
+  katOsvjeziPregled();
+}
+
 function katGrupaPromjena(el){
   if(el.checked) katIzabraneGrupeSpisak.add(el.value);
   else katIzabraneGrupeSpisak.delete(el.value);
@@ -1091,7 +1169,7 @@ function katPrekidacNacina(btn){
     btn.textContent = '🗂 samo grupa';
     btn.style.background = '#f3f0f8'; btn.style.color = '#6b4fa0'; btn.style.borderColor = '#d6cce8';
   }
-  katRenderArtikle();
+  katRenderArtikleGrupe(btn.dataset.grupa);
   katOsvjeziInfoArtikala();
   katOsvjeziPregled();
 }
