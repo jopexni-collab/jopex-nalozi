@@ -383,7 +383,7 @@ async function otvoriPosaljiKatalogGrupe(){
               </div>
               ${/* Artikli TE grupe kao podstavke — ranije su svi artikli svih grupa
                     bili u jednom spisku, pa se nije znalo sta je odakle. */''}
-              <div class="kat-artikli-grupe" data-grupa="${katEsc(g.grupa)}" style="display:none;padding-left:34px;"></div>`).join('')}
+`).join('')}
           </div>`).join('')
       : '<div style="color:#8b96a5;font-size:12px;padding:6px;">Nema grupa proizvoda.</div>';
 
@@ -1061,17 +1061,27 @@ async function katPrevediSve(){
    znalo koji je odakle. */
 const katArtikliPoGrupi = new Map();
 
+/* Otvorena grana se prikazuje DOLJE, u sirem prozoru — stablo je preusko za spisak
+   artikala sa sifrom, nazivom i debljinom. */
+let katOtvorenaGrupa = null;
+
 async function katGranaGrupe(btn){
   const grupa = btn.dataset.grupa;
-  const blok = document.querySelector(`.kat-artikli-grupe[data-grupa="${CSS.escape(grupa)}"]`);
+  const blok = document.getElementById('kat-artikli');
   if(!blok) return;
 
-  if(blok.style.display !== 'none'){ blok.style.display = 'none'; btn.textContent = '▸'; return; }
-  btn.textContent = '▾';
-  blok.style.display = 'block';
+  // Drugi klik na istu granu je zatvara
+  if(katOtvorenaGrupa === grupa){
+    katOtvorenaGrupa = null;
+    katOznaciGranu();
+    katRenderArtikleGrupe(null);
+    return;
+  }
+  katOtvorenaGrupa = grupa;
+  katOznaciGranu();
 
   if(!katArtikliPoGrupi.has(grupa)){
-    blok.innerHTML = '<div style="font-size:11px;color:#8b96a5;padding:4px;">Učitavanje...</div>';
+    blok.innerHTML = '<div style="font-size:11.5px;color:#8b96a5;padding:8px;">Učitavanje...</div>';
     try{
       const tipId = document.getElementById('kat-tip').value;
       const samoDost = document.getElementById('kat-samo-dostupno').checked;
@@ -1087,34 +1097,56 @@ async function katGranaGrupe(btn){
   katRenderArtikleGrupe(grupa);
 }
 
+/* Oznacava koja je grana otvorena — u stablu se vidi strelica, dolje njen sadrzaj. */
+function katOznaciGranu(){
+  document.querySelectorAll('.kat-grana').forEach(b => {
+    const otv = b.dataset.grupa === katOtvorenaGrupa;
+    b.textContent = otv ? '▾' : '▸';
+    b.style.color = otv ? 'var(--blue,#1a5fa8)' : '#8b96a5';
+    b.style.fontWeight = otv ? '700' : '';
+  });
+}
+
 function katRenderArtikleGrupe(grupa){
-  const blok = document.querySelector(`.kat-artikli-grupe[data-grupa="${CSS.escape(grupa)}"]`);
+  const blok = document.getElementById('kat-artikli');
   if(!blok) return;
+  blok.style.display = 'block';
+
+  if(!grupa){
+    blok.innerHTML = `<div style="font-size:11.5px;color:#8b96a5;padding:8px;line-height:1.5;">
+      Klikni <b>▸</b> uz grupu gore da izabereš pojedine artikle.</div>`;
+    return;
+  }
   const lista = katArtikliPoGrupi.get(grupa) || [];
+  const zaglavlje = `<div style="display:flex;align-items:center;gap:8px;padding:5px 0 7px;border-bottom:1px solid #eee;margin-bottom:6px;flex-wrap:wrap;">
+      <b style="font-size:12.5px;color:#1f3864;">📂 ${katEsc(grupa)}</b>
+      <span style="flex:1;"></span>
+      <button type="button" onclick="katSviUGrupi('${katEsc(grupa)}',true)" style="font-size:11px;padding:3px 11px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;">Sve</button>
+      <button type="button" onclick="katSviUGrupi('${katEsc(grupa)}',false)" style="font-size:11px;padding:3px 11px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;">Ništa</button>
+    </div>`;
 
   if(katNacinGrupe.get(grupa) === true){
-    blok.innerHTML = `<div style="font-size:11px;color:#6b4fa0;padding:5px 4px;line-height:1.45;">
-      🗂 Grupa ide <b>kao cjelina</b> — pojedinačni artikli se ne biraju.</div>`;
+    blok.innerHTML = zaglavlje + `<div style="font-size:12px;color:#6b4fa0;padding:9px;background:#faf9fc;border-radius:6px;line-height:1.5;">
+      🗂 Ova grupa ide <b>kao cjelina</b> — pojedinačni artikli se ne biraju.
+      <br><span style="font-size:11px;color:#8b96a5;">Prebaci je na „📄 sa artiklima" ako želiš birati pojedinačno.</span></div>`;
     return;
   }
   if(!lista.length){
-    blok.innerHTML = '<div style="font-size:11px;color:#8b96a5;padding:4px;">Nema artikala.</div>';
+    blok.innerHTML = zaglavlje + '<div style="font-size:11.5px;color:#8b96a5;padding:8px;">Nema artikala.</div>';
     return;
   }
-  blok.innerHTML = `
-    <div style="display:flex;gap:6px;padding:3px 0;">
-      <button type="button" onclick="katSviUGrupi('${katEsc(grupa)}',true)" style="font-size:10px;padding:1px 8px;border:1px solid #ddd;background:#fff;border-radius:4px;cursor:pointer;">Sve</button>
-      <button type="button" onclick="katSviUGrupi('${katEsc(grupa)}',false)" style="font-size:10px;padding:1px 8px;border:1px solid #ddd;background:#fff;border-radius:4px;cursor:pointer;">Ništa</button>
-      <span style="font-size:10px;color:#8b96a5;align-self:center;">${lista.length} art.</span>
+  blok.innerHTML = zaglavlje + `
+    <div style="max-height:240px;overflow-y:auto;">
+      ${lista.map((s,i)=>`
+        <label style="display:flex;align-items:center;gap:9px;padding:3px 5px;font-size:12px;cursor:pointer;background:${i%2?'#f7f9fb':'#fff'};">
+          <input type="checkbox" value="${katEsc(s.sifra)}" ${katIzabraniArtikli.has(String(s.sifra))?'checked':''}
+                 onchange="katArtikalPromjena(this)">
+          <span style="color:#8b96a5;min-width:50px;">${katEsc(s.sifra)}</span>
+          <span style="flex:1;">${katEsc(s.naziv)}</span>
+          ${s.debljina_cm?`<span style="color:#8b96a5;font-size:11px;white-space:nowrap;">${String(s.debljina_cm).replace('.',',')} cm</span>`:''}
+        </label>`).join('')}
     </div>
-    ${lista.map(s=>`
-      <label style="display:flex;align-items:center;gap:7px;padding:2px 0;font-size:11.5px;cursor:pointer;">
-        <input type="checkbox" value="${katEsc(s.sifra)}" ${katIzabraniArtikli.has(String(s.sifra))?'checked':''}
-               onchange="katArtikalPromjena(this)">
-        <span style="color:#8b96a5;min-width:44px;">${katEsc(s.sifra)}</span>
-        <span style="flex:1;">${katEsc(s.naziv)}</span>
-        ${s.debljina_cm?`<span style="color:#8b96a5;font-size:10px;">${String(s.debljina_cm).replace('.',',')} cm</span>`:''}
-      </label>`).join('')}`;
+    <div style="font-size:10.5px;color:#8b96a5;margin-top:5px;">${lista.length} artikala u ovoj grupi</div>`;
 }
 
 function katSviUGrupi(grupa, ukljuci){
@@ -1169,7 +1201,7 @@ function katPrekidacNacina(btn){
     btn.textContent = '🗂 samo grupa';
     btn.style.background = '#f3f0f8'; btn.style.color = '#6b4fa0'; btn.style.borderColor = '#d6cce8';
   }
-  katRenderArtikleGrupe(btn.dataset.grupa);
+  if(katOtvorenaGrupa === btn.dataset.grupa) katRenderArtikleGrupe(btn.dataset.grupa);
   katOsvjeziInfoArtikala();
   katOsvjeziPregled();
 }
