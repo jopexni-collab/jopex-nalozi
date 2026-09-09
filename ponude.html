@@ -12149,6 +12149,48 @@ function genDXF(){
 
     var bbox_h=0; // visina ove stavke (za offset sljedece)
 
+    // ── POZICIJE (klupice i stepenice) ─────────────────────────────
+    // DXF je ranije crtao samo pravougaonik iz dims, pa je lucna klupica
+    // izlazila kao kvadrat. Sada se crta SVAKA pozicija sa svojom konturom.
+    if(imaPozicije()&&(pozicije||[]).length){
+      var _pX=0, _pMaxH=0;
+      (pozicije||[]).forEach(function(pz,pi){
+        var _Lp=_pozLuk(pz);
+        var _pts, _w, _h;
+        if(_Lp){
+          var _bbp=_lukBB(_Lp);
+          _pts=_lukTacke(_Lp,1.5).map(function(q){
+            return [q[0]-_bbp.mnx, q[1]-_bbp.mny];
+          });
+          _w=_bbp.w; _h=_bbp.h;
+        } else {
+          _w=pz.a||0; _h=pz.b||0;
+          if(!(_w>0&&_h>0)) return;
+          _pts=[[0,0],[_w,0],[_w,_h],[0,_h]];
+        }
+        // kontura
+        for(var q2=0;q2<_pts.length;q2++){
+          var a2=_pts[q2], b2=_pts[(q2+1)%_pts.length];
+          ln(_pX+a2[0], yOff+a2[1], _pX+b2[0], yOff+b2[1], 'KONTURA');
+        }
+        // oznaka, mjere i broj komada
+        tx(_pX, yOff-30, 55, (pi+1)+'. '+((pz.kom||1)+' kom'), 'TEKST');
+        if(_Lp){
+          tx(_pX, yOff+_h+70, 45,
+             'Rs'+_Lp.rv+' Ru'+_Lp.ru+' e'+_lukEks(_Lp)+' '+_Lp.ug+String.fromCharCode(176)
+             +(( _Lp.nb||_Lp.nc)?(' noge '+(_Lp.nb||0)+'/'+(_Lp.nc||0)):''), 'TEKST');
+        } else {
+          tx(_pX, yOff+_h+70, 45, _w+' x '+_h+' mm', 'TEKST');
+        }
+        dH(_pX, yOff+_h, _pX+_w, Math.round(_w)+'', 40);
+        _pX += _w + 300;
+        if(_h>_pMaxH) _pMaxH=_h;
+      });
+      bbox_h=_pMaxH+220;
+      yOff+=bbox_h;
+      return;   // pozicije zamjenjuju crtanje osnovnog oblika
+    }
+
     if(tip==='k'){
       if(sh==='I'){
         var _finI=getFinalOutline('I',d,0);

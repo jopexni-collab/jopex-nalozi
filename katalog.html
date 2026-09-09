@@ -378,10 +378,12 @@ async function otvoriPosaljiKatalogGrupe(){
                 <span style="color:#8b96a5;font-size:11px;">${g.broj}</span>
                 ${/* Po grupi se bira: SAMO GRUPA (jedna slika, debljine ispod, bez cijena)
                       ili SA ARTIKLIMA (svaki artikal svoj red i svoju cijenu). */''}
+                ${/* Nacin prikaza ima smisla tek kad je grupa IZABRANA — inace se
+                      podesava nesto sto u katalog ionako ne ulazi. */''}
                 <button type="button" class="kat-nacin" data-grupa="${katEsc(g.grupa)}"
-                        onclick="katPrekidacNacina(this)"
-                        title="Prebaci između: samo grupa (jedna slika, bez cijena) i sa artiklima"
-                        style="font-size:10px;padding:2px 8px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;white-space:nowrap;">
+                        onclick="katPrekidacNacina(this)" disabled
+                        title="Prvo označi grupu, pa biraj način prikaza"
+                        style="font-size:10px;padding:2px 8px;border:1px solid #eee;background:#fafbfc;color:#c3c9d1;border-radius:5px;cursor:not-allowed;white-space:nowrap;">
                   📄 sa artiklima
                 </button>
 
@@ -1203,16 +1205,32 @@ function katRenderArtikleGrupe(grupa){
   }
   blok.innerHTML = zaglavlje + `
     <div style="max-height:240px;overflow-y:auto;">
-      ${lista.map((s,i)=>`
-        <label style="display:flex;align-items:center;gap:9px;padding:3px 5px;font-size:12px;cursor:pointer;background:${i%2?'#f7f9fb':'#fff'};">
+      ${/* Stanje se prikazuje uz svaki artikal — bez toga se lako odstampa nesto cega
+            nema. Nulto stanje je crveno i red je blijed. */''}
+      ${lista.map((s,i)=>{
+        const stanje = Number(s.stanje) || 0;
+        const nema = stanje <= 0;
+        return `
+        <label style="display:flex;align-items:center;gap:9px;padding:3px 5px;font-size:12px;cursor:pointer;
+                      background:${i%2?'#f7f9fb':'#fff'};${nema?'opacity:.62;':''}">
           <input type="checkbox" value="${katEsc(s.sifra)}" ${katIzabraniArtikli.has(String(s.sifra))?'checked':''}
                  onchange="katArtikalPromjena(this)">
           <span style="color:#8b96a5;min-width:50px;">${katEsc(s.sifra)}</span>
           <span style="flex:1;">${katEsc(s.naziv)}</span>
           ${s.debljina_cm?`<span style="color:#8b96a5;font-size:11px;white-space:nowrap;">${String(s.debljina_cm).replace('.',',')} cm</span>`:''}
-        </label>`).join('')}
+          <span title="Stanje u izabranom objektu" style="min-width:62px;text-align:right;font-size:11px;white-space:nowrap;
+                       color:${nema?'var(--red,#c0392b)':'#6b7a8d'};font-weight:${nema?'700':'400'};">
+            ${nema ? 'nema' : stanje.toLocaleString('sr-Latn-BA',{maximumFractionDigits:2}) + ' ' + katEsc(s.jed_mjera||'')}
+          </span>
+        </label>`;
+      }).join('')}
     </div>
-    <div style="font-size:10.5px;color:#8b96a5;margin-top:5px;">${lista.length} artikala u ovoj grupi</div>`;
+    <div style="font-size:10.5px;color:#8b96a5;margin-top:5px;">
+      ${lista.length} artikala u ovoj grupi${(()=>{
+        const bez = lista.filter(s => (Number(s.stanje)||0) <= 0).length;
+        return bez ? ` · <span style="color:var(--red,#c0392b);">${bez} bez stanja</span>` : '';
+      })()}
+    </div>`;
 }
 
 /* Kad se promijeni filter debljina, zapamceni artikli grana vise ne odgovaraju —
@@ -1243,6 +1261,7 @@ function katGrupaPromjena(el){
   else katIzabraneGrupeSpisak.delete(el.value);
   const filteri = document.getElementById('kat-filteri-blok');
   if(filteri && katIzabraneGrupeSpisak.size) filteri.style.display = 'block';
+  katVratiIzborGrupa();   // prekidac nacina postaje aktivan/neaktivan
   katUcitajDebljine(); katUcitajArtikle(); katOsvjeziPregled();
 }
 
@@ -1253,12 +1272,22 @@ function katVratiIzborGrupa(){
     el.checked = katIzabraneGrupeSpisak.has(el.value);
   });
   document.querySelectorAll('.kat-nacin').forEach(btn => {
+    const izabrana = katIzabraneGrupeSpisak.has(btn.dataset.grupa);
     const samo = katNacinGrupe.get(btn.dataset.grupa) === true;
     btn.dataset.samo = samo ? '1' : '0';
+    btn.disabled = !izabrana;
     btn.textContent = samo ? '🗂 samo grupa' : '📄 sa artiklima';
-    btn.style.background = samo ? '#f3f0f8' : '#fff';
-    btn.style.color = samo ? '#6b4fa0' : '';
-    btn.style.borderColor = samo ? '#d6cce8' : '#ddd';
+
+    /* Neaktivan dok grupa nije izabrana — inace se podesava nesto sto ne ulazi u katalog. */
+    if(!izabrana){
+      btn.title = 'Prvo označi grupu, pa biraj način prikaza';
+      btn.style.cssText = 'font-size:10px;padding:2px 8px;border:1px solid #eee;background:#fafbfc;color:#c3c9d1;border-radius:5px;cursor:not-allowed;white-space:nowrap;';
+    } else {
+      btn.title = 'Prebaci između: samo grupa (jedna slika, bez cijena) i sa artiklima';
+      btn.style.cssText = 'font-size:10px;padding:2px 8px;border-radius:5px;cursor:pointer;white-space:nowrap;'
+        + (samo ? 'border:1px solid #d6cce8;background:#f3f0f8;color:#6b4fa0;font-weight:700;'
+                : 'border:1px solid #ddd;background:#fff;');
+    }
   });
 }
 
