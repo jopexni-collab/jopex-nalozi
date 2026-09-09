@@ -48,7 +48,12 @@ router.get('/:token', async (req, res) => {
     /* PRIKAZ PO GRUPAMA — umjesto svakog artikla posebno, jedna stavka po grupi sa
        spiskom dostupnih debljina. Za kamen je to prirodnije: kupac prvo bira
        materijal, pa debljinu. Slika se uzima ona oznacena kao glavna za grupu. */
-    if (kat.samo_grupe && stavke.length) {
+    /* Spajaju se SAMO grupe oznacene kao "samo grupa" — ostale ostaju artikal po
+       artikal. Tako u istom katalogu mogu stajati i jedno i drugo. */
+    const grupeSamo = new Set(
+      (Array.isArray(kat.grupe_samo) ? kat.grupe_samo : []).map(x => String(x).toLowerCase())
+    );
+    if (grupeSamo.size && stavke.length) {
       const slike = (await pool.query(
         `SELECT r.grupa, sl.url, sl.thumb_url
          FROM roba_slike sl JOIN roba r ON r.id = sl.roba_id
@@ -58,8 +63,10 @@ router.get('/:token', async (req, res) => {
       for (const s of slike) slikaGrupe[String(s.grupa).toLowerCase()] = s;
 
       const poGrupi = {};
+      const pojedinacne = [];
       for (const s of stavke) {
         const k = String(s.grupa || 'Ostalo').toLowerCase();
+        if (!grupeSamo.has(k)) { pojedinacne.push(s); continue; }
         if (!poGrupi[k]) {
           const sl = slikaGrupe[k];
           poGrupi[k] = {
@@ -69,7 +76,10 @@ router.get('/:token', async (req, res) => {
             sifra: null,
             debljine: new Set(),
             broj_artikala: 0,
-            glavna_slika: sl?.url || sl?.thumb_url || s.glavna_slika || null,
+            /* Puna slika, ne slicica — slicica je oko 200px pa se u PDF-u muti. */
+            glavna_slika: sl?.url || sl?.thumb_url || s.slika_puna || s.glavna_slika || null,
+            slika: sl?.url || sl?.thumb_url || s.slika_puna || s.slika || null,
+            slika_puna: sl?.url || s.slika_puna || null,
             cijena_od: null, cijena_do: null,
           };
         }
@@ -82,8 +92,14 @@ router.get('/:token', async (req, res) => {
           if (g.cijena_do == null || c2 > g.cijena_do) g.cijena_do = c2;
         }
       }
-      stavke = Object.values(poGrupi)
-        .map(g => ({ ...g, debljine: [...g.debljine].sort((a, b) => a - b) }))
+      /* Grupa sa vise debljina nema JEDNU cijenu, pa se cijene kod nje ne prikazuju —
+         umjesto njih stoji spisak dostupnih debljina. */
+      const spojene = Object.values(poGrupi).map(g => ({
+        ...g,
+        debljine: [...g.debljine].sort((a, b) => a - b),
+        cijena: null, cijena_od: null, cijena_do: null,
+      }));
+      stavke = [...spojene, ...pojedinacne]
         .sort((a, b) => String(a.naziv).localeCompare(String(b.naziv)));
     }
 
@@ -181,6 +197,7 @@ router.get('/:token', async (req, res) => {
       naslov: kat.naslov,
       sta_ulazi: kat.sta_ulazi || 'materijali',
       samo_grupe: kat.samo_grupe === true,
+      grupe_samo: kat.grupe_samo || [],
       /* Jezik i valuta prikaza — prevod naziva i preracun po fiksnom kursu rade se
          u samom dokumentu, da se ne mijenja ono sto je snimljeno. */
       jezik: kat.jezik || 'bs',

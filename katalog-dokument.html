@@ -215,6 +215,12 @@
 .deb-uvod{font-size:10px;color:#8b96a5;font-weight:700;}
 .deb{font-size:10.5px;font-weight:700;background:#eef2f8;color:#1f3864;padding:1px 8px;border-radius:5px;}
 .grupa-broj{font-size:10.5px;opacity:.8;}
+
+@media print{
+  /* Slika mora ostati u punoj razlucivosti — pregledac je inace smanji na velicinu
+     prikaza, pa u PDF-u izadje mutna. */
+  .poz, .gotov-slika, .gotov-k-slika{ image-rendering:auto; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -755,13 +761,15 @@ ${T('uslov')}
 
 function slikaHtml(s, klasa){
   return s.slika
-    ? `<img class="${klasa}" src="${esc(s.slika||s.slika_puna)}" data-puna="${esc(s.slika_puna||'')}" loading="lazy" alt="${esc(s.naziv)}">`
+    ? `<img class="${klasa}" src="${esc(s.slika_puna||s.slika)}" data-puna="${esc(s.slika_puna||'')}" loading="lazy" alt="${esc(s.naziv)}">`
     : `<div class="nema-slike">🪨</div>`;
 }
 
 function kartica(s){
   return `<div class="stavka">
-    ${s.slika?`<img class="poz" src="${esc(s.slika||s.slika_puna)}" data-puna="${esc(s.slika_puna||'')}" loading="lazy" alt="${esc(s.naziv)}">`:''}
+    ${/* PUNA slika ima prednost nad slicicom — sicica je oko 200px, pa se pri stampi
+          i cuvanju u PDF razvlaci i muti. Sicica ostaje kao rezerva. */''}
+    ${(s.slika_puna||s.slika)?`<img class="poz" src="${esc(s.slika_puna||s.slika)}" data-puna="${esc(s.slika_puna||'')}" loading="lazy" alt="${esc(s.naziv)}">`:''}
     <div class="sjena"></div>
     <div class="znacka">${esc(s.grupa||'—')}</div>
     <div class="dno">

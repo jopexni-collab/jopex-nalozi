@@ -151,8 +151,8 @@ router.post('/', smijeSlati, async (req, res) => {
     const r = await pool.query(
       `INSERT INTO katalozi (javni_token, tip_kupca_id, tip_naziv, grupe, objekt_id,
                              prikaz, sa_cijenama, naslov, kupac_naziv, kreirao_id, kreirao_ime, samo_dostupno, debljine, sifre,
-                              gotovi_proizvodi, gotovi_ids, sta_ulazi, jezik, valuta, samo_grupe)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id, javni_token`,
+                              gotovi_proizvodi, gotovi_ids, sta_ulazi, jezik, valuta, samo_grupe, grupe_samo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING id, javni_token`,
       [token, tip_kupca_id || null, tipNaziv, grupe, objekt_id || null,
        prikaz === 'lista' ? 'lista' : 'mreza', sa_cijenama !== false,
        naslov || null, kupac_naziv || null, u.id, u.ime_prezime, samo_dostupno === true,
@@ -168,7 +168,10 @@ router.post('/', smijeSlati, async (req, res) => {
        ['KM','EUR'].includes(req.body?.valuta) ? req.body.valuta : 'KM',
        /* Prikaz po GRUPAMA — jedna slika po grupi, ispod dostupne debljine.
           Za kamen je to prirodnije: kupac bira materijal, pa onda debljinu. */
-       req.body?.samo_grupe === true]
+       req.body?.samo_grupe === true,
+       /* Grupe koje idu kao JEDNA stavka. Ostale ostaju artikal po artikal. */
+       Array.isArray(req.body?.grupe_samo) && req.body.grupe_samo.length
+         ? req.body.grupe_samo.map(String) : null]
     );
     res.status(201).json({ ok: true, token: r.rows[0].javni_token, id: r.rows[0].id });
   } catch (err) {
