@@ -354,8 +354,6 @@ async function otvoriPosaljiKatalogGrupe(){
     // kategorija, npr. sav granit, bez prebiranja po pojedinacnim grupama.
     const poMaster = {};
     grupe.forEach(g => { (poMaster[g.master_naziv || '⏳ Nerazvrstano'] ||= []).push(g); });
-    /* Poslije iscrtavanja vraca se ono sto je vec bilo izabrano. */
-    setTimeout(katVratiIzborGrupa, 0);
     document.getElementById('kat-grupe').innerHTML = grupe.length
       ? Object.entries(poMaster).map(([master, lista]) => `
           <div style="margin-bottom:6px;">
@@ -382,6 +380,10 @@ async function otvoriPosaljiKatalogGrupe(){
               </div>`).join('')}
           </div>`).join('')
       : '<div style="color:#8b96a5;font-size:12px;padding:6px;">Nema grupa proizvoda.</div>';
+
+    /* Vraca se ono sto je vec bilo izabrano — tek POSLIJE iscrtavanja, jer prije toga
+       kvadratica jos nema. Bez ovoga pretraga ponisti sav raniji izbor. */
+    katVratiIzborGrupa();
   }catch(e){}
 }
 
@@ -513,14 +515,10 @@ function katPostaviPrikaz(p){
    Kad se izaberu grupe, ucitaju se debljine koje u njima postoje. Ako se nista ne
    izabere, ide sve — filter je samo suzavanje. */
 function katIzabraneGrupe(){
-  /* Cita se iz zapamcenog spiska — kvadratici na ekranu pokazuju samo ono sto je
-     trenutno pronadjeno pretragom. */
-  for(const el of document.querySelectorAll('#kat-grupe input[type=checkbox][value]')){
-    if(el.checked) katIzabraneGrupeSpisak.add(el.value);
-    else katIzabraneGrupeSpisak.delete(el.value);
-  }
-  if(katIzabraneGrupeSpisak.size) return [...katIzabraneGrupeSpisak];
-  return [...document.querySelectorAll('#kat-grupe input[value]:checked')].map(i=>i.value);
+  /* Vraca se ZAPAMCENI spisak. Ne cita se sa ekrana — poslije pretrage tamo stoje samo
+     pronadjene grupe, pa bi se sve ostale brisale iz izbora. Spisak se dopunjuje samo
+     kroz katGrupaPromjena, kad korisnik stvarno klikne. */
+  return [...katIzabraneGrupeSpisak];
 }
 function katIzabraneDebljine(){
   return [...document.querySelectorAll('#kat-debljine input:checked')].map(i=>i.value);
