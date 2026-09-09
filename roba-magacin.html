@@ -3878,10 +3878,24 @@ function renderLagerRedovi(){
           ${/* U magacinu se umjesto sličice prikazuje IKONICA — red je time upola niži i
                 tabela stane mnogo kompaktnije. Klik i dalje otvara karusel sa slikama.
                 (Maloprodaja zadržava sličice — tamo je vizuelni prepoznavanje bitnije.) */''}
+          ${/* CRVENO oko = ovdje je slika koja predstavlja cijelu grupu.
+                Bez toga se u listi ne bi znalo gdje ta slika stoji. */''}
           ${s.glavna_slika
-            ? `<span title="Pogledaj slike (${s.broj_slika})" style="font-size:15px;line-height:1;color:var(--blue,#1a5fa8);">👁</span>`
+            ? `<span title="${s.nosi_grupu ? `Pogledaj slike (${s.broj_slika}) · OVDJE je slika koja predstavlja grupu „${esc(s.grupa||'')}"` : `Pogledaj slike (${s.broj_slika})`}"
+                     style="font-size:15px;line-height:1;color:${s.nosi_grupu?'var(--red,#c0392b)':'var(--blue,#1a5fa8)'};">👁</span>`
             : `<span title="Dodaj sliku" style="font-size:14px;line-height:1;color:#c3c9d1;">＋</span>`}
           ${parseInt(s.broj_slika)>1?`<span style="font-size:9px;color:#8b96a5;font-weight:700;margin-left:1px;">${s.broj_slika}</span>`:''}
+
+          ${/* Kod OSTALIH artikala grupe stoji blijedi znak sa sifrom nosioca — tako se
+                iz bilo kog artikla vidi da grupa vec ima svoju sliku i gdje je. */''}
+          ${(!s.nosi_grupu && s.grupa_slika_sifra)
+            ? `<span title="Grupu „${esc(s.grupa||'')}" predstavlja slika artikla ${esc(s.grupa_slika_sifra)}"
+                     style="font-size:9px;color:#c3c9d1;margin-left:2px;">🗂${esc(s.grupa_slika_sifra)}</span>`
+            : ''}
+          ${(!s.nosi_grupu && !s.grupa_slika_sifra && s.grupa && s.glavna_slika)
+            ? `<span title="Grupa „${esc(s.grupa)}" nema sliku koja je predstavlja — otvori slike i klikni „🗂 Glavna za grupu""
+                     style="font-size:9px;color:var(--orange,#b8860b);margin-left:2px;">🗂</span>`
+            : ''}
           ${s.model_3d_url?`<span title="Ima 3D model" style="background:#6b4fa0;color:#fff;font-size:7.5px;padding:1px 3px;border-radius:5px;line-height:1;margin-left:2px;vertical-align:middle;">3D</span>`:''}
         </div>
       </td>
@@ -5162,7 +5176,7 @@ function gprRenderDetalj(el, g){
         <thead><tr style="background:#1f3864;color:#fff;">
           <th style="padding:4px 6px;text-align:left;">Grupa izbora</th>
           <th style="padding:4px 6px;text-align:left;">Komponenta</th>
-          <th style="padding:4px 6px;text-align:center;" title="★ glavna slika artikla · 🗂 glavna za grupu · 🍽️ slika gotovog proizvoda">Slike</th>
+          <th style="padding:4px 6px;text-align:center;" title="👁 plavo = ima slike · 👁 CRVENO = ovdje je slika koja predstavlja grupu · 🗂 sifra = grupu predstavlja slika tog artikla · 🗂 žuto = grupa nema svoju sliku">Slike</th>
           <th style="padding:4px 6px;text-align:left;">Grupa</th>
           <th style="padding:4px 6px;text-align:center;">Deb.</th>
           <th style="padding:4px 6px;text-align:center;" title="Standardna dimenzija table iz lagera — koliko je velika ploča iz koje se reže. Nije mjera proizvoda.">Tabla iz lagera</th>

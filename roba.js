@@ -131,7 +131,17 @@ router.get('/lager-prodaja', zahtijevaProdaju, async (req, res) => {
               (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS glavna_slika,
               (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND gotov_proizvod=true LIMIT 1) AS slika_gotov,
               r.model_3d_url,
-              (SELECT COUNT(*) FROM roba_slike WHERE roba_id=r.id) AS broj_slika
+              (SELECT COUNT(*) FROM roba_slike WHERE roba_id=r.id) AS broj_slika,
+
+              /* Slika koja predstavlja GRUPU. Vraca se i kad je kod DRUGOG artikla —
+                 inace se u listi ne bi znalo je li za grupu uopste izabrana slika,
+                 ni kod koga stoji. */
+              EXISTS(SELECT 1 FROM roba_slike WHERE roba_id=r.id AND grupa_glavna=true) AS nosi_grupu,
+              (SELECT r2.sifra FROM roba r2 JOIN roba_slike s2 ON s2.roba_id=r2.id
+               WHERE s2.grupa_glavna = true
+                 AND TRIM(LOWER(r2.grupa)) = TRIM(LOWER(r.grupa))
+                 AND COALESCE(TRIM(r.grupa),'') <> ''
+               LIMIT 1) AS grupa_slika_sifra
        FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
        WHERE r.aktivan=true
        ORDER BY r.naziv`,
