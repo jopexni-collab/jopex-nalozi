@@ -32,12 +32,14 @@ router.get('/', async (req, res) => {
   if (!u) return res.status(401).json({ error: 'Niste prijavljeni.' });
   try {
     const r = await pool.query(
+      /* Ko ima "Ugovara" vidi SVE ponude — on ih i usvaja u naloge, pa mu tudje moraju
+         biti dostupne. Ostali vide samo svoje. */
       `SELECT id, naziv, kupac, kreator_id, kreator_inicijali, datum, link_json, kreirano
        FROM ponude
-       WHERE ($1 = 'admin' OR kreator_id = $2)
+       WHERE ($1 = 'admin' OR $3 = true OR kreator_id = $2)
        ORDER BY kreirano DESC
        LIMIT 100`,
-      [u.rola, u.id]
+      [u.rola, u.id, u.moze_ugovarati === true]
     );
     res.json(r.rows);
   } catch (err) {
@@ -70,6 +72,8 @@ router.delete('/:id', async (req, res) => {
   if (!u) return res.status(401).json({ error: 'Niste prijavljeni.' });
   try {
     const r = await pool.query(
+      /* Brisanje ostaje na autoru i adminu — "Ugovara" smije da vidi i usvoji, ali
+         ne i da obrise tudji rad. */
       `DELETE FROM ponude WHERE id = $1 AND ($2 = 'admin' OR kreator_id = $3) RETURNING id`,
       [req.params.id, u.rola, u.id]
     );
