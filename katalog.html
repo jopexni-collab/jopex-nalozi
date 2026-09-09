@@ -521,6 +521,12 @@ function katUpisaneSifre(){
     if(el.checked) katIzabraniArtikli.add(el.value);
     else katIzabraniArtikli.delete(el.value);
   }
+  /* Iz spiska se izbacuju artikli grupa koje idu kao cjelina — oni se ne salju
+     pojedinacno, jer bi se ista roba pojavila dvaput. */
+  const samoGrupe = new Set(katGrupeSamo().map(x => String(x).toLowerCase()));
+  for(const s of (katArtikliLista || [])){
+    if(samoGrupe.has(String(s.grupa||'').toLowerCase())) katIzabraniArtikli.delete(String(s.sifra));
+  }
   if(!katIzabraniArtikli.size) return [];
 
   /* Ako su izabrani BAS SVI artikli ucitanih grupa, spisak se ne salje — katalog tad
@@ -566,11 +572,25 @@ async function katUcitajArtikle(){
 function katRenderArtikle(){
   const cont = document.getElementById('kat-artikli');
   const q = (document.getElementById('kat-artikli-pretraga').value||'').toLowerCase().trim();
-  const prikaz = katArtikliLista.filter(s=>!q
+
+  /* Grupe u rezimu "samo grupa" idu kao JEDNA stavka — njihovi artikli se ovdje ne
+     nude, jer bi izbor bio bez ucinka. Tako se u istom katalogu mogu kombinovati:
+     cijela grupa, i pojedini artikli iz drugih grupa. */
+  const samoGrupe = new Set(katGrupeSamo().map(x => String(x).toLowerCase()));
+  const dostupni = katArtikliLista.filter(s => !samoGrupe.has(String(s.grupa||'').toLowerCase()));
+
+  const prikaz = dostupni.filter(s=>!q
     || String(s.sifra).toLowerCase().includes(q)
     || String(s.naziv).toLowerCase().includes(q));
   if(!katArtikliLista.length){
     cont.innerHTML = '<div style="color:#8b96a5;font-size:12px;padding:4px;">Izaberi grupe pa će se ovdje pojaviti artikli.</div>';
+    return;
+  }
+  if(!dostupni.length){
+    cont.innerHTML = `<div style="color:#6b4fa0;font-size:12px;padding:8px;background:#faf9fc;border-radius:6px;line-height:1.5;">
+      🗂 Sve izabrane grupe idu <b>kao cjelina</b> — pojedinačni artikli se ne biraju.
+      <br><span style="color:#8b96a5;font-size:11px;">Prebaci grupu na „📄 sa artiklima" ako želiš birati pojedinačno.</span>
+    </div>`;
     return;
   }
   /* Izbor se pamti u ZASEBNOM spisku, ne cita se sa ekrana. Ranije se citao iz onoga
@@ -1017,6 +1037,15 @@ async function katPrevediSve(){
 function katPrekidacNacina(btn){
   const samo = btn.dataset.samo === '1';
   btn.dataset.samo = samo ? '0' : '1';
+
+  /* Kad grupa predje u "samo grupa", njeni pojedinacno izabrani artikli se brisu iz
+     izbora — inace bi ostali zapamceni, a nigdje se ne bi vidjeli. */
+  if(!samo){
+    const g = String(btn.dataset.grupa || '').toLowerCase();
+    for(const s of (katArtikliLista || [])){
+      if(String(s.grupa||'').toLowerCase() === g) katIzabraniArtikli.delete(String(s.sifra));
+    }
+  }
   if(samo){
     btn.textContent = '📄 sa artiklima';
     btn.style.background = '#fff'; btn.style.color = ''; btn.style.borderColor = '#ddd';
@@ -1024,6 +1053,8 @@ function katPrekidacNacina(btn){
     btn.textContent = '🗂 samo grupa';
     btn.style.background = '#f3f0f8'; btn.style.color = '#6b4fa0'; btn.style.borderColor = '#d6cce8';
   }
+  katRenderArtikle();
+  katOsvjeziInfoArtikala();
   katOsvjeziPregled();
 }
 
