@@ -173,6 +173,8 @@ main{max-width:760px;margin:0 auto;padding:20px 16px 40px;}
              style="width:100%;font:inherit;font-size:12px;padding:6px 9px;border:1px solid #ddd;border-radius:6px;margin-bottom:6px;">
       <div id="kat-gotovi" style="max-height:230px;overflow-y:auto;border:1px solid #ddd;border-radius:8px;padding:7px 9px;"></div>
       <div id="kat-gotovi-info" style="font-size:11px;color:#8b96a5;margin-top:4px;"></div>
+      <!-- Proizvodi otvorene grupe — dolje, gdje ima mjesta -->
+      <div id="kat-gotovi-proizvodi" style="max-height:330px;overflow-y:auto;border:1px solid #ddd;border-radius:8px;padding:8px 11px;margin-top:8px;"></div>
     </div>
 
     <div style="margin-bottom:14px;">
@@ -901,47 +903,82 @@ async function katUcitajGotove(){
   }
 }
 
+/* Otvorena grana gotovih proizvoda — proizvodi se prikazuju DOLJE, isto kao artikli
+   kod materijala. Ranije su svi bili u jednom spisku, pa se u uskom prozoru nije
+   moglo prebirati. */
+let katOtvorenaGrupaGP = null;
+
 function katGotoviRender(){
   const cont = document.getElementById('kat-gotovi');
   if(!katGotoviPodaci.length || !katGotoviPodaci.some(g=>g.proizvodi.length)){
     cont.innerHTML = '<div style="padding:14px;text-align:center;color:#8b96a5;font-size:12px;line-height:1.6;">Nema gotovih proizvoda.<br><span style="font-size:11px;">Napravi ih u <b>Roba i magacini → Gotovi proizvodi</b>.</span></div>';
     return;
   }
-  const saCijenama = document.getElementById('kat-cijene')?.checked;
 
   cont.innerHTML = katGotoviPodaci.filter(g=>g.proizvodi.length).map(g=>{
-    const sviIzabrani = g.proizvodi.every(p=>katIzabraniGotovi.has(p.id));
-    const nekiIzabrani = g.proizvodi.some(p=>katIzabraniGotovi.has(p.id));
+    const svi = g.proizvodi.every(p=>katIzabraniGotovi.has(p.id));
+    const neki = g.proizvodi.some(p=>katIzabraniGotovi.has(p.id));
+    const otv = katOtvorenaGrupaGP === g.id;
+    const izabranih = g.proizvodi.filter(p=>katIzabraniGotovi.has(p.id)).length;
     return `
-    <div class="kat-g-grupa" data-tekst="${esc(g.naziv).toLowerCase()}" style="margin-bottom:7px;">
-      <label style="display:flex;align-items:center;gap:7px;padding:3px 4px;font-size:12.5px;cursor:pointer;font-weight:700;">
-        <input type="checkbox" ${sviIzabrani?'checked':''} ${!sviIzabrani&&nekiIzabrani?'data-djelimicno="1"':''}
-               onchange="katGrupaGotovih(${g.id},this.checked)">
-        <span style="flex:1;">📂 ${esc(g.naziv)}</span>
-        <span style="font-size:10px;color:#8b96a5;font-weight:400;">${g.proizvodi.length}</span>
-      </label>
-      ${g.proizvodi.map(p=>{
-        /* Proizvod bez snimljenog cjenovnika se i dalje MOZE izabrati — u katalogu ce
-           stajati "na upit" umjesto cijene. Zabrana bi bila stroza nego sto treba. */
-        const bezCijena = !p.cjenovnik_kada;
-        return `
-        <label class="kat-g-red" data-tekst="${esc(p.naziv).toLowerCase()}"
-               style="display:flex;align-items:center;gap:7px;padding:2px 4px 2px 22px;font-size:12px;cursor:pointer;">
-          <input type="checkbox" value="${p.id}" ${katIzabraniGotovi.has(p.id)?'checked':''}
-                 onchange="katProizvodGotovih(${p.id},this.checked)">
-          <span style="flex:1;">${esc(p.naziv)}</span>
-          ${saCijenama && bezCijena
-            ? '<span style="font-size:9.5px;color:var(--orange,#b8860b);" title="Nema snimljen cjenovnik — u katalogu će stajati „na upit"">⚠ bez cijena</span>'
-            : ''}
-          ${!p.slika_url ? '<span style="font-size:9.5px;color:#c3c9d1;" title="Nema sliku gotovog proizvoda">🖼</span>' : ''}
-        </label>`;
-      }).join('')}
+    <div class="kat-g-grupa" data-tekst="${esc(g.naziv).toLowerCase()}" style="margin-bottom:3px;">
+      <div style="display:flex;align-items:center;gap:8px;padding:4px 6px;font-size:12.5px;font-weight:700;
+                  background:${otv?'#e8eef7':''};border-radius:${otv?'6px':'0'};">
+        <input type="checkbox" ${svi?'checked':''} ${!svi&&neki?'data-djelimicno="1"':''}
+               onchange="katGrupaGotovih(${g.id},this.checked)" title="Uključi sve proizvode ove grupe" style="cursor:pointer;">
+        ${/* Klik na naziv otvara granu — proizvodi se prikazuju dolje, gdje ima mjesta. */''}
+        <span onclick="katGranaGotovih(${g.id})" style="flex:1;cursor:pointer;color:${otv?'var(--blue,#1a5fa8)':''};">
+          📂 ${esc(g.naziv)}
+        </span>
+        <span style="font-size:10px;color:#8b96a5;font-weight:400;">
+          ${izabranih?`${izabranih}/`:''}${g.proizvodi.length}
+        </span>
+      </div>
     </div>`;
   }).join('');
 
   const uk = katIzabraniGotovi.size;
   document.getElementById('kat-gotovi-info').textContent =
-    uk ? `Izabrano ${uk} ${uk===1?'proizvod':'proizvoda'}` : 'Nijedan proizvod nije izabran.';
+    uk ? `Izabrano ${uk} ${uk===1?'proizvod':'proizvoda'}` : 'Klikni grupu da vidiš proizvode.';
+
+  katRenderGotoveGrupe();
+}
+
+/* Otvara granu grupe gotovih proizvoda. Drugi klik je zatvara. */
+function katGranaGotovih(gid){
+  katOtvorenaGrupaGP = (katOtvorenaGrupaGP === gid) ? null : gid;
+  katGotoviRender();
+}
+
+function katRenderGotoveGrupe(){
+  const blok = document.getElementById('kat-gotovi-proizvodi');
+  if(!blok) return;
+  const g = katGotoviPodaci.find(x => x.id === katOtvorenaGrupaGP);
+  if(!g){
+    blok.innerHTML = `<div style="font-size:11.5px;color:#8b96a5;padding:8px;line-height:1.5;">
+      Klikni grupu gore da izabereš pojedine proizvode.</div>`;
+    return;
+  }
+  const saCijenama = document.getElementById('kat-cijene')?.checked;
+  blok.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 0 7px;border-bottom:1px solid #eee;margin-bottom:6px;flex-wrap:wrap;">
+      <b style="font-size:12.5px;color:#1f3864;">📂 ${esc(g.naziv)}</b>
+      <span style="flex:1;"></span>
+      <button type="button" onclick="katGrupaGotovih(${g.id},true)" style="font-size:11px;padding:3px 11px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;">Sve</button>
+      <button type="button" onclick="katGrupaGotovih(${g.id},false)" style="font-size:11px;padding:3px 11px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;">Ništa</button>
+    </div>
+    <div style="max-height:240px;overflow-y:auto;">
+      ${g.proizvodi.map((p,i)=>`
+        <label style="display:flex;align-items:center;gap:9px;padding:3px 5px;font-size:12px;cursor:pointer;background:${i%2?'#f7f9fb':'#fff'};">
+          <input type="checkbox" value="${p.id}" ${katIzabraniGotovi.has(p.id)?'checked':''}
+                 onchange="katProizvodGotovih(${p.id},this.checked)">
+          <span style="flex:1;">${esc(p.naziv)}</span>
+          ${saCijenama && !p.cjenovnik_kada
+            ? '<span style="font-size:10px;color:var(--orange,#b8860b);white-space:nowrap;" title="Nema snimljen cjenovnik — u katalogu će stajati „na upit"">⚠ bez cijena</span>' : ''}
+          ${!p.slika_url ? '<span style="font-size:10px;color:#c3c9d1;" title="Nema sliku">🖼</span>' : ''}
+        </label>`).join('')}
+    </div>
+    <div style="font-size:10.5px;color:#8b96a5;margin-top:5px;">${g.proizvodi.length} proizvoda u ovoj grupi</div>`;
 }
 
 function katGrupaGotovih(gid, ukljuci){
@@ -1092,6 +1129,12 @@ async function katGranaGrupe(btn){
   }
   katOtvorenaGrupa = grupa;
   katOznaciGranu();
+
+  /* Blok sa debljinama i artiklima je skriven dok se ne izabere "Materijali" —
+     otvaranjem grane se prikazuje, jer se tu i bira. */
+  const filteri = document.getElementById('kat-filteri-blok');
+  if(filteri) filteri.style.display = 'block';
+
   katUcitajDebljine();   // svaka grupa ima svoje debljine
 
   if(!katArtikliPoGrupi.has(grupa)){
@@ -1198,6 +1241,8 @@ function katSviUGrupi(grupa, ukljuci){
 function katGrupaPromjena(el){
   if(el.checked) katIzabraneGrupeSpisak.add(el.value);
   else katIzabraneGrupeSpisak.delete(el.value);
+  const filteri = document.getElementById('kat-filteri-blok');
+  if(filteri && katIzabraneGrupeSpisak.size) filteri.style.display = 'block';
   katUcitajDebljine(); katUcitajArtikle(); katOsvjeziPregled();
 }
 
