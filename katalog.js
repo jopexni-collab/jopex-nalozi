@@ -191,6 +191,7 @@ router.get('/pregled', smijeSlati, async (req, res) => {
       samo_dostupno: req.query.samo_dostupno === 'true',
       debljine: (req.query.debljine || '').split(',').filter(Boolean),
       sifre: (req.query.sifre || '').split(',').filter(Boolean),
+      grupe_samo: (req.query.grupe_samo || '').split(',').filter(Boolean),
     });
     res.json(podaci);
   } catch (err) {
@@ -199,7 +200,7 @@ router.get('/pregled', smijeSlati, async (req, res) => {
 });
 
 // Zajednicko ucitavanje stavki — koriste ga i pregled i javni prikaz.
-async function ucitajStavke({ grupe, objekt_id, tip_kupca_id, samo_dostupno, debljine, sifre }) {
+async function ucitajStavke({ grupe, objekt_id, tip_kupca_id, samo_dostupno, debljine, sifre, grupe_samo }) {
   /* Katalog samo od gotovih proizvoda nema nijednu grupu materijala — tad se ne ide
      u bazu uopste, umjesto da upit vrati prazno. */
   if (!Array.isArray(grupe) || !grupe.length)
@@ -228,9 +229,18 @@ async function ucitajStavke({ grupe, objekt_id, tip_kupca_id, samo_dostupno, deb
     dodatni += ` AND r.debljina_cm = ANY($${vals.length}::numeric[])`;
   }
   const listaSifri = (sifre || []).map(s => String(s).trim()).filter(Boolean);
+  /* Grupe koje idu KAO CJELINA moraju proci i kad je zadan spisak sifara — inace bi
+     im svi artikli ispali iz upita, pa se grupa u katalogu ne bi ni pojavila.
+     Spisak sifara sluzi da suzi OSTALE grupe, ne ove. */
+  const cijeleGrupe = (grupe_samo || []).map(g => String(g).trim().toLowerCase()).filter(Boolean);
   if (listaSifri.length) {
     vals.push(listaSifri);
-    dodatni += ` AND r.sifra = ANY($${vals.length}::text[])`;
+    let uslov = `r.sifra = ANY($${vals.length}::text[])`;
+    if (cijeleGrupe.length) {
+      vals.push(cijeleGrupe);
+      uslov = `(${uslov} OR TRIM(LOWER(r.grupa)) = ANY($${vals.length}::text[]))`;
+    }
+    dodatni += ` AND ${uslov}`;
   }
 
   // DISTINCT ON (r.id) — jedan red PO ARTIKLU. Bez ovoga, ako objekt_id nije zadat,

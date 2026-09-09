@@ -25,6 +25,9 @@ router.get('/:token', async (req, res) => {
       samo_dostupno: kat.samo_dostupno,
       debljine: kat.debljine || [],
       sifre: kat.sifre || [],
+      /* Grupe koje idu kao cjelina prolaze i kad je zadan spisak sifara — inace bi
+         im artikli ispali iz upita, pa se grupa ne bi ni pojavila u katalogu. */
+      grupe_samo: kat.grupe_samo || [],
     });
 
     // Ako je poslato BEZ cijena, cijene se uklanjaju OVDJE (na serveru) — ne salju se

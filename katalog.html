@@ -574,7 +574,9 @@ async function katUcitajArtikle(){
     const r = await fetch(`${API}/api/katalog/pregled?grupe=${encodeURIComponent(grupe.join(','))}`
       + (katObjektId?`&objekt_id=${katObjektId}`:'') + (tipId?`&tip_kupca_id=${tipId}`:'')
       + (samoDost?'&samo_dostupno=true':'')
-      + (deb.length?`&debljine=${deb.join(',')}`:''));
+      + (deb.length?`&debljine=${deb.join(',')}`:'')
+      /* Grupe koje idu kao cjelina — da pregled pokaze isto sto ce biti u katalogu */
+      + (katGrupeSamo().length?`&grupe_samo=${encodeURIComponent(katGrupeSamo().join(','))}`:''));
     const d = await r.json();
     katArtikliLista = d.stavke || [];
   }catch(e){ katArtikliLista = []; }

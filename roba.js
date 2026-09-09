@@ -2507,4 +2507,23 @@ router.put('/slike/:id/grupa-glavna', async (req, res) => {
   } finally { client.release(); }
 });
 
+/* GET /:id/slike/grupa — koja slika trenutno predstavlja grupu ovog artikla.
+   Karusel prikazuje samo slike jednog artikla, pa se bez ovoga ne vidi da je za grupu
+   vec izabrana slika kod nekog drugog. */
+router.get('/:id/slike/grupa', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT r2.sifra, r2.naziv AS artikal, sl.id AS slika_id, sl.url, sl.thumb_url,
+              r.grupa
+       FROM roba r
+       LEFT JOIN roba r2 ON TRIM(LOWER(r2.grupa)) = TRIM(LOWER(r.grupa))
+       LEFT JOIN roba_slike sl ON sl.roba_id = r2.id AND sl.grupa_glavna = true
+       WHERE r.id = $1 AND sl.id IS NOT NULL
+       LIMIT 1`,
+      [req.params.id]
+    );
+    res.json(r.rows[0] || null);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
