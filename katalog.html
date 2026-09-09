@@ -134,12 +134,26 @@ main{max-width:760px;margin:0 auto;padding:20px 16px 40px;}
       </div>
     </div>
 
+    <!-- Prikaz po grupama: jedna slika po materijalu, ispod dostupne debljine.
+         Za kamen je to prirodnije nego red po red za svaku debljinu. -->
+    <label style="display:flex;align-items:center;gap:9px;padding:9px 12px;margin-bottom:14px;border-radius:8px;cursor:pointer;
+                  border:1px solid var(--border,#ddd);background:#fafbfc;">
+      <input type="checkbox" id="kat-samo-grupe">
+      <span style="font-size:12.5px;">
+        <b>Prikaži samo grupe</b>
+        <span style="display:block;font-size:11px;color:#8b96a5;line-height:1.45;margin-top:2px;">
+          Jedna slika po materijalu (npr. „tasto"), a ispod <b>dostupne debljine</b> —
+          umjesto zasebnog reda za svaku debljinu.
+        </span>
+      </span>
+    </label>
+
     <!-- Jezik i valuta — katalog za inostranstvo. Kurs EUR/KM je fiksan, pa je
          preracun tacan, ne procjena. -->
     <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px;">
       <div style="flex:1;min-width:130px;">
         <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:5px;">Jezik</label>
-        <select id="kat-jezik" style="width:100%;font:inherit;font-size:12.5px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;">
+        <select id="kat-jezik" onchange="katProvjeriPrijevode()" style="width:100%;font:inherit;font-size:12.5px;padding:7px 10px;border:1px solid #ccc;border-radius:6px;">
           <option value="bs">🇧🇦 Bosanski / srpski</option>
           <option value="en">🇬🇧 English</option>
           <option value="it">🇮🇹 Italiano</option>
@@ -155,6 +169,10 @@ main{max-width:760px;margin:0 auto;padding:20px 16px 40px;}
         </select>
       </div>
     </div>
+
+    <!-- Kad se izabere strani jezik, provjerava se sta jos nije prevedeno. Katalog
+         radi i bez toga — neprevedeno ostaje na nasem jeziku — ali je bolje znati. -->
+    <div id="kat-prijevod-traka" style="display:none;margin-bottom:14px;padding:9px 12px;border-radius:8px;font-size:12px;line-height:1.5;"></div>
 
     <!-- IZBOR GOTOVIH PROIZVODA -->
     <div id="kat-gotovi-blok" style="display:none;margin-bottom:14px;">
@@ -628,6 +646,7 @@ async function katNapravi(){
         tip_kupca_id: tipId ? parseInt(tipId) : null,
         grupe, objekt_id: katObjektId, prikaz: katPrikaz,
         sa_cijenama: saCijenama,
+        samo_grupe: document.getElementById('kat-samo-grupe')?.checked === true,
         jezik: document.getElementById('kat-jezik')?.value || 'bs',
         valuta: document.getElementById('kat-valuta')?.value || 'KM',
         /* Sta ulazi u katalog i koji gotovi proizvodi su izabrani */
@@ -892,6 +911,72 @@ window.addEventListener('error', e => {
   }
   el.textContent = 'Greška: ' + e.message + (e.lineno ? ' — red ' + e.lineno : '') + '  (klikni da skloniš)';
 });
+
+
+/* Provjera prijevoda pri izboru jezika. Katalog radi i bez njih — neprevedeno ostaje
+   na nasem jeziku — ali je bolje da se zna prije nego sto ode kupcu. */
+async function katProvjeriPrijevode(){
+  const jezik = document.getElementById('kat-jezik').value;
+  const traka = document.getElementById('kat-prijevod-traka');
+  if(jezik === 'bs'){ traka.style.display = 'none'; return; }
+
+  traka.style.display = 'block';
+  traka.style.background = '#f7f8fa'; traka.style.color = '#6b7a8d';
+  traka.textContent = 'Provjeravam prijevode...';
+  try{
+    const r = await fetch(`${API}/api/prijevodi/nedostaju?jezik=${jezik}`);
+    if(!r.ok) throw new Error('Ne mogu provjeriti prijevode.');
+    const d = await r.json();
+    const n = (d.nedostaju || []).length;
+    if(!n){
+      traka.style.background = '#eef7f1'; traka.style.color = 'var(--green,#1f8a4c)';
+      traka.textContent = '✓ Svi nazivi su prevedeni.';
+      return;
+    }
+    traka.style.background = '#fff8e1'; traka.style.color = '#8b6914';
+    traka.innerHTML = `
+      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;">
+        <span style="flex:1;">
+          ⚠ <b>${n}</b> ${n===1?'naziv nije preveden':'naziva nije prevedeno'} —
+          u katalogu će ostati na našem jeziku.
+        </span>
+        <button type="button" onclick="katPrevediSve()"
+                style="font:inherit;font-size:11.5px;padding:5px 13px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">
+          🌍 Prevedi automatski
+        </button>
+        <a href="prijevodi.html" target="_blank"
+           style="font-size:11.5px;color:#8b6914;text-decoration:underline;">unesi ručno →</a>
+      </div>
+      <div style="font-size:10.5px;margin-top:5px;opacity:.85;">
+        ${(d.nedostaju||[]).slice(0,8).map(esc).join(' · ')}${n>8?` … i još ${n-8}`:''}
+      </div>`;
+  }catch(e){
+    traka.style.background = '#fdecea'; traka.style.color = 'var(--red,#c0392b)';
+    traka.textContent = '✗ ' + e.message;
+  }
+}
+
+async function katPrevediSve(){
+  const jezik = document.getElementById('kat-jezik').value;
+  const traka = document.getElementById('kat-prijevod-traka');
+  traka.style.background = '#f7f8fa'; traka.style.color = '#6b7a8d';
+  traka.textContent = 'Prevodim... (može potrajati desetak sekundi)';
+  try{
+    const r = await fetch(`${API}/api/prijevodi/prevedi`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ jezik }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    traka.style.background = '#eef7f1'; traka.style.color = 'var(--green,#1f8a4c)';
+    traka.innerHTML = `✓ Prevedeno ${d.prevedeno}. <b>Prijevodi su automatski</b> —
+      <a href="prijevodi.html" target="_blank" style="color:var(--green,#1f8a4c);">pregledaj ih</a> prije slanja kataloga.`;
+  }catch(e){
+    traka.style.background = '#fdecea'; traka.style.color = 'var(--red,#c0392b)';
+    traka.innerHTML = `✗ ${esc(e.message)}
+      <a href="prijevodi.html" target="_blank" style="color:var(--red,#c0392b);text-decoration:underline;">unesi ručno →</a>`;
+  }
+}
 
 </script>
 </body>

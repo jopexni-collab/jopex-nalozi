@@ -2468,4 +2468,43 @@ router.delete('/:id/slike/:slikaId', preskociAkoNijeArtikal, zahtijevaProdaju, a
 
 
 
+/* PUT /slike/:id/grupa-glavna — oznaka da slika predstavlja CIJELU GRUPU.
+   Razlicita od glavne slike artikla: kad katalog prikazuje grupe (npr. "tasto"
+   umjesto svakog artikla posebno), uzima se ova. */
+router.put('/slike/:id/grupa-glavna', async (req, res) => {
+  const u = req.session?.user;
+  if (!(u?.rola === 'admin' || u?.moze_roba_magacin))
+    return res.status(403).json({ error: 'Nemate dozvolu.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const s = await client.query(
+      `SELECT sl.id, r.grupa FROM roba_slike sl
+       JOIN roba r ON r.id = sl.roba_id WHERE sl.id=$1`, [req.params.id]
+    );
+    if (!s.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Slika nije pronađena.' }); }
+    const grupa = (s.rows[0].grupa || '').trim();
+    if (!grupa) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Artikal nema grupu — prvo ga svrstaj u grupu.' }); }
+
+    const ukljuci = req.body?.grupa_glavna !== false;
+
+    /* Skida se sa svih slika te grupe — samo jedna smije predstavljati grupu.
+       Bez toga bi katalog nasumicno birao izmedju vise oznacenih. */
+    await client.query(
+      `UPDATE roba_slike SET grupa_glavna = false
+       WHERE roba_id IN (SELECT id FROM roba WHERE TRIM(LOWER(grupa)) = TRIM(LOWER($1)))`,
+      [grupa]
+    );
+    if (ukljuci)
+      await client.query('UPDATE roba_slike SET grupa_glavna = true WHERE id=$1', [req.params.id]);
+
+    await client.query('COMMIT');
+    res.json({ ok: true, grupa, grupa_glavna: ukljuci });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
 module.exports = router;

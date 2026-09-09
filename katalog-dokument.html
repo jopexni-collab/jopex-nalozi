@@ -210,6 +210,11 @@
   background:#1f3864;color:#fff;border-radius:3px;font-size:9px;font-weight:800;}
 .pl-mjera{font-weight:700;color:#1a2733;}
 .pl-artikal{color:#8b96a5;}
+
+.deb-red{display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-top:6px;}
+.deb-uvod{font-size:10px;color:#8b96a5;font-weight:700;}
+.deb{font-size:10.5px;font-weight:700;background:#eef2f8;color:#1f3864;padding:1px 8px;border-radius:5px;}
+.grupa-broj{font-size:10.5px;opacity:.8;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -268,7 +273,7 @@ const PRIJEVODI = {
         uslov:'Cijena je za navedenu izvedbu i mjeru u zaglavlju kolone. Druga izvedba ili mjera mijenja cijenu.',
         oblici_nap:'Dostupnost oblika zavisi od postolja — uz svaki proizvod stoji šta nosi.',
         prazan:'Katalog je prazan.' ,
-        naslov_pred:'Katalog proizvoda', ucitavanje:'Učitavanje kataloga...', stampaj:'🖨 Štampaj', mreza:'▦ Mreža', lista:'☰ Lista', za:'Za', cijene_tip:'Cijene', sa_pdv:'sa PDV', bez_pdv:'bez PDV-a', poslao:'Poslao', o_PRAV:'Pravougaoni', o_KVAD:'Kvadratni', o_KRUG:'Okrugli', o_OVAL:'Ovalni', o_BACVA:'Bačvasti', o_ZAOB:'Zaobljeni uglovi', o_I:'Pravougli', o_L:'L oblik', o_U:'U oblik', o_V:'V oblik', o_N:'Nepravilan', o_G:'G oblik', nazad:'← Nazad', pdf:'⬇ Sačuvaj kao PDF'},
+        naslov_pred:'Katalog proizvoda', ucitavanje:'Učitavanje kataloga...', stampaj:'🖨 Štampaj', mreza:'▦ Mreža', lista:'☰ Lista', za:'Za', cijene_tip:'Cijene', sa_pdv:'sa PDV', bez_pdv:'bez PDV-a', poslao:'Poslao', o_PRAV:'Pravougaoni', o_KVAD:'Kvadratni', o_KRUG:'Okrugli', o_OVAL:'Ovalni', o_BACVA:'Bačvasti', o_ZAOB:'Zaobljeni uglovi', o_I:'Pravougli', o_L:'L oblik', o_U:'U oblik', o_V:'V oblik', o_N:'Nepravilan', o_G:'G oblik', nazad:'← Nazad', pdf:'⬇ Sačuvaj kao PDF', debljine:'Debljine:', artikala:'artikala', cijena_od:'od', nedostupno:'Trenutno nedostupno'},
   en: { materijal:'Material', dostupno_i_u:'Also available in:', na_upit:'price on request',
         cijena_na_upit:'Price on request', izvedba:'Version', postolje_ploca:'base + top',
         cijena:'Price', mjera:'Size', dostupne_mjere:'Available sizes:',
@@ -276,7 +281,7 @@ const PRIJEVODI = {
         uslov:'Price applies to the version shown and the size in the column header. Other versions or sizes change the price.',
         oblici_nap:'Shape availability depends on the base — each product shows what it supports.',
         prazan:'The catalogue is empty.' ,
-        naslov_pred:'Product catalogue', ucitavanje:'Loading catalogue...', stampaj:'🖨 Print', mreza:'▦ Grid', lista:'☰ List', za:'For', cijene_tip:'Prices', sa_pdv:'incl. VAT', bez_pdv:'excl. VAT', poslao:'Sent by', o_PRAV:'Rectangular', o_KVAD:'Square', o_KRUG:'Round', o_OVAL:'Oval', o_BACVA:'Barrel', o_ZAOB:'Rounded corners', o_I:'Straight', o_L:'L shape', o_U:'U shape', o_V:'V shape', o_N:'Irregular', o_G:'G shape', nazad:'← Back', pdf:'⬇ Save as PDF'},
+        naslov_pred:'Product catalogue', ucitavanje:'Loading catalogue...', stampaj:'🖨 Print', mreza:'▦ Grid', lista:'☰ List', za:'For', cijene_tip:'Prices', sa_pdv:'incl. VAT', bez_pdv:'excl. VAT', poslao:'Sent by', o_PRAV:'Rectangular', o_KVAD:'Square', o_KRUG:'Round', o_OVAL:'Oval', o_BACVA:'Barrel', o_ZAOB:'Rounded corners', o_I:'Straight', o_L:'L shape', o_U:'U shape', o_V:'V shape', o_N:'Irregular', o_G:'G shape', nazad:'← Back', pdf:'⬇ Save as PDF', debljine:'Thicknesses:', artikala:'items', cijena_od:'from', nedostupno:'Currently unavailable'},
   it: { materijal:'Materiale', dostupno_i_u:'Disponibile anche in:', na_upit:'prezzo su richiesta',
         cijena_na_upit:'Prezzo su richiesta', izvedba:'Versione', postolje_ploca:'base + piano',
         cijena:'Prezzo', mjera:'Misura', dostupne_mjere:'Misure disponibili:',
@@ -284,7 +289,7 @@ const PRIJEVODI = {
         uslov:'Il prezzo vale per la versione indicata e la misura nell\'intestazione. Altre versioni o misure cambiano il prezzo.',
         oblici_nap:'La disponibilità delle forme dipende dalla base — ogni prodotto indica cosa supporta.',
         prazan:'Il catalogo è vuoto.' ,
-        naslov_pred:'Catalogo prodotti', ucitavanje:'Caricamento catalogo...', stampaj:'🖨 Stampa', mreza:'▦ Griglia', lista:'☰ Elenco', za:'Per', cijene_tip:'Prezzi', sa_pdv:'IVA inclusa', bez_pdv:'IVA esclusa', poslao:'Inviato da', o_PRAV:'Rettangolare', o_KVAD:'Quadrato', o_KRUG:'Rotondo', o_OVAL:'Ovale', o_BACVA:'A botte', o_ZAOB:'Angoli arrotondati', o_I:'Diritto', o_L:'Forma a L', o_U:'Forma a U', o_V:'Forma a V', o_N:'Irregolare', o_G:'Forma a G', nazad:'← Indietro', pdf:'⬇ Salva in PDF'},
+        naslov_pred:'Catalogo prodotti', ucitavanje:'Caricamento catalogo...', stampaj:'🖨 Stampa', mreza:'▦ Griglia', lista:'☰ Elenco', za:'Per', cijene_tip:'Prezzi', sa_pdv:'IVA inclusa', bez_pdv:'IVA esclusa', poslao:'Inviato da', o_PRAV:'Rettangolare', o_KVAD:'Quadrato', o_KRUG:'Rotondo', o_OVAL:'Ovale', o_BACVA:'A botte', o_ZAOB:'Angoli arrotondati', o_I:'Diritto', o_L:'Forma a L', o_U:'Forma a U', o_V:'Forma a V', o_N:'Irregolare', o_G:'Forma a G', nazad:'← Indietro', pdf:'⬇ Salva in PDF', debljine:'Spessori:', artikala:'articoli', cijena_od:'da', nedostupno:'Non disponibile'},
   de: { materijal:'Material', dostupno_i_u:'Auch erhältlich in:', na_upit:'Preis auf Anfrage',
         cijena_na_upit:'Preis auf Anfrage', izvedba:'Ausführung', postolje_ploca:'Gestell + Platte',
         cijena:'Preis', mjera:'Maß', dostupne_mjere:'Verfügbare Maße:',
@@ -292,7 +297,7 @@ const PRIJEVODI = {
         uslov:'Der Preis gilt für die angegebene Ausführung und das Maß in der Spaltenüberschrift. Andere Ausführungen oder Maße ändern den Preis.',
         oblici_nap:'Die Formauswahl hängt vom Gestell ab — bei jedem Produkt steht, was möglich ist.',
         prazan:'Der Katalog ist leer.' ,
-        naslov_pred:'Produktkatalog', ucitavanje:'Katalog wird geladen...', stampaj:'🖨 Drucken', mreza:'▦ Raster', lista:'☰ Liste', za:'Für', cijene_tip:'Preise', sa_pdv:'inkl. MwSt.', bez_pdv:'zzgl. MwSt.', poslao:'Gesendet von', o_PRAV:'Rechteckig', o_KVAD:'Quadratisch', o_KRUG:'Rund', o_OVAL:'Oval', o_BACVA:'Tonnenform', o_ZAOB:'Abgerundete Ecken', o_I:'Gerade', o_L:'L-Form', o_U:'U-Form', o_V:'V-Form', o_N:'Unregelmäßig', o_G:'G-Form', nazad:'← Zurück', pdf:'⬇ Als PDF speichern'},
+        naslov_pred:'Produktkatalog', ucitavanje:'Katalog wird geladen...', stampaj:'🖨 Drucken', mreza:'▦ Raster', lista:'☰ Liste', za:'Für', cijene_tip:'Preise', sa_pdv:'inkl. MwSt.', bez_pdv:'zzgl. MwSt.', poslao:'Gesendet von', o_PRAV:'Rechteckig', o_KVAD:'Quadratisch', o_KRUG:'Rund', o_OVAL:'Oval', o_BACVA:'Tonnenform', o_ZAOB:'Abgerundete Ecken', o_I:'Gerade', o_L:'L-Form', o_U:'U-Form', o_V:'V-Form', o_N:'Unregelmäßig', o_G:'G-Form', nazad:'← Zurück', pdf:'⬇ Als PDF speichern', debljine:'Stärken:', artikala:'Artikel', cijena_od:'ab', nedostupno:'Derzeit nicht verfügbar'},
   fr: { materijal:'Matériau', dostupno_i_u:'Aussi disponible en :', na_upit:'prix sur demande',
         cijena_na_upit:'Prix sur demande', izvedba:'Version', postolje_ploca:'piètement + plateau',
         cijena:'Prix', mjera:'Dimension', dostupne_mjere:'Dimensions disponibles :',
@@ -300,7 +305,7 @@ const PRIJEVODI = {
         uslov:'Le prix s\'applique à la version indiquée et à la dimension en tête de colonne. Une autre version ou dimension modifie le prix.',
         oblici_nap:'Les formes disponibles dépendent du piètement — chaque produit indique ce qu\'il permet.',
         prazan:'Le catalogue est vide.' ,
-        naslov_pred:'Catalogue produits', ucitavanje:'Chargement du catalogue...', stampaj:'🖨 Imprimer', mreza:'▦ Grille', lista:'☰ Liste', za:'Pour', cijene_tip:'Prix', sa_pdv:'TVA incluse', bez_pdv:'hors TVA', poslao:'Envoyé par', o_PRAV:'Rectangulaire', o_KVAD:'Carré', o_KRUG:'Rond', o_OVAL:'Ovale', o_BACVA:'Tonneau', o_ZAOB:'Angles arrondis', o_I:'Droit', o_L:'Forme en L', o_U:'Forme en U', o_V:'Forme en V', o_N:'Irrégulier', o_G:'Forme en G', nazad:'← Retour', pdf:'⬇ Enregistrer en PDF'},
+        naslov_pred:'Catalogue produits', ucitavanje:'Chargement du catalogue...', stampaj:'🖨 Imprimer', mreza:'▦ Grille', lista:'☰ Liste', za:'Pour', cijene_tip:'Prix', sa_pdv:'TVA incluse', bez_pdv:'hors TVA', poslao:'Envoyé par', o_PRAV:'Rectangulaire', o_KVAD:'Carré', o_KRUG:'Rond', o_OVAL:'Ovale', o_BACVA:'Tonneau', o_ZAOB:'Angles arrondis', o_I:'Droit', o_L:'Forme en L', o_U:'Forme en U', o_V:'Forme en V', o_N:'Irrégulier', o_G:'Forme en G', nazad:'← Retour', pdf:'⬇ Enregistrer en PDF', debljine:'Épaisseurs :', artikala:'articles', cijena_od:'à partir de', nedostupno:'Actuellement indisponible'},
 };
 
 /* Jezik i valuta se drze u SVOM objektu, ne citaju se iz "podaci" — taj je deklarisan
@@ -495,6 +500,18 @@ function nadjiDimenziju(p, tekst){
     const b = broj(opisDim(d));
     return b.length && t.length && b[0] === t[0] && (b[1] ?? null) === (t[1] ?? null);
   }) || null;
+}
+
+
+/* Dostupne debljine grupe — sitne oznake, isto kao oblici kod stolova.
+   Kupcu je to dovoljno: vidi materijal i u kojim debljinama ga ima. */
+function debljineHtml(s){
+  const d = s.debljine || [];
+  if(!d.length) return '';
+  return `<div class="deb-red">
+    <span class="deb-uvod">${T('debljine')}</span>
+    ${d.map(x=>`<span class="deb">${String(x).replace('.',',')} cm</span>`).join('')}
+  </div>`;
 }
 
 function gotovKartica(p){
@@ -749,8 +766,13 @@ function kartica(s){
     <div class="znacka">${esc(s.grupa||'—')}</div>
     <div class="dno">
       <div class="naziv">${esc(s.naziv)}</div>
-      ${s.cijena!=null?`<div class="cijena">${fm(s.cijena)} <span class="jm">/ ${esc(s.jed_mjera)}</span></div>`:''}
-      ${!s.dostupno?'<div class="oznaka-nema">Trenutno nedostupno</div>':''}
+      ${/* Grupa: raspon cijena i broj artikala umjesto jedne cijene. */''}
+      ${s.je_grupa
+        ? `${s.cijena_od!=null?`<div class="cijena">${s.cijena_od!==s.cijena_do?`${T('cijena_od')} `:''}${fmv(s.cijena_od, s.valuta)} <span class="jm">/ ${esc(s.jed_mjera)}</span></div>`:''}
+           <div class="grupa-broj">${s.broj_artikala} ${T('artikala')}</div>`
+        : `${s.cijena!=null?`<div class="cijena">${fmv(s.cijena, s.valuta)} <span class="jm">/ ${esc(s.jed_mjera)}</span></div>`:''}`}
+      ${debljineHtml(s)}
+      ${!s.dostupno&&!s.je_grupa?`<div class="oznaka-nema">${T('nedostupno')}</div>`:''}
     </div>
   </div>`;
 }
@@ -764,7 +786,7 @@ function red(s){
       <div class="sifra">Šifra: ${esc(s.sifra)}${s.debljina_cm?` · ${s.debljina_cm} cm`:''}${!s.dostupno?' · <span style="color:#c0392b;">nedostupno</span>':''}</div>
     </div>
     ${s.cijena!=null?`<div class="cijena">${fm(s.cijena)}<div class="jm">/ ${esc(s.jed_mjera)}</div></div>`:''}
-  </div>`;
+  ${debljineHtml(s)}</div>`;
 }
 
 /* "Nazad" — katalog se iz aplikacije otvara u NOVOM TABU, a tamo history.back() nema

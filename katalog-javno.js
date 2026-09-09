@@ -45,6 +45,48 @@ router.get('/:token', async (req, res) => {
       ? podaci.stavke
       : podaci.stavke.map(({ cijena, cijena_bez_pdv, pdv_iznos, ...ostalo }) => ostalo);
     // Katalog samo sa gotovim proizvodima ne salje materijale
+    /* PRIKAZ PO GRUPAMA — umjesto svakog artikla posebno, jedna stavka po grupi sa
+       spiskom dostupnih debljina. Za kamen je to prirodnije: kupac prvo bira
+       materijal, pa debljinu. Slika se uzima ona oznacena kao glavna za grupu. */
+    if (kat.samo_grupe && stavke.length) {
+      const slike = (await pool.query(
+        `SELECT r.grupa, sl.url, sl.thumb_url
+         FROM roba_slike sl JOIN roba r ON r.id = sl.roba_id
+         WHERE sl.grupa_glavna = true AND COALESCE(TRIM(r.grupa),'') <> ''`
+      )).rows;
+      const slikaGrupe = {};
+      for (const s of slike) slikaGrupe[String(s.grupa).toLowerCase()] = s;
+
+      const poGrupi = {};
+      for (const s of stavke) {
+        const k = String(s.grupa || 'Ostalo').toLowerCase();
+        if (!poGrupi[k]) {
+          const sl = slikaGrupe[k];
+          poGrupi[k] = {
+            ...s,
+            naziv: s.grupa || 'Ostalo',
+            je_grupa: true,
+            sifra: null,
+            debljine: new Set(),
+            broj_artikala: 0,
+            glavna_slika: sl?.url || sl?.thumb_url || s.glavna_slika || null,
+            cijena_od: null, cijena_do: null,
+          };
+        }
+        const g = poGrupi[k];
+        g.broj_artikala++;
+        if (s.debljina_cm) g.debljine.add(Number(s.debljina_cm));
+        const c2 = Number(s.cijena);
+        if (kat.sa_cijenama && c2 > 0) {
+          if (g.cijena_od == null || c2 < g.cijena_od) g.cijena_od = c2;
+          if (g.cijena_do == null || c2 > g.cijena_do) g.cijena_do = c2;
+        }
+      }
+      stavke = Object.values(poGrupi)
+        .map(g => ({ ...g, debljine: [...g.debljine].sort((a, b) => a - b) }))
+        .sort((a, b) => String(a.naziv).localeCompare(String(b.naziv)));
+    }
+
     if (kat.sta_ulazi === 'gotovi') stavke = [];
     else if (jezik !== 'bs') stavke = stavke.map(s => ({ ...s, grupa: pr(s.grupa) }));
 
@@ -138,6 +180,7 @@ router.get('/:token', async (req, res) => {
     res.json({
       naslov: kat.naslov,
       sta_ulazi: kat.sta_ulazi || 'materijali',
+      samo_grupe: kat.samo_grupe === true,
       /* Jezik i valuta prikaza — prevod naziva i preracun po fiksnom kursu rade se
          u samom dokumentu, da se ne mijenja ono sto je snimljeno. */
       jezik: kat.jezik || 'bs',

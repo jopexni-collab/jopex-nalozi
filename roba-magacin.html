@@ -666,6 +666,9 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       </div>
       <div style="display:flex;gap:8px;margin-top:8px;">
         <button id="msa-btn-glavna" class="ce-tip-btn" style="flex:1;font-size:12px;" onclick="msaPostaviGlavnu()">★ Postavi kao glavnu</button>
+        <button id="msa-btn-grupa" class="ce-tip-btn" style="flex:1;font-size:12px;"
+                title="Ova slika predstavlja CIJELU GRUPU u katalogu — kad se katalog pravi po grupama, uzima se ona"
+                onclick="msaPostaviGrupnu()">🗂 Glavna za grupu</button>
         <button id="msa-btn-gotov" class="ce-tip-btn" style="flex:1;font-size:12px;" onclick="msaPrekidacGotov()"
                 title="Slika gotovog proizvoda — ista slika može biti i glavna i gotov proizvod">🍽️ Gotov proizvod</button>
         <button class="ce-tip-btn" style="flex:0 0 auto;font-size:12px;background:var(--red,#c0392b);color:#fff;" onclick="msaObrisiTrenutnu()">🗑 Obriši (undo)</button>
@@ -2282,6 +2285,12 @@ function msaPrikaziTrenutnu(){
   document.getElementById('msa-brojac').textContent=`${msaTrenutniIndeks+1}/${msaSlike.length}`;
   const btnGlavna=document.getElementById('msa-btn-glavna');
   if(s.glavna){ btnGlavna.textContent='★ Glavna slika'; btnGlavna.disabled=true; btnGlavna.style.opacity='.6'; }
+  const btnGrupa = document.getElementById('msa-btn-grupa');
+  if(btnGrupa){
+    btnGrupa.textContent = s.grupa_glavna ? '🗂 Glavna za grupu ✓' : '🗂 Glavna za grupu';
+    btnGrupa.style.background = s.grupa_glavna ? '#eef2f8' : '';
+    btnGrupa.style.fontWeight = s.grupa_glavna ? '700' : '';
+  }
   else{ btnGlavna.textContent='☆ Postavi kao glavnu'; btnGlavna.disabled=false; btnGlavna.style.opacity='1'; }
 
   /* Gotov proizvod je ZASEBNA oznaka od glavne — ista slika moze biti i jedno i drugo,
@@ -2356,6 +2365,33 @@ async function msaPrekidacGotov(){
     msaPrikaziTrenutnu();
     if(typeof ucitajLagerListu==='function') ucitajLagerListu();
   }catch(e){ alert('✗ ' + e.message); }
+}
+
+
+/* Slika koja predstavlja CIJELU GRUPU u katalogu. Razlicita od glavne slike artikla:
+   kad se katalog pravi po grupama, jedan materijal ima jednu sliku. */
+async function msaPostaviGrupnu(){
+  const s = msaSlike?.[msaTekuca];
+  if(!s) return;
+  const btn = document.getElementById('msa-btn-grupa');
+  const staroTxt = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Čuvam...';
+  try{
+    const r = await fetch(`${API}/api/roba/slike/${s.id}/grupa-glavna`,{
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ grupa_glavna: !s.grupa_glavna }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    // Oznaka se skida sa ostalih slika te grupe — samo jedna predstavlja grupu
+    for(const x of msaSlike) x.grupa_glavna = false;
+    s.grupa_glavna = d.grupa_glavna;
+    msaPrikazi();
+    if(typeof ucitajLagerListu === 'function') ucitajLagerListu();
+  }catch(e){
+    alert('✗ ' + e.message);
+    btn.textContent = staroTxt;
+  }finally{ btn.disabled = false; }
 }
 
 async function msaPostaviGlavnu(){
@@ -4867,7 +4903,7 @@ async function gprIzborSlike(pid){
             <img src="${esc(s.thumb_url||s.url)}" style="width:100%;height:88px;object-fit:cover;display:block;">
             <div style="padding:4px 6px;font-size:10px;line-height:1.3;">
               <div style="font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.roba_naziv)}</div>
-              <div style="color:#8b96a5;">${s.gotov_proizvod?'🍽️ gotov':s.glavna?'★ glavna':''}</div>
+              <div style="color:#8b96a5;">${s.gotov_proizvod?'🍽️ gotov':s.grupa_glavna?'🗂 grupa':s.glavna?'★ glavna':''}</div>
             </div>
           </div>`).join('')}
       </div>`
@@ -5103,7 +5139,7 @@ function gprRenderDetalj(el, g){
         <thead><tr style="background:#1f3864;color:#fff;">
           <th style="padding:4px 6px;text-align:left;">Grupa izbora</th>
           <th style="padding:4px 6px;text-align:left;">Komponenta</th>
-          <th style="padding:4px 6px;text-align:center;" title="★ glavna slika artikla · 🍽️ slika gotovog proizvoda">Slike</th>
+          <th style="padding:4px 6px;text-align:center;" title="★ glavna slika artikla · 🗂 glavna za grupu · 🍽️ slika gotovog proizvoda">Slike</th>
           <th style="padding:4px 6px;text-align:left;">Grupa</th>
           <th style="padding:4px 6px;text-align:center;">Deb.</th>
           <th style="padding:4px 6px;text-align:center;" title="Standardna dimenzija table iz lagera — koliko je velika ploča iz koje se reže. Nije mjera proizvoda.">Tabla iz lagera</th>
