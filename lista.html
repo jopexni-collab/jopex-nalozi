@@ -2432,12 +2432,28 @@ async function otvoriKaruselNaloga(rBr){
   }catch(e){}
 }
 
+
+/* Listanje slika u malom karuselu. Dugmad ‹ › su ga zvala, ali funkcija nije
+   postojala — pa se druga slika mogla otvoriti samo preko veze. */
+function knPomjeri(smjer){
+  if(knSlike.length < 2) return;
+  knIndeks = (knIndeks + smjer + knSlike.length) % knSlike.length;
+  knPrikaziTrenutnu();
+}
+
 function knPrikaziTrenutnu(){
   if(!knSlike.length){ document.getElementById('kn-karusel').style.display='none'; return; }
   document.getElementById('kn-karusel').style.display='block';
   const s=knSlike[knIndeks];
   document.getElementById('kn-img').src=s.url;
   document.getElementById('kn-brojac').textContent=`${knIndeks+1}/${knSlike.length}`;
+
+  /* Strelice nemaju smisla kod jedne slike — sakrivaju se, da ne izgleda kao da
+     nesto ne radi. */
+  const vise = knSlike.length > 1;
+  document.querySelectorAll('#kn-karusel button[onclick^="knPomjeri"]').forEach(b => {
+    b.style.display = vise ? 'block' : 'none';
+  });
   const btn=document.getElementById('kn-btn-glavna');
   if(s.glavna){ btn.textContent='★ Glavna'; btn.disabled=true; btn.style.opacity='.6'; }
   else{ btn.textContent='☆ Postavi kao glavnu'; btn.disabled=false; btn.style.opacity='1'; }
@@ -2677,6 +2693,23 @@ checkAuth();
     nag.textContent = (t === String(n) || t === fmt(n)) ? '' : `= ${fmt(n)}`;
   });
 })();
+
+/* Strelice na tastaturi listaju slike, Esc zatvara — brze nego pogadjati dugmad. */
+document.addEventListener('keydown', e => {
+  const pun = document.getElementById('kn-pun-ekran');
+  const mali = document.getElementById('modal-slike-naloga');
+  const otvorenPun = pun && pun.style.display !== 'none' && pun.style.display !== '';
+  const otvorenMali = mali && mali.style.display !== 'none' && mali.style.display !== '';
+  if(!otvorenPun && !otvorenMali) return;
+
+  if(e.key === 'ArrowLeft'){ e.preventDefault(); otvorenPun ? knPomjeriPuniEkran(-1) : knPomjeri(-1); }
+  else if(e.key === 'ArrowRight'){ e.preventDefault(); otvorenPun ? knPomjeriPuniEkran(1) : knPomjeri(1); }
+  else if(e.key === 'Escape'){
+    if(otvorenPun) pun.style.display = 'none';
+    else if(otvorenMali) mali.style.display = 'none';
+  }
+});
+
 </script>
 
 
