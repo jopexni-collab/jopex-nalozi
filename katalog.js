@@ -280,6 +280,9 @@ async function ucitajStavke({ grupe, objekt_id, tip_kupca_id, samo_dostupno, deb
       grupa: s.grupa, master_naziv: s.master_naziv, debljina_cm: s.debljina_cm,
       slika: s.slika, slika_puna: s.slika_puna,
       dostupno: parseFloat(s.stanje) > 0,
+      /* Sama kolicina — pri pravljenju kataloga se vidi koliko cega ima, pa se ne
+         odstampa artikal kojeg nema. Ranije se slalo samo da/ne. */
+      stanje: parseFloat(s.stanje) || 0,
       cijena: c.konacna, cijena_bez_pdv: c.bez_pdv, pdv_iznos: c.pdv_iznos,
     };
   });

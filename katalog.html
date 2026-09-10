@@ -239,9 +239,13 @@ main{max-width:760px;margin:0 auto;padding:20px 16px 40px;}
 
     <!-- REZULTAT — link + dugmad za slanje (isti obrazac kao otpremnica u maloprodaji) -->
     <div id="kat-rezultat" style="display:none;margin-top:16px;border-top:1px solid #eee;padding-top:14px;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-        <button onclick="katNazad()" style="border:1px solid #ddd;background:#fff;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px;">← Izmijeni</button>
-        <div style="font-size:12px;font-weight:700;color:#555;">Katalog je spreman — pošalji kupcu:</div>
+      <!-- Uocljivije dugme za povratak — ranije se gubilo medju vezama za slanje -->
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px;flex-wrap:wrap;">
+        <button onclick="katNazad()"
+                style="border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:7px;padding:8px 15px;cursor:pointer;font-size:12.5px;font-weight:700;">
+          ← Nazad na katalog
+        </button>
+        <div style="font-size:12px;font-weight:700;color:#555;flex:1;">Katalog je spreman — pošalji kupcu:</div>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:10px;">
         <a id="kat-viber" href="#" style="flex:1;text-align:center;padding:10px 6px;border:1px solid #ddd;border-radius:8px;text-decoration:none;color:#7360f2;font-size:12.5px;font-weight:600;">📱 Viber</a>
@@ -799,6 +803,9 @@ function katNazad(){
   document.getElementById('kat-rezultat').style.display = 'none';
   katPodesavanjaVidljiva(true);
   katToken = null;
+  /* Vraca se i na vrh — poslije pravljenja je stranica pomjerena dolje, pa se obrazac
+     ne bi vidio i izgledalo bi da se nista nije desilo. */
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function katLink(){ return `${location.origin}/katalog-dokument.html?token=${encodeURIComponent(katToken)}`; }
