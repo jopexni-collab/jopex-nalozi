@@ -916,6 +916,10 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
           <option value="20" selected>R20</option><option value="40">R40</option><option value="custom">Proizvoljno</option>
         </select>
         <input type="text" inputmode="decimal" id="sto-r-inp" min="0" placeholder="mm" style="display:none;margin-top:3px" oninput="fixComma(this);refresh()">
+        <div style="margin-top:6px;padding:6px 8px;background:#f7f9fc;border:1px solid #dde2ea;border-radius:5px">
+          <div style="font-size:10px;color:#8a93a3;margin-bottom:4px">Na koje uglove</div>
+          <div id="sto-r-uglovi" style="display:flex;gap:10px;flex-wrap:wrap"></div>
+        </div>
       </div>
       <div id="sto-rl-wrap" style="display:none;margin-top:10px">
         <div class="hint">Radijus zakrivljenja DUŽE strane (mm) - veći radijus = blaže zakrivljenje</div>
@@ -1913,6 +1917,41 @@ function polyArea(outlineMM){
 var TABLE_OBLUTAK_X_RATIO=0.36;
 var TABLE_OBLUTAK_Y_RATIO=0.68;
 
+// Radijus stola po UGLU. Ranije se primjenjivao na sva cetiri; sada se
+// bira na koje. Redoslijed uglova: 0 gore-lijevo, 1 gore-desno,
+// 2 dolje-desno, 3 dolje-lijevo.
+var STO_UGLOVI=[{i:0,lbl:'gore lijevo'},{i:1,lbl:'gore desno'},
+                {i:2,lbl:'dolje desno'},{i:3,lbl:'dolje lijevo'}];
+function _stoUgloviAktivni(){
+  var a=items[activeIdx];
+  var v=a&&a.stoR;
+  if(!v||!v.length) return [true,true,true,true];   // zadano: sva cetiri
+  return [0,1,2,3].map(function(k){ return v.indexOf(k)>=0; });
+}
+function stoUgaoToggle(k,da){
+  var a=items[activeIdx]; if(!a) return;
+  var akt=_stoUgloviAktivni();
+  akt[k]=!!da;
+  var lista=[0,1,2,3].filter(function(q){ return akt[q]; });
+  if(!lista.length) lista=[k];         // bar jedan mora ostati
+  a.stoR=lista;
+  buildStoUglovi(); refresh();
+}
+function buildStoUglovi(){
+  var con=ge('sto-r-uglovi'); if(!con) return;
+  var akt=_stoUgloviAktivni();
+  con.innerHTML=STO_UGLOVI.map(function(u){
+    return '<label style="font-size:10.5px;display:flex;align-items:center;gap:4px;'
+      +'cursor:pointer"><input type="checkbox"'+(akt[u.i]?' checked':'')
+      +' onchange="stoUgaoToggle('+u.i+',this.checked)"> '+u.lbl+'</label>';
+  }).join('');
+}
+// Radijus po uglu: 0 gdje ugao nije izabran
+function _stoRadijusi(){
+  var r=getTableRadiusMM();
+  var akt=_stoUgloviAktivni();
+  return [0,1,2,3].map(function(k){ return akt[k]?r:0; });
+}
 function getTableRadiusMM(){
   var sel=ge('sto-r-sel');
   if(!sel) return 0;
@@ -2037,12 +2076,15 @@ function traceTableShape(ctx,sh,A,B,sc,rrMM){
     ctx.save(); ctx.translate(xMid,yMid); ctx.scale(xMid,yMid); ctx.arc(0,0,1,Math.PI,Math.PI*1.5); ctx.restore();
     ctx.closePath();
   } else if(sh==='radijus'){
-    var rPx=Math.min((rrMM||0)*sc,w/2,h/2);
-    ctx.moveTo(rPx,0);
-    ctx.lineTo(w-rPx,0); ctx.arcTo(w,0,w,rPx,rPx);
-    ctx.lineTo(w,h-rPx); ctx.arcTo(w,h,w-rPx,h,rPx);
-    ctx.lineTo(rPx,h); ctx.arcTo(0,h,0,h-rPx,rPx);
-    ctx.lineTo(0,rPx); ctx.arcTo(0,0,rPx,0,rPx);
+    // Radijus se moze primijeniti na jedan, dva, tri ili sva cetiri ugla.
+    // rrMM moze biti broj (svi uglovi) ili niz [gl,gd,dd,dl].
+    var _rNiz=Array.isArray(rrMM)?rrMM:[rrMM||0,rrMM||0,rrMM||0,rrMM||0];
+    var rP=_rNiz.map(function(v){ return Math.min((v||0)*sc,w/2,h/2); });
+    ctx.moveTo(rP[0],0);
+    ctx.lineTo(w-rP[1],0); if(rP[1]>0) ctx.arcTo(w,0,w,rP[1],rP[1]); else ctx.lineTo(w,0);
+    ctx.lineTo(w,h-rP[2]); if(rP[2]>0) ctx.arcTo(w,h,w-rP[2],h,rP[2]); else ctx.lineTo(w,h);
+    ctx.lineTo(rP[3],h);   if(rP[3]>0) ctx.arcTo(0,h,0,h-rP[3],rP[3]); else ctx.lineTo(0,h);
+    ctx.lineTo(0,rP[0]);   if(rP[0]>0) ctx.arcTo(0,0,rP[0],0,rP[0]); else ctx.lineTo(0,0);
     ctx.closePath();
   } else if(sh==='bure'||sh==='fbure'){
     var RcMM=rrMM||0, RlMM=getTableLongRadiusMM(), RsMM=(sh==='fbure')?getTableShortRadiusMM():0;
@@ -3100,6 +3142,7 @@ function switchItem(toIdx){
   buildKlPodtip();buildPozicijeTabelu();
   try{ prikaziLagerInfo(); }catch(e){}
   try{ _osvjeziStanjeMaterijala(); }catch(e){}
+  try{ if(uiTip==="sto"||tip==="sto") buildStoUglovi(); }catch(e){}
   buildItemList();
   refresh();
 }
@@ -11003,7 +11046,7 @@ function drawSto(ctx,W,H){
   ctx.save();ctx.translate(PAD,PAD);
 
   var rrMM=getTableRadiusMM();
-  traceTableShape(ctx,shape,A,B,sc,rrMM);
+  traceTableShape(ctx,shape,A,B,sc,(shape==='radijus')?_stoRadijusi():rrMM);
   ctx.fillStyle='#ffffff';ctx.fill();
   ctx.strokeStyle='#000';ctx.lineWidth=1.3;ctx.setLineDash([9,3,1.4,3]);ctx.stroke();ctx.setLineDash([]);
 
@@ -11014,7 +11057,7 @@ function drawSto(ctx,W,H){
   // sama interno odlučuje da li da nacrta "R" oznaku (samo kad rmm>0).
   if(shape==='radijus'||shape==='bure'||shape==='fbure'){
     var _stoCornerPts=[{x:0,y:0},{x:A*sc,y:0},{x:A*sc,y:B*sc},{x:0,y:B*sc}];
-    drawCornerLabels(ctx,_stoCornerPts,[rrMM,rrMM,rrMM,rrMM],sc,'#sto-r-sel',false,function(){return {kind:'number',label:'Radijus uglova stola (mm)',unit:'mm',min:0,step:1,get:function(){return getTableRadiusMM();},set:function(v){_setRadiusSelInline('sto-r',v);}};});
+    drawCornerLabels(ctx,_stoCornerPts,_stoRadijusi(),sc,'#sto-r-sel',false,function(){return {kind:'number',label:'Radijus uglova stola (mm)',unit:'mm',min:0,step:1,get:function(){return getTableRadiusMM();},set:function(v){_setRadiusSelInline('sto-r',v);}};});
   }
 
   // Obrada ivica - jedna obrada za cijeli sto (nije moguće različito po
@@ -13499,20 +13542,25 @@ function _osvjeziStanjeMaterijala(){
   var naziv=(gs('mat-naziv')||'').trim();
   var traka=ge('mat-stanje-info');
   var imaNaziv=!!naziv;
-  // Debljina i cijena zavise od izabranog materijala
+  // Polja se NE zakljucavaju. Debljina i cijena se cesto unose rucno, za
+  // materijal koji nije na lageru ili jos nije izabran - zakljucavanje je
+  // blokiralo taj posao. Umjesto toga se samo istakne polje naziva.
   ['mat-d-sel','mat-d-inp','mat-c'].forEach(function(id){
     var el=ge(id); if(!el) return;
-    el.disabled=!imaNaziv;
-    el.style.opacity=imaNaziv?'':'0.5';
-    el.style.cursor=imaNaziv?'':'not-allowed';
-    el.title=imaNaziv?'':'Prvo izaberi materijal';
+    el.disabled=false;
+    el.style.opacity='';
+    el.style.cursor='';
+    el.title='';
   });
+  var nazEl=ge('mat-naziv');
+  if(nazEl) nazEl.style.borderColor=imaNaziv?'':'#e8a800';
   if(!traka) return;
   if(!imaNaziv){
     traka.style.display='';
     traka.style.background='#f0f4fa'; traka.style.color='#6b7a8d';
     traka.style.border='1px solid #dde2ea';
-    traka.innerHTML='Izaberi materijal \u2014 debljina i cijena se otklju\u010davaju poslije toga.';
+    traka.innerHTML='Materijal nije izabran \u2014 mo\u017ee\u0161 unijeti ru\u010dno '
+      +'ili odabrati sa lagera (\u26c1).';
     return;
   }
   var st=_stanjeModela(naziv);
