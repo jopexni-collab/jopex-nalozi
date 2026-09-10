@@ -1940,17 +1940,43 @@ function stoUgaoToggle(k,da){
 function buildStoUglovi(){
   var con=ge('sto-r-uglovi'); if(!con) return;
   var akt=_stoUgloviAktivni();
-  con.innerHTML=STO_UGLOVI.map(function(u){
-    return '<label style="font-size:10.5px;display:flex;align-items:center;gap:4px;'
-      +'cursor:pointer"><input type="checkbox"'+(akt[u.i]?' checked':'')
-      +' onchange="stoUgaoToggle('+u.i+',this.checked)"> '+u.lbl+'</label>';
-  }).join('');
+  var zad=getTableRadiusMM();
+  var a=items[activeIdx];
+  var poj=(a&&a.stoRv)||{};
+  con.innerHTML='<div style="width:100%;font-size:9.5px;color:#8a93a3;'
+    +'padding-bottom:3px">prazno polje = zajedni\u010dki radijus ('+zad+' mm)</div>'
+    +STO_UGLOVI.map(function(u){
+      return '<div style="display:flex;align-items:center;gap:5px;width:calc(50% - 5px)">'
+        +'<label style="font-size:10.5px;display:flex;align-items:center;gap:4px;'
+        +'cursor:pointer;flex:1"><input type="checkbox"'+(akt[u.i]?' checked':'')
+        +' onchange="stoUgaoToggle('+u.i+',this.checked)"> '+u.lbl+'</label>'
+        +'<input type="text" inputmode="decimal" value="'+(poj[u.i]!=null?poj[u.i]:'')+'" '
+        +'placeholder="'+zad+'" style="width:48px;font:inherit;font-size:10.5px;'
+        +'padding:2px 4px;border:1px solid #dde2ea;border-radius:3px;text-align:right'
+        +(akt[u.i]?'':';opacity:.4')+'"'+(akt[u.i]?'':' disabled')
+        +' onchange="fixComma(this);stoUgaoRadijus('+u.i+',this.value)">'
+        +'<span style="font-size:9px;color:#8a93a3">mm</span></div>';
+    }).join('');
+}
+// Radijus SAMO za jedan ugao; prazno znaci zajednicki
+function stoUgaoRadijus(k,val){
+  var a=items[activeIdx]; if(!a) return;
+  a.stoRv=a.stoRv||{};
+  var v=_broj(val);
+  if(String(val||'').trim()===''||!(v>0)) delete a.stoRv[k];
+  else a.stoRv[k]=Math.max(0,Math.round(v));
+  buildStoUglovi(); refresh();
 }
 // Radijus po uglu: 0 gdje ugao nije izabran
 function _stoRadijusi(){
   var r=getTableRadiusMM();
   var akt=_stoUgloviAktivni();
-  return [0,1,2,3].map(function(k){ return akt[k]?r:0; });
+  var a=items[activeIdx];
+  var poj=(a&&a.stoRv)||{};
+  return [0,1,2,3].map(function(k){
+    if(!akt[k]) return 0;
+    return (poj[k]!=null&&poj[k]>0)?poj[k]:r;
+  });
 }
 function getTableRadiusMM(){
   var sel=ge('sto-r-sel');
@@ -7620,6 +7646,9 @@ function calcAllItems(){
 
 function refresh(){
   syncToActive();
+  // Kvacice za uglove stola - bile su samo u buildAll, pa se popis nije
+  // pojavljivao dok se ne promijeni tab.
+  try{ if(tip==='sto'||uiTip==='sto') buildStoUglovi(); }catch(e){}
   var mat=0,iv=0,usl=0,uk=0,pov='';
   if(tip==='k'){
     var m=getArea(),ivd=getIvData();
@@ -11700,9 +11729,15 @@ function genRadniNalog(returnHtml){try{
              if(it.shape!=='radijus'||typeof _stoRadijusi!=='function') return '';
              var n=_stoRadijusi(), im=['gore lijevo','gore desno','dolje desno','dolje lijevo'];
              var koji=[0,1,2,3].filter(function(k){ return n[k]>0; });
-             if(koji.length===4) return ' (sva 4 ugla)';
+             var isti=koji.every(function(k){ return n[k]===n[koji[0]]; });
+             if(koji.length===4&&isti) return ' (sva 4 ugla)';
              return '<br><span style="font-weight:400;font-size:10px">'
-               +koji.map(function(k){ return im[k]; }).join(', ')+'</span>';
+               +koji.map(function(k){ return im[k]+(isti?'':(' R'+n[k])); }).join(', ')
+               +([0,1,2,3].some(function(k){return n[k]===0;})
+                  ? ('; o\u0161tri: '+[0,1,2,3].filter(function(k){return n[k]===0;})
+                      .map(function(k){return im[k];}).join(', '))
+                  : '')
+               +'</span>';
            })()
           +'</b></td></tr>';
       }
