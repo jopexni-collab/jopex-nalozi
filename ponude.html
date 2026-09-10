@@ -11106,11 +11106,14 @@ function drawSto(ctx,W,H){
   var segs=getIvSegs(shape,dims);
   var stA=ivSt['A-zad'];
   if(stA&&stA.prof&&stA.prof!=='none'){
+    // Linija obrade mora pratiti STVARNE radijuse po uglu, ne zajednicki -
+    // inace se kod razlicitih radijusa crta preko pogresne konture.
+    var _rIv=(shape==='radijus')?_stoRadijusi():rrMM;
     // Prvo obriši crta-tačka liniju konture (bijelom) da se ne vidi ispod
-    traceTableShape(ctx,shape,A,B,sc,rrMM);
+    traceTableShape(ctx,shape,A,B,sc,_rIv);
     ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.setLineDash([]);
     ctx.stroke();
-    traceTableShape(ctx,shape,A,B,sc,rrMM);
+    traceTableShape(ctx,shape,A,B,sc,_rIv);
     ctx.strokeStyle='#000';ctx.lineWidth=1.3;ctx.setLineDash([]);
     ctx.stroke();
   }
