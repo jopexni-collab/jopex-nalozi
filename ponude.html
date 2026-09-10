@@ -522,6 +522,8 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
     </div>
     <div class="fg"><label>Model / Boja</label>
       <input type="text" id="mat-naziv" list="mat-list" placeholder="Slobodan unos ili odaberi..." onchange="refresh()" oninput="refresh()">
+      <div id="mat-stanje-info" style="display:none;font-size:10.5px;padding:4px 7px;
+        border-radius:4px;margin-top:3px;line-height:1.35"></div>
       <datalist id="mat-list">
         <optgroup label="Kvarc">
         <option value="Bianco Tiffone"><option value="Calacatta Bellagio"><option value="Snow White">
@@ -3097,6 +3099,7 @@ function switchItem(toIdx){
   buildTableShapeGrid();buildTableDimWrap();buildTableHoleUI();
   buildKlPodtip();buildPozicijeTabelu();
   try{ prikaziLagerInfo(); }catch(e){}
+  try{ _osvjeziStanjeMaterijala(); }catch(e){}
   buildItemList();
   refresh();
 }
@@ -8581,15 +8584,34 @@ function drawOtvori(ctx,sc,aX,aY,aW,aH){
     ctx.restore();
     // Kote pozicije slavine: od lijeve ivice i od gornje ivice (zida)
     var slavX=s.x||400, slavY=s.yz||50;
-    // Kota od lijeve ivice (X) -> DOLJE od ploce, pomjerena po indeksu da se ne preklapaju
-    var slavKotaY=_slBaseY+_slBaseH+32+si*16;
-    // Kota od gornje ivice (Y) -> DESNO od ploce, pomjerena po indeksu
-    var slavKotaX=_slBaseX+_slBaseW+32+si*16;
+    // Kote se pomjeraju po indeksu da se ne preklope. Razmak od 16 px je
+    // bio manji od natpisa (npr. "60 mm" je oko 35 px), pa su se kod dvije
+    // slavine na istoj visini natpisi poklapali i skrivali drugi otvor.
+    var _slRazmak=42;
+    var slavKotaY=_slBaseY+_slBaseH+32+si*_slRazmak;
+    // Uspravna kota mjeri rastojanje od zadnje ivice. Slavine na ISTOJ
+    // visini imaju istu vrijednost, pa se crta SAMO JEDNOM - inace se
+    // identicni natpisi poklope i sakriju drugi otvor.
+    var _slIsti=(slavine||[]).findIndex(function(o){
+      return Math.abs((o.yz||50)-(s.yz||50))<1;
+    });
+    var _crtajY=(_slIsti===si);
+    // redni broj razlicite visine, da se kote ne slazu jedna na drugu
+    var _slRedY=0;
+    var _vidjene={};
+    for(var _q=0;_q<si;_q++){
+      var _v=Math.round((slavine[_q].yz||50));
+      if(!_vidjene[_v]){ _vidjene[_v]=1; _slRedY++; }
+    }
+    var slavKotaX=_slBaseX+_slBaseW+32+_slRedY*_slRazmak;
     // Horizontalna kota dolje: od lijeve ivice do slavine
     kota(ctx,_pSl.left*sc,slavKotaY,slx,slavKotaY,slavX+' mm',_slavinaDimEditDesc(si,'x','Udaljenost slavine '+(si+1)+' od lijeve ivice'),'#slavina-list [data-sl-idx="'+si+'"]');
     // Vertikalna kota desno: od zadnje ivice do slavine
-    kota(ctx,slavKotaX,_pSl.back*sc,slavKotaX,sly,slavY+' mm',_slavinaDimEditDesc(si,'yz','Udaljenost slavine '+(si+1)+' od zadnje ivice'),'#slavina-list [data-sl-idx="'+si+'"]');
+    if(_crtajY)
+      kota(ctx,slavKotaX,_pSl.back*sc,slavKotaX,sly,slavY+' mm',_slavinaDimEditDesc(si,'yz','Udaljenost slavine '+(si+1)+' od zadnje ivice'),'#slavina-list [data-sl-idx="'+si+'"]');
     _regClickRect(slx-fi,sly-fi,fi*2,fi*2,'#slavina-list [data-sl-idx="'+si+'"]');
+    // Otvor je prepreka - kote ga moraju zaobici, inace ga sakriju
+    _kotaPrepreka(slx,sly,Math.max(14,fi+6));
     // Referentne isprekidane linije
     ctx.save();ctx.strokeStyle='#e74c3c';ctx.lineWidth=0.6;ctx.setLineDash([3,3]);
     // Ref za X kotu: vertikalne linije gore od ploce
@@ -8934,6 +8956,12 @@ function drawLegenda(ctx,W,H){
     +(_rezLeg.length?(13+_rezLeg.length*10):0)
     +(_kanLeg.length?(13+_kanLeg.length*11):0);
   var lX=W-lW-4, lY=4;
+  // Legenda je prepreka kotama - bez toga kota slavine ulazi u nju
+  try{
+    _kotaPrepreka(lX+lW/2, lY+lH/2, Math.max(lW,lH)/2+6);
+    for(var _lq=0;_lq<=6;_lq++)
+      _kotaPrepreka(lX+lW*_lq/6, lY+lH/2, Math.max(24,lH/2));
+  }catch(e){}
 
   // Pozadina
   ctx.fillStyle='rgba(255,255,255,0.93)';
@@ -9079,7 +9107,13 @@ function getCanvasSizeForItem(){
     // 96 je bocni rub u drawK, 0.97 njegov faktor; 104 je gornji+donji rub.
     var _scW=(_baseW-192)/Math.max(_bbW,1)*0.97;
     var _potrebna=Math.round(_bbH*_scW)+104;
-    var _baseH=Math.min(750,Math.max(300,_potrebna));
+    // Svaka slavina poslije prve dodaje svoj red kota ispod ploce
+    var _brSl=((typeof slavine!=='undefined'&&slavine)||[]).length;
+    if(_brSl>1) _potrebna+=(_brSl-1)*42+20;
+    // Otvori i slavine nose svoje kote unutar i ispod ploce
+    var _imaOtv=(gc('cb-sud')||gc('cb-plo')||((customOtvori||[]).length>0));
+    if(_imaOtv||_brSl) _potrebna+=46;
+    var _baseH=Math.min(900,Math.max(300,_potrebna));
     return {w:_baseW, h:_hasExt?Math.max(_baseH+100,560):_baseH};
   }
   if(tip==='sto'){
@@ -13429,7 +13463,75 @@ function suziModeleNaGrupu(){
     dl.innerHTML='';
     return;
   }
-  dl.innerHTML=imena.map(function(n){ return '<option value="'+n+'"><\/option>'; }).join('');
+  // Uz svaki model ide i STANJE - da se ne izabere artikal kojeg nema.
+  // Zbir po nazivu, jer isti model moze stajati u vise poslovnica.
+  var stanja={};
+  _lagerKes.forEach(function(x){
+    if(!x.naziv) return;
+    if(g&&x.grupa&&x.grupa!==g) return;
+    stanja[x.naziv]=(stanja[x.naziv]||0)+(_broj(x.stanje)||0);
+  });
+  dl.innerHTML=imena.map(function(n){
+    var st=stanja[n]||0;
+    var opis=(st>0)?(fmtBroj(st,2)+' m\u00b2 na stanju'):'NEMA NA STANJU';
+    return '<option value="'+n+'">'+opis+'<\/option>';
+  }).join('');
+  _lagerStanja=stanja;
+}
+// Stanje po nazivu, za trenutnu grupu
+var _lagerStanja={};
+function _stanjeModela(naziv){
+  var n=String(naziv||'').trim();
+  if(!n) return null;
+  if(_lagerStanja[n]!=null) return _lagerStanja[n];
+  // ako suziModeleNaGrupu jos nije trcao, potrazi direktno
+  if(!_lagerKes||!_lagerKes.length) return null;
+  var uk=0, naso=false;
+  _lagerKes.forEach(function(x){
+    if(String(x.naziv||'').trim()!==n) return;
+    naso=true; uk+=(_broj(x.stanje)||0);
+  });
+  return naso?uk:null;
+}
+// Dok materijal nije izabran, polja koja od njega zavise nemaju smisla.
+// Isto tako, ako je izabran model kojeg NEMA na stanju, to mora da se vidi.
+function _osvjeziStanjeMaterijala(){
+  var naziv=(gs('mat-naziv')||'').trim();
+  var traka=ge('mat-stanje-info');
+  var imaNaziv=!!naziv;
+  // Debljina i cijena zavise od izabranog materijala
+  ['mat-d-sel','mat-d-inp','mat-c'].forEach(function(id){
+    var el=ge(id); if(!el) return;
+    el.disabled=!imaNaziv;
+    el.style.opacity=imaNaziv?'':'0.5';
+    el.style.cursor=imaNaziv?'':'not-allowed';
+    el.title=imaNaziv?'':'Prvo izaberi materijal';
+  });
+  if(!traka) return;
+  if(!imaNaziv){
+    traka.style.display='';
+    traka.style.background='#f0f4fa'; traka.style.color='#6b7a8d';
+    traka.style.border='1px solid #dde2ea';
+    traka.innerHTML='Izaberi materijal \u2014 debljina i cijena se otklju\u010davaju poslije toga.';
+    return;
+  }
+  var st=_stanjeModela(naziv);
+  if(st==null){
+    traka.style.display='';
+    traka.style.background='#fff8e6'; traka.style.color='#8a6d3b';
+    traka.style.border='1px solid #e8d9bd';
+    traka.innerHTML='<b>'+naziv+'</b> nije na lageru \u2014 unos van lagera.';
+  } else if(st<=0){
+    traka.style.display='';
+    traka.style.background='#fdecea'; traka.style.color='#a4342a';
+    traka.style.border='1px solid #f0b3ad';
+    traka.innerHTML='\u26a0 <b>'+naziv+'</b> \u2014 <b>stanje 0</b>. Provjeri prije nego po\u0161alje\u0161 ponudu.';
+  } else {
+    traka.style.display='';
+    traka.style.background='#eefaf6'; traka.style.color='#1d6b52';
+    traka.style.border='1px solid #bde3d6';
+    traka.innerHTML='<b>'+naziv+'</b> \u2014 na stanju <b>'+fmtBroj(st,2)+' m\u00b2</b>';
+  }
 }
 function grupaPromijenjena(){
   var sel=ge('mat-v-sel'), inp=ge('mat-v-inp');
