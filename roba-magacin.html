@@ -757,6 +757,8 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <div class="ce-row">
       <button class="ce-tip-btn" onclick="ucitajLagerListu()">Prikaži</button>
       <button class="ce-tip-btn" style="color:var(--green,#1f8a4c);font-weight:700;" onclick="otvoriNovArtikal()">➕ Nova šifra</button>
+      <button class="ce-tip-btn" onclick="otvoriPreimenujGrupu()"
+              title="Promijeni naziv cijele grupe — mijenja se na svim njenim artiklima">✎ Preimenuj grupu</button>
       <button class="ce-tip-btn" onclick="otvoriRucniUnos()">✏️ Ručni unos</button>
       <button class="ce-tip-btn" onclick="izvezLagerListu()">📥 Izvezi u XLSX</button>
       <button class="ce-tip-btn" style="color:var(--red);" id="btn-obrisi-lager" onclick="otvoriBrisanjeLagera()">🗑️ Obriši lager</button>
@@ -8334,6 +8336,83 @@ async function sacuvajGrupuArtikla(){
   }
 }
 
+
+/* Preimenovanje CIJELE grupe. Grupa je tekst na artiklu, pa se mijenja na svim
+   njenim artiklima odjednom — djelimicna izmjena bi razdvojila istu robu. */
+let pgGrupe = [];
+
+async function otvoriPreimenujGrupu(){
+  document.getElementById('pg-novi').value = '';
+  document.getElementById('pg-poruka').textContent = '';
+  document.getElementById('pg-upozorenje').textContent = '';
+  try{
+    const r = await fetch(`${API}/api/roba/liste-grupa`);
+    const d = await r.json();
+    pgGrupe = (Array.isArray(d) ? d : d.grupe || [])
+      .map(x => typeof x === 'string' ? { grupa: x, broj: null } : x)
+      .filter(x => x.grupa)
+      .sort((a,b) => String(a.grupa).localeCompare(String(b.grupa)));
+    document.getElementById('pg-stara').innerHTML = pgGrupe.map(g =>
+      `<option value="${esc(g.grupa)}">${esc(g.grupa)}${g.broj?` (${g.broj})`:''}</option>`).join('');
+  }catch(e){
+    document.getElementById('pg-stara').innerHTML = '<option value="">— ne mogu učitati grupe —</option>';
+  }
+  pgOsvjeziBroj();
+  document.getElementById('modal-preimenuj-grupu').style.display = 'flex';
+}
+
+function pgOsvjeziBroj(){
+  const g = pgGrupe.find(x => x.grupa === document.getElementById('pg-stara').value);
+  document.getElementById('pg-broj').textContent = g?.broj ? `${g.broj} artikala` : '';
+  pgProvjeri();
+}
+
+/* Ako ciljni naziv vec postoji, ovo je SPAJANJE — bolje reci unaprijed nego poslije. */
+function pgProvjeri(){
+  const novi = document.getElementById('pg-novi').value.trim().toLowerCase();
+  const stara = document.getElementById('pg-stara').value.trim().toLowerCase();
+  const el = document.getElementById('pg-upozorenje');
+  if(!novi){ el.textContent = ''; return; }
+  if(novi === stara){ el.textContent = 'Isti naziv.'; el.style.color = 'var(--orange,#b8860b)'; return; }
+  const postoji = pgGrupe.find(x => String(x.grupa).trim().toLowerCase() === novi);
+  if(postoji){
+    el.innerHTML = `⚠ Grupa „${esc(postoji.grupa)}" već postoji — artikli će se <b>spojiti</b> u nju.`;
+    el.style.color = 'var(--orange,#b8860b)';
+  }else{
+    el.textContent = '✓ Nov naziv grupe.';
+    el.style.color = 'var(--green,#1f8a4c)';
+  }
+}
+
+async function pgSacuvaj(){
+  const staro = document.getElementById('pg-stara').value.trim();
+  const novo = document.getElementById('pg-novi').value.trim();
+  const poruka = document.getElementById('pg-poruka');
+  const dugme = document.getElementById('pg-dugme');
+  if(!staro || !novo){
+    poruka.textContent = 'Izaberi grupu i upiši nov naziv.'; poruka.style.color = 'var(--orange,#b8860b)';
+    return;
+  }
+  dugme.disabled = true;
+  poruka.textContent = 'Mijenjam...'; poruka.style.color = '#8b96a5';
+  try{
+    const r = await fetch(`${API}/api/roba/grupe/preimenuj`,{
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ staro, novo }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    poruka.innerHTML = `✓ Izmijenjeno ${d.izmijenjeno} ${d.izmijenjeno===1?'artikal':'artikala'}${d.spojeno?' · <b>spojeno</b>':''}`;
+    poruka.style.color = 'var(--green,#1f8a4c)';
+    setTimeout(()=>{
+      document.getElementById('modal-preimenuj-grupu').style.display = 'none';
+      if(typeof ucitajLagerListu === 'function') ucitajLagerListu();
+    }, 1100);
+  }catch(e){
+    poruka.textContent = '✗ ' + e.message; poruka.style.color = 'var(--red,#c0392b)';
+  }finally{ dugme.disabled = false; }
+}
+
 </script>
 
 
@@ -8672,6 +8751,36 @@ async function sacuvajGrupuArtikla(){
     <div style="display:flex;gap:8px;align-items:center;margin-top:14px;">
       <button onclick="sacuvajGrupuArtikla()" style="flex:1;padding:9px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;">✓ Sačuvaj</button>
       <span id="mg-poruka" style="font-size:11.5px;color:#8b96a5;"></span>
+    </div>
+  </div>
+</div>
+<div id="modal-preimenuj-grupu" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:940;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:12px;padding:18px;max-width:440px;width:94vw;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <h3 style="margin:0;font-size:15.5px;">✎ Preimenuj grupu</h3>
+      <button onclick="document.getElementById('modal-preimenuj-grupu').style.display='none'" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999;">✕</button>
+    </div>
+    <div style="font-size:11.5px;color:#6b7a8d;line-height:1.5;margin-bottom:13px;">
+      Naziv se mijenja na <b>svim artiklima</b> te grupe odjednom. Grupa nije zaseban
+      zapis nego tekst na artiklu, pa bi djelimična izmjena razdvojila istu robu.
+    </div>
+
+    <label style="display:block;margin-bottom:10px;">
+      <span style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Grupa</span>
+      <select id="pg-stara" onchange="pgOsvjeziBroj()" style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:7px;font:inherit;font-size:13px;"></select>
+      <span id="pg-broj" style="font-size:10.5px;color:#8b96a5;"></span>
+    </label>
+
+    <label style="display:block;">
+      <span style="font-size:11px;color:#6b7a8d;display:block;margin-bottom:3px;">Novi naziv</span>
+      <input type="text" id="pg-novi" placeholder="npr. Royal Tiger" oninput="pgProvjeri()"
+             style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:7px;font:inherit;font-size:13px;">
+      <span id="pg-upozorenje" style="font-size:10.5px;color:#8b96a5;display:block;margin-top:3px;line-height:1.45;"></span>
+    </label>
+
+    <div style="display:flex;gap:8px;align-items:center;margin-top:15px;">
+      <button onclick="pgSacuvaj()" id="pg-dugme" style="flex:1;padding:10px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:7px;font-weight:700;cursor:pointer;font-size:13px;">✓ Preimenuj</button>
+      <span id="pg-poruka" style="font-size:11.5px;color:#8b96a5;flex:1;"></span>
     </div>
   </div>
 </div>

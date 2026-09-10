@@ -1673,7 +1673,10 @@ router.post('/import', upload.single('file'), async (req, res) => {
           `INSERT INTO roba (sifra, naziv, jed_mjera, izvor_uvoza, grupa, debljina_cm)
            VALUES ($1,$2,$3,$4,$5,$6)
            ON CONFLICT (sifra) DO UPDATE SET naziv=$2, jed_mjera=$3, izvor_uvoza=$4,
-             grupa=COALESCE($5, roba.grupa), debljina_cm=COALESCE($6, roba.debljina_cm), azurirano=now()
+             /* Grupa se pri uvozu NE mijenja na postojecim artiklima — sifra je jedini kljuc.
+     Grupe se u aplikaciji rucno sredjuju za katalog, pa bi ih uvoz svaki put vracao
+     na ono sto pise u tabeli dobavljaca. Upisuje se samo kad je artikal NOV. */
+  grupa=COALESCE(roba.grupa, $5), debljina_cm=COALESCE($6, roba.debljina_cm), azurirano=now()
            RETURNING id, (xmax = 0) AS inserted`,
           [sifra, naziv, jed_mjera, izvor, grupa, debljina]
         );
@@ -2529,6 +2532,55 @@ router.get('/:id/slike/grupa', async (req, res) => {
     );
     res.json(r.rows[0] || null);
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/* PUT /grupe/preimenuj — mijenja naziv grupe na SVIM artiklima koji joj pripadaju.
+   Grupa nije zaseban zapis nego tekst na artiklu, pa preimenovanje mora proci kroz
+   sve odjednom — inace bi dio ostao pod starim nazivom i katalog bi ih razdvojio. */
+router.put('/grupe/preimenuj', async (req, res) => {
+  const u = req.session?.user;
+  if (!(u?.rola === 'admin' || u?.moze_roba_magacin))
+    return res.status(403).json({ error: 'Nemate dozvolu.' });
+
+  const staro = String(req.body?.staro || '').trim();
+  const novo = String(req.body?.novo || '').trim();
+  if (!staro || !novo) return res.status(400).json({ error: 'Unesite stari i novi naziv grupe.' });
+  if (staro.toLowerCase() === novo.toLowerCase() && staro === novo)
+    return res.status(400).json({ error: 'Naziv je isti.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    /* Ako ciljna grupa vec postoji, ovo je SPAJANJE — artikli obje grupe zavrsavaju
+       pod istim nazivom. To je namjerno dozvoljeno, ali se javlja u odgovoru. */
+    const cilj = await client.query(
+      `SELECT COUNT(*)::int AS n FROM roba WHERE TRIM(LOWER(grupa)) = TRIM(LOWER($1))`, [novo]
+    );
+    const spaja = cilj.rows[0].n > 0 && staro.toLowerCase() !== novo.toLowerCase();
+
+    const r = await client.query(
+      `UPDATE roba SET grupa = $1, azurirano = now()
+       WHERE TRIM(LOWER(grupa)) = TRIM(LOWER($2)) RETURNING id`,
+      [novo, staro]
+    );
+
+    /* Trag izmjene — grupa utice na katalog i sastavnice, pa se biljezi ko je i kada
+       preimenovao. */
+    for (const red of r.rows) {
+      await client.query(
+        `INSERT INTO roba_naziv_log (roba_id, sifra, stari_naziv, novi_naziv, polje, korisnik_ime)
+         SELECT $1, sifra, $2, $3, 'grupa', $4 FROM roba WHERE id = $1`,
+        [red.id, staro, novo, u.ime_prezime]
+      ).catch(() => {});
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true, izmijenjeno: r.rows.length, spojeno: spaja });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
 });
 
 module.exports = router;
