@@ -2050,8 +2050,20 @@ function getTablePerimeter(sh,d){
     return getBurePerimeter(segsFbure);
   }
   if(sh==='radijus'){
-    var rr=Math.min(getTableRadiusMM(),A/2,B/2);
-    return 2*(A-2*rr)+2*(B-2*rr)+2*Math.PI*rr;
+    // Obim mora pratiti KOJI su uglovi zaobljeni. Ranije se racunalo kao
+    // da su sva cetiri, pa je obrada bila kratka kad ih je manje.
+    var _rN=(typeof _stoRadijusi==='function')?_stoRadijusi():null;
+    var rjed=Math.min(getTableRadiusMM(),A/2,B/2);
+    if(!_rN) return 2*(A-2*rjed)+2*(B-2*rjed)+2*Math.PI*rjed;
+    var rr=_rN.map(function(v){ return Math.min(v||0,A/2,B/2); });
+    // Svaka strana se skrati za radijuse svoja dva ugla
+    var gore = A-rr[0]-rr[1];
+    var desno= B-rr[1]-rr[2];
+    var dolje= A-rr[2]-rr[3];
+    var lijevo=B-rr[3]-rr[0];
+    // Svaki zaobljen ugao doda cetvrtinu kruga
+    var lukovi=rr.reduce(function(z,v){ return z+(v>0?(Math.PI*v/2):0); },0);
+    return gore+desno+dolje+lijevo+lukovi;
   }
   return 2*(A+B);
 }
@@ -11683,7 +11695,16 @@ function genRadniNalog(returnHtml){try{
         dimRows+='<tr><td><b>B</b></td><td>Dubina</td><td><b>'+gi('sto-b')+' mm</b></td></tr>';
       }
       if(it.shape==='radijus'||it.shape==='bure'||it.shape==='fbure'){
-        dimRows+='<tr><td><b>Rc</b></td><td>Radijus uglova</td><td><b>'+getTableRadiusMM()+' mm</b></td></tr>';
+        dimRows+='<tr><td><b>Rc</b></td><td>Radijus uglova</td><td><b>'+getTableRadiusMM()+' mm'
+          +(function(){
+             if(it.shape!=='radijus'||typeof _stoRadijusi!=='function') return '';
+             var n=_stoRadijusi(), im=['gore lijevo','gore desno','dolje desno','dolje lijevo'];
+             var koji=[0,1,2,3].filter(function(k){ return n[k]>0; });
+             if(koji.length===4) return ' (sva 4 ugla)';
+             return '<br><span style="font-weight:400;font-size:10px">'
+               +koji.map(function(k){ return im[k]; }).join(', ')+'</span>';
+           })()
+          +'</b></td></tr>';
       }
       if(it.shape==='bure'||it.shape==='fbure'){
         dimRows+='<tr><td><b>Rl</b></td><td>Radijus duže strane</td><td><b>'+getTableLongRadiusMM()+' mm</b></td></tr>';
@@ -12509,9 +12530,12 @@ function genDXF(){
       var rrD=getTableRadiusMM();
       var stoBrD=Math.max(1,gi('sto-br')||1);
       if(shape==='radijus'){
-        var rrDC=Math.min(rrD,stoAD/2,stoBD/2);
-        dxfRoundedRect(0,0,stoAD,stoBD,rrDC,rrDC,rrDC,rrDC,'KONTURA',yOff);
-        if(rrDC>0) dxfCornerLabels([{x:0,y:0},{x:stoAD,y:0},{x:stoAD,y:stoBD},{x:0,y:stoBD}],[rrDC,rrDC,rrDC,rrDC]);
+        // Radijus po uglu - ne smiju sva cetiri dobiti isti
+        var _rDN=((typeof _stoRadijusi==='function')?_stoRadijusi():[rrD,rrD,rrD,rrD])
+          .map(function(v){ return Math.min(v||0,stoAD/2,stoBD/2); });
+        dxfRoundedRect(0,0,stoAD,stoBD,_rDN[0],_rDN[1],_rDN[2],_rDN[3],'KONTURA',yOff);
+        if(_rDN.some(function(v){return v>0;}))
+          dxfCornerLabels([{x:0,y:0},{x:stoAD,y:0},{x:stoAD,y:stoBD},{x:0,y:stoBD}],_rDN);
       } else if(shape==='bure'||shape==='fbure'){
         var RlD=getTableLongRadiusMM(), RsD=(shape==='fbure')?getTableShortRadiusMM():0;
         var bureSegs=getBureSegments(stoAD,stoBD,rrD,RlD,RsD);
