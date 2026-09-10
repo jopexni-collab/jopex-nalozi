@@ -259,6 +259,30 @@ main{max-width:760px;margin:0 auto;padding:20px 16px 40px;}
 </div>
 
 <script>
+
+/* Objekat, kupac i povratna adresa mogu doci iz drugog ekrana (maloprodaja, blagajna) —
+   tako svi koriste ISTI obrazac, bez kopija koje zaostaju. */
+(function katPreuzmiIzAdrese(){
+  const par = new URLSearchParams(location.search);
+  const oid = par.get('objekt_id');
+  const kupac = par.get('kupac');
+  const nazad = par.get('nazad');
+
+  if(oid) window.__katObjektIzAdrese = oid;
+  if(kupac){
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const el = document.getElementById('kat-kupac');
+      if(el) el.value = kupac;
+    });
+  }
+  if(nazad && /^[a-z-]+\.html$/.test(nazad)){
+    document.addEventListener('DOMContentLoaded', ()=>{
+      const v = document.querySelector('header a, .nazad');
+      if(v && v.tagName === 'A') v.href = nazad;
+    });
+  }
+})();
+
 /* Izbor grupa i nacin prikaza pamte se ZASEBNO — spisak grupa se prepisuje pri
    svakoj pretrazi, pa bi se ono sto je ranije izabrano inace izgubilo. */
 const katIzabraneGrupeSpisak = new Set();
