@@ -76,6 +76,7 @@ router.get('/:token', async (req, res) => {
             ...s,
             naziv: s.grupa || 'Ostalo',
             je_grupa: true,
+            master_naziv: s.master_naziv || null,
             sifra: null,
             debljine: new Set(),
             broj_artikala: 0,

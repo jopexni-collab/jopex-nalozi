@@ -469,13 +469,32 @@ function render(){
   }
 
   if(podaci.stavke.length){
-    const poGrupama = {};
-    podaci.stavke.forEach(s => { (poGrupama[s.grupa||'Ostalo'] ||= []).push(s); });
     if(gotovi.length) html += `<div class="grupa-naslov" style="margin-top:26px;">${T('materijali')}</div>`;
-    html += Object.entries(poGrupama).map(([grupa, stavke]) => `
-      <div class="grupa-naslov">${esc(grupa)}</div>
-      <div class="${prikaz}">${stavke.map(s => prikaz==='mreza' ? kartica(s) : red(s)).join('')}</div>
-    `).join('');
+
+    /* Stavke koje SU grupe (spojene, jedna po materijalu) idu ZAJEDNO, u jednu mrezu —
+       ranije je svaka dobijala svoj odjeljak sa jednom karticom, pa su ispadale jedna
+       ispod druge umjesto jedna pored druge. */
+    const grupneStavke = podaci.stavke.filter(s => s.je_grupa);
+    const obicne = podaci.stavke.filter(s => !s.je_grupa);
+
+    if(grupneStavke.length){
+      /* Slozene po nadgrupi (granit, kvarc...), da se srodni materijali drze zajedno. */
+      const poMasteru = {};
+      grupneStavke.forEach(s => { (poMasteru[s.master_naziv || ''] ||= []).push(s); });
+      html += Object.entries(poMasteru).map(([master, lista]) => `
+        ${master ? `<div class="grupa-naslov">${esc(master)}</div>` : ''}
+        <div class="${prikaz}">${lista.map(s => prikaz==='mreza' ? kartica(s) : red(s)).join('')}</div>
+      `).join('');
+    }
+
+    if(obicne.length){
+      const poGrupama = {};
+      obicne.forEach(s => { (poGrupama[s.grupa||'Ostalo'] ||= []).push(s); });
+      html += Object.entries(poGrupama).map(([grupa, stavke]) => `
+        <div class="grupa-naslov">${esc(grupa)}</div>
+        <div class="${prikaz}">${stavke.map(s => prikaz==='mreza' ? kartica(s) : red(s)).join('')}</div>
+      `).join('');
+    }
   }
 
   document.getElementById('sadrzaj').innerHTML = html;
@@ -771,7 +790,7 @@ function kartica(s){
           i cuvanju u PDF razvlaci i muti. Sicica ostaje kao rezerva. */''}
     ${(s.slika_puna||s.slika)?`<img class="poz" src="${esc(s.slika_puna||s.slika)}" data-puna="${esc(s.slika_puna||'')}" loading="lazy" alt="${esc(s.naziv)}">`:''}
     <div class="sjena"></div>
-    <div class="znacka">${esc(s.grupa||'—')}</div>
+    <div class="znacka"${s.je_grupa?' style="background:#6b4fa0;"':''}>${s.je_grupa?'🗂 '+esc(s.naziv):esc(s.grupa||'—')}</div>
     <div class="dno">
       <div class="naziv">${esc(s.naziv)}</div>
       ${/* Grupa: raspon cijena i broj artikala umjesto jedne cijene. */''}
@@ -789,7 +808,7 @@ function red(s){
   return `<div class="stavka">
     ${slikaHtml(s,'slika')}
     <div class="info">
-      <div class="znacka">${esc(s.grupa||'—')}</div>
+      <div class="znacka"${s.je_grupa?' style="background:#6b4fa0;"':''}>${s.je_grupa?'🗂 '+esc(s.naziv):esc(s.grupa||'—')}</div>
       <div class="naziv">${esc(s.naziv)}</div>
       <div class="sifra">Šifra: ${esc(s.sifra)}${s.debljina_cm?` · ${s.debljina_cm} cm`:''}${!s.dostupno?' · <span style="color:#c0392b;">nedostupno</span>':''}</div>
     </div>

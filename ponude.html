@@ -929,6 +929,10 @@ table.tbl tr:nth-child(even) td{background:#f9f9f9;}
         <div class="hint">Radijus zakrivljenja KRAĆE strane (mm)</div>
         <input type="text" inputmode="decimal" id="sto-rs" value="3000" min="100" oninput="fixComma(this);refresh()">
       </div>
+      <div id="sto-iv-wrap" style="display:none;margin-top:10px;padding:7px 9px;
+        background:#f7f9fc;border:1px solid #dde2ea;border-radius:6px">
+        <div id="sto-iv-strane"></div>
+      </div>
     </div>
     <div class="sec">
       <div class="sec-hd" style="color:#b8860b">Obrada ivica</div>
@@ -1968,6 +1972,121 @@ function stoUgaoRadijus(k,val){
   buildStoUglovi(); refresh();
 }
 // Radijus po uglu: 0 gdje ugao nije izabran
+// ── OBRADA PO STRANAMA (samo pravougaoni sto sa radijusom) ───────
+// Strane: A zadnja, B lijeva, C desna, D prednja.
+// Uglovi: 0 gore-lijevo (A|B), 1 gore-desno (A|C),
+//         2 dolje-desno (C|D), 3 dolje-lijevo (D|B)
+var STO_STRANE=[{id:'A',lbl:'A zadnja'},{id:'B',lbl:'B lijeva'},
+                {id:'C',lbl:'C desna'},{id:'D',lbl:'D prednja'}];
+// Koje strane dodiruje svaki ugao
+var STO_UGAO_STRANE=[['A','B'],['A','C'],['C','D'],['D','B']];
+function _stoRazlicito(){
+  var a=items[activeIdx];
+  return !!(a&&a.stoIvR);
+}
+function _stoProfStrane(id){
+  var a=items[activeIdx];
+  if(!_stoRazlicito()){
+    var st=ivSt['A-zad'];
+    return (st&&st.prof)||'none';
+  }
+  var v=(a.stoIvR||{})[id];
+  return v||'none';
+}
+// Ugao prati OBRADJENU stranu. Ako su obje obradjene, uzima prvu po obimu.
+function _stoProfUgla(k){
+  var par=STO_UGAO_STRANE[k];
+  var p1=_stoProfStrane(par[0]), p2=_stoProfStrane(par[1]);
+  if(p1!=='none'&&p2!=='none') return p1;
+  if(p1!=='none') return p1;
+  if(p2!=='none') return p2;
+  return 'none';
+}
+function buildStoIvice(){
+  var con=ge('sto-iv-strane'); if(!con) return;
+  var razl=_stoRazlicito();
+  var d=_stoDuzine();
+  var h='<label style="font-size:11px;display:flex;align-items:center;gap:5px;'
+    +'cursor:pointer;font-weight:600;color:#1a5fa8;margin-bottom:'+(razl?'6px':'0')+'">'
+    +'<input type="checkbox"'+(razl?' checked':'')
+    +' onchange="stoIvRazlicito(this.checked)"> razli\u010dita obrada po stranama</label>';
+  if(razl){
+    h+=STO_STRANE.map(function(sd){
+      var pr=_stoProfStrane(sd.id);
+      return '<div style="display:flex;gap:5px;align-items:center;margin-bottom:4px">'
+        +'<b style="font-size:11px;color:'+(pr==='none'?'#8a93a3':'#1a5fa8')
+        +';min-width:64px">'+sd.lbl+'</b>'
+        +'<select onchange="stoIvStrana(\''+sd.id+'\',this.value)" '
+        +'style="flex:1;font:inherit;font-size:11px;padding:2px 4px">'
+        +Object.keys(PLbl).map(function(p2){
+          return '<option value="'+p2+'"'+(p2===pr?' selected':'')+'>'
+            +PSym[p2]+' '+PLbl[p2]+'<\/option>';
+        }).join('')
+        +'</select>'
+        +'<span style="font-size:9.5px;color:#8a93a3;min-width:52px;text-align:right">'
+        +Math.round(d.prave[sd.id])+' mm</span></div>';
+    }).join('');
+    // Kako su raspodijeljeni uglovi
+    var opisU=[0,1,2,3].map(function(k){
+      var p3=_stoProfUgla(k);
+      return STO_UGAO_STRANE[k].join('|')+': '+(p3==='none'?'sirov':(PSym[p3]||p3));
+    }).join('  \u00b7  ');
+    h+='<div style="font-size:9.5px;color:#8a93a3;padding-top:2px;line-height:1.4">'
+      +'Ugao prati obra\u0111enu stranu \u2014 '+opisU+'</div>';
+  }
+  con.innerHTML=h;
+}
+function stoIvRazlicito(da){
+  var a=items[activeIdx]; if(!a) return;
+  if(da){
+    var poc=((ivSt['A-zad']||{}).prof)||'none';
+    a.stoIvR={A:poc,B:poc,C:poc,D:poc};
+    _stoIvUskladi();
+  } else {
+    delete a.stoIvR;
+    STO_STRANE.forEach(function(sd){ delete ivSt['STO-'+sd.id]; });
+    syncToActive();
+  }
+  buildStoIvice(); refresh();
+}
+function stoIvStrana(id,prof){
+  var a=items[activeIdx]; if(!a||!a.stoIvR) return;
+  a.stoIvR[id]=prof;
+  _stoIvUskladi();
+  buildStoIvice(); refresh();
+}
+// Obrada po stranama se cuva u it.stoIvR, ali obracun cita ivSt po
+// oznaci segmenta - pa se ta dva moraju uskladiti.
+function _stoIvUskladi(){
+  if(!_stoRazlicito()) return;
+  STO_STRANE.forEach(function(sd){
+    var kljuc='STO-'+sd.id;
+    ivSt[kljuc]=ivSt[kljuc]||{};
+    ivSt[kljuc].prof=_stoProfStrane(sd.id);
+    ivSt[kljuc].chk=(ivSt[kljuc].prof!=='none');
+  });
+  syncToActive();
+}
+// Duzine: svaka strana skracena za radijuse svoja dva ugla, plus lukovi
+function _stoDuzine(){
+  var A=gi('sto-a')||1600, B=(shape==='okrugao')?A:(gi('sto-b')||900);
+  var r=_stoRadijusi().map(function(v){ return Math.min(v||0,A/2,B/2); });
+  var prave={A:A-r[0]-r[1], B:B-r[0]-r[3], C:B-r[1]-r[2], D:A-r[3]-r[2]};
+  var lukovi=[0,1,2,3].map(function(k){ return (r[k]>0)?(Math.PI*r[k]/2):0; });
+  return {prave:prave, lukovi:lukovi, r:r};
+}
+// Duzina po PROFILU - za obracun i za redove u ponudi
+function _stoIvPoProfilu(){
+  var d=_stoDuzine();
+  var zbir={};
+  function dodaj(prof,mm){
+    if(!prof||prof==='none'||!(mm>0)) return;
+    zbir[prof]=(zbir[prof]||0)+mm;
+  }
+  STO_STRANE.forEach(function(sd){ dodaj(_stoProfStrane(sd.id), d.prave[sd.id]); });
+  [0,1,2,3].forEach(function(k){ dodaj(_stoProfUgla(k), d.lukovi[k]); });
+  return zbir;
+}
 function _stoRadijusi(){
   var r=getTableRadiusMM();
   var akt=_stoUgloviAktivni();
@@ -6346,8 +6465,21 @@ function getIvSegs(sh,d){
     return izl;
   }
   if(sh==='radijus'||sh==='okrugao'||sh==='jajasto'||sh==='oblutak'||sh==='bure'||sh==='fbure'){
-    // Sto - JEDNA obrada za CIJELI sto (nije moguće različito obraditi
-    // pojedine strane stola, bez obzira na oblik)
+    // PRAVOUGAONI sto sa radijusom moze imati razlicitu obradu po stranama -
+    // npr. jedna strana se nastavlja na drugi element pa ostaje sirova.
+    // Ostali oblici imaju jednu obradu za cijeli obim.
+    if(sh==='radijus'&&typeof _stoRazlicito==='function'&&_stoRazlicito()){
+      var dz=_stoDuzine();
+      return STO_STRANE.map(function(sd){
+        var duz=dz.prave[sd.id];
+        // uz stranu idu lukovi koji su joj pripisani
+        [0,1,2,3].forEach(function(k){
+          if(_stoProfUgla(k)===_stoProfStrane(sd.id)
+             && STO_UGAO_STRANE[k].indexOf(sd.id)===0) duz+=dz.lukovi[k];
+        });
+        return {id:'STO-'+sd.id, lbl:sd.id, fullLbl:sd.lbl, len:Math.round(duz)};
+      }).filter(function(x){ return x.len>0; });
+    }
     return [{id:'A-zad',lbl:'A',len:getTablePerimeter(sh,d)}];
   }
   if(sh==='kl'){
@@ -7648,7 +7780,14 @@ function refresh(){
   syncToActive();
   // Kvacice za uglove stola - bile su samo u buildAll, pa se popis nije
   // pojavljivao dok se ne promijeni tab.
-  try{ if(tip==='sto'||uiTip==='sto') buildStoUglovi(); }catch(e){}
+  try{
+    if(tip==='sto'||uiTip==='sto'){
+      buildStoUglovi();
+      var _w=ge('sto-iv-wrap');
+      if(_w) _w.style.display=(shape==='radijus')?'':'none';
+      if(shape==='radijus'){ _stoIvUskladi(); buildStoIvice(); }
+    }
+  }catch(e){}
   var mat=0,iv=0,usl=0,uk=0,pov='';
   if(tip==='k'){
     var m=getArea(),ivd=getIvData();
@@ -11727,6 +11866,22 @@ function genRadniNalog(returnHtml){try{
         dimRows+='<tr><td><b>B</b></td><td>Dubina</td><td><b>'+gi('sto-b')+' mm</b></td></tr>';
       }
       if(it.shape==='radijus'||it.shape==='bure'||it.shape==='fbure'){
+        // Razlicita obrada po stranama
+        if(it.shape==='radijus'&&typeof _stoRazlicito==='function'&&_stoRazlicito()){
+          var _dz=_stoDuzine();
+          STO_STRANE.forEach(function(sd){
+            var pr=_stoProfStrane(sd.id);
+            dimRows+='<tr><td><b>'+sd.id+'</b></td><td>'+sd.lbl.replace(/^[A-D] /,'')
+              +'</td><td><b>'+Math.round(_dz.prave[sd.id])+' mm</b> \u00b7 '
+              +(PSym[pr]||'')+' '+(PLbl[pr]||'bez obrade')+'</td></tr>';
+          });
+          dimRows+='<tr><td></td><td style="font-size:10px;color:#6b7a8d">Uglovi</td>'
+            +'<td style="font-size:10px;color:#6b7a8d">'
+            +[0,1,2,3].map(function(k){
+                var p3=_stoProfUgla(k);
+                return STO_UGAO_STRANE[k].join('|')+' '+(p3==='none'?'sirov':(PSym[p3]||p3));
+              }).join(' \u00b7 ')+'</td></tr>';
+        }
         dimRows+='<tr><td><b>Rc</b></td><td>Radijus uglova</td><td><b>'+getTableRadiusMM()+' mm'
           +(function(){
              if(it.shape!=='radijus'||typeof _stoRadijusi!=='function') return '';
