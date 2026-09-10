@@ -388,11 +388,19 @@ async function otvoriPosaljiKatalogGrupe(){
     document.getElementById('kat-grupe').innerHTML = grupe.length
       ? Object.entries(poMaster).map(([master, lista]) => `
           <div style="margin-bottom:6px;">
-            <label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;font-weight:800;cursor:pointer;border-bottom:1px solid #eee;color:#330066;">
-              <input type="checkbox" onchange="katMasterToggle(this)">
-              <span style="flex:1;">${katEsc(master)}</span>
+            <div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;font-weight:800;border-bottom:1px solid #eee;color:#330066;">
+              <input type="checkbox" onchange="katMasterToggle(this)" title="Uključi sve grupe ovog materijala" style="cursor:pointer;">
+              <span style="flex:1;cursor:pointer;" onclick="this.previousElementSibling.click()">${katEsc(master)}</span>
+              ${/* Nacin prikaza za CIJELI materijal — jednim klikom se sve njegove
+                    grupe prebace, umjesto grupa po grupa. */''}
+              <button type="button" class="kat-master-nacin" data-master="${katEsc(master)}"
+                      onclick="katMasterNacin(this)"
+                      title="Postavi način prikaza za sve grupe ovog materijala"
+                      style="font-size:9.5px;padding:1px 8px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:700;">
+                📄 sve sa artiklima
+              </button>
               <span style="color:#8b96a5;font-weight:400;font-size:11px;">${lista.length} grupa</span>
-            </label>
+            </div>
             ${lista.map(g=>`
               <div style="display:flex;align-items:center;gap:8px;padding:3px 0 3px 18px;font-size:12.5px;">
                 <input type="checkbox" value="${katEsc(g.grupa)}" onchange="katGrupaPromjena(this)"
@@ -425,6 +433,7 @@ async function otvoriPosaljiKatalogGrupe(){
     /* Vraca se ono sto je vec bilo izabrano — tek POSLIJE iscrtavanja, jer prije toga
        kvadratica jos nema. Bez ovoga pretraga ponisti sav raniji izbor. */
     katVratiIzborGrupa();
+    katOznaciMastere();
   }catch(e){}
 }
 
@@ -518,10 +527,71 @@ function katPrikaziInfoTipa(){
 }
 
 // Kvadratic MASTER grupe cekira/odcekira sve grupe ispod nje.
+
+/* Nacin prikaza za CIJELI materijal — sve njegove grupe odjednom. Jednim klikom se
+   npr. sav granit prebaci na "samo grupa", bez prebiranja po grupama. */
+function katMasterNacin(btn){
+  const blok = btn.closest('div').parentElement;
+  const sve = [...blok.querySelectorAll('.kat-nacin')].map(b => b.dataset.grupa);
+  /* Mijenja se samo IZABRANIM grupama — nacin za grupu koja ne ulazi u katalog
+     nema ucinka, pa bi oznaka "sve kao grupe" bila netacna. */
+  const grupe = sve.filter(g => katIzabraneGrupeSpisak.has(g));
+  if(!grupe.length){
+    alert('Prvo označi bar jednu grupu ovog materijala.');
+    return;
+  }
+
+  // Ako su SVE vec na "samo grupa", klik ih vraca na artikle; inace sve na grupu
+  const sveNaGrupu = grupe.every(g => katNacinGrupe.get(g) === true);
+  for(const g of grupe) katNacinGrupe.set(g, !sveNaGrupu);
+
+  katVratiIzborGrupa();
+  katOznaciMastere();
+  if(katOtvorenaGrupa) katRenderArtikleGrupe(katOtvorenaGrupa);
+  katOsvjeziInfoArtikala();
+  katOsvjeziPregled();
+}
+
+/* Dugme materijala pokazuje stanje njegovih grupa: sve na grupu, sve sa artiklima,
+   ili mjesovito. */
+function katOznaciMastere(){
+  document.querySelectorAll('.kat-master-nacin').forEach(btn => {
+    const blok = btn.closest('div').parentElement;
+    const sve = [...blok.querySelectorAll('.kat-nacin')].map(b => b.dataset.grupa);
+    const grupe = sve.filter(g => katIzabraneGrupeSpisak.has(g));
+    const naGrupu = grupe.filter(g => katNacinGrupe.get(g) === true).length;
+
+    // Bez izabranih grupa dugme je neaktivno — nema na sta da se primijeni
+    if(!grupe.length){
+      btn.textContent = '📄 sve sa artiklima';
+      btn.style.cssText = 'font-size:9.5px;padding:1px 8px;border:1px solid #eee;background:#fafbfc;color:#c3c9d1;border-radius:5px;cursor:not-allowed;white-space:nowrap;font-weight:700;';
+      return;
+    }
+    if(naGrupu === 0){
+      btn.textContent = '📄 sve sa artiklima';
+      btn.style.cssText = 'font-size:9.5px;padding:1px 8px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:700;';
+    } else if(naGrupu === grupe.length){
+      btn.textContent = '🗂 sve kao grupe';
+      btn.style.cssText = 'font-size:9.5px;padding:1px 8px;border:1px solid #d6cce8;background:#f3f0f8;color:#6b4fa0;border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:700;';
+    } else {
+      btn.textContent = `🗂 ${naGrupu}/${grupe.length}`;
+      btn.style.cssText = 'font-size:9.5px;padding:1px 8px;border:1px solid #ffe082;background:#fff8e1;color:#8b6914;border-radius:5px;cursor:pointer;white-space:nowrap;font-weight:700;';
+    }
+  });
+}
+
 function katMasterToggle(el){
-  el.closest('div').querySelectorAll('input[value]').forEach(i=>i.checked = el.checked);
+  /* Izbor se PAMTI — spisak grupa se prepisuje pri pretrazi, pa bi se inace izgubio. */
+  el.closest('div').parentElement.querySelectorAll('input[value]').forEach(i => {
+    i.checked = el.checked;
+    if(el.checked) katIzabraneGrupeSpisak.add(i.value);
+    else katIzabraneGrupeSpisak.delete(i.value);
+  });
+  const filteri = document.getElementById('kat-filteri-blok');
+  if(filteri && katIzabraneGrupeSpisak.size) filteri.style.display = 'block';
+  katVratiIzborGrupa();
   katUcitajDebljine();
-  katUcitajArtikle();
+  katOsvjeziGrane();
   katOsvjeziPregled();
 }
 
@@ -1293,6 +1363,7 @@ function katGrupaPromjena(el){
   const filteri = document.getElementById('kat-filteri-blok');
   if(filteri && katIzabraneGrupeSpisak.size) filteri.style.display = 'block';
   katVratiIzborGrupa();   // prekidac nacina postaje aktivan/neaktivan
+  katOznaciMastere();
   katUcitajDebljine(); katUcitajArtikle(); katOsvjeziPregled();
 }
 
