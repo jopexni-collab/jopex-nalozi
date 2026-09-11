@@ -6156,15 +6156,24 @@ function setTableShape(shapeId){
   if(shapeId==='okrugao') dims.B=dims.A;
   buildTableShapeGrid();
   buildTableDimWrap();
-  var radSec=ge('sto-radius-sec');
-  var needsRadSec=(shapeId==='radijus'||shapeId==='bure'||shapeId==='fbure');
-  if(radSec) radSec.style.display=needsRadSec?'':'none';
-  var rcWrap=ge('sto-rc-wrap'), rlWrap=ge('sto-rl-wrap'), rsWrap=ge('sto-rs-wrap');
-  if(rcWrap) rcWrap.style.display=needsRadSec?'':'none';
-  if(rlWrap) rlWrap.style.display=(shapeId==='bure'||shapeId==='fbure')?'':'none';
-  if(rsWrap) rsWrap.style.display=(shapeId==='fbure')?'':'none';
+  _stoPrikaziRadSec(shapeId);
   buildIvice();
   refresh();
+}
+// Vidljivost odjeljaka radijusa i obrade po stranama. Ranije se postavljala
+// SAMO u setTableShape, pa su kod ucitane stavke ostajali skriveni - izgledalo
+// je kao da tih postavki uopste nema.
+function _stoPrikaziRadSec(sh){
+  sh=sh||shape;
+  var radSec=ge('sto-radius-sec');
+  var treba=(sh==='radijus'||sh==='bure'||sh==='fbure');
+  if(radSec) radSec.style.display=treba?'':'none';
+  var rcWrap=ge('sto-rc-wrap'), rlWrap=ge('sto-rl-wrap'), rsWrap=ge('sto-rs-wrap');
+  if(rcWrap) rcWrap.style.display=treba?'':'none';
+  if(rlWrap) rlWrap.style.display=(sh==='bure'||sh==='fbure')?'':'none';
+  if(rsWrap) rsWrap.style.display=(sh==='fbure')?'':'none';
+  var ivWrap=ge('sto-iv-wrap');
+  if(ivWrap) ivWrap.style.display=(sh==='radijus')?'':'none';
 }
 function buildTableDimWrap(){
   var con=ge('sto-dim-wrap');if(!con)return;
@@ -7815,9 +7824,8 @@ function refresh(){
   // pojavljivao dok se ne promijeni tab.
   try{
     if(tip==='sto'||uiTip==='sto'){
+      _stoPrikaziRadSec();
       buildStoUglovi();
-      var _w=ge('sto-iv-wrap');
-      if(_w) _w.style.display=(shape==='radijus')?'':'none';
       if(shape==='radijus'){ _stoIvUskladi(); buildStoIvice(); }
     }
   }catch(e){}
@@ -11270,7 +11278,36 @@ function drawSto(ctx,W,H){
   // sama interno odlučuje da li da nacrta "R" oznaku (samo kad rmm>0).
   if(shape==='radijus'||shape==='bure'||shape==='fbure'){
     var _stoCornerPts=[{x:0,y:0},{x:A*sc,y:0},{x:A*sc,y:B*sc},{x:0,y:B*sc}];
-    drawCornerLabels(ctx,_stoCornerPts,_stoRadijusi(),sc,'#sto-r-sel',false,function(){return {kind:'number',label:'Radijus uglova stola (mm)',unit:'mm',min:0,step:1,get:function(){return getTableRadiusMM();},set:function(v){_setRadiusSelInline('sto-r',v);}};});
+    // Klik na ugao mijenja SAMO TAJ ugao kod pravougaonog stola; kod bureta
+    // uglovi su vezani pa ostaje zajednicki radijus.
+    drawCornerLabels(ctx,_stoCornerPts,_stoRadijusi(),sc,'#sto-r-sel',false,
+      function(_k){
+        if(shape!=='radijus')
+          return {kind:'number',label:'Radijus uglova stola (mm)',unit:'mm',min:0,step:1,
+                  get:function(){return getTableRadiusMM();},
+                  set:function(v){_setRadiusSelInline('sto-r',v);}};
+        var im=['gore lijevo','gore desno','dolje desno','dolje lijevo'];
+        return {kind:'number',
+          label:'Radijus ugla \u2014 '+(im[_k]||_k)+' (0 = o\u0161tar)',
+          unit:'mm', min:0, step:1,
+          get:function(){ return _stoRadijusi()[_k]||0; },
+          set:function(v){
+            var n=Math.max(0,_broj(v));
+            var a=items[activeIdx]; if(!a) return;
+            if(n<=0){
+              // 0 znaci ostar ugao - iskljuci ga
+              stoUgaoToggle(_k,false);
+            } else {
+              // ukljuci ga i daj mu tu vrijednost
+              var akt=_stoUgloviAktivni();
+              if(!akt[_k]){
+                akt[_k]=true;
+                a.stoR=[0,1,2,3].filter(function(q){ return akt[q]; });
+              }
+              stoUgaoRadijus(_k,n);
+            }
+          }};
+      });
   }
 
   // Obrada ivica - jedna obrada za cijeli sto (nije moguće različito po
