@@ -898,6 +898,9 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <button type="button" class="ce-tip-btn active" data-kper="7" onclick="postaviKretanjePeriod(7,this)">7 dana</button>
       <button type="button" class="ce-tip-btn" data-kper="30" onclick="postaviKretanjePeriod(30,this)">30 dana</button>
       <button type="button" class="ce-tip-btn" data-kper="mjesec" onclick="postaviKretanjeMjesec(this)">Ovaj mjesec</button>
+      <button type="button" class="ce-tip-btn" data-kper="3mj" onclick="postaviKretanjeOpseg('3mj',this)">3 mjeseca</button>
+      <button type="button" class="ce-tip-btn" data-kper="ova-god" onclick="postaviKretanjeOpseg('ova-god',this)">Ova godina</button>
+      <button type="button" class="ce-tip-btn" data-kper="prosla-god" onclick="postaviKretanjeOpseg('prosla-god',this)">Prošla godina</button>
     </div>
     <div class="ce-row" style="margin-top:6px;">
       <button type="button" class="ce-tip-btn active" data-kizv="" onclick="postaviKretanjeIzvor('',this)">Sva kretanja</button>
@@ -1232,7 +1235,21 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 <div class="modal" id="kartica-modal">
   <div class="modal-box" style="max-width:600px;">
     <h3 id="kartica-naslov">Robna kartica</h3>
-    <div id="kartica-lista" style="max-height:420px;overflow-y:auto;"></div>
+
+    <!-- Dva lista: pojedinacni dokumenti i zbirni promet po periodima -->
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <button type="button" id="rk-list-promet" onclick="rkList('promet')"
+              style="flex:1;padding:7px;border:1px solid var(--border,#ddd);background:var(--blue,#1a5fa8);color:#fff;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;">
+        📊 Promet
+      </button>
+      <button type="button" id="rk-list-dokumenti" onclick="rkList('dokumenti')"
+              style="flex:1;padding:7px;border:1px solid var(--border,#ddd);background:#fff;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;">
+        📄 Dokumenti
+      </button>
+    </div>
+
+    <div id="kartica-promet" style="max-height:420px;overflow-y:auto;"></div>
+    <div id="kartica-lista" style="max-height:420px;overflow-y:auto;display:none;"></div>
     <div class="modal-btns" style="margin-top:8px">
       <button class="btn-sec" onclick="document.getElementById('kartica-modal').classList.remove('on')">Zatvori</button>
     </div>
@@ -1983,6 +2000,94 @@ const TIP_KRETANJA_STIL={
   prenos_ulaz:{ikona:'↘️',boja:'var(--green)'}, prenos_izlaz:{ikona:'↗️',boja:'var(--red)'},
 };
 
+async 
+/* Robna kartica ima dva lista: PROMET (zbirno po periodima) i DOKUMENTI (pojedinacno).
+   Promet je prvi jer se najcesce gleda "koliko je otislo ovog mjeseca", a ne svaki
+   dokument posebno. */
+let rkRedovi = [], rkRobaId = null, rkNaziv = '';
+
+function rkList(koji){
+  const p = document.getElementById('kartica-promet');
+  const d = document.getElementById('kartica-lista');
+  const bp = document.getElementById('rk-list-promet');
+  const bd = document.getElementById('rk-list-dokumenti');
+  const akt = 'background:var(--blue,#1a5fa8);color:#fff;';
+  const mir = 'background:#fff;color:inherit;';
+  const st = 'flex:1;padding:7px;border:1px solid var(--border,#ddd);border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;';
+  const promet = koji === 'promet';
+  p.style.display = promet ? 'block' : 'none';
+  d.style.display = promet ? 'none' : 'block';
+  bp.style.cssText = st + (promet ? akt : mir);
+  bd.style.cssText = st + (promet ? mir : akt);
+}
+
+/* Zbir ulaza i izlaza po periodima. Racuna se iz VEC ucitanih redova kartice —
+   bez novog poziva serveru, jer su svi podaci tu. */
+function rkPrikaziPromet(rows){
+  const cont = document.getElementById('kartica-promet');
+  if(!rows.length){ cont.innerHTML = '<div style="padding:20px;text-align:center;color:#8b96a5;">Nema prometa.</div>'; return; }
+
+  const d = new Date(); d.setHours(0,0,0,0);
+  const poc = {
+    'Danas':        new Date(d),
+    '7 dana':       new Date(d.getFullYear(), d.getMonth(), d.getDate()-6),
+    '30 dana':      new Date(d.getFullYear(), d.getMonth(), d.getDate()-29),
+    'Ovaj mjesec':  new Date(d.getFullYear(), d.getMonth(), 1),
+    '3 mjeseca':    new Date(d.getFullYear(), d.getMonth()-2, 1),
+    'Ova godina':   new Date(d.getFullYear(), 0, 1),
+  };
+
+  const fm = v => (Number(v)||0).toLocaleString('sr-Latn-BA',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const redovi = Object.entries(poc).map(([ime, od])=>{
+    let ulaz = 0, izlaz = 0, dok = 0;
+    for(const r of rows){
+      const dat = new Date(r.datum);
+      if(isNaN(dat) || dat < od) continue;
+      dok++;
+      const k = Number(r.kolicina) || 0;
+      if(k > 0) ulaz += k; else izlaz += Math.abs(k);
+    }
+    return { ime, ulaz, izlaz, neto: ulaz - izlaz, dok };
+  });
+
+  // Najveci promet odredjuje duzinu trake — tako se odnosi vide na prvi pogled
+  const max = Math.max(1, ...redovi.map(r => Math.max(r.ulaz, r.izlaz)));
+
+  cont.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+      <thead><tr style="background:#1f3864;color:#fff;">
+        <th style="padding:5px 8px;text-align:left;">Period</th>
+        <th style="padding:5px 8px;text-align:right;">Ulaz</th>
+        <th style="padding:5px 8px;text-align:right;">Izlaz</th>
+        <th style="padding:5px 8px;text-align:right;">Neto</th>
+        <th style="padding:5px 8px;width:38%;">Odnos</th>
+      </tr></thead>
+      <tbody>${redovi.map((r,i)=>`
+        <tr style="background:${i%2?'#f7f9fb':'#fff'};border-bottom:1px solid #eef0f3;">
+          <td style="padding:4px 8px;font-weight:700;">${r.ime}
+            <span style="font-weight:400;color:#8b96a5;font-size:10px;"> · ${r.dok} dok.</span></td>
+          <td style="padding:4px 8px;text-align:right;color:var(--green,#1f8a4c);">${r.ulaz?'+'+fm(r.ulaz):'—'}</td>
+          <td style="padding:4px 8px;text-align:right;color:var(--red,#c0392b);">${r.izlaz?'−'+fm(r.izlaz):'—'}</td>
+          <td style="padding:4px 8px;text-align:right;font-weight:700;${r.neto<0?'color:var(--red,#c0392b);':''}">${fm(r.neto)}</td>
+          <td style="padding:4px 8px;">
+            <div style="display:flex;height:13px;gap:1px;align-items:center;">
+              <div style="flex:1;display:flex;justify-content:flex-end;">
+                <div style="height:11px;width:${Math.round(r.ulaz/max*100)}%;background:var(--green,#1f8a4c);border-radius:2px 0 0 2px;"></div>
+              </div>
+              <div style="width:1px;height:13px;background:#c3c9d1;"></div>
+              <div style="flex:1;">
+                <div style="height:11px;width:${Math.round(r.izlaz/max*100)}%;background:var(--red,#c0392b);border-radius:0 2px 2px 0;"></div>
+              </div>
+            </div>
+          </td>
+        </tr>`).join('')}</tbody>
+    </table>
+    <div style="font-size:10.5px;color:#8b96a5;margin-top:7px;line-height:1.5;">
+      Zeleno lijevo = ulaz, crveno desno = izlaz. Trake su srazmjerne najvećem prometu
+      u prikazanim periodima, pa se odnosi vide na prvi pogled.
+    </div>`;
+}
+
 async function otvoriRobnuKarticu(robaId, naziv){
   const objektId=document.getElementById('lager-objekat').value;
   if(!objektId){alert('Izaberite prvo prodajni objekat.');return;}
@@ -1993,6 +2098,9 @@ async function otvoriRobnuKarticu(robaId, naziv){
     const r=await fetch(`${API}/api/roba/${robaId}/kartica?objekt_id=${objektId}`);
     const rows=await r.json();
     if(!r.ok) throw new Error(rows.error||'Greška.');
+    rkRedovi = rows; rkRobaId = robaId; rkNaziv = naziv;
+    rkPrikaziPromet(rows);
+    rkList('promet');   // promet je prvi — najcesce se gleda
     if(!rows.length){
       document.getElementById('kartica-lista').innerHTML='<div style="padding:20px;text-align:center;color:#8b96a5;">Nema evidentiranih kretanja za ovaj artikal na ovom PJ.</div>';
       return;
@@ -7938,12 +8046,37 @@ function postaviKretanjeIzvor(izvor, btn){
   primijeniKretanjeFiltere();
 }
 
+
+/* Duzi periodi. Racuna se preko lokalnog datuma, ne preko toISOString() — taj vraca
+   UTC, pa bi u nasoj vremenskoj zoni znao pomjeriti dan unazad. */
+function postaviKretanjeOpseg(vrsta, btn){
+  document.querySelectorAll('.ce-tip-btn[data-kper]').forEach(b=>b.classList.toggle('active', b===btn));
+  const d = new Date();
+  const lok = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+  let od, do_;
+
+  if(vrsta === '3mj'){
+    od = new Date(d.getFullYear(), d.getMonth()-2, 1);   // pocetak mjeseca prije 2 mjeseca
+    do_ = d;
+  } else if(vrsta === 'ova-god'){
+    od = new Date(d.getFullYear(), 0, 1);
+    do_ = d;
+  } else {   // prosla godina — cijela, od 1.1. do 31.12.
+    od = new Date(d.getFullYear()-1, 0, 1);
+    do_ = new Date(d.getFullYear()-1, 11, 31);
+  }
+  document.getElementById('kretanje-od').value = lok(od);
+  document.getElementById('kretanje-do').value = lok(do_);
+  ucitajKretanjeRobe();
+}
+
 function postaviKretanjePeriod(dana, btn){
   document.querySelectorAll('.ce-tip-btn[data-kper]').forEach(b=>b.classList.toggle('active', b===btn));
   const danas=new Date();
   const od=new Date(danas); od.setDate(od.getDate()-(dana-1));
-  document.getElementById('kretanje-od').value=od.toISOString().split('T')[0];
-  document.getElementById('kretanje-do').value=danas.toISOString().split('T')[0];
+  const lok = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+  document.getElementById('kretanje-od').value=lok(od);
+  document.getElementById('kretanje-do').value=lok(danas);
   ucitajKretanjeRobe();
 }
 
@@ -7951,8 +8084,9 @@ function postaviKretanjeMjesec(btn){
   document.querySelectorAll('.ce-tip-btn[data-kper]').forEach(b=>b.classList.toggle('active', b===btn));
   const danas=new Date();
   const prvi=new Date(danas.getFullYear(), danas.getMonth(), 1);
-  document.getElementById('kretanje-od').value=prvi.toISOString().split('T')[0];
-  document.getElementById('kretanje-do').value=danas.toISOString().split('T')[0];
+  const lok = x => `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+  document.getElementById('kretanje-od').value=lok(prvi);
+  document.getElementById('kretanje-do').value=lok(danas);
   ucitajKretanjeRobe();
 }
 
