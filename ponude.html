@@ -11418,7 +11418,11 @@ function drawSto(ctx,W,H){
 
   {
     kota(ctx,0,-28,A*sc,-28,(shape==='okrugao'?'ø'+A:A)+' mm',_tableDimEditDesc('A'),'#sto-a');
-    if(shape!=='okrugao') kota(ctx,A*sc+28,0,A*sc+28,B*sc,B+' mm',_tableDimEditDesc('B'),'#sto-b');
+    if(shape!=='okrugao'){
+    // Kod bureta puna visina ide dalje udesno, pa nominalna ostaje bliza ploci
+    var _kb=(shape==='bure'||shape==='fbure')?78:28;
+    kota(ctx,A*sc+_kb,0,A*sc+_kb,B*sc,B+' mm',_tableDimEditDesc('B'),'#sto-b');
+  }
   // Kod bureta lukovi izlaze izvan A x B - nominalna kota ne kaze koliku
   // tablu treba. Dodaje se STVARNA mjera preko svega.
   if(shape==='bure'||shape==='fbure'){
@@ -11426,16 +11430,9 @@ function drawSto(ctx,W,H){
       var _bbB=_bureBB(A,B,rrMM,getTableLongRadiusMM(),
                        (shape==='fbure')?getTableShortRadiusMM():0);
       if(_bbB.w>A+2||_bbB.h>B+2){
-        ctx.save();
-        ctx.strokeStyle='#b8860b'; ctx.lineWidth=1; ctx.setLineDash([4,3]);
-        ctx.strokeRect(_bbB.mnx*sc,_bbB.mny*sc,_bbB.w*sc,_bbB.h*sc);
-        ctx.setLineDash([]);
-        ctx.fillStyle='#b8860b'; ctx.font='9px Segoe UI,Arial';
-        ctx.textAlign='left'; ctx.textBaseline='top';
-        ctx.fillText('tabla '+_bbB.w+'\u00d7'+_bbB.h+' mm',_bbB.mnx*sc,_bbB.mxy*sc+6);
-        ctx.restore();
-        kota(ctx,_bbB.mnx*sc,_bbB.mny*sc-26,_bbB.mxx*sc,_bbB.mny*sc-26,_bbB.w+' mm');
-        kota(ctx,_bbB.mxx*sc+58,_bbB.mny*sc,_bbB.mxx*sc+58,_bbB.mxy*sc,_bbB.h+' mm');
+        // Bez okvira i natpisa - samo DVIJE kote sa strane:
+        // puna visina (preko ispupcenja) i visina strane (nominalna B).
+        kota(ctx,_bbB.mxx*sc+30,_bbB.mny*sc,_bbB.mxx*sc+30,_bbB.mxy*sc,_bbB.h+' mm');
       }
     }catch(e){}
   }
@@ -11448,10 +11445,11 @@ function drawSto(ctx,W,H){
     ctx.fillStyle='#1a5fa8';ctx.font='bold 36px Segoe UI,Arial';
     ctx.textAlign='left';ctx.textBaseline='middle';
     var _stoBrY=Math.max(B*sc/2,100);
-    ctx.fillText('× '+stoBrCv,A*sc+60,_stoBrY-8);
+    var _brX=(shape==='bure'||shape==='fbure')?(A*sc+118):(A*sc+60);
+    ctx.fillText('× '+stoBrCv,_brX,_stoBrY-8);
     ctx.font='18px Segoe UI,Arial';ctx.fillStyle='#555';
-    ctx.fillText('komada',A*sc+62,_stoBrY+16);
-    _regClickRect(A*sc+58,_stoBrY-28,82,48,'#sto-br',_inputEditDesc('sto-br','Broj komada'));
+    ctx.fillText('komada',_brX+2,_stoBrY+16);
+    _regClickRect(_brX-2,_stoBrY-28,82,48,'#sto-br',_inputEditDesc('sto-br','Broj komada'));
   }
 
   // Naslov (dovoljno razmaknut od gornje kote da se ne preklapaju)
