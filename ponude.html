@@ -2213,6 +2213,26 @@ function getTablePerimeter(sh,d){
   return 2*(A+B);
 }
 
+// Stvarni bounding box bureta - lukovi se ispupce izvan A x B, pa kota
+// koja pokazuje samo A i B ne kaze koliku tablu treba.
+function _bureBB(A,B,Rc,Rl,Rs){
+  var segs=getBureSegments(A,B,Rc,Rl,Rs);
+  var mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9;
+  segs.forEach(function(sg){
+    var a1=Math.atan2(sg.p1[1]-sg.cy,sg.p1[0]-sg.cx);
+    var a2=Math.atan2(sg.p2[1]-sg.cy,sg.p2[0]-sg.cx);
+    var d=a2-a1;
+    while(d>Math.PI) d-=2*Math.PI;
+    while(d<-Math.PI) d+=2*Math.PI;
+    for(var i=0;i<=48;i++){
+      var a=a1+d*i/48;
+      var x=sg.cx+Math.cos(a)*sg.r, y=sg.cy+Math.sin(a)*sg.r;
+      if(x<mnx)mnx=x; if(x>mxx)mxx=x; if(y<mny)mny=y; if(y>mxy)mxy=y;
+    }
+  });
+  return {w:Math.round(mxx-mnx), h:Math.round(mxy-mny),
+          mnx:mnx, mny:mny, mxx:mxx, mxy:mxy};
+}
 function traceTableShape(ctx,sh,A,B,sc,rrMM){
   var w=A*sc, h=B*sc;
   ctx.beginPath();
@@ -3071,6 +3091,19 @@ function _stoMjere(it){
   if(!(A>0)) A=_broj(d&&d.A)||1600;
   if(!(B>0)) B=_broj(d&&d.B)||900;
   if(sh==='okrugao') B=A;
+  // BURE i FULL BURE: lukovi se ispupce IZVAN A x B, pa tabla mora biti
+  // veca. Materijal je uvijek bruto - racuna se po stvarnom okviru.
+  if(sh==='bure'||sh==='fbure'){
+    try{
+      var _rc=(a===items[activeIdx])?getTableRadiusMM():(_broj(inp['sto-r-sel'])||0);
+      var _rl=(a===items[activeIdx])?getTableLongRadiusMM():(_broj(inp['sto-rl'])||0);
+      var _rs=(sh==='fbure')
+        ? ((a===items[activeIdx])?getTableShortRadiusMM():(_broj(inp['sto-rs'])||0))
+        : 0;
+      var bbB=_bureBB(A,B,_rc,_rl,_rs);
+      if(bbB.w>0&&bbB.h>0) return {a:bbB.w, b:bbB.h, nomA:A, nomB:B};
+    }catch(e){}
+  }
   return {a:A, b:B};
 }
 function _bbPolyTj(t){
@@ -11243,11 +11276,75 @@ function drawSto(ctx,W,H){
   // Obrada ivica - jedna obrada za cijeli sto (nije moguće različito po
   // stranama, bez obzira na oblik)
   var segs=getIvSegs(shape,dims);
+  var _rIv=(shape==='radijus')?_stoRadijusi():rrMM;
+  if(shape==='radijus'&&typeof _stoRazlicito==='function'&&_stoRazlicito()){
+    // ── RAZLICITA OBRADA PO STRANAMA ──────────────────────────────
+    // Svaka strana i svaki luk se crtaju SVOJIM profilom.
+    var w2=A*sc, h2=B*sc;
+    var rP=_stoRadijusi().map(function(v){ return Math.min((v||0)*sc,w2/2,h2/2); });
+    // prave strane: [x1,y1,x2,y2,idStrane]
+    var _prave=[
+      [rP[0],0, w2-rP[1],0, 'A'],
+      [w2,rP[1], w2,h2-rP[2], 'C'],
+      [w2-rP[2],h2, rP[3],h2, 'D'],
+      [0,h2-rP[3], 0,rP[0], 'B']
+    ];
+    // lukovi: centar, pocetni ugao, krajnji ugao, poluprecnik, indeks ugla
+    var _luk=[
+      [w2-rP[1],rP[1], -Math.PI/2, 0,        rP[1], 1],
+      [w2-rP[2],h2-rP[2], 0, Math.PI/2,      rP[2], 2],
+      [rP[3],h2-rP[3], Math.PI/2, Math.PI,   rP[3], 3],
+      [rP[0],rP[0], Math.PI, Math.PI*1.5,    rP[0], 0]
+    ];
+    // bijela podloga preko crta-tacka konture, samo gdje ima obrade
+    function _crtajDio(fn){
+      _prave.forEach(function(pv){
+        var pr=_stoProfStrane(pv[4]);
+        if(pr&&pr!=='none') fn(pv[0],pv[1],pv[2],pv[3],pr);
+      });
+      _luk.forEach(function(lk){
+        var pr=_stoProfUgla(lk[5]);
+        if(!pr||pr==='none'||!(lk[4]>0)) return;
+        var n=Math.max(4,Math.ceil(lk[4]/3));
+        for(var q=0;q<n;q++){
+          var a1=lk[2]+(lk[3]-lk[2])*q/n, a2=lk[2]+(lk[3]-lk[2])*(q+1)/n;
+          fn(lk[0]+Math.cos(a1)*lk[4], lk[1]+Math.sin(a1)*lk[4],
+             lk[0]+Math.cos(a2)*lk[4], lk[1]+Math.sin(a2)*lk[4], pr);
+        }
+      });
+    }
+    _crtajDio(function(x1,y1,x2,y2){
+      ctx.save(); ctx.strokeStyle='#fff'; ctx.lineWidth=2.4; ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.restore();
+    });
+    _crtajDio(function(x1,y1,x2,y2,pr){ drawIv(ctx,x1,y1,x2,y2,pr); });
+    // Slovo strane sa simbolom, uvuceno ka centru
+    _prave.forEach(function(pv){
+      var pr=_stoProfStrane(pv[4]);
+      var mx2=(pv[0]+pv[2])/2, my2=(pv[1]+pv[3])/2;
+      var dx2=w2/2-mx2, dy2=h2/2-my2, dl2=Math.hypot(dx2,dy2)||1;
+      var tx2=mx2+dx2/dl2*16, ty2=my2+dy2/dl2*16;
+      ctx.save();
+      ctx.font='bold 11px Segoe UI,Arial';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle=(pr==='none')?'#c8d2dd':'#1a5fa8';
+      ctx.fillText(pv[4],tx2,ty2);
+      ctx.restore();
+      drawProfSymbol(ctx,tx2+13,ty2,pr||'none');
+      _kotaPrepreka(tx2,ty2,13);
+      _kotaPrepreka(tx2+13,ty2,13);
+      // klik na stranu mijenja njenu obradu
+      _regClickRect(Math.min(pv[0],pv[2])-7,Math.min(pv[1],pv[3])-7,
+        Math.abs(pv[2]-pv[0])+14, Math.abs(pv[3]-pv[1])+14, null,
+        {kind:'select', label:'Obrada strane '+pv[4],
+         options:Object.keys(PLbl).map(function(p2){
+           return {value:p2,label:PSym[p2]+' '+PLbl[p2]}; }),
+         get:function(){ return _stoProfStrane(pv[4]); },
+         set:function(v){ stoIvStrana(pv[4],v); }});
+    });
+  } else {
   var stA=ivSt['A-zad'];
   if(stA&&stA.prof&&stA.prof!=='none'){
-    // Linija obrade mora pratiti STVARNE radijuse po uglu, ne zajednicki -
-    // inace se kod razlicitih radijusa crta preko pogresne konture.
-    var _rIv=(shape==='radijus')?_stoRadijusi():rrMM;
     // Prvo obriši crta-tačka liniju konture (bijelom) da se ne vidi ispod
     traceTableShape(ctx,shape,A,B,sc,_rIv);
     ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.setLineDash([]);
@@ -11255,6 +11352,7 @@ function drawSto(ctx,W,H){
     traceTableShape(ctx,shape,A,B,sc,_rIv);
     ctx.strokeStyle='#000';ctx.lineWidth=1.3;ctx.setLineDash([]);
     ctx.stroke();
+  }
   }
   // Klikabilna zona - cijeli obim stola (bilo koji oblik) vodi na ISTU
   // (jedinstvenu) kontrolu obrade ivice
@@ -11284,6 +11382,26 @@ function drawSto(ctx,W,H){
   {
     kota(ctx,0,-28,A*sc,-28,(shape==='okrugao'?'ø'+A:A)+' mm',_tableDimEditDesc('A'),'#sto-a');
     if(shape!=='okrugao') kota(ctx,A*sc+28,0,A*sc+28,B*sc,B+' mm',_tableDimEditDesc('B'),'#sto-b');
+  // Kod bureta lukovi izlaze izvan A x B - nominalna kota ne kaze koliku
+  // tablu treba. Dodaje se STVARNA mjera preko svega.
+  if(shape==='bure'||shape==='fbure'){
+    try{
+      var _bbB=_bureBB(A,B,rrMM,getTableLongRadiusMM(),
+                       (shape==='fbure')?getTableShortRadiusMM():0);
+      if(_bbB.w>A+2||_bbB.h>B+2){
+        ctx.save();
+        ctx.strokeStyle='#b8860b'; ctx.lineWidth=1; ctx.setLineDash([4,3]);
+        ctx.strokeRect(_bbB.mnx*sc,_bbB.mny*sc,_bbB.w*sc,_bbB.h*sc);
+        ctx.setLineDash([]);
+        ctx.fillStyle='#b8860b'; ctx.font='9px Segoe UI,Arial';
+        ctx.textAlign='left'; ctx.textBaseline='top';
+        ctx.fillText('tabla '+_bbB.w+'\u00d7'+_bbB.h+' mm',_bbB.mnx*sc,_bbB.mxy*sc+6);
+        ctx.restore();
+        kota(ctx,_bbB.mnx*sc,_bbB.mny*sc-26,_bbB.mxx*sc,_bbB.mny*sc-26,_bbB.w+' mm');
+        kota(ctx,_bbB.mxx*sc+58,_bbB.mny*sc,_bbB.mxx*sc+58,_bbB.mxy*sc,_bbB.h+' mm');
+      }
+    }catch(e){}
+  }
   }
 
 
