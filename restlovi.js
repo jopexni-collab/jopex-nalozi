@@ -1563,4 +1563,226 @@ router.get('/sume/pregled', smijeVidjeti, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+
+/* ─────────────────── VERIFIKACIJA POVRATA RESTLA ───────────────────
+   Restl nastao rezanjem ODMAH ulazi u opticaj — može se uzeti u drugi nalog bez
+   čekanja. Provjera je naknadna i služi da se uhvati pogrešno upisana mjera ili
+   komad kojeg fizički nema. Zato se ne blokira rad, nego se greška ispravlja kad
+   se otkrije. */
+
+// nalog_materijal.nalog_r_br je INTEGER u bazi, pa se broj naloga mora pretvoriti.
+// Ako nije broj, upis se odbija odmah umjesto da pukne u bazi.
+function brojNaloga(v) {
+  const n = parseInt(String(v ?? '').trim(), 10);
+  if (!isFinite(n)) throw new Error('Broj naloga mora biti cijeli broj: ' + v);
+  return n;
+}
+
+function smijeOdobriti(user) {
+  return !!(user && (user.rola === 'admin' || user.moze_ugovarati));
+}
+
+// GET /api/restlovi/za-provjeru
+router.get('/za-provjeru', smijeVidjeti, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT r.id, r.oznaka, r.materijal, r.dim_a, r.dim_b, r.povrsina, r.poligon, r.oblik,
+              r.kreirao_ime, r.kreirano, r.nastao_iz_naloga, r.foto_url, r.lokacija,
+              po.naziv AS objekt_naziv, ro.naziv AS artikal_naziv, ro.sifra AS artikal_sifra,
+              rod.oznaka AS roditelj_oznaka
+         FROM restlovi r
+         LEFT JOIN prodajni_objekti po ON po.id = r.objekt_id
+         LEFT JOIN roba ro ON ro.id = r.roba_id
+         LEFT JOIN restlovi rod ON rod.id = r.roditelj_id
+        WHERE r.provjeren = 'ceka' AND r.status <> 'potrosen'
+        ORDER BY r.kreirano DESC LIMIT 200`);
+    res.json({ stavke: r.rows, smijem: smijeOdobriti(req.session?.user) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/restlovi/:id/provjeri
+// body: { odluka: 'potvrdjen' | 'odbijen', dim_a?, dim_b?, poligon?, napomena? }
+router.post('/:id/provjeri', async (req, res) => {
+  const user = req.session?.user;
+  if (!smijeOdobriti(user)) return res.status(403).json({ error: 'Provjeru odobrava onaj ko ima pravo ugovaranja.' });
+
+  const client = await pool.connect();
+  try {
+    const { odluka, dim_a, dim_b, poligon, napomena } = req.body;
+    if (!['potvrdjen', 'odbijen'].includes(odluka))
+      return res.status(400).json({ error: 'Odluka mora biti "potvrdjen" ili "odbijen".' });
+    // Odbijanje traži razlog — inače se kasnije ne zna šta je bilo prijavljeno
+    if (odluka === 'odbijen' && !String(napomena || '').trim())
+      return res.status(400).json({ error: 'Za odbijanje je obavezan razlog.' });
+
+    await client.query('BEGIN');
+    const cur = await client.query('SELECT * FROM restlovi WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!cur.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Restl nije pronađen.' }); }
+    const r = cur.rows[0];
+    if (r.provjeren !== 'ceka') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Restl je već provjeren.' }); }
+
+    if (odluka === 'odbijen') {
+      // Ne briše se — ostaje trag šta je bilo prijavljeno i zašto nije prošlo
+      await client.query(
+        `UPDATE restlovi SET provjeren='odbijen', status='greska', provjerio_id=$1,
+                provjerio_ime=$2, provjereno=now(), provjera_napomena=$3 WHERE id=$4`,
+        [user.id, user.ime_prezime, String(napomena).trim(), r.id]);
+      await upisiLog(client, r.id, 'provjeren', 'ceka', 'odbijen: ' + String(napomena).trim(), user);
+      await client.query('COMMIT');
+      return res.json({ ok: true, odluka: 'odbijen' });
+    }
+
+    // Potvrda, uz moguću ispravku mjera
+    let ispravljeno = false;
+    const noviA = Number(dim_a) || 0, noviB = Number(dim_b) || 0;
+    const jePoligon = Array.isArray(poligon) && poligon.length >= 3;
+
+    if (jePoligon || (noviA && noviB && (noviA !== Number(r.dim_a) || noviB !== Number(r.dim_b)))) {
+      let tjemena;
+      if (jePoligon) {
+        const g = geo.provjeriTjemena(poligon);
+        if (g) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Oblik: ' + g }); }
+        tjemena = poligon;
+      } else {
+        tjemena = [[0,0],[noviA,0],[noviA,noviB],[0,noviB]];
+      }
+      const okv = geo.okvir(tjemena);
+      const pov = geo.povrsinaPoligona(tjemena) / 1e6;
+      // Stare mjere se PAMTE — da se vidi šta je operater upisao a šta je provjera zatekla
+      await client.query(
+        `UPDATE restlovi SET dim_a=$1, dim_b=$2, poligon=$3::jsonb, povrsina=$4,
+                mjere_prije=$5::jsonb WHERE id=$6`,
+        [Math.round(okv.sirina), Math.round(okv.visina), JSON.stringify(tjemena), pov,
+         JSON.stringify({ dim_a: r.dim_a, dim_b: r.dim_b, povrsina: r.povrsina, poligon: r.poligon }),
+         r.id]);
+      await upisiLog(client, r.id, 'mjere', r.dim_a + '×' + r.dim_b,
+        Math.round(okv.sirina) + '×' + Math.round(okv.visina) + ' (provjera)', user);
+      ispravljeno = true;
+    }
+
+    await client.query(
+      `UPDATE restlovi SET provjeren='potvrdjen', provjerio_id=$1, provjerio_ime=$2,
+              provjereno=now(), provjera_napomena=$3 WHERE id=$4`,
+      [user.id, user.ime_prezime, napomena || null, r.id]);
+    await upisiLog(client, r.id, 'provjeren', 'ceka', 'potvrdjen', user);
+    await client.query('COMMIT');
+    res.json({ ok: true, odluka: 'potvrdjen', mjere_ispravljene: ispravljeno });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+/* ─────────────────── MATERIJAL NALOGA: VIŠE IZVORA ───────────────────
+   Jedan nalog rijetko stane u jedan restl — obično ide nekoliko restlova pa ostatak
+   iz cijele table. Svaki izvor je zaseban red, pa se vidi odakle je šta došlo. */
+
+// GET /api/restlovi/nalog/:r_br/materijal
+router.get('/nalog/:r_br/materijal', smijeVidjeti, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT nm.*, r.oznaka AS restl_oznaka, r.materijal AS restl_materijal,
+              ro.naziv AS artikal_naziv, ro.sifra AS artikal_sifra,
+              po.naziv AS objekt_naziv
+         FROM nalog_materijal nm
+         LEFT JOIN restlovi r ON r.id = nm.restl_id
+         LEFT JOIN roba ro ON ro.id = nm.roba_id
+         LEFT JOIN prodajni_objekti po ON po.id = nm.objekt_id
+        WHERE nm.nalog_r_br = $1 AND nm.stornirano = false
+        ORDER BY nm.uzeto`, [brojNaloga(req.params.r_br)]);
+    const s = r.rows;
+    res.json({
+      stavke: s,
+      ukupno_m2: Math.round(s.reduce((z, x) => z + (Number(x.povrsina) || 0), 0) * 10000) / 10000,
+      restlova: s.filter(x => x.vrsta === 'restl').length,
+      tabli: s.filter(x => x.vrsta === 'tabla').length,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/restlovi/nalog/:r_br/uzmi
+router.post('/nalog/:r_br/uzmi', smijeUnositi, async (req, res) => {
+  const user = req.session.user;
+  const client = await pool.connect();
+  try {
+    const { vrsta, restl_id, roba_id, povrsina, dim_a, dim_b, napomena } = req.body;
+    if (!['restl', 'tabla'].includes(vrsta))
+      return res.status(400).json({ error: 'Vrsta mora biti "restl" ili "tabla".' });
+
+    await client.query('BEGIN');
+    let red;
+
+    if (vrsta === 'restl') {
+      if (!restl_id) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Nedostaje restl.' }); }
+      // FOR UPDATE — dva operatera u istom trenutku ne mogu uzeti isti komad
+      const cur = await client.query('SELECT * FROM restlovi WHERE id=$1 FOR UPDATE', [restl_id]);
+      if (!cur.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Restl nije pronađen.' }); }
+      const r = cur.rows[0];
+      if (r.status === 'potrosen') { await client.query('ROLLBACK'); return res.status(400).json({ error: `Restl ${r.oznaka} je već potrošen.` }); }
+      if (r.provjeren === 'odbijen') { await client.query('ROLLBACK'); return res.status(400).json({ error: `Restl ${r.oznaka} je odbijen pri provjeri — ne može se koristiti.` }); }
+
+      await client.query(
+        `UPDATE restlovi SET status='rezervisan', nastao_iz_naloga=COALESCE(nastao_iz_naloga,$1) WHERE id=$2`,
+        [brojNaloga(req.params.r_br), r.id]);
+      red = await client.query(
+        `INSERT INTO nalog_materijal (nalog_r_br, vrsta, restl_id, roba_id, objekt_id,
+            povrsina, dim_a, dim_b, napomena, uzeo_id, uzeo_ime)
+         VALUES ($1,'restl',$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+        [brojNaloga(req.params.r_br), r.id, r.roba_id, r.objekt_id, r.povrsina,
+         r.dim_a, r.dim_b, napomena || null, user.id, user.ime_prezime]);
+      await upisiLog(client, r.id, 'status', r.status, 'rezervisan za nalog ' + req.params.r_br, user);
+    } else {
+      if (!roba_id) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Nedostaje artikal za cijelu tablu.' }); }
+      red = await client.query(
+        `INSERT INTO nalog_materijal (nalog_r_br, vrsta, roba_id, objekt_id, povrsina,
+            dim_a, dim_b, napomena, uzeo_id, uzeo_ime)
+         VALUES ($1,'tabla',$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        [brojNaloga(req.params.r_br), roba_id, req.body.objekt_id || null,
+         Number(povrsina) || 0, dim_a || null, dim_b || null,
+         napomena || null, user.id, user.ime_prezime]);
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true, stavka: red.rows[0],
+               napomena: 'Lager nije mijenjan — materijal se skida tek kad se restl stvarno isječe.' });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+// DELETE /api/restlovi/nalog-materijal/:id — storno, restl se vraća u opticaj
+router.delete('/nalog-materijal/:id', smijeUnositi, async (req, res) => {
+  const user = req.session.user;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const cur = await client.query('SELECT * FROM nalog_materijal WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!cur.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Stavka nije pronađena.' }); }
+    const s = cur.rows[0];
+    if (s.stornirano) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Već je stornirano.' }); }
+
+    // Zapis OSTAJE — samo se označi, da se vidi da je materijal bio uzet pa vraćen
+    await client.query(
+      `UPDATE nalog_materijal SET stornirano=true, stornirao_ime=$1, stornirano_kada=now() WHERE id=$2`,
+      [user.ime_prezime, s.id]);
+
+    if (s.restl_id) {
+      const r = await client.query('SELECT status, oznaka FROM restlovi WHERE id=$1', [s.restl_id]);
+      // Restl koji je u međuvremenu stvarno isječen se NE vraća — to više nije isti komad
+      if (r.rows.length && r.rows[0].status === 'rezervisan') {
+        await client.query(`UPDATE restlovi SET status='dostupan' WHERE id=$1`, [s.restl_id]);
+        await upisiLog(client, s.restl_id, 'status', 'rezervisan', 'dostupan (storno naloga)', user);
+      }
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+
 module.exports = router;
