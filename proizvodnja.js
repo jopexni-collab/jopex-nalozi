@@ -216,48 +216,118 @@ const UNDO_DOZVOLJENE_KOLONE = [
 router.post('/:r_br/undo/:logId', async (req, res) => {
   const user = req.session?.user;
   if (!user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const logRes = await client.query(
+      `SELECT * FROM status_promjene_log WHERE id=$1 AND r_br=$2`,
+      [req.params.logId, req.params.r_br]
+    );
+    if (!logRes.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Zapis u istoriji nije pronađen.' }); }
+    const log = logRes.rows[0];
+
+    /* Neke izmjene POVLACE druge: kad se stiklira "Gotovo", prikaz odmah mijenja i
+       status i prioritet. To su zasebni zapisi u istoj sekundi, pa undo mora vratiti
+       SVE njih odjednom — inace bi vratio jedno polje, a ostala bi ostala izmijenjena.
+       Ranije je undo gledao samo svoj zapis i odbijao ga kao "ne najnoviji". */
+    const skupina = await client.query(
+      `SELECT * FROM status_promjene_log
+       WHERE r_br=$1 AND kada BETWEEN $2::timestamp - interval '2 seconds'
+                                  AND $2::timestamp + interval '2 seconds'
+       ORDER BY kada`,
+      [req.params.r_br, log.kada]
+    );
+
+    /* Za svako polje iz skupine provjerava se da je bas taj zapis posljednji — ako je
+       neko poslije toga opet mijenjao, vracanje bi preskocilo njegovu izmjenu. */
+    for (const z of skupina.rows) {
+      if (!UNDO_DOZVOLJENE_KOLONE.includes(z.kolona)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: `Polje „${z.kolona}" ne podržava vraćanje.` });
+      }
+      const zadnji = await client.query(
+        `SELECT id FROM status_promjene_log WHERE r_br=$1 AND kolona=$2 ORDER BY kada DESC LIMIT 1`,
+        [req.params.r_br, z.kolona]
+      );
+      if (zadnji.rows[0]?.id !== z.id) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          error: `Polje „${z.kolona}" je u međuvremenu ponovo mijenjano — vraćanje bi preskočilo taj korak.`,
+        });
+      }
+    }
+
+    const vraceno = [];
+    for (const z of skupina.rows) {
+      let v = z.stara_vrijednost;
+      if (BOOLEAN_POLJA.includes(z.kolona)) v = v === 'true';
+      await client.query(
+        `UPDATE proizvodnja_jopex SET ${z.kolona} = $1 WHERE r_br = $2`,
+        [v, req.params.r_br]
+      );
+      await client.query(
+        `INSERT INTO status_promjene_log (r_br, kolona, stara_vrijednost, nova_vrijednost, korisnik_id, korisnik_ime)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [req.params.r_br, z.kolona, z.nova_vrijednost, z.stara_vrijednost,
+         user.id, user.ime_prezime + ' (undo)']
+      );
+      vraceno.push({ kolona: z.kolona, na: z.stara_vrijednost });
+    }
+
+    await client.query('COMMIT');
+    res.json({ ok: true, vraceno, broj: vraceno.length });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+/* GET /:r_br/undo-pregled/:logId — sta bi se tacno vratilo, prije nego se klikne.
+   Bez ovoga korisnik ne zna da vracanje "Gotovo" mijenja i status i prioritet. */
+router.get('/:r_br/undo-pregled/:logId', async (req, res) => {
   try {
     const logRes = await pool.query(
       `SELECT * FROM status_promjene_log WHERE id=$1 AND r_br=$2`,
       [req.params.logId, req.params.r_br]
     );
-    if (!logRes.rows.length) return res.status(404).json({ error: 'Zapis u istoriji nije pronađen.' });
+    if (!logRes.rows.length) return res.status(404).json({ error: 'Zapis nije pronađen.' });
     const log = logRes.rows[0];
 
-    const najnoviji = await pool.query(
-      `SELECT id FROM status_promjene_log WHERE r_br=$1 AND kolona=$2 ORDER BY kada DESC LIMIT 1`,
-      [req.params.r_br, log.kolona]
+    const skupina = await pool.query(
+      `SELECT id, kolona, stara_vrijednost, nova_vrijednost, korisnik_ime, kada
+       FROM status_promjene_log
+       WHERE r_br=$1 AND kada BETWEEN $2::timestamp - interval '2 seconds'
+                                  AND $2::timestamp + interval '2 seconds'
+       ORDER BY kada`,
+      [req.params.r_br, log.kada]
     );
-    if (najnoviji.rows[0]?.id !== log.id) {
-      return res.status(409).json({ error: 'Ovo više nije najnovija promjena za ovo polje (neko je posle toga opet menjao) — undo nije moguć bez preskakanja koraka.' });
+
+    const stavke = [];
+    for (const z of skupina.rows) {
+      const zadnji = await pool.query(
+        `SELECT id FROM status_promjene_log WHERE r_br=$1 AND kolona=$2 ORDER BY kada DESC LIMIT 1`,
+        [req.params.r_br, z.kolona]
+      );
+      stavke.push({
+        kolona: z.kolona,
+        sada: z.nova_vrijednost,
+        vraca_na: z.stara_vrijednost,
+        moze: zadnji.rows[0]?.id === z.id && UNDO_DOZVOLJENE_KOLONE.includes(z.kolona),
+        razlog: zadnji.rows[0]?.id !== z.id ? 'polje je poslije toga ponovo mijenjano'
+              : !UNDO_DOZVOLJENE_KOLONE.includes(z.kolona) ? 'polje ne podržava vraćanje'
+              : null,
+      });
     }
-
-    if (!UNDO_DOZVOLJENE_KOLONE.includes(log.kolona)) {
-      return res.status(400).json({ error: 'Ovo polje ne podržava undo.' });
-    }
-
-    let vrijednostZaUpis = log.stara_vrijednost;
-    if (BOOLEAN_POLJA.includes(log.kolona)) vrijednostZaUpis = vrijednostZaUpis === 'true';
-
-    await pool.query(
-      `UPDATE proizvodnja_jopex SET ${log.kolona} = $1 WHERE r_br = $2`,
-      [vrijednostZaUpis, req.params.r_br]
-    );
-    await pool.query(
-      `INSERT INTO status_promjene_log (r_br, kolona, stara_vrijednost, nova_vrijednost, korisnik_id, korisnik_ime)
-       VALUES ($1,$2,$3,$4,$5,$6)`,
-      [req.params.r_br, log.kolona, log.nova_vrijednost, log.stara_vrijednost, user.id, user.ime_prezime + ' (undo)']
-    );
-
-    res.json({ ok: true, kolona: log.kolona, vraceno_na: log.stara_vrijednost });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    res.json({
+      stavke,
+      moze_sve: stavke.every(x => x.moze),
+      kada: log.kada,
+      ko: log.korisnik_ime,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-
-// POST /api/proizvodnja - novi nalog
-// Poziva se i iz web forme i iz JoPeX HTML (usvajanje ponude)
 router.post('/', async (req, res) => {
   const user = req.session?.user;
   const {
@@ -270,13 +340,14 @@ router.post('/', async (req, res) => {
   if (!zadatak?.trim())
     return res.status(400).json({ error: '"zadatak" je obavezno polje.' });
 
-  // KRITIČNO: "Usvoji ponudu → Nalog" (Generator) smije da ZAVRŠI SAMO admin ili "Ponude
-  // sve" (moze_ugovarati). Osoba sa "Unos naloga" (bez moze_ugovarati) smije da PRAVI i
-  // ČUVA ponudu (cloud/R2), ali NE smije sama da je usvoji u stvaran radni nalog — mora
-  // neko sa pravom da to pregleda i potvrdi. Frontend sakriva dugme za takve korisnike,
-  // ali to SAMO PO SEBI nije dovoljno (neko bi mogao pozvati API direktno) — zato je
-  // provjera i OVDJE, na backend-u, gdje se stvarno ne može zaobići.
-  if (iz_generatora_ponuda && user?.rola !== 'admin' && !user?.moze_ugovarati) {
+  /* "Usvoji ponudu → Nalog" smiju admin, "Ponude sve" (moze_ugovarati) i "Unos naloga".
+     Ranije je bilo ograniceno na prva dva, ali je to bilo zaobilazno: ko ima unos_naloga
+     svejedno moze rucno napraviti isti nalog sa istim ciframa — pa je ogranicenje samo
+     pravilo dodatan korak, bez stvarne zastite.
+     Provjera ostaje i OVDJE, ne samo u prikazu — dugme se moze sakriti, ali se API
+     moze pozvati direktno. */
+  if (iz_generatora_ponuda && user?.rola !== 'admin'
+      && !user?.moze_ugovarati && !user?.unos_naloga) {
     return res.status(403).json({
       error: 'Nemate pravo da usvojite ponudu u radni nalog. Sačuvajte je (☁ Sačuvaj) da je neko sa pravom pregleda i usvoji.',
     });

@@ -323,25 +323,85 @@ function pushUndo(rBr, fieldOrMapa, oldVal){
   if(btn){btn.style.opacity='1';btn.style.cursor='pointer';}
 }
 
+/* Vracanje zadnje izmjene.
+   Spisak `undoStack` zivi samo u memoriji stranice — poslije osvjezavanja je prazan,
+   pa se tad pita SERVER koja je zadnja izmjena. Tako vracanje radi i sutradan.
+   Prije vracanja se prikaze STA se tacno vraca: izmjena "Gotovo" povlaci i status i
+   prioritet, pa bi bez toga korisnik vratio tri stvari misleci da vraca jednu. */
 async function undoZadnje(e){
   e.preventDefault();
-  if(!undoStack.length) return;
-  const u=undoStack.pop();
-  const body={};
-  for(const iz of u.izmjene) body[iz.field]=iz.oldVal;
-  try{
-    await fetch(`${API}/api/proizvodnja/${u.rBr}`,{
-      method:'PATCH',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(body),
-    });
-    const row=all.find(r=>r.r_br==u.rBr);
-    if(row) for(const iz of u.izmjene) row[iz.field]=iz.oldVal;
-    render();
-  }catch(e){alert('Greška pri undo.');}
-  if(!undoStack.length){
-    const btn=document.getElementById('btn-undo');
-    if(btn){btn.style.opacity='.5';btn.style.cursor='not-allowed';}
+
+  // 1. Iz memorije, ako je izmjena napravljena u ovoj sjednici
+  if(undoStack.length){
+    const u = undoStack[undoStack.length-1];
+    const opis = u.izmjene.map(iz =>
+      `• ${STATUS_LOG_NAZIVI[iz.field] || iz.field}: „${iz.newVal ?? '—'}" → „${iz.oldVal ?? '—'}"`).join('\n');
+    if(!confirm(`Vratiti zadnju izmjenu na nalogu ${u.rBr}?\n\n${opis}`)) return;
+
+    undoStack.pop();
+    const body={};
+    for(const iz of u.izmjene) body[iz.field]=iz.oldVal;
+    try{
+      const r = await fetch(`${API}/api/proizvodnja/${u.rBr}`,{
+        method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body),
+      });
+      if(!r.ok) throw new Error('Server je odbio vraćanje.');
+      const row=all.find(x=>x.r_br==u.rBr);
+      if(row) for(const iz of u.izmjene) row[iz.field]=iz.oldVal;
+      render();
+    }catch(err){ alert('✗ ' + err.message); }
+    if(!undoStack.length) osvjeziDugmeUndo();
+    return;
   }
+
+  /* 2. Poslije osvjezavanja stranice memorija je prazna — pita se server.
+        Ranije se ovdje samo izlazilo, pa je dugme izgledalo pokvareno. */
+  const rBr = prompt('Broj naloga čiju zadnju izmjenu vraćamo:');
+  if(!rBr || !String(rBr).trim()) return;
+  await undoSaServera(String(rBr).trim());
+}
+
+/* Vracanje preko servera — gleda dnevnik promjena, pa radi i poslije osvjezavanja. */
+async function undoSaServera(rBr){
+  try{
+    const rl = await fetch(`${API}/api/proizvodnja/${rBr}/status-log`);
+    if(!rl.ok) throw new Error('Ne mogu učitati istoriju izmjena.');
+    const log = await rl.json();
+    if(!log.length){ alert(`Nalog ${rBr} nema zabilježenih izmjena.`); return; }
+
+    const zadnji = log[0];
+    const rp = await fetch(`${API}/api/proizvodnja/${rBr}/undo-pregled/${zadnji.id}`);
+    const pregled = await rp.json();
+    if(!rp.ok) throw new Error(pregled.error || 'Greška pri pregledu.');
+
+    const opis = (pregled.stavke||[]).map(s =>
+      `• ${STATUS_LOG_NAZIVI[s.kolona] || s.kolona}: „${s.sada ?? '—'}" → „${s.vraca_na ?? '—'}"`
+      + (s.moze ? '' : `   ⚠ ${s.razlog}`)).join('\n');
+
+    if(!pregled.moze_sve){
+      alert(`Vraćanje nije moguće:\n\n${opis}`);
+      return;
+    }
+    const kada = pregled.kada ? new Date(pregled.kada).toLocaleString('sr-Latn-BA') : '';
+    if(!confirm(`Vratiti izmjenu na nalogu ${rBr}?\n${kada}${pregled.ko?' · '+pregled.ko:''}\n\n${opis}`)) return;
+
+    const r = await fetch(`${API}/api/proizvodnja/${rBr}/undo/${zadnji.id}`,{ method:'POST' });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    alert(`✓ Vraćeno ${d.broj} ${d.broj===1?'polje':'polja'}.`);
+    location.reload();
+  }catch(err){ alert('✗ ' + err.message); }
+}
+
+function osvjeziDugmeUndo(){
+  const btn=document.getElementById('btn-undo');
+  if(!btn) return;
+  const ima = undoStack.length > 0;
+  btn.style.opacity = ima ? '1' : '.75';
+  btn.style.cursor = 'pointer';
+  btn.title = ima ? 'Vrati zadnju izmjenu iz ove sjednice'
+                  : 'Vrati zadnju izmjenu — traži broj naloga';
 }
 
 function mozeEditovati(field, row){
