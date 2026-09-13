@@ -88,14 +88,26 @@ function mapaKolona(zaglavlja) {
 }
 
 /* ── L-OBLIK ──
-   Onako kako ga operator crta i unosi u tabelu:
-     A = ukupna visina (desna ivica)   C = ukupna širina (gornja ivica)
-     B = širina donjeg kraka           D = visina gornjeg kraka
-   Gornji krak ide punom širinom C, donji stoji uz DESNU ivicu.
-   Prazan dio je dolje lijevo: (C−B) široko, (A−D) visoko.
-   Površina = A*B + (C−B)*D — provjereno na svih 13 L-redova iz tabele. */
-function tjemenaLOblika(A, B, C, D) {
-  return [[C - B, 0], [C, 0], [C, A], [0, A], [0, A - D], [C - B, A - D]];
+   Onako kako operater crta i unosi u tabelu (prema skici):
+
+        ┌──── d ────┐
+        │           │
+   ┌────┘           │  c
+   │                │
+   │ b              │
+   └───── a ────────┘
+
+     a = ukupna širina donjeg dijela (donja ivica)
+     b = visina donjeg dijela (lijeva ivica)
+     c = ukupna visina (desna ivica)
+     d = širina gornjeg kraka (gornja ivica)
+
+   Gornji krak stoji uz DESNU ivicu; prazan dio je gore lijevo.
+   Površina = a·b + (c−b)·d — provjereno na svim L-redovima iz tabele.
+
+   Granični okvir je a × c: širina a, visina c. */
+function tjemenaLOblika(a, b, c, d) {
+  return [[0, 0], [a, 0], [a, c], [a - d, c], [a - d, b], [0, b]];
 }
 
 function tjemenaPravougaonika(A, B) {
@@ -155,8 +167,10 @@ function pripremiRed(red, m, indeks) {
 
   const jeL = C > 0 && D > 0;
   if (jeL) {
-    if (C <= B) stavka.greske.push(`L-oblik: C (${C}) mora biti veće od B (${B}) — provjeri jesu li kolone zamijenjene`);
-    if (A <= D) stavka.greske.push(`L-oblik: A (${A}) mora biti veće od D (${D})`);
+    // c je UKUPNA visina, b visina donjeg dijela → c mora biti veće
+    if (C <= B) stavka.greske.push(`L-oblik: duž C (${C}) je ukupna visina i mora biti veća od B (${B}) — provjeri jesu li kolone zamijenjene`);
+    // a je UKUPNA širina, d širina gornjeg kraka → a mora biti veće
+    if (A <= D) stavka.greske.push(`L-oblik: duž A (${A}) je ukupna širina i mora biti veća od D (${D})`);
   } else {
     if (!A || !B) stavka.greske.push('nedostaje mjera A ili B');
   }
