@@ -60,6 +60,28 @@ async function sljedecaOznaka(client) {
 // Prekidač za zaključavanje lagera. Podrazumijevano je ZAKLJUČAN — ako reda u
 // tabeli nema iz bilo kog razloga, ponašamo se kao da je zaključan, jer je tiho
 // mijenjanje tuđeg lagera gora greška od nemijenjanja.
+/* KLASA po veličini — apsolutno, u kvadratima, ne "pola table".
+   Table nisu iste veličine, pa je pola table od 3,2×1,6 m sasvim drugi komad nego
+   pola table od 2×1 m. Granice se čuvaju u postavkama, da se mijenjaju bez koda. */
+let GRANICE_KLASA = null;
+
+async function graniceKlasa() {
+  if (GRANICE_KLASA) return GRANICE_KLASA;
+  try {
+    const r = await pool.query(
+      `SELECT kljuc, vrijednost FROM restlovi_postavke WHERE kljuc IN ('klasa_a_min_m2','klasa_b_min_m2')`);
+    const m = new Map(r.rows.map(x => [x.kljuc, Number(x.vrijednost)]));
+    GRANICE_KLASA = { a: m.get('klasa_a_min_m2') || 1.5, b: m.get('klasa_b_min_m2') || 0.5 };
+  } catch (e) { GRANICE_KLASA = { a: 1.5, b: 0.5 }; }
+  return GRANICE_KLASA;
+}
+
+async function odrediKlasu(povrsinaM2) {
+  const g = await graniceKlasa();
+  const p = Number(povrsinaM2) || 0;
+  return p >= g.a ? 'A' : (p >= g.b ? 'B' : 'C');
+}
+
 async function lagerZakljucan() {
   try {
     const r = await pool.query(`SELECT vrijednost FROM restlovi_postavke WHERE kljuc='lager_zakljucan'`);
@@ -540,8 +562,25 @@ router.post('/uvoz/probni', samoAdmin, primiFajl.single('fajl'), async (req, res
         st.upozorenja.push('L-oblik: strana kraka se iz tabele ne vidi, uvozi se sa krakom desno — provjeri komad');
     }
 
+    // Koliko uvezenih restlova već stoji u tom PJ — da se prije uvoza zna da li se
+    // dodaje na postojeće ili zamjenjuje
+    let postojeci = { ukupno: 0, netaknuti: 0, dirnuti: 0 };
+    if (objektId) {
+      const p = await pool.query(
+        `SELECT COUNT(*)::int AS ukupno,
+                COUNT(*) FILTER (WHERE status = 'dostupan'
+                  AND NOT EXISTS (SELECT 1 FROM restl_koristenje k WHERE k.restl_id = r.id)
+                  AND NOT EXISTS (SELECT 1 FROM restl_prenosi pr WHERE pr.restl_id = r.id)
+                  AND NOT EXISTS (SELECT 1 FROM restlovi d WHERE d.roditelj_id = r.id))::int AS netaknuti
+           FROM restlovi r WHERE r.uvoz_id IS NOT NULL AND r.objekt_id = $1`, [objektId]);
+      postojeci.ukupno = p.rows[0].ukupno;
+      postojeci.netaknuti = p.rows[0].netaknuti;
+      postojeci.dirnuti = postojeci.ukupno - postojeci.netaknuti;
+    }
+
     const sporni = stavke.filter(s => s.greske.length || s.upozorenja.length);
     res.json({
+      postojeci,
       list: ime, listovi,
       sazetak: uvoz.sazetak(stavke),
       povezano: stavke.filter(s => s.roba_id).length,
@@ -556,6 +595,13 @@ router.post('/uvoz/potvrdi', samoAdmin, async (req, res) => {
   const client = await pool.connect();
   try {
     const { objekt_id, naziv_fajla, list, stavke } = req.body;
+    /* NAČIN UVOZA — bez ovoga se svaki ponovni uvoz iste tabele nalijepi na postojeće
+       stanje i restlovi se udvostruče.
+         'dodaj'   — samo dodaje (prvi uvoz, ili dopuna novim komadima)
+         'zamijeni'— prethodno uvezeni restlovi tog PJ se storniraju pa se uvozi novo
+       Storniraju se SAMO netaknuti komadi — korišćeni ostaju, jer je njihova istorija
+       stvarna i ne smije nestati. */
+    const nacin = req.body.nacin === 'zamijeni' ? 'zamijeni' : 'dodaj';
     if (!objekt_id) return res.status(400).json({ error: 'PJ nije izabran.' });
     if (!Array.isArray(stavke) || !stavke.length) return res.status(400).json({ error: 'Nema redova za uvoz.' });
 
@@ -606,6 +652,40 @@ router.post('/uvoz/potvrdi', samoAdmin, async (req, res) => {
     }
 
     await client.query('BEGIN');
+
+    let obrisano = 0, zadrzano = [];
+    if (nacin === 'zamijeni') {
+      // Komadi koji su korišćeni, prenošeni ili od kojih je nastao drugi restl se NE
+      // brišu — njihov trag je stvaran. Ostaju i broje se posebno.
+      const dirnuti = await client.query(
+        `SELECT r.id, r.oznaka FROM restlovi r
+          WHERE r.uvoz_id IS NOT NULL AND r.objekt_id = $1 AND (
+                r.status <> 'dostupan'
+             OR EXISTS (SELECT 1 FROM restl_koristenje k WHERE k.restl_id = r.id)
+             OR EXISTS (SELECT 1 FROM restl_prenosi p WHERE p.restl_id = r.id)
+             OR EXISTS (SELECT 1 FROM restlovi d WHERE d.roditelj_id = r.id)
+             OR EXISTS (SELECT 1 FROM nalog_materijal nm WHERE nm.restl_id = r.id AND nm.stornirano = false))`,
+        [objekt_id]);
+      zadrzano = dirnuti.rows.map(x => x.oznaka);
+      const zadrzaniIds = dirnuti.rows.map(x => x.id);
+
+      const zaBrisanje = await client.query(
+        `SELECT id FROM restlovi
+          WHERE uvoz_id IS NOT NULL AND objekt_id = $1
+            AND NOT (id = ANY($2::int[]))`,
+        [objekt_id, zadrzaniIds.length ? zadrzaniIds : [0]]);
+      const ids = zaBrisanje.rows.map(x => x.id);
+      if (ids.length) {
+        await client.query('DELETE FROM restl_log WHERE restl_id = ANY($1::int[])', [ids]);
+        const d = await client.query('DELETE FROM restlovi WHERE id = ANY($1::int[])', [ids]);
+        obrisano = d.rowCount;
+      }
+      // Stare serije se označe stornirano, da se u istoriji vidi šta je zamijenjeno
+      await client.query(
+        `UPDATE restl_uvoz SET stornirano=true, stornirao_ime=$1, stornirano_kada=now()
+          WHERE objekt_id=$2 AND stornirano=false`,
+        [user.ime_prezime + ' (zamjena uvozom)', objekt_id]);
+    }
 
     const serija = await client.query(
       `INSERT INTO restl_uvoz (naziv_fajla, list, objekt_id, korisnik_id, korisnik_ime, preskoceno)
@@ -679,6 +759,8 @@ router.post('/uvoz/potvrdi', samoAdmin, async (req, res) => {
       ok: true, uvoz_id: uvozId, redova: zaUpis.length, komada: upisano,
       povrsina: Math.round(ukupnaPovrsina * 10000) / 10000, preskoceno,
       odbijeni: odbijeni.slice(0, 20), odbijenih: odbijeni.length,
+      nacin, obrisano,
+      zadrzano: zadrzano.slice(0, 30), zadrzanih: zadrzano.length,
       napomena: 'Lager nije mijenjan — uvoz nikad ne dira lager listu.',
     });
   } catch (err) {
@@ -1129,20 +1211,28 @@ router.post('/', smijeUnositi, async (req, res) => {
 
     const oznaka = await sljedecaOznaka(client);
     const pov = povrsinaM2(ob, A, B, dim_c, dim_d, tjemena);
+    const klasa = await odrediKlasu(pov);
 
     const r = await client.query(
       `INSERT INTO restlovi
          (oznaka, objekt_id, roba_id, materijal, grupa, debljina_cm, oblik,
           dim_a, dim_b, dim_c, dim_d, poligon, povrsina, cijena_m2, foto_url,
           roditelj_id, nastao_iz_naloga, izvor, lokacija, napomena,
-          kreirao_id, kreirao_ime)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+          kreirao_id, kreirao_ime, klasa, stanje_komada, mane, korisna_povrsina)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,
+               $23,$24,$25::jsonb,$26)
        RETURNING *`,
       [oznaka, objekt_id, roba_id || null, materijal, grupa || null, debljina_cm || null, ob,
        A, B, dim_c || 0, dim_d || 0, JSON.stringify(tjemena), pov, cijena, foto_url || null,
        roditelj_id || null, nastao_iz_naloga || null,
        izvor || (roditelj_id ? 'restl' : 'tabla'), lokacija || null, napomena || null,
-       user.id, user.ime_prezime]
+       user.id, user.ime_prezime,
+       klasa,
+       ['ispravan','sa_manom','za_sitno'].includes(req.body.stanje_komada) ? req.body.stanje_komada : 'ispravan',
+       Array.isArray(req.body.mane) && req.body.mane.length ? JSON.stringify(req.body.mane) : null,
+       // Kad mana smanjuje upotrebljivost, korisna površina je manja od stvarne —
+       // pošteno je voditi komad kao manji nego se praviti da je cio upotrebljiv.
+       Number(req.body.korisna_povrsina) || null]
     );
 
     await upisiLog(client, r.rows[0].id, 'kreiran', null, oznaka, user);
@@ -1201,18 +1291,24 @@ router.post('/:id/koristi', smijeUnositi, async (req, res) => {
       const oA = ob === 'poligon' ? ok2.sirina : ostatak.dim_a;
       const oB = ob === 'poligon' ? ok2.visina : ostatak.dim_b;
       const pov = geo.povrsinaPoligona(tj) / 1000000;
+      const klasaD = await odrediKlasu(pov);
       const oznaka = await sljedecaOznaka(client);
       const ins = await client.query(
         `INSERT INTO restlovi
            (oznaka, objekt_id, roba_id, materijal, grupa, debljina_cm, oblik,
             dim_a, dim_b, dim_c, dim_d, poligon, povrsina, cijena_m2, foto_url,
-            roditelj_id, nastao_iz_naloga, izvor, lokacija, napomena, kreirao_id, kreirao_ime)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'restl',$18,$19,$20,$21)
+            roditelj_id, nastao_iz_naloga, izvor, lokacija, napomena, kreirao_id, kreirao_ime,
+            klasa, stanje_komada, mane)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'restl',$18,$19,$20,$21,
+                 $22,$23,$24::jsonb)
          RETURNING id, oznaka`,
         [oznaka, r.objekt_id, r.roba_id, r.materijal, r.grupa, r.debljina_cm, ob,
          oA, oB, ostatak.dim_c || 0, ostatak.dim_d || 0, JSON.stringify(tj),
          pov, r.cijena_m2, ostatak.foto_url || null, r.id, nalog_r_br || null,
-         ostatak.lokacija || r.lokacija, ostatak.napomena || null, user.id, user.ime_prezime]
+         ostatak.lokacija || r.lokacija, ostatak.napomena || null, user.id, user.ime_prezime,
+         klasaD,
+         ['ispravan','sa_manom','za_sitno'].includes(ostatak.stanje_komada) ? ostatak.stanje_komada : 'ispravan',
+         Array.isArray(ostatak.mane) && ostatak.mane.length ? JSON.stringify(ostatak.mane) : null]
       );
       noviId = ins.rows[0].id;
       await upisiLog(client, noviId, 'kreiran', null, `${ins.rows[0].oznaka} (od ${r.oznaka})`, user);
@@ -2168,6 +2264,50 @@ router.post('/nalozi/pozicije-stanje', smijeVidjeti, async (req, res) => {
 
     res.json({ nalozi: izlaz });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
+/* POST /api/restlovi/:id/mane — opis mane na postojećem komadu.
+   Mana koja NE mijenja oblik (ogrebotina, mrlja, ton) samo se bilježi. Mana koja
+   smanjuje upotrebljivost (rupa, odlomljen ugao) unosi se kao umanjena korisna
+   površina — komad se vodi kao manji nego što jeste, uz napomenu zašto. */
+router.post('/:id/mane', smijeUnositi, async (req, res) => {
+  const user = req.session.user;
+  const client = await pool.connect();
+  try {
+    const { mane, stanje_komada, korisna_povrsina } = req.body;
+    if (stanje_komada && !['ispravan','sa_manom','za_sitno'].includes(stanje_komada))
+      return res.status(400).json({ error: 'Nepoznato stanje komada.' });
+
+    await client.query('BEGIN');
+    const cur = await client.query('SELECT * FROM restlovi WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!cur.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Restl nije pronađen.' }); }
+    const r = cur.rows[0];
+
+    const kor = Number(korisna_povrsina) || null;
+    if (kor && kor > Number(r.povrsina) + 0.0001) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Korisna površina ne može biti veća od stvarne (' +
+        Number(r.povrsina).toFixed(3) + ' m²).' });
+    }
+
+    await client.query(
+      `UPDATE restlovi SET mane=$1::jsonb, stanje_komada=COALESCE($2, stanje_komada),
+              korisna_povrsina=$3 WHERE id=$4`,
+      [Array.isArray(mane) && mane.length ? JSON.stringify(mane) : null,
+       stanje_komada || null, kor, r.id]);
+
+    if (stanje_komada && stanje_komada !== r.stanje_komada)
+      await upisiLog(client, r.id, 'stanje_komada', r.stanje_komada, stanje_komada, user);
+    if (kor && kor !== Number(r.korisna_povrsina))
+      await upisiLog(client, r.id, 'korisna_povrsina', r.korisna_povrsina, kor, user);
+
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
 });
 
 

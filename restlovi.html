@@ -90,6 +90,10 @@ td.num{text-align:right;white-space:nowrap;}
 .chip-potrosen{background:#eef0f3;color:#8b96a5;}
 .chip-u_proizvodnji{background:#e0e7ff;color:#3730a3;}
 .chip-greska{background:#fce8e6;color:#c0392b;}
+.kl{display:inline-block;width:17px;height:17px;line-height:17px;text-align:center;
+  border-radius:4px;font-size:10.5px;font-weight:800;}
+.kl-A{background:#1f8a4c;color:#fff;} .kl-B{background:#e67e22;color:#fff;} .kl-C{background:#8b96a5;color:#fff;}
+.mana{color:#e67e22;font-size:11px;}
 .msg{padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:12.5px;font-weight:600;}
 .msg.ok{background:#e6f4ea;color:var(--green);}
 .msg.err{background:#fce8e6;color:var(--red);}
@@ -171,6 +175,13 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
       <label class="polje">Ili naziv<input type="text" id="t_materijal" list="t_materijali" placeholder="npr. Carrara" style="width:170px">
         <datalist id="t_materijali"></datalist></label>
       <label class="polje">PJ<select id="t_objekt" style="width:170px"><option value="">— sve PJ —</option></select></label>
+      <label class="polje">Klasa<select id="t_klasa" style="width:150px">
+        <option value="">— sve klase —</option>
+        <option value="A">A — veliki komadi</option>
+        <option value="B">B — srednji</option>
+        <option value="C">C — sitni</option>
+        <option value="B,C">B i C (čuvaj velike)</option>
+      </select></label>
       <label class="polje">Rez/rezerva (mm)<input type="number" id="t_rez" value="5" style="width:110px"></label>
       <label class="polje">Ako ništa ne staje<select id="t_odstupanje" style="width:180px">
         <option value="0">ne predlaži ništa</option>
@@ -182,6 +193,10 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
       <button class="btn" onclick="trazi()">Traži</button>
     </div>
     <div id="t_info" class="hint" style="margin-top:8px"></div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;cursor:pointer;margin-top:8px">
+      <input type="checkbox" id="t_sa_manom">
+      <b>Prihvatam i komade sa manom</b> — kad pozicija nije vidljiva pa je svejedno
+    </label>
     <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;cursor:pointer;margin-top:10px">
       <input type="checkbox" id="t_nacrtaj" onchange="prebaciEditorTrazi()">
       <b>Komad nije pravougaonik</b> — nacrtaj ga isto kao kod novog restla
@@ -1673,6 +1688,9 @@ async function trazi() {
     objekt_id: document.getElementById('t_objekt').value || null,
     rez: document.getElementById('t_rez').value || 0,
     odstupanje: Number(document.getElementById('t_odstupanje').value) || 0,
+    klasa: document.getElementById('t_klasa').value
+      ? document.getElementById('t_klasa').value.split(',') : null,
+    i_sa_manom: document.getElementById('t_sa_manom').checked,
   };
   const cilj = document.getElementById('rezultat_trazi');
   cilj.innerHTML = '<div class="empty-msg">Tražim…</div>';
@@ -1740,6 +1758,8 @@ const XL_KOLONE = [
   { k: 'artikal',     lbl: 'Naziv',     align: 'left'  },
   { k: 'master',      lbl: 'Master gr.',align: 'left'  },
   { k: 'grupa',       lbl: 'Grupa',     align: 'left'  },
+  { k: 'klasa',       lbl: 'Kl.',       align: 'left'  },
+  { k: 'stanje_k',    lbl: 'Stanje',    align: 'left'  },
   { k: 'debljina',    lbl: 'Deb. cm',   align: 'right' },
   { k: 'sirina',      lbl: 'Širina mm', align: 'right' },
   { k: 'visina',      lbl: 'Visina mm', align: 'right' },
@@ -1787,6 +1807,8 @@ function xlVrijednost(r, k) {
     case 'artikal':    return r.artikal_naziv || r.materijal || '';
     case 'grupa':      return r.prikaz_grupa || r.grupa || '';
     case 'master':     return r.master_grupa || '';
+    case 'klasa':      return r.klasa || '';
+    case 'stanje_k':   return ({ ispravan:'ispravan', sa_manom:'sa manom', za_sitno:'za sitno' })[r.stanje_komada] || 'ispravan';
     case 'debljina':   return r.prikaz_debljina != null ? Number(r.prikaz_debljina) : (r.debljina_cm != null ? Number(r.debljina_cm) : '');
     case 'sirina':     return Math.round(Number(r.dim_a) || 0);
     case 'visina':     return Math.round(Number(r.dim_b) || 0);
@@ -2022,6 +2044,13 @@ function crtajTabelu(opcije) {
     '<td>' + xlVrijednost(r, 'artikal') + '</td>' +
     '<td>' + xlVrijednost(r, 'master') + '</td>' +
     '<td>' + xlVrijednost(r, 'grupa') + '</td>' +
+    '<td>' + (r.klasa ? '<span class="kl kl-' + r.klasa + '" title="' +
+      ({A:'veliki komad',B:'srednji',C:'sitan'}[r.klasa] || '') + '">' + r.klasa + '</span>' : '') + '</td>' +
+    '<td>' + (r.stanje_komada === 'sa_manom'
+        ? '<span class="mana" title="' + ((r.mane||[]).map(m => m.vrsta + (m.opis ? ': ' + m.opis : '')).join('; ') || 'ima manu') + '">⚠ mana</span>'
+        : (r.stanje_komada === 'za_sitno' ? '<span class="hint">za sitno</span>' : '')) +
+      (r.korisna_povrsina && Number(r.korisna_povrsina) < Number(r.povrsina)
+        ? '<div class="hint" style="margin:0">korisno ' + fmt(r.korisna_povrsina) + ' m²</div>' : '') + '</td>' +
     '<td class="num">' + (xlVrijednost(r, 'debljina') || '') + '</td>' +
     '<td class="num">' + xlVrijednost(r, 'sirina') + '</td>' +
     '<td class="num">' + xlVrijednost(r, 'visina') + '</td>' +
@@ -2042,6 +2071,8 @@ function crtajTabelu(opcije) {
         (r.nastao_iz_naloga ? ' · nalog ' + r.nastao_iz_naloga : '') + '</td>') +
     '<td style="white-space:nowrap">' +
       '<button class="btn sec mali" onclick="rodovnik(' + r.id + ')">Rodovnik</button> ' +
+      (DOZVOLE.unos && r.status !== 'potrosen'
+        ? '<button class="btn sec mali" onclick="opisiManu(' + r.id + ',' + (Number(r.povrsina)||0) + ')">⚠ Mana</button> ' : '') +
       '<a class="btn sec mali" style="text-decoration:none;display:inline-block" href="/api/restlovi/' + r.id + '/dxf">DXF</a>' +
       (DOZVOLE.unos && r.status !== 'potrosen' && !o.trazenje
         ? ' <button class="btn sec mali" onclick="otvoriPrenos(' + r.id + ')">Prenos</button>' +
@@ -2088,6 +2119,61 @@ async function vratiSaMasine(id) {
   try {
     await api('/' + id + '/vrati-sa-masine', { method: 'POST' });
     poruka('Restl je vraćen u dostupne.');
+    ucitajListu(); ucitajSume();
+  } catch (e) { poruka(e.message, 'greska'); }
+}
+
+/* Opis mane. Razdvojene su dvije vrste:
+   – mana koja NE mijenja oblik (ogrebotina, mrlja, ton) — samo se bilježi
+   – mana koja smanjuje upotrebljivost (rupa, odlomljen ugao) — unosi se kao manja
+     korisna površina, pa se komad vodi kao manji nego što jeste
+   Rupu okruženu materijalom sa svih strana geometrija zasad ne može opisati, pa je
+   umanjenje korisne površine pošten način da se to ipak uzme u obzir. */
+function opisiManu(id, povrsina) {
+  modal('<h3>Stanje komada i mane</h3>' +
+    '<label class="polje">Stanje<select id="mn_stanje" onchange="mnPrikaz()" style="width:260px">' +
+      '<option value="ispravan">Ispravan — bez mana</option>' +
+      '<option value="sa_manom">Sa manom — upotrebljiv uz napomenu</option>' +
+      '<option value="za_sitno">Samo za sitne komade</option>' +
+    '</select></label>' +
+    '<div id="mn_detalji" style="display:none;margin-top:10px">' +
+      '<div class="red">' +
+      '<label class="polje">Vrsta mane<select id="mn_vrsta" style="width:190px">' +
+        '<option>ogrebotina</option><option>mrlja</option><option>razlika u tonu</option>' +
+        '<option>odlomljen ugao</option><option>napuklina</option><option>rupa</option>' +
+        '<option>neravna ivica</option><option>drugo</option></select></label>' +
+      '<label class="polje">Gdje<input id="mn_gdje" placeholder="npr. gornji desni ugao" style="width:220px"></label>' +
+      '</div>' +
+      '<label class="polje" style="margin-top:8px">Opis<textarea id="mn_opis" rows="2" style="width:100%"></textarea></label>' +
+      '<label class="polje" style="margin-top:8px">Korisna površina (m²) — ako mana smanjuje upotrebljivost' +
+        '<input type="number" step="0.01" id="mn_kor" placeholder="stvarna je ' + fmt(povrsina) + '" style="width:200px"></label>' +
+      '<div class="hint">Ostavi prazno ako je cijeli komad upotrebljiv. Za rupu ili odlomljen ugao ' +
+        'upiši koliko se stvarno može iskoristiti — komad se onda vodi kao manji.</div>' +
+    '</div>' +
+    '<div class="modal-btns"><button class="btn" onclick="sacuvajManu(' + id + ',' + povrsina + ')">✓ Sačuvaj</button>' +
+    '<button class="btn sec" onclick="zatvoriModal()">Odustani</button></div>');
+}
+
+function mnPrikaz() {
+  const v = document.getElementById('mn_stanje').value;
+  document.getElementById('mn_detalji').style.display = v === 'ispravan' ? 'none' : 'block';
+}
+
+async function sacuvajManu(id, povrsina) {
+  const stanje = document.getElementById('mn_stanje').value;
+  const kor = Number(document.getElementById('mn_kor').value) || null;
+  if (kor && kor > povrsina) return poruka('Korisna površina ne može biti veća od stvarne.', 'greska');
+  const mane = stanje === 'ispravan' ? [] : [{
+    vrsta: document.getElementById('mn_vrsta').value,
+    gdje: document.getElementById('mn_gdje').value || null,
+    opis: document.getElementById('mn_opis').value || null,
+  }];
+  try {
+    await api('/' + id + '/mane', { method: 'POST', body: JSON.stringify({
+      mane, stanje_komada: stanje, korisna_povrsina: kor }) });
+    zatvoriModal();
+    poruka(stanje === 'ispravan' ? 'Komad označen kao ispravan.' :
+      'Mana zabilježena' + (kor ? ', korisna površina ' + fmt(kor) + ' m².' : '.'));
     ucitajListu(); ucitajSume();
   } catch (e) { poruka(e.message, 'greska'); }
 }
@@ -3357,7 +3443,7 @@ function uzmiIzPlana(restlId, iPozicije, podaciJson) {
 }
 
 /* ═══════════════ UVOZ ═══════════════ */
-let UVOZ_STAVKE = null, UVOZ_LIST = '', UVOZ_FAJL = '';
+let UVOZ_STAVKE = null, UVOZ_LIST = '', UVOZ_FAJL = '', UVOZ_POSTOJECI = null;
 
 async function probniUvoz() {
   const f = document.getElementById('u_fajl').files[0];
@@ -3374,6 +3460,7 @@ async function probniUvoz() {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Greška pri čitanju.');
     UVOZ_STAVKE = d.stavke; UVOZ_LIST = d.list; UVOZ_FAJL = f.name;
+    UVOZ_POSTOJECI = d.postojeci || null;
 
     const sel = document.getElementById('u_list');
     sel.innerHTML = d.listovi.map(l => '<option' + (l === d.list ? ' selected' : '') + '>' + l + '</option>').join('');
@@ -3511,6 +3598,28 @@ function crtajProbni(d) {
   }
   html += '<div id="u_sporni"></div>';
 
+  // Ako u tom PJ već ima uvezenih restlova, mora se izabrati šta sa njima —
+  // inače se ponovnim uvozom iste tabele komadi udvostruče.
+  const p = UVOZ_POSTOJECI;
+  if (p && p.ukupno) {
+    html += '<div class="msg" style="background:#fff3e0;color:#8a5200;margin-top:14px">' +
+      '<b>U ovom PJ već postoji ' + p.ukupno + ' uvezenih restlova.</b> ' +
+      'Izaberi šta sa njima — inače se ponovnim uvozom iste tabele komadi udvostruče.' +
+      '<div style="display:flex;gap:14px;margin-top:8px;flex-wrap:wrap">' +
+      '<label style="display:flex;gap:6px;align-items:center;cursor:pointer">' +
+        '<input type="radio" name="uvoz_nacin" value="dodaj" checked> ' +
+        '<b>Dodaj na postojeće</b> — zadrži svih ' + p.ukupno + ' i dopiši nove</label>' +
+      '<label style="display:flex;gap:6px;align-items:center;cursor:pointer">' +
+        '<input type="radio" name="uvoz_nacin" value="zamijeni"> ' +
+        '<b>Obriši pa uvezi novo</b> — briše ' + p.netaknuti + ' netaknutih' +
+        (p.dirnuti ? ', zadržava ' + p.dirnuti + ' korišćenih' : '') + '</label>' +
+      '</div>' +
+      (p.dirnuti ? '<div class="hint" style="margin-top:6px">Komadi koji su korišćeni, ' +
+        'prenošeni ili od kojih je nastao drugi restl se NE brišu ni u jednom slučaju — ' +
+        'njihova istorija je stvarna.</div>' : '') +
+      '</div>';
+  }
+
   html += '<div style="display:flex;gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap">' +
     '<button class="btn zelen" onclick="potvrdiUvoz()">✓ Uvezi u bazu</button>' +
     '<button class="btn sec" onclick="document.getElementById(\'u_rezultat\').innerHTML=\'\'">Odustani</button>' +
@@ -3526,11 +3635,24 @@ async function potvrdiUvoz() {
   const objekt = document.getElementById('u_objekt').value;
   if (!objekt) return poruka('Izaberi PJ.', 'greska');
   const koliko = UVOZ_STAVKE.filter(s => !s.preskoci && (s.status !== 'greska' || s.rucno_ispravljen)).length;
-  if (!confirm('Uvozi se ' + koliko + ' redova u izabrani PJ. Nastaviti?')) return;
+  const izbor = document.querySelector('input[name="uvoz_nacin"]:checked');
+  const nacin = izbor ? izbor.value : 'dodaj';
+  const p = UVOZ_POSTOJECI;
+  let pitanje = 'Uvozi se ' + koliko + ' redova u izabrani PJ.';
+  if (nacin === 'zamijeni' && p) {
+    pitanje = 'BRIŠE SE ' + p.netaknuti + ' postojećih restlova' +
+      (p.dirnuti ? ' (' + p.dirnuti + ' korišćenih ostaje)' : '') +
+      ', pa se uvozi ' + koliko + ' novih redova.\n\nOvo se ne može poništiti dugmetom Storno.';
+  }
+  if (!confirm(pitanje + '\n\nNastaviti?')) return;
   try {
     const d = await api('/uvoz/potvrdi', { method: 'POST', body: JSON.stringify({
-      objekt_id: objekt, naziv_fajla: UVOZ_FAJL, list: UVOZ_LIST, stavke: UVOZ_STAVKE }) });
-    poruka('Uvezeno ' + d.komada + ' komada iz ' + d.redova + ' redova (' + fmt(d.povrsina) +
+      objekt_id: objekt, naziv_fajla: UVOZ_FAJL, list: UVOZ_LIST,
+      stavke: UVOZ_STAVKE, nacin }) });
+    poruka((d.nacin === 'zamijeni' && d.obrisano
+             ? 'Obrisano ' + d.obrisano + ' starih' +
+               (d.zadrzanih ? ', zadržano ' + d.zadrzanih + ' korišćenih' : '') + '. ' : '') +
+           'Uvezeno ' + d.komada + ' komada iz ' + d.redova + ' redova (' + fmt(d.povrsina) +
            ' m²). Preskočeno ' + d.preskoceno +
            (d.odbijenih ? ', od toga ' + d.odbijenih + ' zbog šifre' : '') + '. ' + d.napomena);
     if (d.odbijenih) console.log('Odbijeni redovi:', d.odbijeni);
