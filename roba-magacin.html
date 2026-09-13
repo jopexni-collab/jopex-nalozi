@@ -4000,7 +4000,7 @@ function renderLagerRedovi(){
       <td style="padding:1px 5px;text-align:right;">
         ${s.restlovi_m2==null ? '<span style="color:#dfe3e8;" title="Restlovi se vode samo za PJ Aleksandrovac">·</span>'
           : Number(s.restlovi_m2)>0
-          ? `<a href="restlovi.html?roba_id=${s.id}" target="_blank"
+          ? `<a href="restlovi.html?q=${encodeURIComponent(s.sifra)}&roba_id=${s.id}" target="_blank"
                  title="${Number(s.restlovi_kom)||0} ${(Number(s.restlovi_kom)||0)===1?'dostupan restl':'dostupnih restlova'} — klikni da ih vidiš${Number(s.rezervisano_m2)>0?`\n+ ${uPolje(s.rezervisano_m2,2)} rezervisano (broji se u „Cijele")`:''}"
                  style="color:#6b4fa0;text-decoration:none;font-weight:700;border-bottom:1px dotted #6b4fa0;">
                ${uPolje(s.restlovi_m2,2)}
