@@ -88,6 +88,8 @@ td.num{text-align:right;white-space:nowrap;}
 .chip-dostupan{background:#e6f4ea;color:var(--green);}
 .chip-rezervisan{background:#fff3e0;color:#e67e22;}
 .chip-potrosen{background:#eef0f3;color:#8b96a5;}
+.chip-u_proizvodnji{background:#e0e7ff;color:#3730a3;}
+.chip-greska{background:#fce8e6;color:#c0392b;}
 .msg{padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:12.5px;font-weight:600;}
 .msg.ok{background:#e6f4ea;color:var(--green);}
 .msg.err{background:#fce8e6;color:var(--red);}
@@ -199,6 +201,7 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
         <option value="">Dostupni + rezervisani</option>
         <option value="dostupan">Dostupan</option>
         <option value="rezervisan">Rezervisan</option>
+        <option value="u_proizvodnji">U proizvodnji</option>
         <option value="potrosen">Potrošen</option>
       </select></label>
       <button class="btn" onclick="ucitajListu()">Prikaži</button>
@@ -2041,7 +2044,11 @@ function crtajTabelu(opcije) {
       '<button class="btn sec mali" onclick="rodovnik(' + r.id + ')">Rodovnik</button> ' +
       '<a class="btn sec mali" style="text-decoration:none;display:inline-block" href="/api/restlovi/' + r.id + '/dxf">DXF</a>' +
       (DOZVOLE.unos && r.status !== 'potrosen' && !o.trazenje
-        ? ' <button class="btn sec mali" onclick="otvoriPrenos(' + r.id + ')">Prenos</button>' : '') +
+        ? ' <button class="btn sec mali" onclick="otvoriPrenos(' + r.id + ')">Prenos</button>' +
+          (r.status === 'u_proizvodnji'
+            ? ' <button class="btn sec mali" onclick="vratiSaMasine(' + r.id + ')">↩ Sa mašine</button>'
+            : ' <button class="btn sec mali" onclick="naMasinu(' + r.id + ')">▶ Na mašinu</button>')
+        : '') +
     '</td></tr>';
   }).join('');
 
@@ -2064,6 +2071,25 @@ function xlIzvezi() {
   a.href = URL.createObjectURL(blob);
   a.download = 'restlovi.csv';
   a.click();
+}
+
+// Restl fizički odlazi na mašinu — između rezervacije i stvarnog rezanja
+async function naMasinu(id) {
+  try {
+    await api('/' + id + '/u-proizvodnju', { method: 'POST',
+      body: JSON.stringify({ nalog_r_br: NALOG_IZ_URL || null }) });
+    poruka('Restl je označen kao U PROIZVODNJI. Kad se isječe, otvori „Uzmi" da se upiše ostatak.');
+    ucitajListu(); ucitajSume();
+  } catch (e) { poruka(e.message, 'greska'); }
+}
+
+async function vratiSaMasine(id) {
+  if (!confirm('Vratiti restl sa mašine neisječen?')) return;
+  try {
+    await api('/' + id + '/vrati-sa-masine', { method: 'POST' });
+    poruka('Restl je vraćen u dostupne.');
+    ucitajListu(); ucitajSume();
+  } catch (e) { poruka(e.message, 'greska'); }
 }
 
 async function xlGrupniPrenos() {
@@ -2107,8 +2133,11 @@ function modal(html) {
 }
 
 // Uzimanje restla za nalog + unos ostatka (koji postaje NOVI restl)
+let POSLJEDNJE_UZIMANJE = null;
+
 function otvoriKoristi(id, w, h, ctx) {
   const k = ctx || {};
+  POSLJEDNJE_UZIMANJE = { id, w, h, ctx };
   // Kad se dolazi iz plana, poznat je i restl i šta se iz njega reže — pa se sve
   // popunjava samo. Ranije se otvarao prazan prozor iako su podaci već postojali.
   modal(
@@ -2125,13 +2154,20 @@ function otvoriKoristi(id, w, h, ctx) {
     ' Nema ostatka — restl je potrošen do kraja</label>' +
     '<fieldset id="k_ostatak"><legend>Ostatak postaje novi restl</legend>' +
     '<div class="red"><label class="polje">Oblik<select id="k_oblik" onchange="crtezModal()">' +
-    '<option value="pravougaonik">Pravougaonik</option><option value="L">L-oblik</option></select></label>' +
+    '<option value="pravougaonik">Pravougaonik</option><option value="L">L-oblik</option>' +
+    '<option value="nepravilan">Kosi rez / nepravilan…</option></select></label>' +
     '<label class="polje">A<input type="number" id="k_oa" oninput="crtezModal()" style="width:100px"></label>' +
     '<label class="polje">B<input type="number" id="k_ob" oninput="crtezModal()" style="width:100px"></label>' +
     '<label class="polje">C<input type="number" id="k_oc" oninput="crtezModal()" style="width:100px"></label>' +
     '<label class="polje">D<input type="number" id="k_od" oninput="crtezModal()" style="width:100px"></label></div>' +
     '<svg id="k_crtez" class="crtez" width="260" height="170" style="margin-top:10px"></svg>' +
     '<div class="hint">Cijena po m² se automatski nasljeđuje od ovog restla.</div>' +
+    '<div id="k_nepravilan" style="display:none;margin-top:8px">' +
+      '<div class="hint" style="margin-bottom:6px">Za kosi rez i nepravilne oblike ostatak se crta ' +
+      'istim editorom kao novi restl — nacrtaj ga prstom pa ispravi mjere.</div>' +
+      '<button type="button" class="btn sec mali" onclick="nacrtajOstatak()">✏ Nacrtaj oblik ostatka…</button>' +
+      '<span id="k_poligon_info" class="hint" style="margin-left:8px"></span>' +
+    '</div>' +
     '</fieldset>' +
     '<div class="modal-btns">' +
     '<button class="btn" onclick="posaljiKoristi(' + id + ')">Sačuvaj</button>' +
@@ -2140,7 +2176,55 @@ function otvoriKoristi(id, w, h, ctx) {
   crtezModal();
 }
 
+let OSTATAK_POLIGON = null;
+
+// Pun editor oblika za ostatak — isti onaj kojim se crta novi restl, pa ostatak
+// može biti bilo kojeg oblika, ne samo pravougaonik ili L.
+function nacrtajOstatak() {
+  // Stanje editora se čuva zasebno, da se ne pomiješa sa oblikom novog restla
+  STANJA.ostatak = STANJA.ostatak ||
+    { t: [[0,0],[600,0],[600,400],[0,400]], p: [], z: [], r: { dolje:false, lijevo:false },
+      oblik: 'nepravilan', mjere: ['','','',''] };
+  zatvoriModal();
+  document.querySelector('[data-tab="novi"]').click();
+  premjestiEditor('ostatak');
+  poruka2('Nacrtaj oblik ostatka, pa se vrati dugmetom ispod.');
+  const panel = document.getElementById('p-novi');
+  if (panel && !document.getElementById('vrati_na_uzimanje')) {
+    const t = document.createElement('div');
+    t.id = 'vrati_na_uzimanje';
+    t.className = 'msg';
+    t.style.cssText = 'background:#eef4fc;color:#134a85;display:flex;justify-content:space-between;align-items:center;gap:10px';
+    t.innerHTML = '<span>✏ Crtaš <b>oblik ostatka</b> restla. Kad završiš, vrati se.</span>' +
+      '<button class="btn mali" onclick="zavrsiCrtanjeOstatka()">✓ Gotov oblik — nazad na uzimanje</button>';
+    panel.prepend(t);
+  }
+}
+
+function zavrsiCrtanjeOstatka() {
+  OSTATAK_POLIGON = TJEMENA.map(p => [p[0], p[1]]);
+  const t = document.getElementById('vrati_na_uzimanje');
+  if (t) t.remove();
+  document.querySelector('[data-tab="trazi"]').click();
+  if (POSLJEDNJE_UZIMANJE) {
+    otvoriKoristi(POSLJEDNJE_UZIMANJE.id, POSLJEDNJE_UZIMANJE.w, POSLJEDNJE_UZIMANJE.h, POSLJEDNJE_UZIMANJE.ctx);
+    const sel = document.getElementById('k_oblik');
+    if (sel) { sel.value = 'nepravilan'; crtezModal(); }
+  }
+}
+
 function crtezModal() {
+  const oblik = document.getElementById('k_oblik').value;
+  const nep = document.getElementById('k_nepravilan');
+  if (nep) nep.style.display = oblik === 'nepravilan' ? 'block' : 'none';
+  const info = document.getElementById('k_poligon_info');
+  if (info) info.innerHTML = OSTATAK_POLIGON
+    ? '<b style="color:#1f8a4c">oblik nacrtan (' + OSTATAK_POLIGON.length + ' tjemena)</b>'
+    : '';
+  if (oblik === 'nepravilan') {
+    if (OSTATAK_POLIGON) nacrtajTjemena(document.getElementById('k_crtez'), OSTATAK_POLIGON, 260, 170);
+    return;
+  }
   nacrtaj(document.getElementById('k_crtez'), document.getElementById('k_oblik').value,
     document.getElementById('k_oa').value, document.getElementById('k_ob').value,
     document.getElementById('k_oc').value, document.getElementById('k_od').value, 260, 170);
@@ -2148,6 +2232,10 @@ function crtezModal() {
 
 async function posaljiKoristi(id) {
   const kraj = document.getElementById('k_kraj').checked;
+  if (!kraj && document.getElementById('k_oblik').value === 'nepravilan' && !OSTATAK_POLIGON) {
+    poruka('Nacrtaj oblik ostatka ili izaberi pravougaonik/L.', 'greska');
+    return;
+  }
   const komEl = document.getElementById('k_kom');
   const komada = komEl ? Math.max(1, Number(komEl.value) || 1) : 1;
   const telo = {
@@ -2156,17 +2244,20 @@ async function posaljiKoristi(id) {
     uzeto_b: document.getElementById('k_b').value || null,
     komada,
     potrosen_do_kraja: kraj,
-    ostatak: kraj ? null : {
-      oblik: document.getElementById('k_oblik').value,
-      dim_a: document.getElementById('k_oa').value,
-      dim_b: document.getElementById('k_ob').value,
-      dim_c: document.getElementById('k_oc').value,
-      dim_d: document.getElementById('k_od').value
-    }
+    ostatak: kraj ? null : (document.getElementById('k_oblik').value === 'nepravilan'
+      ? { oblik: 'poligon', poligon: OSTATAK_POLIGON }
+      : {
+          oblik: document.getElementById('k_oblik').value,
+          dim_a: document.getElementById('k_oa').value,
+          dim_b: document.getElementById('k_ob').value,
+          dim_c: document.getElementById('k_oc').value,
+          dim_d: document.getElementById('k_od').value
+        })
   };
   try {
     const d = await api('/' + id + '/koristi', { method: 'POST', body: JSON.stringify(telo) });
     zatvoriModal();
+    OSTATAK_POLIGON = null;
     poruka((komada > 1 ? komada + ' komada uzeto. ' : '') +
            (d.novi_restl_id ? 'Od ostatka je napravljen novi restl.' : 'Restl je potrošen.') +
            porukaLagera(d.lager), lagerJeProblem(d.lager) ? 'greska' : 'uspjeh');
@@ -2595,6 +2686,7 @@ async function planIzracunaj() {
     };
 
     const s = d.sazetak;
+    window.__planTrebaTabla = s.treba_tabla || 0;
     let html =
       '<div class="kartice">' +
       '<div class="kartica"><div class="v">' + s.ukupno_komada + '</div><div class="n">komada u nalogu</div></div>' +
@@ -2661,6 +2753,10 @@ async function planIzracunaj() {
         (z.nadjeno_po && z.nadjeno_po !== 'artikal'
           ? '<div class="hint" style="margin:0 0 3px"><b style="color:#e67e22">nađeno po: ' +
             z.nadjeno_po + '</b> — pozicija nije vezana za artikal, izaberi materijal lijevo</div>' : '') +
+        // Kad komadi ostaju nepokriveni, tu je i dugme za trebovanje cijele table
+        (z.treba_tabla && NALOG_IZ_URL
+          ? '<div style="margin-bottom:4px"><button class="btn mali" onclick="trebujTablu(' + i + ',' +
+            z.treba_tabla + ')">📋 Trebuj tablu za ' + z.treba_tabla + ' kom</button></div>' : '') +
         (z.restlovi.length
           ? z.restlovi.map(r =>
               '<div style="display:flex;gap:6px;align-items:center;margin-bottom:3px' +
@@ -2724,11 +2820,19 @@ async function planIzracunaj() {
         '(vidi „Usaglašavanje" u tabu Uvoz), ili tražena debljina ne postoji ni na jednom restlu.</div>';
     } else if (s.treba_tabla) {
       html += '<div class="msg" style="background:#fff3e0;color:#8a5200;margin-top:12px">' +
-        '<b>' + s.treba_tabla + ' komada</b> nema odakle iz restlova — za njih treba cijela tabla.</div>';
+        '<b>' + s.treba_tabla + ' komada</b> nema odakle iz restlova — za njih treba cijela tabla.<br>' +
+        'Ako nalog ne ide iz restlova, <b>vrati uzete komade</b> da ne ostanu zaključani ' +
+        'za nalog koji se neće izrezati.' +
+        (NALOG_IZ_URL ? ' <button class="btn sec mali" onclick="vratiSveZaNalog()">↩ Vrati sve uzeto za ovaj nalog</button>' : '') +
+        '</div>';
     } else {
-      html += '<div class="msg ok" style="margin-top:12px">Cijeli nalog se može izrezati iz postojećih restlova.</div>';
+      html += '<div class="msg ok" style="margin-top:12px">Cijeli nalog se može izrezati iz postojećih restlova.' +
+        (NALOG_IZ_URL ? ' <button class="btn sec mali" onclick="vratiSveZaNalog()">↩ Vrati sve uzeto</button>' : '') +
+        '</div>';
     }
-    cilj.innerHTML = html;
+    cilj.innerHTML = html + '<div id="materijal_naloga"></div><div id="bilans_naloga"></div>';
+    prikaziMaterijalNaloga();
+    prikaziBilans();
   } catch (e) {
     cilj.innerHTML = '<div class="msg err">Plan nije izračunat: ' + e.message + '</div>';
   }
@@ -3012,11 +3116,229 @@ function prikaziAlternative(iPozicije, altJson) {
     '<div class="modal-btns"><button class="btn sec" onclick="zatvoriModal()">Zatvori</button></div>');
 }
 
+// Vraćanje svih komada uzetih za nalog. Potrebno kad se ispostavi da nema dovoljno
+// materijala — inače ostanu rezervisani za nalog koji se neće izrezati.
+/* TREBOVANJE CIJELE TABLE
+   Kad komad nema odakle iz restlova, treba cijela tabla sa lagera. Artikal se bira
+   istim biračem kao i materijal pozicije, a potrebna površina se predlaže iz mjera
+   komada i količine — operater je može ispraviti. */
+let TREBOVANJE = null;
+
+function trebujTablu(iPozicije, koliko) {
+  const p = PLAN_POZICIJE[iPozicije] || {};
+  const povKomada = ((Number(p.sirina) || 0) * (Number(p.visina) || 0)) / 1e6;
+  TREBOVANJE = { i: iPozicije, koliko };
+
+  const lista = ARTIKLI.filter(a =>
+    (!p.roba_id || String(a.id) === String(p.roba_id)) &&
+    (!p.debljina_cm || Number(a.debljina_cm) === Number(p.debljina_cm)));
+
+  modal('<h3>Trebovanje cijele table</h3>' +
+    '<div class="msg" style="background:#eef4fc;color:#134a85;margin-bottom:10px">' +
+      'Pozicija <b>' + (p.naziv || '') + '</b> · ' + Math.round(p.sirina) + '×' + Math.round(p.visina) +
+      ' mm · <b>' + koliko + ' kom</b> nema odakle iz restlova.</div>' +
+    '<div class="red">' +
+    '<label class="polje">Artikal sa lagera<select id="tb_roba" style="width:320px">' +
+      (lista.length ? '' : '<option value="">— nema artikla po filteru pozicije —</option>') +
+      (lista.length ? lista : ARTIKLI).map(a => '<option value="' + a.id + '"' +
+        (String(a.id) === String(p.roba_id) ? ' selected' : '') + '>' +
+        (a.sifra ? a.sifra + ' — ' : '') + a.naziv +
+        (a.debljina_cm ? ' · ' + fmt(a.debljina_cm) + ' cm' : '') + '</option>').join('') +
+      '</select></label>' +
+    '<label class="polje">PJ<select id="tb_objekt" style="width:180px">' +
+      OBJEKTI.map(o => '<option value="' + o.id + '">' + o.naziv + '</option>').join('') + '</select></label>' +
+    '</div><div class="red" style="margin-top:8px">' +
+    '<label class="polje">Tabla širina (mm)<input type="number" id="tb_a" value="3200" style="width:130px" oninput="tbRacunaj()"></label>' +
+    '<label class="polje">Tabla visina (mm)<input type="number" id="tb_b" value="1600" style="width:130px" oninput="tbRacunaj()"></label>' +
+    '<label class="polje">Površina (m²)<input type="number" step="0.01" id="tb_pov" style="width:120px"></label>' +
+    '</div>' +
+    '<div id="tb_info" class="hint" style="margin-top:6px"></div>' +
+    '<label class="polje" style="margin-top:8px">Napomena<input id="tb_nap" style="width:100%"></label>' +
+    '<div class="modal-btns">' +
+    '<button class="btn zelen" onclick="posaljiTrebovanje()">✓ Trebuj tablu</button>' +
+    '<button class="btn sec" onclick="zatvoriModal()">Odustani</button></div>');
+  tbRacunaj();
+  const pov = document.getElementById('tb_pov');
+  if (pov && !pov.value) pov.value = (povKomada * koliko).toFixed(2);
+}
+
+function tbRacunaj() {
+  if (!document.getElementById('tb_info')) return;   // dotrebovanje nema taj prikaz
+  const a = Number(document.getElementById('tb_a')?.value) || 0;
+  const b = Number(document.getElementById('tb_b')?.value) || 0;
+  const el = document.getElementById('tb_info');
+  if (!el) return;
+  const p = PLAN_POZICIJE[TREBOVANJE.i] || {};
+  const povTable = (a * b) / 1e6;
+  const povKomada = ((Number(p.sirina) || 0) * (Number(p.visina) || 0)) / 1e6;
+  const staje = a && b && p.sirina && p.visina
+    ? Math.floor(a / p.sirina) * Math.floor(b / p.visina) : 0;
+  el.innerHTML = 'Tabla ' + fmt(povTable) + ' m² · iz nje izlazi oko <b>' + staje + ' komada</b> ' +
+    (staje >= TREBOVANJE.koliko
+      ? '<span style="color:#1f8a4c">— dovoljno za svih ' + TREBOVANJE.koliko + '</span>'
+      : '<span style="color:#c0392b">— trebaće ' + Math.ceil(TREBOVANJE.koliko / (staje || 1)) + ' tabli</span>') +
+    ' · potrebno ' + fmt(povKomada * TREBOVANJE.koliko) + ' m²';
+}
+
+async function posaljiTrebovanje() {
+  const robaId = document.getElementById('tb_roba').value;
+  if (!robaId) return poruka('Izaberi artikal sa lagera.', 'greska');
+  try {
+    const d = await api('/nalog/' + NALOG_IZ_URL + '/uzmi', { method: 'POST', body: JSON.stringify({
+      vrsta: 'tabla',
+      roba_id: Number(robaId),
+      objekt_id: Number(document.getElementById('tb_objekt').value) || null,
+      povrsina: Number(document.getElementById('tb_pov').value) || 0,
+      dim_a: Number(document.getElementById('tb_a').value) || null,
+      dim_b: Number(document.getElementById('tb_b').value) || null,
+      napomena: document.getElementById('tb_nap').value || null,
+    }) });
+    zatvoriModal();
+    poruka('Tabla trebovana za nalog #' + NALOG_IZ_URL +
+           (d.artikal ? ': ' + d.artikal.naziv : '') + '.' +
+           porukaLagera(d.lager) + (d.upozorenje ? ' ' + d.upozorenje : ''),
+           (d.upozorenje || lagerJeProblem(d.lager)) ? 'greska' : 'uspjeh');
+    prikaziMaterijalNaloga(); prikaziBilans();
+  } catch (e) { poruka(e.message, 'greska'); }
+}
+
+/* Pregled svega što je uzeto za nalog — restlovi i table zajedno */
+/* BILANS — je li trebovano dovoljno.
+   Iz same liste uzetog se to ne vidi: tamo stoji koliko je uzeto, ali ne i koliko
+   nalog traži. Poredi se po ARTIKLU, jer se granit i kvarc ne mogu sabirati. */
+async function prikaziBilans() {
+  const cilj = document.getElementById('bilans_naloga');
+  if (!cilj || !NALOG_IZ_URL) return;
+  try {
+    const d = await api('/nalog/' + NALOG_IZ_URL + '/bilans', { method: 'POST',
+      body: JSON.stringify({ pozicije: PLAN_POZICIJE, rez: 5 }) });
+    if (!d.stavke.length) { cilj.innerHTML = ''; return; }
+    const s = d.sazetak;
+
+    const boja = { fali: '#c0392b', dovoljno: '#1f8a4c', visak: '#e67e22' };
+    const rijec = { fali: 'FALI', dovoljno: 'dovoljno', visak: 'višak' };
+
+    cilj.innerHTML =
+      '<h3 style="margin-top:16px">Bilans materijala — nalog #' + NALOG_IZ_URL + '</h3>' +
+      (s.artikala_fali
+        ? '<div class="msg err"><b>Nije trebovano dovoljno.</b> ' + s.artikala_fali +
+          ' artikal(a) ne pokriva potrebu — ispod je koliko tačno fali.</div>'
+        : '<div class="msg ok"><b>Trebovano je dovoljno za cijeli nalog.</b>' +
+          (s.artikala_visak ? ' Kod ' + s.artikala_visak + ' artikala ima osjetnog viška — ' +
+            'provjeri da nije trebovano dvaput.' : '') + '</div>') +
+      '<div class="xl-wrap"><table class="xl"><thead><tr><th>Artikal</th>' +
+      '<th style="text-align:right">Treba m²</th><th style="text-align:right">Kom</th>' +
+      '<th style="text-align:right">Iz restlova</th><th style="text-align:right">Iz tabli</th>' +
+      '<th style="text-align:right">Uzeto ukupno</th><th style="text-align:right">Razlika</th>' +
+      '<th>Stanje</th><th></th></tr></thead><tbody>' +
+      d.stavke.map(x =>
+        '<tr style="background:' + (x.stanje === 'fali' ? '#fdf0ef' : (x.stanje === 'visak' ? '#fff8f0' : '#eefaf1')) + '">' +
+        '<td><b>' + x.artikal + '</b>' + (x.sifra ? ' <span class="hint">' + x.sifra + '</span>' : '') + '</td>' +
+        '<td class="num">' + fmt(x.treba_m2) + '</td>' +
+        '<td class="num">' + x.treba_komada + '</td>' +
+        '<td class="num">' + fmt(x.iz_restlova_m2) + (x.restlova ? ' <span class="hint">(' + x.restlova + ')</span>' : '') + '</td>' +
+        '<td class="num">' + fmt(x.iz_tabli_m2) + (x.tabli ? ' <span class="hint">(' + x.tabli + ')</span>' : '') + '</td>' +
+        '<td class="num"><b>' + fmt(x.uzeto_m2) + '</b></td>' +
+        '<td class="num" style="color:' + boja[x.stanje] + ';font-weight:700">' +
+          (x.razlika_m2 > 0 ? '+' : '') + fmt(x.razlika_m2) + '</td>' +
+        '<td><b style="color:' + boja[x.stanje] + '">' + rijec[x.stanje] + '</b></td>' +
+        '<td>' + (x.stanje === 'fali' && x.roba_id
+          ? '<button class="btn mali" onclick="dotrebujZaArtikal(' + x.roba_id + ',' +
+            Math.abs(x.razlika_m2) + ')">Dotrebuj ' + fmt(Math.abs(x.razlika_m2)) + ' m²</button>'
+          : '') + '</td></tr>').join('') +
+      '<tr style="background:#eef4fc;font-weight:700"><td>UKUPNO</td>' +
+      '<td class="num">' + fmt(s.treba_m2) + '</td><td></td><td></td><td></td>' +
+      '<td class="num">' + fmt(s.uzeto_m2) + '</td>' +
+      '<td class="num">' + (s.uzeto_m2 - s.treba_m2 > 0 ? '+' : '') + fmt(s.uzeto_m2 - s.treba_m2) + '</td>' +
+      '<td colspan="2"></td></tr></tbody></table></div>' +
+      '<div class="hint">Potrebna površina uključuje rez od 5 mm po komadu. ' +
+      'Poređenje ide po artiklu — različiti materijali se ne sabiraju.</div>';
+  } catch (e) { cilj.innerHTML = '<div class="msg err">Bilans: ' + e.message + '</div>'; }
+}
+
+// Dotrebovanje tačno onoliko koliko fali
+function dotrebujZaArtikal(robaId, faliM2) {
+  const i = PLAN_POZICIJE.findIndex(p => String(p.roba_id) === String(robaId));
+  TREBOVANJE = { i: i >= 0 ? i : 0, koliko: 1 };
+  const a = ARTIKLI.find(x => String(x.id) === String(robaId));
+  modal('<h3>Dotrebovanje — fali ' + fmt(faliM2) + ' m²</h3>' +
+    '<div class="msg" style="background:#fdf0ef;color:#c0392b;margin-bottom:10px">' +
+    'Za <b>' + (a ? a.naziv : 'artikal') + '</b> nedostaje <b>' + fmt(faliM2) + ' m²</b>.</div>' +
+    '<div class="red">' +
+    '<label class="polje">PJ<select id="tb_objekt" style="width:180px">' +
+      OBJEKTI.map(o => '<option value="' + o.id + '">' + o.naziv + '</option>').join('') + '</select></label>' +
+    '<label class="polje">Tabla širina<input type="number" id="tb_a" value="3200" style="width:120px"></label>' +
+    '<label class="polje">Tabla visina<input type="number" id="tb_b" value="1600" style="width:120px"></label>' +
+    '<label class="polje">Površina (m²)<input type="number" step="0.01" id="tb_pov" value="' +
+      (Math.ceil(faliM2 * 100) / 100) + '" style="width:120px"></label></div>' +
+    '<input type="hidden" id="tb_roba" value="' + robaId + '">' +
+    '<label class="polje" style="margin-top:8px">Napomena<input id="tb_nap" ' +
+      'value="Dotrebovano jer je falilo ' + fmt(faliM2) + ' m²" style="width:100%"></label>' +
+    '<div class="modal-btns"><button class="btn zelen" onclick="posaljiTrebovanje()">✓ Trebuj</button>' +
+    '<button class="btn sec" onclick="zatvoriModal()">Odustani</button></div>');
+}
+
+async function prikaziMaterijalNaloga() {
+  if (!NALOG_IZ_URL) return;
+  const cilj = document.getElementById('materijal_naloga');
+  if (!cilj) return;
+  try {
+    const d = await api('/nalog/' + NALOG_IZ_URL + '/materijal');
+    if (!d.stavke.length) { cilj.innerHTML = ''; return; }
+    cilj.innerHTML =
+      '<h3 style="margin-top:16px">Materijal uzet za nalog #' + NALOG_IZ_URL + '</h3>' +
+      '<div class="xl-wrap"><table class="xl"><thead><tr><th>Vrsta</th><th>Oznaka / artikal</th>' +
+      '<th style="text-align:right">Mjere</th><th style="text-align:right">m²</th>' +
+      '<th>Ko i kada</th><th></th></tr></thead><tbody>' +
+      d.stavke.map(x => '<tr><td>' + (x.vrsta === 'restl'
+          ? '<span class="chip chip-rezervisan">restl</span>'
+          : '<span class="chip" style="background:#e0e7ff;color:#3730a3">tabla</span>') + '</td>' +
+        '<td><b>' + (x.restl_oznaka || x.artikal_naziv || '') + '</b>' +
+          (x.artikal_sifra ? ' <span class="hint">' + x.artikal_sifra + '</span>' : '') + '</td>' +
+        '<td class="num">' + (x.dim_a ? Math.round(x.dim_a) + '×' + Math.round(x.dim_b) : '') + '</td>' +
+        '<td class="num">' + fmt(x.povrsina) + '</td>' +
+        '<td class="hint">' + (x.uzeo_ime || '') + ', ' + new Date(x.uzeto).toLocaleString('bs-BA') + '</td>' +
+        '<td><button class="btn sec mali" onclick="stornirajMaterijal(' + x.id + ')">Storno</button></td>' +
+        '</tr>').join('') +
+      '<tr style="background:#eef4fc;font-weight:700"><td colspan="3">UKUPNO · ' +
+        d.restlova + ' restl(ova), ' + d.tabli + ' tabl(i)</td>' +
+        '<td class="num">' + fmt(d.ukupno_m2) + '</td><td colspan="2"></td></tr>' +
+      '</tbody></table></div>';
+  } catch (e) { cilj.innerHTML = '<div class="msg err">' + e.message + '</div>'; }
+}
+
+async function stornirajMaterijal(id) {
+  if (!confirm('Stornirati ovu stavku? Restl se vraća u opticaj.')) return;
+  try {
+    await api('/nalog-materijal/' + id, { method: 'DELETE' });
+    poruka('Stornirano.');
+    prikaziMaterijalNaloga(); prikaziBilans();
+  } catch (e) { poruka(e.message, 'greska'); }
+}
+
+async function vratiSveZaNalog() {
+  if (!NALOG_IZ_URL) return;
+  if (!confirm('Vratiti u opticaj SVE restlove uzete za nalog #' + NALOG_IZ_URL + '?\n' +
+               'Komadi koji su već isječeni se ne vraćaju.')) return;
+  try {
+    const d = await api('/nalog/' + NALOG_IZ_URL + '/vrati-sve', { method: 'DELETE' });
+    poruka(d.poruka + (d.oznake && d.oznake.length ? ' (' + d.oznake.join(', ') + ')' : ''),
+           d.preskoceni && d.preskoceni.length ? 'greska' : 'uspjeh');
+    planIzracunaj(); ucitajSume();
+  } catch (e) { poruka(e.message, 'greska'); }
+}
+
 function uzmiIzPlana(restlId, iPozicije, podaciJson) {
   let d = {};
   try { d = JSON.parse(podaciJson); } catch (e) {}
   const p = PLAN_POZICIJE[iPozicije] || {};
   const sir = Number(p.sirina) || 0, vis = Number(p.visina) || 0;
+
+  // Ako plan ne pokriva cijeli nalog, operater to mora znati PRIJE nego što
+  // rezerviše komad — inače uzme nekoliko pa tek onda vidi da fali.
+  const nepokriveno = (window.__planTrebaTabla || 0);
+  if (nepokriveno && !confirm('Pažnja: ' + nepokriveno + ' komada iz ovog naloga nema u restlovima ' +
+      'i ide na cijelu tablu.\n\nSvejedno uzeti ovaj restl?')) return;
 
   otvoriKoristi(restlId, sir, vis, {
     oznaka: d.oznaka,
