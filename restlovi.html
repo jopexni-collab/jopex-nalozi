@@ -152,6 +152,7 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
     <button type="button" class="glavni-tab-btn active" data-tab="trazi">🔍 Traži komad</button>
     <button type="button" class="glavni-tab-btn" data-tab="lista">🧩 Restlovi</button>
     <button type="button" class="glavni-tab-btn" data-tab="novi" id="tabNovi">➕ Novi restl</button>
+    <button type="button" class="glavni-tab-btn" data-tab="odobrenja" id="tabOdobrenja" style="display:none">✓ Odobrenja</button>
     <button type="button" class="glavni-tab-btn" data-tab="uvoz" id="tabUvoz" style="display:none">📥 Uvoz</button>
   </div>
 
@@ -269,6 +270,14 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
     </fieldset>
 
     <button class="btn zelen" onclick="sacuvajNovi()">✓ Sačuvaj restl</button>
+  </div></div>
+
+  <div class="view" id="p-odobrenja"><div class="panel">
+    <div class="hint" style="margin-bottom:10px">
+      Trebovanje i povrat se izvršavaju <b>odmah</b> — mašina ne staje dok neko ne odgovori.
+      Odobrenje je naknadno: ovdje se potvrđuje ili osporava ono što je već urađeno.
+    </div>
+    <div id="odobrenja_sadrzaj"></div>
   </div></div>
 
   <!-- ══════════════ UVOZ IZ XLSX ══════════════ -->
@@ -472,6 +481,7 @@ document.querySelectorAll('.glavni-tab-btn').forEach(t => t.onclick = () => {
   document.getElementById('p-' + t.dataset.tab).classList.add('active');
   if (t.dataset.tab === 'lista') ucitajListu();
   if (t.dataset.tab === 'uvoz') { predloziPJ(); ucitajSerije(); }
+  if (t.dataset.tab === 'odobrenja') ucitajOdobrenja();
   if (t.dataset.tab === 'novi') premjestiEditor('novi');
   if (t.dataset.tab === 'trazi') {
     if (!ARTIKLI.length) ucitajFiltere();
@@ -3448,8 +3458,10 @@ async function prikaziMaterijalNaloga() {
       '<h3 style="margin-top:16px">Materijal uzet za nalog #' + NALOG_IZ_URL + '</h3>' +
       '<div class="xl-wrap"><table class="xl"><thead><tr><th>Vrsta</th><th>Oznaka / artikal</th>' +
       '<th style="text-align:right">Mjere</th><th style="text-align:right">m²</th>' +
-      '<th>Ko i kada</th><th></th></tr></thead><tbody>' +
-      d.stavke.map(x => '<tr><td>' + (x.vrsta === 'restl'
+      '<th>Ko i kada</th><th>Odobrenje</th><th></th></tr></thead><tbody>' +
+      d.stavke.map(x => '<tr style="background:' +
+          (x.odobreno === 'ceka' ? '#fff8f0' : (x.odobreno === 'osporeno' ? '#fdf0ef' : '')) + '">' +
+        '<td>' + (x.vrsta === 'restl'
           ? '<span class="chip chip-rezervisan">restl</span>'
           : '<span class="chip" style="background:#e0e7ff;color:#3730a3">tabla</span>') + '</td>' +
         '<td><b>' + (x.restl_oznaka || x.artikal_naziv || '') + '</b>' +
@@ -3457,11 +3469,21 @@ async function prikaziMaterijalNaloga() {
         '<td class="num">' + (x.dim_a ? Math.round(x.dim_a) + '×' + Math.round(x.dim_b) : '') + '</td>' +
         '<td class="num">' + fmt(x.povrsina) + '</td>' +
         '<td class="hint">' + (x.uzeo_ime || '') + ', ' + new Date(x.uzeto).toLocaleString('bs-BA') + '</td>' +
-        '<td><button class="btn sec mali" onclick="stornirajMaterijal(' + x.id + ')">Storno</button></td>' +
-        '</tr>').join('') +
+        '<td>' + (x.odobreno === 'ceka'
+            ? '<span class="chip" style="background:#fff3e0;color:#8a5200">⏳ čeka odobrenje</span>'
+            : (x.odobreno === 'osporeno'
+              ? '<span class="chip chip-greska" title="' + (x.odobrenje_napomena || '') + '">✗ osporeno</span>'
+              : '<span class="chip chip-dostupan">✓ odobreno</span>' +
+                (x.odobrio_ime ? '<div class="hint" style="margin:0">' + x.odobrio_ime + '</div>' : ''))) + '</td>' +
+        '<td style="white-space:nowrap">' +
+          '<button class="btn sec mali" onclick="stornirajMaterijal(' + x.id + ')">Storno</button>' +
+          (x.vrsta === 'tabla' && x.odobreno === 'odobreno'
+            ? ' <a class="btn sec mali" style="text-decoration:none;display:inline-block" ' +
+              'href="/api/restlovi/izdatnica/' + x.id + '" target="_blank">📄 Izdatnica</a>' : '') +
+        '</td></tr>').join('') +
       '<tr style="background:#eef4fc;font-weight:700"><td colspan="3">UKUPNO · ' +
         d.restlova + ' restl(ova), ' + d.tabli + ' tabl(i)</td>' +
-        '<td class="num">' + fmt(d.ukupno_m2) + '</td><td colspan="2"></td></tr>' +
+        '<td class="num">' + fmt(d.ukupno_m2) + '</td><td colspan="3"></td></tr>' +
       '</tbody></table></div>';
   } catch (e) { cilj.innerHTML = '<div class="msg err">' + e.message + '</div>'; }
 }
@@ -3510,6 +3532,190 @@ function uzmiIzPlana(restlId, iPozicije, podaciJson) {
           (d.procenat ? ' · iskorišćeno ' + fmt(d.procenat) + '%' : '') +
           (d.ostatak ? ' · ostatak ' + fmt(d.ostatak) + ' m²' : ''),
   });
+}
+
+/* ═══════════════ ODOBRENJA ═══════════════ */
+let SMIJEM_ODOBRITI = false;
+
+/* Traka na vrhu.
+   Odobravač vidi poziv na radnju; onaj ko je trebovao vidi da SE ČEKA na njega —
+   inače misli da je gotovo i ode rezati tablu koja još nije odobrena. */
+async function javiOdobrenja() {
+  try {
+    const d = await api('/odobrenja');
+    if (!d.ukupno) return;
+
+    if (!d.smijem) {
+      // Nije odobravač — pokazuje se samo ono što je on sam trebovao
+      const moje = (d.trebovanja || []).filter(x => x.uzeo_ime === (JA && JA.ime_prezime));
+      if (!moje.length) return;
+      const el0 = document.getElementById('poruka');
+      if (el0) el0.insertAdjacentHTML('beforeend',
+        '<div class="msg" style="background:#fff3e0;color:#8a5200">' +
+        '⏳ <b>' + moje.length + ' tvoj' + (moje.length === 1 ? 'e trebovanje čeka' : 'a trebovanja čekaju') +
+        ' odobrenje.</b> Materijal je već izdat — ovo je samo naknadna potvrda. ' +
+        'Odobravaju: ugovaranje i maloprodaja.</div>');
+      return;
+    const el = document.getElementById('poruka');
+    if (!el) return;
+    el.insertAdjacentHTML('beforeend',
+      '<div class="msg" style="background:#fff3e0;color:#8a5200;display:flex;' +
+      'justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">' +
+      '<span>⏳ <b>' + d.ukupno + '</b> stavki čeka tvoje odobrenje' +
+      (d.trebovanja.length ? ' · ' + d.trebovanja.length + ' trebovanja' : '') +
+      (d.povrati.length ? ' · ' + d.povrati.length + ' povrata' : '') + '</span>' +
+      '<button class="btn mali" onclick="document.querySelector(\'[data-tab=odobrenja]\').click()">Pregledaj</button></div>');
+    }
+  } catch (e) { /* bez trake se i dalje radi */ }
+}
+
+async function ucitajOdobrenja() {
+  const cilj = document.getElementById('odobrenja_sadrzaj');
+  cilj.innerHTML = '<div class="empty-msg">Učitavam…</div>';
+  try {
+    const d = await api('/odobrenja');
+    SMIJEM_ODOBRITI = !!d.smijem;
+    if (!d.ukupno) {
+      cilj.innerHTML = '<div class="msg ok">Nema ničega na čekanju — sve je odobreno.</div>';
+      return;
+    }
+    let html = '';
+
+    if (d.trebovanja.length) {
+      html += '<h3>Trebovanja materijala (' + d.trebovanja.length + ')</h3>' +
+        '<div class="xl-wrap"><table class="xl"><thead><tr><th>Nalog</th><th>Vrsta</th>' +
+        '<th>Artikal / restl</th><th style="text-align:right">Mjere</th>' +
+        '<th style="text-align:right">m²</th><th>Ko i kada</th><th></th></tr></thead><tbody>' +
+        d.trebovanja.map(x => '<tr>' +
+          '<td><b>#' + x.nalog_r_br + '</b>' + (x.pozicija_naziv ? '<div class="hint">' + x.pozicija_naziv + '</div>' : '') + '</td>' +
+          '<td>' + (x.vrsta === 'tabla'
+            ? '<span class="chip" style="background:#e0e7ff;color:#3730a3">cijela tabla</span>'
+            : '<span class="chip chip-rezervisan">restl</span>') + '</td>' +
+          '<td>' + (x.restl_oznaka ? '<b>' + x.restl_oznaka + '</b> — ' : '') + (x.artikal || '') +
+            (x.sifra ? ' <span class="hint">' + x.sifra + '</span>' : '') + '</td>' +
+          '<td class="num">' + (x.dim_a ? Math.round(x.dim_a) + '×' + Math.round(x.dim_b) : '') + '</td>' +
+          '<td class="num"><b>' + fmt(x.povrsina) + '</b></td>' +
+          '<td class="hint">' + (x.uzeo_ime || '') + '<br>' + new Date(x.uzeto).toLocaleString('bs-BA') + '</td>' +
+          '<td style="white-space:nowrap">' + (SMIJEM_ODOBRITI
+            ? '<button class="btn mali" onclick="odluciMaterijal(' + x.id + ',\'odobreno\')">✓ Odobri</button> ' +
+              '<button class="btn sec mali" onclick="odluciMaterijal(' + x.id + ',\'osporeno\')">✗ Ospori</button><br>' +
+              '<button class="btn sec mali" style="margin-top:3px" onclick="vratiTablu(' + x.id + ',' +
+                (Number(x.povrsina) || 0) + ',' + JSON.stringify(JSON.stringify(x.vrsta)) + ')">↩ Vrati ' +
+                (x.vrsta === 'tabla' ? 'tablu' : 'restl') + '</button>'
+            : '<span class="hint">čeka odobrenje</span>') + '</td></tr>').join('') +
+        '</tbody></table></div>';
+    }
+
+    if (d.povrati.length) {
+      html += '<h3 style="margin-top:16px">Povrati restlova na provjeru (' + d.povrati.length + ')</h3>' +
+        '<div class="hint" style="margin-bottom:6px">Restl je već u opticaju — provjera hvata pogrešnu mjeru ili komad kojeg nema.</div>' +
+        '<div class="xl-wrap"><table class="xl"><thead><tr><th>Oznaka</th><th>Materijal</th>' +
+        '<th style="text-align:right">Mjere</th><th style="text-align:right">m²</th>' +
+        '<th>Nalog</th><th>Ko i kada</th><th></th></tr></thead><tbody>' +
+        d.povrati.map(x => '<tr>' +
+          '<td><b>' + x.oznaka + '</b>' + (x.foto_url ? ' <a href="' + x.foto_url + '" target="_blank">📷</a>' : '') + '</td>' +
+          '<td>' + (x.artikal || x.materijal || '') + '</td>' +
+          '<td class="num">' + Math.round(x.dim_a) + '×' + Math.round(x.dim_b) + '</td>' +
+          '<td class="num">' + fmt(x.povrsina) + '</td>' +
+          '<td>' + (x.nastao_iz_naloga || '') + '</td>' +
+          '<td class="hint">' + (x.kreirao_ime || '') + '<br>' + new Date(x.kreirano).toLocaleString('bs-BA') + '</td>' +
+          '<td style="white-space:nowrap">' + (SMIJEM_ODOBRITI
+            ? '<button class="btn mali" onclick="odluciPovrat(' + x.id + ',\'potvrdjen\',' +
+                (Number(x.dim_a)||0) + ',' + (Number(x.dim_b)||0) + ')">✓ Potvrdi</button> ' +
+              '<button class="btn sec mali" onclick="odluciPovrat(' + x.id + ',\'odbijen\')">✗ Odbij</button>'
+            : '<span class="hint">čeka provjeru</span>') + '</td></tr>').join('') +
+        '</tbody></table></div>';
+    }
+    cilj.innerHTML = html;
+  } catch (e) { cilj.innerHTML = '<div class="msg err">' + e.message + '</div>'; }
+}
+
+async function odluciMaterijal(id, odluka) {
+  let nap = '';
+  if (odluka === 'osporeno') {
+    nap = prompt('Razlog osporavanja:') || '';
+    if (!nap.trim()) return;
+  }
+  try {
+    const d = await api('/nalog-materijal/' + id + '/odobri', { method: 'POST',
+      body: JSON.stringify({ odluka, napomena: nap }) });
+    poruka(odluka === 'odobreno' ? 'Trebovanje odobreno.' : 'Trebovanje osporeno. ' + (d.napomena || ''),
+           odluka === 'odobreno' ? 'uspjeh' : 'greska');
+    ucitajOdobrenja();
+  } catch (e) { poruka(e.message, 'greska'); }
+}
+
+async function odluciPovrat(id, odluka, a, b) {
+  if (odluka === 'odbijen') {
+    const nap = prompt('Razlog odbijanja (komad ne postoji, mjera pogrešna…):') || '';
+    if (!nap.trim()) return;
+    try {
+      await api('/' + id + '/provjeri', { method: 'POST', body: JSON.stringify({ odluka, napomena: nap }) });
+      poruka('Povrat odbijen — restl je izvučen iz opticaja.', 'greska');
+      ucitajOdobrenja(); ucitajSume();
+    } catch (e) { poruka(e.message, 'greska'); }
+    return;
+  }
+  // Potvrda, uz mogućnost ispravke mjera koje je provjera zatekla
+  modal('<h3>Potvrda povrata</h3>' +
+    '<div class="hint" style="margin-bottom:8px">Ako su mjere na komadu drugačije od upisanih, ispravi ih ovdje. ' +
+    'Stare se pamte, pa se kasnije zna šta je operater upisao a šta je provjera zatekla.</div>' +
+    '<div class="red">' +
+    '<label class="polje">Širina (mm)<input type="number" id="pv_a" value="' + a + '" style="width:120px"></label>' +
+    '<label class="polje">Visina (mm)<input type="number" id="pv_b" value="' + b + '" style="width:120px"></label></div>' +
+    '<label class="polje" style="margin-top:8px">Napomena<input id="pv_nap" style="width:100%"></label>' +
+    '<div class="modal-btns"><button class="btn zelen" onclick="posaljiPotvrduPovrata(' + id + ')">✓ Potvrdi</button>' +
+    '<button class="btn sec" onclick="zatvoriModal()">Odustani</button></div>');
+}
+
+async function posaljiPotvrduPovrata(id) {
+  try {
+    const d = await api('/' + id + '/provjeri', { method: 'POST', body: JSON.stringify({
+      odluka: 'potvrdjen',
+      dim_a: document.getElementById('pv_a').value,
+      dim_b: document.getElementById('pv_b').value,
+      napomena: document.getElementById('pv_nap').value || null }) });
+    zatvoriModal();
+    poruka('Povrat potvrđen.' + (d.mjere_ispravljene ? ' Mjere su ispravljene.' : ''));
+    ucitajOdobrenja(); ucitajListu(); ucitajSume();
+  } catch (e) { poruka(e.message, 'greska'); }
+}
+
+/* Vraćanje table ili ostatka u magacin. Ostatak može ići kao NOVI RESTL umjesto
+   nazad u lager — tada se ne vraća na stanje, jer bi se isti materijal vodio dvaput. */
+function vratiTablu(id, uzeto, vrstaJson) {
+  let vrsta = 'tabla';
+  try { vrsta = JSON.parse(vrstaJson); } catch (e) {}
+  modal('<h3>Vraćanje u magacin</h3>' +
+    '<div class="msg" style="background:#eef4fc;color:#134a85;margin-bottom:10px">' +
+      'Uzeto je <b>' + fmt(uzeto) + ' m²</b>. Vrati samo ono što se stvarno vraća.</div>' +
+    '<label class="polje">Vraća se (m²)<input type="number" step="0.01" id="vr_m2" value="' +
+      fmt(uzeto).replace(',', '.') + '" style="width:140px"></label>' +
+    '<label style="display:flex;gap:8px;align-items:center;margin:10px 0;cursor:pointer">' +
+      '<input type="checkbox" id="vr_restl" onchange="document.getElementById(\'vr_mjere\').style.display=this.checked?\'flex\':\'none\'">' +
+      '<b>Ostatak zavedi kao novi restl</b> umjesto vraćanja na lager</label>' +
+    '<div class="red" id="vr_mjere" style="display:none">' +
+      '<label class="polje">Širina (mm)<input type="number" id="vr_a" style="width:120px"></label>' +
+      '<label class="polje">Visina (mm)<input type="number" id="vr_b" style="width:120px"></label></div>' +
+    '<div class="modal-btns"><button class="btn zelen" onclick="posaljiVracanje(' + id + ',' + uzeto + ')">✓ Vrati</button>' +
+    '<button class="btn sec" onclick="zatvoriModal()">Odustani</button></div>');
+}
+
+async function posaljiVracanje(id, uzeto) {
+  const m2 = Number(document.getElementById('vr_m2').value) || 0;
+  if (m2 <= 0) return poruka('Unesi koliko se vraća.', 'greska');
+  if (m2 > uzeto + 0.0001) return poruka('Ne može se vratiti više nego što je uzeto.', 'greska');
+  const kaoRestl = document.getElementById('vr_restl').checked;
+  try {
+    const d = await api('/nalog-materijal/' + id + '/vrati', { method: 'POST', body: JSON.stringify({
+      vraceno_m2: m2, kao_restl: kaoRestl,
+      dim_a: document.getElementById('vr_a').value || null,
+      dim_b: document.getElementById('vr_b').value || null }) });
+    zatvoriModal();
+    poruka('Vraćeno ' + fmt(d.vraceno) + ' m². ' + d.napomena +
+           (d.novi_restl ? ' Nastao restl ' + d.novi_restl.oznaka + '.' : '') + porukaLagera(d.lager));
+    ucitajOdobrenja(); ucitajSume();
+  } catch (e) { poruka(e.message, 'greska'); }
 }
 
 /* ═══════════════ UVOZ ═══════════════ */
@@ -3929,6 +4135,12 @@ async function stornirajUvoz(id) {
   // JA je globalna promjenljiva; 'me' postoji SAMO unutar try bloka iznad, pa bi
   // ovdje bacilo ReferenceError i prekinulo cijelo učitavanje stranice.
   if (JA && JA.rola === 'admin') document.getElementById('tabUvoz').style.display = '';
+  // Odobravanje: postojeća prava „Ugovara" i „Prodaja" — maloprodaja troši isti
+  // lager, pa mora moći odobriti tablu koju sama uzima.
+  if (JA && (JA.rola === 'admin' || JA.moze_ugovarati || JA.moze_prodavati)) {
+    document.getElementById('tabOdobrenja').style.display = '';
+    javiOdobrenja();
+  }
 
   try {
     OBJEKTI = await (await fetch('/api/prodajni-objekti')).json();
@@ -3942,6 +4154,12 @@ async function stornirajUvoz(id) {
   // Filteri idu PRVI — tab "Traži komad" je početni ekran, pa grupe i artikli moraju
   // biti u meniju prije nego što korisnik bilo šta uradi. Ranije su stajali posljednji,
   // iza poziva koji mogu pući, pa se lako dešavalo da uopšte ne stignu na red.
+  // Dolazak sa ?tab=odobrenja — iz zvonca u zaglavlju bilo koje stranice
+  const tabIzURL = new URLSearchParams(location.search).get('tab');
+  if (tabIzURL && document.querySelector('[data-tab="' + tabIzURL + '"]')) {
+    setTimeout(() => document.querySelector('[data-tab="' + tabIzURL + '"]').click(), 0);
+  }
+
   await ucitajFiltere();
   // Plan za cijeli nalog ima prednost; ako ga nema, gleda se pojedinačna pozicija
   if (!(await primiSvePozicije())) primiIzNaloga();
@@ -3960,5 +4178,6 @@ async function stornirajUvoz(id) {
   }
 })();
 </script>
+<script src="restl-alert.js"></script>
 </body>
 </html>

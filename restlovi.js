@@ -2465,4 +2465,254 @@ router.post('/razdvajanje/izvrsi', async (req, res) => {
 });
 
 
+/* ─────────────── ODOBRAVANJE TREBOVANJA I POVRAT ───────────────
+   Trebovanje se izvršava ODMAH — mašina ne smije stajati dok neko ne odgovori na
+   telefon. Odobrenje je naknadno: odobravač vidi spisak i potvrđuje ili osporava.
+   Osporavanje ne briše ništa, nego traži razlog i ostaje kao trag. */
+
+/* Ko odobrava trebovanje — POSTOJEĆA prava, bez ijedne nove dozvole:
+     • „Ugovara" (moze_ugovarati) — ozbiljan status, već ga imaju
+     • „Prodaja" (moze_prodavati) — maloprodaja troši isti lager, pa mora
+       moći odobriti tablu koju sama uzima
+   Ko sutra dobije jedno od ta dva prava, odmah može i odobravati — nema kolone
+   koja bi se morala održavati u paru. */
+function smijeOdobritiMaterijal(user) {
+  return !!(user && (user.rola === 'admin' || user.moze_ugovarati || user.moze_prodavati));
+}
+
+// GET /api/restlovi/odobrenja — šta čeka odobrenje
+router.get('/odobrenja', smijeVidjeti, async (req, res) => {
+  try {
+    const [materijal, povrati] = await Promise.all([
+      pool.query(
+        `SELECT nm.*, ro.naziv AS artikal, ro.sifra, rs.oznaka AS restl_oznaka,
+                po.naziv AS objekt_naziv
+           FROM nalog_materijal nm
+           LEFT JOIN roba ro ON ro.id = nm.roba_id
+           LEFT JOIN restlovi rs ON rs.id = nm.restl_id
+           LEFT JOIN prodajni_objekti po ON po.id = nm.objekt_id
+          WHERE nm.odobreno = 'ceka' AND nm.stornirano = false
+          ORDER BY nm.uzeto DESC LIMIT 200`),
+      pool.query(
+        `SELECT r.id, r.oznaka, r.materijal, r.dim_a, r.dim_b, r.povrsina, r.kreirao_ime,
+                r.kreirano, r.nastao_iz_naloga, r.foto_url, ro.naziv AS artikal
+           FROM restlovi r LEFT JOIN roba ro ON ro.id = r.roba_id
+          WHERE r.provjeren = 'ceka' AND r.status <> 'potrosen'
+          ORDER BY r.kreirano DESC LIMIT 200`),
+    ]);
+    res.json({
+      trebovanja: materijal.rows,
+      povrati: povrati.rows,
+      smijem: smijeOdobritiMaterijal(req.session?.user),
+      ukupno: materijal.rows.length + povrati.rows.length,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/restlovi/nalog-materijal/:id/odobri
+router.post('/nalog-materijal/:id/odobri', async (req, res) => {
+  const user = req.session?.user;
+  if (!smijeOdobritiMaterijal(user))
+    return res.status(403).json({ error: 'Trebovanje odobravaju samo ovlašćene osobe.' });
+
+  const odluka = req.body?.odluka;
+  if (!['odobreno', 'osporeno'].includes(odluka))
+    return res.status(400).json({ error: 'Odluka mora biti "odobreno" ili "osporeno".' });
+  const nap = String(req.body?.napomena || '').trim();
+  // Osporavanje traži razlog — inače se kasnije ne zna šta je bilo sporno
+  if (odluka === 'osporeno' && !nap)
+    return res.status(400).json({ error: 'Uz osporavanje unesite razlog.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const st = await client.query('SELECT * FROM nalog_materijal WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!st.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Stavka nije pronađena.' }); }
+    if (st.rows[0].odobreno !== 'ceka') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Već je odlučeno.' }); }
+
+    await client.query(
+      `UPDATE nalog_materijal SET odobreno=$1, odobrio_id=$2, odobrio_ime=$3,
+              odobreno_kada=now(), odobrenje_napomena=$4 WHERE id=$5`,
+      [odluka, user.id, user.ime_prezime, nap || null, req.params.id]);
+    await client.query('COMMIT');
+    res.json({ ok: true, odluka,
+      napomena: odluka === 'osporeno'
+        ? 'Osporeno — materijal nije vraćen sam od sebe. Ako treba, vrati ga dugmetom „Vrati tablu".'
+        : null });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+/* POST /api/restlovi/nalog-materijal/:id/vrati
+   Vraćanje cijele table ili njenog ostatka u magacin. Za razliku od storna, ovdje se
+   vraća SAMO ono što je fizički vraćeno — ostatak table može biti manji od uzetog. */
+router.post('/nalog-materijal/:id/vrati', smijeUnositi, async (req, res) => {
+  const user = req.session.user;
+  const client = await pool.connect();
+  try {
+    const vraceno = Number(req.body.vraceno_m2) || 0;
+    const kaoRestl = req.body.kao_restl === true;
+
+    await client.query('BEGIN');
+    const st = await client.query('SELECT * FROM nalog_materijal WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!st.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Stavka nije pronađena.' }); }
+    const s = st.rows[0];
+    if (s.vraceno_m2) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Već je vraćeno.' }); }
+    if (vraceno <= 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Unesi koliko se vraća.' }); }
+    if (vraceno > Number(s.povrsina) + 0.0001) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: `Ne može se vratiti više nego što je uzeto (${Number(s.povrsina).toFixed(2)} m²).` });
+    }
+
+    let noviRestl = null;
+    if (kaoRestl && req.body.dim_a && req.body.dim_b) {
+      // Ostatak table postaje novi restl, ne vraća se u lager kao tabla
+      const A = Number(req.body.dim_a), B = Number(req.body.dim_b);
+      const tj = [[0,0],[A,0],[A,B],[0,B]];
+      const pov = geo.povrsinaPoligona(tj) / 1e6;
+      const oznaka = await sljedecaOznaka(client);
+      const klasa = await odrediKlasu(pov);
+      const ins = await client.query(
+        `INSERT INTO restlovi (oznaka, objekt_id, roba_id, materijal, oblik, dim_a, dim_b,
+            poligon, povrsina, nastao_iz_naloga, izvor, klasa, kreirao_id, kreirao_ime)
+         VALUES ($1,$2,$3,$4,'pravougaonik',$5,$6,$7::jsonb,$8,$9,'tabla',$10,$11,$12)
+         RETURNING id, oznaka`,
+        [oznaka, s.objekt_id, s.roba_id, req.body.materijal || 'ostatak table',
+         A, B, JSON.stringify(tj), pov, String(s.nalog_r_br), klasa, user.id, user.ime_prezime]);
+      noviRestl = ins.rows[0];
+      await upisiLog(client, noviRestl.id, 'kreiran', null,
+        oznaka + ' (ostatak table, nalog ' + s.nalog_r_br + ')', user);
+    }
+
+    // Na lager se vraća samo kad ostatak NE postaje restl — inače bi se isti
+    // materijal vodio dvaput: i kao restl i kao lager stanje.
+    let lager = null;
+    if (!kaoRestl) {
+      lager = await pomjeriLager(client, s.roba_id, s.objekt_id, -vraceno,
+        `Povrat u magacin sa naloga ${s.nalog_r_br}`, user);
+    }
+
+    await client.query(
+      `UPDATE nalog_materijal SET vraceno_m2=$1, vratio_ime=$2, vraceno_kada=now(),
+              povrsina = GREATEST(0, povrsina - $1) WHERE id=$3`,
+      [vraceno, user.ime_prezime, s.id]);
+
+    await client.query('COMMIT');
+    res.json({ ok: true, vraceno, novi_restl: noviRestl, lager,
+      napomena: kaoRestl ? 'Ostatak je zaveden kao novi restl.' : 'Vraćeno u lager.' });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+
+/* GET /api/restlovi/izdatnica/:id — dokument o izdavanju materijala iz magacina.
+   Namjerno NIJE otpremnica: otpremnica je prodajni dokument (kupac, cijene, naplata,
+   slanje knjigovodstvu), a ovdje materijal ne napušta firmu nego ide iz magacina u
+   proizvodnju. Zato izdatnica — isti pojam, drugi dokument. */
+router.get('/izdatnica/:id', smijeVidjeti, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT nm.*, ro.naziv AS artikal, ro.sifra, ro.jed_mjera,
+              rs.oznaka AS restl_oznaka, po.naziv AS objekt_naziv, po.adresa
+         FROM nalog_materijal nm
+         LEFT JOIN roba ro ON ro.id = nm.roba_id
+         LEFT JOIN restlovi rs ON rs.id = nm.restl_id
+         LEFT JOIN prodajni_objekti po ON po.id = nm.objekt_id
+        WHERE nm.id = $1`, [req.params.id]);
+    if (!r.rows.length) return res.status(404).send('Stavka nije pronađena.');
+    const x = r.rows[0];
+
+    // Sve stavke istog naloga, da izdatnica pokrije cijelo izdavanje
+    const sve = await pool.query(
+      `SELECT nm.*, ro.naziv AS artikal, ro.sifra, rs.oznaka AS restl_oznaka
+         FROM nalog_materijal nm
+         LEFT JOIN roba ro ON ro.id = nm.roba_id
+         LEFT JOIN restlovi rs ON rs.id = nm.restl_id
+        WHERE nm.nalog_r_br = $1 AND nm.stornirano = false
+        ORDER BY nm.uzeto`, [x.nalog_r_br]);
+
+    const d = new Date(x.uzeto);
+    const broj = 'IZD-' + d.getFullYear() + '-' + String(x.id).padStart(6, '0');
+    const dat = v => new Date(v).toLocaleString('bs-BA');
+    const br = v => (Number(v) || 0).toLocaleString('bs-BA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const esc = v => String(v ?? '').replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
+
+    const ukupno = sve.rows.reduce((z, y) => z + (Number(y.povrsina) || 0), 0);
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!DOCTYPE html><html lang="bs"><head><meta charset="UTF-8">
+<title>${broj}</title>
+<style>
+  body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#222;max-width:800px;margin:0 auto;padding:24px;}
+  h1{font-size:20px;color:#1f3864;margin:0 0 4px;}
+  .zaglavlje{display:flex;justify-content:space-between;border-bottom:2px solid #1f3864;padding-bottom:10px;margin-bottom:16px;}
+  .polje{margin:3px 0;} .polje b{display:inline-block;min-width:130px;color:#6b7a8d;font-weight:600;}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:12px;}
+  th{background:#1f3864;color:#fff;padding:6px 8px;text-align:left;font-size:11px;}
+  td{padding:6px 8px;border-bottom:1px solid #eee;}
+  td.num,th.num{text-align:right;}
+  tfoot td{font-weight:700;background:#eef4fc;border-top:2px solid #1f3864;}
+  .potpisi{display:flex;gap:40px;margin-top:48px;}
+  .potpis{flex:1;border-top:1px solid #999;padding-top:6px;font-size:11px;color:#6b7a8d;text-align:center;}
+  .napomena{font-size:11px;color:#8b96a5;margin-top:24px;border-top:1px dashed #ccc;padding-top:8px;}
+  @media print{body{padding:0;} .noprint{display:none;}}
+</style></head><body>
+<div class="zaglavlje">
+  <div><h1>IZDATNICA MATERIJALA</h1><div style="font-size:15px;font-weight:700">${broj}</div></div>
+  <div style="text-align:right;font-size:12px">
+    <div><b>JoPeX</b></div>
+    <div>${esc(x.objekt_naziv || '')}</div>
+    <div>${esc(x.adresa || '')}</div>
+  </div>
+</div>
+
+<div class="polje"><b>Radni nalog:</b> #${esc(x.nalog_r_br)}</div>
+<div class="polje"><b>Izdao:</b> ${esc(x.uzeo_ime || '')}</div>
+<div class="polje"><b>Datum izdavanja:</b> ${dat(x.uzeto)}</div>
+<div class="polje"><b>Odobrio:</b> ${x.odobreno === 'odobreno'
+  ? esc(x.odobrio_ime || '') + (x.odobreno_kada ? ', ' + dat(x.odobreno_kada) : '')
+  : '<span style="color:#c0392b">NIJE ODOBRENO</span>'}</div>
+
+<table>
+  <thead><tr><th>Vrsta</th><th>Šifra</th><th>Artikal / oznaka</th>
+    <th class="num">Mjere (mm)</th><th class="num">Površina m²</th><th>Pozicija</th></tr></thead>
+  <tbody>
+  ${sve.rows.map(y => `<tr>
+    <td>${y.vrsta === 'tabla' ? 'cijela tabla' : 'restl'}</td>
+    <td>${esc(y.sifra || '')}</td>
+    <td>${esc(y.restl_oznaka ? y.restl_oznaka + ' — ' : '')}${esc(y.artikal || '')}</td>
+    <td class="num">${y.dim_a ? Math.round(y.dim_a) + '×' + Math.round(y.dim_b) : ''}</td>
+    <td class="num">${br(y.povrsina)}</td>
+    <td>${esc(y.pozicija_naziv || '')}</td></tr>`).join('')}
+  </tbody>
+  <tfoot><tr><td colspan="4">UKUPNO — ${sve.rows.length} stavki</td>
+    <td class="num">${br(ukupno)}</td><td></td></tr></tfoot>
+</table>
+
+<div class="potpisi">
+  <div class="potpis">Izdao iz magacina</div>
+  <div class="potpis">Preuzeo u proizvodnji</div>
+  <div class="potpis">Odobrio</div>
+</div>
+
+<div class="napomena">
+  Izdatnica prati kretanje materijala <b>unutar firme</b> — iz magacina u proizvodnju.
+  Nije prodajni dokument i ne zamjenjuje otpremnicu.
+  ${sve.rows.some(y => y.odobreno === 'ceka')
+    ? '<br><b style="color:#c0392b">Pažnja: neke stavke još čekaju odobrenje.</b>' : ''}
+</div>
+
+<div class="noprint" style="margin-top:20px;text-align:center">
+  <button onclick="window.print()" style="padding:8px 20px;background:#1a5fa8;color:#fff;
+    border:none;border-radius:6px;cursor:pointer;font-size:13px">🖨 Štampaj</button>
+</div>
+</body></html>`);
+  } catch (err) { res.status(500).send('Greška: ' + err.message); }
+});
+
+
 module.exports = router;
