@@ -1707,6 +1707,9 @@ router.post('/nalog/:r_br/uzmi', smijeUnositi, async (req, res) => {
   const client = await pool.connect();
   try {
     const { vrsta, restl_id, roba_id, povrsina, dim_a, dim_b, napomena } = req.body;
+    const pozicijaId = req.body.pozicija_id || null;
+    const pozicijaNaziv = req.body.pozicija_naziv || null;
+    const komadaStavke = Math.max(1, Math.round(Number(req.body.komada) || 1));
     if (!['restl', 'tabla'].includes(vrsta))
       return res.status(400).json({ error: 'Vrsta mora biti "restl" ili "tabla".' });
 
@@ -1747,11 +1750,12 @@ router.post('/nalog/:r_br/uzmi', smijeUnositi, async (req, res) => {
 
       red = await client.query(
         `INSERT INTO nalog_materijal (nalog_r_br, vrsta, roba_id, objekt_id, povrsina,
-            dim_a, dim_b, napomena, uzeo_id, uzeo_ime)
-         VALUES ($1,'tabla',$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+            dim_a, dim_b, napomena, uzeo_id, uzeo_ime, pozicija_id, pozicija_naziv, komada)
+         VALUES ($1,'tabla',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
         [brojNaloga(req.params.r_br), roba_id, req.body.objekt_id || null,
          trazenoM2, dim_a || null, dim_b || null,
-         napomena || null, user.id, user.ime_prezime]);
+         napomena || null, user.id, user.ime_prezime,
+         pozicijaId, pozicijaNaziv, komadaStavke]);
 
       // Skidanje sa lagera ide kroz istu funkciju kao i kod restlova — pa poštuje
       // prekidač zaključavanja i upisuje trag u roba_kretanja.
@@ -2019,6 +2023,150 @@ router.post('/nalog/:r_br/bilans', smijeVidjeti, async (req, res) => {
         pokriveno: stavke.length > 0 && stavke.every(x => x.stanje !== 'fali'),
       },
     });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
+/* POST /api/restlovi/nalozi/stanje
+   Stanje materijala za VIŠE naloga odjednom — da lista naloga ne zove rutu po redu.
+   Vraća šta je uzeto i, ako se pošalje potrebna kvadratura, da li je nalog pokriven.
+
+   body: { nalozi: [372, 373, 374], potrebno: { "372": 6.2, "373": 3.1 } }
+   Polje `potrebno` je opciono — bez njega se vraća samo uzeto, jer restlovi ne znaju
+   šta nalog traži; te podatke ima lista naloga. */
+router.post('/nalozi/stanje', smijeVidjeti, async (req, res) => {
+  try {
+    const nalozi = (Array.isArray(req.body.nalozi) ? req.body.nalozi : [])
+      .map(x => parseInt(String(x).trim(), 10)).filter(Number.isFinite);
+    if (!nalozi.length) return res.json({ nalozi: {} });
+    const potrebno = req.body.potrebno || {};
+
+    const r = await pool.query(
+      `SELECT nm.nalog_r_br, nm.vrsta,
+              COUNT(*)::int AS koliko,
+              COALESCE(SUM(nm.povrsina), 0) AS m2,
+              MAX(nm.uzeto) AS zadnje
+         FROM nalog_materijal nm
+        WHERE nm.nalog_r_br = ANY($1::int[]) AND nm.stornirano = false
+        GROUP BY nm.nalog_r_br, nm.vrsta`, [nalozi]);
+
+    // Koliko je restlova za taj nalog još u proizvodnji — nalog nije gotov dok su na mašini
+    const uProizvodnji = await pool.query(
+      `SELECT nm.nalog_r_br, COUNT(*)::int AS koliko
+         FROM nalog_materijal nm
+         JOIN restlovi rs ON rs.id = nm.restl_id
+        WHERE nm.nalog_r_br = ANY($1::int[]) AND nm.stornirano = false
+          AND rs.status IN ('rezervisan','u_proizvodnji')
+        GROUP BY nm.nalog_r_br`, [nalozi]);
+    const naMasini = new Map(uProizvodnji.rows.map(x => [Number(x.nalog_r_br), x.koliko]));
+
+    const izlaz = {};
+    for (const n of nalozi) {
+      izlaz[n] = { restlova: 0, tabli: 0, restlovi_m2: 0, table_m2: 0, uzeto_m2: 0,
+                   na_masini: naMasini.get(n) || 0, zadnje: null,
+                   treba_m2: null, pokriven: null, fali_m2: null, stanje: 'nista' };
+    }
+    for (const x of r.rows) {
+      const n = izlaz[Number(x.nalog_r_br)];
+      if (!n) continue;
+      const m2 = Number(x.m2) || 0;
+      if (x.vrsta === 'restl') { n.restlova = x.koliko; n.restlovi_m2 = m2; }
+      else { n.tabli = x.koliko; n.table_m2 = m2; }
+      n.uzeto_m2 = Math.round((n.restlovi_m2 + n.table_m2) * 10000) / 10000;
+      if (!n.zadnje || x.zadnje > n.zadnje) n.zadnje = x.zadnje;
+    }
+
+    for (const n of nalozi) {
+      const t = potrebno[n] != null ? Number(potrebno[n]) : null;
+      const z = izlaz[n];
+      if (t != null && isFinite(t) && t > 0) {
+        z.treba_m2 = Math.round(t * 10000) / 10000;
+        z.fali_m2 = Math.round(Math.max(0, t - z.uzeto_m2) * 10000) / 10000;
+        z.pokriven = z.uzeto_m2 >= t - 0.0001;
+      }
+      // Jedno stanje koje lista može prikazati kao znak, bez daljeg računanja
+      z.stanje = z.uzeto_m2 === 0 ? 'nista'
+        : (z.pokriven === false ? 'djelimicno'
+        : (z.na_masini ? 'u_radu' : 'pokriven'));
+    }
+
+    res.json({ nalozi: izlaz });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
+/* POST /api/restlovi/nalozi/pozicije-stanje
+   Broji ZAVRŠENE POZICIJE, ne kvadraturu — "3 od 5 završeno" je ono što se vidi u
+   listi naloga. Pozicija je završena kad je materijal za nju stvarno isječen, ne kad
+   je samo rezervisan.
+
+   body: { nalozi: [372, 373], pozicije: { "372": [{id, naziv, kolicina}, …] } }
+   Spisak pozicija šalje lista naloga — restlovi ga nemaju. */
+router.post('/nalozi/pozicije-stanje', smijeVidjeti, async (req, res) => {
+  try {
+    const nalozi = (Array.isArray(req.body.nalozi) ? req.body.nalozi : [])
+      .map(x => parseInt(String(x).trim(), 10)).filter(Number.isFinite);
+    if (!nalozi.length) return res.json({ nalozi: {} });
+    const pozicijePoNalogu = req.body.pozicije || {};
+
+    const r = await pool.query(
+      `SELECT nm.nalog_r_br, nm.pozicija_id, nm.pozicija_naziv, nm.komada,
+              nm.zavrseno, nm.vrsta, nm.restl_id, rs.status AS restl_status
+         FROM nalog_materijal nm
+         LEFT JOIN restlovi rs ON rs.id = nm.restl_id
+        WHERE nm.nalog_r_br = ANY($1::int[]) AND nm.stornirano = false`, [nalozi]);
+
+    const izlaz = {};
+    for (const n of nalozi) {
+      const zadate = Array.isArray(pozicijePoNalogu[n]) ? pozicijePoNalogu[n] : [];
+      const stavke = r.rows.filter(x => Number(x.nalog_r_br) === n);
+
+      // Po poziciji: koliko je komada planirano i koliko stvarno isječeno
+      const poPoziciji = new Map();
+      for (const z of zadate) {
+        poPoziciji.set(String(z.id), {
+          id: z.id, naziv: z.naziv || '',
+          treba: Math.max(1, Math.round(Number(z.kolicina) || 1)),
+          planirano: 0, zavrseno: 0, u_radu: 0,
+        });
+      }
+      for (const x of stavke) {
+        const k = String(x.pozicija_id ?? '');
+        // Stavka bez veze na poziciju (stariji zapisi) se vodi zasebno
+        if (!poPoziciji.has(k)) {
+          poPoziciji.set(k, { id: x.pozicija_id || null, naziv: x.pozicija_naziv || '(bez pozicije)',
+            treba: 0, planirano: 0, zavrseno: 0, u_radu: 0 });
+        }
+        const p = poPoziciji.get(k);
+        const kom = Math.max(1, Number(x.komada) || 1);
+        p.planirano += kom;
+        if (x.zavrseno || (x.vrsta === 'restl' && x.restl_status === 'potrosen')) p.zavrseno += kom;
+        else if (x.restl_status === 'u_proizvodnji' || x.restl_status === 'rezervisan') p.u_radu += kom;
+      }
+
+      const lista = [...poPoziciji.values()].map(p => ({
+        ...p,
+        // Pozicija je gotova kad je isječeno bar onoliko komada koliko traži
+        gotova: p.treba > 0 ? p.zavrseno >= p.treba : (p.planirano > 0 && p.zavrseno >= p.planirano),
+      }));
+      const ukupno = zadate.length || lista.length;
+      const gotovih = lista.filter(p => p.gotova).length;
+      const zapoceto = lista.some(p => p.planirano > 0);
+
+      izlaz[n] = {
+        ukupno, gotovih, nezavrsenih: Math.max(0, ukupno - gotovih),
+        pozicije: lista,
+        zapoceto,
+        // Prijedlog statusa za listu naloga:
+        //   nije_zapoceto → ništa nije uzeto
+        //   u_radu        → počelo, ali nisu sve pozicije gotove
+        //   ceka_isporuku → sve pozicije završene
+        predlozeni_status: !zapoceto ? 'nije_zapoceto'
+          : (ukupno > 0 && gotovih >= ukupno ? 'ceka_isporuku' : 'u_radu'),
+      };
+    }
+
+    res.json({ nalozi: izlaz });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

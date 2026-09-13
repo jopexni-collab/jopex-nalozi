@@ -3187,6 +3187,9 @@ async function posaljiTrebovanje() {
     const d = await api('/nalog/' + NALOG_IZ_URL + '/uzmi', { method: 'POST', body: JSON.stringify({
       vrsta: 'tabla',
       roba_id: Number(robaId),
+      pozicija_id: (PLAN_POZICIJE[TREBOVANJE.i] || {}).id || null,
+      pozicija_naziv: (PLAN_POZICIJE[TREBOVANJE.i] || {}).naziv || null,
+      komada: TREBOVANJE.koliko || 1,
       objekt_id: Number(document.getElementById('tb_objekt').value) || null,
       povrsina: Number(document.getElementById('tb_pov').value) || 0,
       dim_a: Number(document.getElementById('tb_a').value) || null,
