@@ -106,6 +106,19 @@ async function pomjeriLager(client, robaId, objektId, m2, opis, user) {
   }
   if (!kvadrata) return rezultat;
 
+  // Kad je lager razdvojen na table i restlove, restl je VEĆ izdvojen iz stanja —
+  // pa njegovo trošenje ne smije ponovo umanjivati lager. Trebovanje cijele table
+  // i dalje umanjuje, jer tabla jeste u lageru.
+  if (opis && /restl/i.test(opis) && !/tabla/i.test(opis)) {
+    try {
+      const n = await pool.query(`SELECT vrijednost FROM restlovi_postavke WHERE kljuc='nacin_lagera'`);
+      if (n.rows.length && n.rows[0].vrijednost === 'samo_table') {
+        rezultat.tekst = 'Lager se ne mijenja — restlovi se vode odvojeno od cijelih tabli.';
+        return rezultat;
+      }
+    } catch (e) { /* bez postavke se ponaša kao ranije */ }
+  }
+
   const zakljucan = await lagerZakljucan();
   const kolicina = kvadrata.toFixed(2).replace('.', ',') + ' m²';
 
@@ -859,6 +872,10 @@ router.get('/', smijeVidjeti, async (req, res) => {
     else                     { uslovi.push(`r.status <> 'potrosen'`); }
     if (req.query.materijal) { uslovi.push(`r.materijal ILIKE $${i++}`); vals.push(`%${req.query.materijal}%`); }
     if (req.query.q)         { uslovi.push(`(r.oznaka ILIKE $${i} OR r.materijal ILIKE $${i} OR r.napomena ILIKE $${i})`); vals.push(`%${req.query.q}%`); i++; }
+    // Filtriranje po ARTIKLU, ne po tekstu — šifra "8874" kroz ILIKE pokupi i
+    // "TASTO 8874-B", pa je veza na roba_id jedini pouzdan način.
+    if (req.query.roba_id)   { uslovi.push(`r.roba_id = $${i++}`); vals.push(req.query.roba_id); }
+    if (req.query.sifra)     { uslovi.push(`ro.sifra = $${i++}`); vals.push(String(req.query.sifra).trim()); }
 
     const r = await pool.query(
       `SELECT r.*, po.naziv AS objekt_naziv, po.valuta,
@@ -2304,6 +2321,143 @@ router.post('/:id/mane', smijeUnositi, async (req, res) => {
 
     await client.query('COMMIT');
     res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+
+/* ─────────── RAZDVAJANJE LAGERA NA TABLE I RESTLOVE ───────────
+   Zatečeno stanje: roba_pj.stanje sadrži I cijele table I restlove.
+   Poslije razdvajanja: stanje su SAMO cijele table, a ukupno = table + restlovi.
+
+   Posljedica koju treba znati: kad je lager razdvojen, uzimanje restla više NE SMIJE
+   dirati lager — restl je već odbijen od njega. Zato se prekidač prebacuje automatski.
+
+   Radi se JEDNOM. Zato ima probni prolaz i zapis koji se može vratiti. */
+
+// GET /api/restlovi/razdvajanje/probno — šta bi se desilo, bez ijedne izmjene
+router.get('/razdvajanje/probno', smijeVidjeti, async (req, res) => {
+  try {
+    const nacin = await pool.query(`SELECT vrijednost FROM restlovi_postavke WHERE kljuc='nacin_lagera'`);
+    const vec = nacin.rows.length && nacin.rows[0].vrijednost === 'samo_table';
+
+    const r = await pool.query(
+      `SELECT r.objekt_id, r.roba_id, po.naziv AS objekt_naziv,
+              ro.sifra, ro.naziv AS artikal, ro.jed_mjera,
+              COUNT(*)::int AS restlova,
+              COALESCE(SUM(r.povrsina), 0) AS restlovi_m2,
+              COALESCE(MAX(rp.stanje), 0) AS stanje
+         FROM restlovi r
+         JOIN roba ro ON ro.id = r.roba_id
+         LEFT JOIN roba_pj rp ON rp.roba_id = r.roba_id AND rp.objekt_id = r.objekt_id
+         LEFT JOIN prodajni_objekti po ON po.id = r.objekt_id
+        WHERE r.status <> 'potrosen' AND r.roba_id IS NOT NULL
+        GROUP BY r.objekt_id, r.roba_id, po.naziv, ro.sifra, ro.naziv, ro.jed_mjera
+        ORDER BY ro.naziv`);
+
+    const stavke = r.rows.map(x => {
+      const stanje = Number(x.stanje) || 0;
+      const restl = Number(x.restlovi_m2) || 0;
+      const poslije = Math.round((stanje - restl) * 10000) / 10000;
+      return {
+        ...x,
+        restlovi_m2: Math.round(restl * 10000) / 10000,
+        stanje_prije: stanje,
+        stanje_poslije: poslije,
+        // Restlovi veći od lager stanja znače da lager NE sadrži restlove, ili da
+        // je stanje netačno. Takav red se ne smije tiho oduzeti u minus.
+        problem: poslije < -0.0001 ? 'restlovi veći od lager stanja' :
+                 (String(x.jed_mjera).toLowerCase() !== 'm2' ? 'artikal nije u m²' : null),
+      };
+    });
+
+    // Restlovi bez veze na artikal se ne mogu oduzeti ni od čega
+    const bezVeze = await pool.query(
+      `SELECT COUNT(*)::int AS koliko, COALESCE(SUM(povrsina),0) AS m2
+         FROM restlovi WHERE roba_id IS NULL AND status <> 'potrosen'`);
+
+    res.json({
+      vec_razdvojeno: vec,
+      stavke,
+      sazetak: {
+        artikala: stavke.length,
+        restlova: stavke.reduce((z, x) => z + x.restlova, 0),
+        ukupno_m2: Math.round(stavke.reduce((z, x) => z + x.restlovi_m2, 0) * 10000) / 10000,
+        problematicnih: stavke.filter(x => x.problem).length,
+        bez_veze_komada: bezVeze.rows[0].koliko,
+        bez_veze_m2: Math.round(Number(bezVeze.rows[0].m2) * 10000) / 10000,
+      },
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/restlovi/razdvajanje/izvrsi — jednokratno oduzimanje. Samo admin.
+router.post('/razdvajanje/izvrsi', async (req, res) => {
+  const user = req.session?.user;
+  if (user?.rola !== 'admin') return res.status(403).json({ error: 'Razdvajanje lagera može samo administrator.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const n = await client.query(`SELECT vrijednost FROM restlovi_postavke WHERE kljuc='nacin_lagera' FOR UPDATE`);
+    if (n.rows.length && n.rows[0].vrijednost === 'samo_table') {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Lager je već razdvojen — ponovno oduzimanje bi skinulo restlove dvaput.' });
+    }
+
+    const r = await client.query(
+      `SELECT r.objekt_id, r.roba_id, COUNT(*)::int AS restlova,
+              COALESCE(SUM(r.povrsina), 0) AS restlovi_m2,
+              COALESCE(MAX(rp.stanje), 0) AS stanje, ro.jed_mjera, ro.naziv
+         FROM restlovi r
+         JOIN roba ro ON ro.id = r.roba_id
+         LEFT JOIN roba_pj rp ON rp.roba_id = r.roba_id AND rp.objekt_id = r.objekt_id
+        WHERE r.status <> 'potrosen' AND r.roba_id IS NOT NULL
+        GROUP BY r.objekt_id, r.roba_id, ro.jed_mjera, ro.naziv`);
+
+    let promijenjeno = 0, preskoceno = [];
+    for (const x of r.rows) {
+      const stanje = Number(x.stanje) || 0;
+      const restl = Number(x.restlovi_m2) || 0;
+      // Artikal koji nije u m² se preskače — oduzimanje kvadrata od komada nema smisla
+      if (String(x.jed_mjera).toLowerCase() !== 'm2') { preskoceno.push(x.naziv + ' (nije m²)'); continue; }
+      // U minus se ne ide — to bi značilo da lager ionako ne sadrži restlove
+      if (stanje - restl < -0.0001) { preskoceno.push(x.naziv + ' (restlovi veći od stanja)'); continue; }
+
+      const poslije = Math.round((stanje - restl) * 10000) / 10000;
+      await client.query(
+        `UPDATE roba_pj SET stanje=$1, azurirano=now() WHERE roba_id=$2 AND objekt_id=$3`,
+        [poslije, x.roba_id, x.objekt_id]);
+      await client.query(
+        `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, napomena, korisnik_id, korisnik_ime)
+         VALUES ($1,$2,'izlaz',$3,$4,$5,$6)`,
+        [x.roba_id, x.objekt_id, restl,
+         `Razdvajanje lagera: ${x.restlova} restlova izdvojeno iz ukupnog stanja`,
+         user.id, user.ime_prezime]);
+      await client.query(
+        `INSERT INTO lager_razdvajanje (objekt_id, roba_id, stanje_prije, restlovi_m2,
+            stanje_poslije, restlova, korisnik_ime)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [x.objekt_id, x.roba_id, stanje, restl, poslije, x.restlova, user.ime_prezime]);
+      promijenjeno++;
+    }
+
+    // Od sada lager znači SAMO CIJELE TABLE — restl je već odbijen, pa njegovo
+    // trošenje ne smije ponovo umanjivati lager.
+    await client.query(
+      `INSERT INTO restlovi_postavke (kljuc, vrijednost, azurirao_id, azurirao_ime, azurirano)
+       VALUES ('nacin_lagera','samo_table',$1,$2,now())
+       ON CONFLICT (kljuc) DO UPDATE SET vrijednost='samo_table', azurirao_id=$1, azurirao_ime=$2, azurirano=now()`,
+      [user.id, user.ime_prezime]);
+
+    await client.query('COMMIT');
+    res.json({
+      ok: true, promijenjeno, preskoceno,
+      napomena: 'Lager od sada sadrži SAMO cijele table. Uzimanje restla više ne umanjuje lager, ' +
+                'jer je restl već izdvojen iz stanja.',
+    });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ error: err.message });

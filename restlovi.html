@@ -288,6 +288,21 @@ legend{font-size:11px;color:#6b7a8d;font-weight:700;padding:0 6px;}
   </div>
 
   <div class="panel">
+    <h3>Razdvajanje lagera na table i restlove</h3>
+    <div class="hint" style="margin-bottom:10px">
+      Zatečeno stanje: lager lista sadrži <b>i cijele table i restlove</b> zajedno.
+      Razdvajanjem se od lagera jednokratno oduzme zbir restlova, pa lager znači
+      <b>samo cijele table</b>, a ukupno je table + restlovi.<br>
+      <b>Radi se jednom.</b> Poslije toga uzimanje restla više ne umanjuje lager —
+      restl je već izdvojen iz stanja.
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn" onclick="probnoRazdvajanje()">Vidi šta bi se desilo</button>
+    </div>
+    <div id="u_razdvajanje" style="margin-top:12px"></div>
+  </div>
+
+  <div class="panel">
     <h3>Usaglašavanje sa lager listom</h3>
     <div class="hint" style="margin-bottom:10px">
       Restl se vezuje za artikal preko <b>šifre</b>, i od njega preuzima grupu, debljinu i sliku.
@@ -1952,8 +1967,18 @@ function xlOznaciSveRedove(ukljuci) {
   crtajListu();
 }
 
+let FILTER_ARTIKAL = null;
+
 async function ucitajListu() {
   const p = new URLSearchParams();
+  // Filter po artiklu iz lager liste — ide u upit, ne kroz tekstualnu pretragu
+  if (FILTER_ARTIKAL) {
+    if (FILTER_ARTIKAL.roba_id) p.set('roba_id', FILTER_ARTIKAL.roba_id);
+    else if (FILTER_ARTIKAL.sifra) p.set('sifra', FILTER_ARTIKAL.sifra);
+    // PJ se namjerno NE šalje: restlovi tog artikla mogu biti u bilo kom objektu,
+    // a prazan spisak bi izgledao kao da ih nema.
+    document.getElementById('f_objekt').value = '';
+  }
   if (document.getElementById('f_q').value) p.set('q', document.getElementById('f_q').value);
   if (document.getElementById('f_objekt').value) p.set('objekt_id', document.getElementById('f_objekt').value);
   if (document.getElementById('f_status').value) p.set('status', document.getElementById('f_status').value);
@@ -1963,6 +1988,7 @@ async function ucitajListu() {
     XL_PODACI = await api('?' + p.toString());
     XL_OZNACENI.clear();
     crtajListu();
+    crtajTrakuArtikla();
   } catch (e) { cilj.innerHTML = '<div class="msg err">' + e.message + '</div>'; }
 }
 
@@ -2088,6 +2114,37 @@ function crtajTabelu(opcije) {
 }
 
 function crtajListu() { crtajTabelu({ cilj: 'tabela_lista' }); }
+
+/* Traka koja kaže ZAŠTO se vidi samo dio spiska — bez nje korisnik ne zna da je
+   lista filtrirana i misli da restlova nema. */
+function crtajTrakuArtikla() {
+  const stara = document.getElementById('traka_artikal');
+  if (stara) stara.remove();
+  if (!FILTER_ARTIKAL) return;
+  const prvi = XL_PODACI[0] || {};
+  const naziv = prvi.artikal_naziv || prvi.materijal || FILTER_ARTIKAL.sifra || 'izabrani artikal';
+  const sifra = prvi.artikal_sifra || FILTER_ARTIKAL.sifra || '';
+  const el = document.createElement('div');
+  el.id = 'traka_artikal';
+  el.className = 'msg';
+  el.style.cssText = 'background:#eef4fc;color:#134a85;display:flex;justify-content:space-between;' +
+    'align-items:center;gap:10px;flex-wrap:wrap';
+  el.innerHTML = '<span>📦 Prikazani su restlovi samo za <b>' + naziv + '</b>' +
+    (sifra ? ' <span class="hint">(' + sifra + ')</span>' : '') +
+    ' — ukupno <b>' + XL_PODACI.length + '</b> komada, ' +
+    fmt(XL_PODACI.reduce((z, r) => z + (Number(r.povrsina) || 0), 0)) + ' m²</span>' +
+    '<span style="display:flex;gap:8px">' +
+    '<button class="btn sec mali" onclick="skiniFilterArtikla()">Prikaži sve restlove</button>' +
+    '<a href="roba-magacin.html" style="color:#1a5fa8;font-weight:700;text-decoration:none;align-self:center">← Nazad na lager</a>' +
+    '</span>';
+  const panel = document.getElementById('p-lista');
+  if (panel) panel.prepend(el);
+}
+
+function skiniFilterArtikla() {
+  FILTER_ARTIKAL = null;
+  ucitajListu();
+}
 
 function xlIzvezi() {
   const redovi = xlVidljivi().filter(r => XL_OZNACENI.has(r.id));
@@ -2603,6 +2660,19 @@ function postaviIzURL(id, v) {
 // 700 ms; ovako je pouzdanije jer se čeka stvarni odgovor, ne procijenjeno vrijeme.
 async function primiIzNaloga() {
   const p = new URLSearchParams(location.search);
+
+  /* DOLAZAK IZ LAGER LISTE — samo artikal, bez mjera.
+     Tad se ne otvara traženje nego se LISTA filtrira na taj artikal: htjelo se vidjeti
+     šta ima od tog materijala, ne šta staje u neku poziciju. */
+  const izLagera = p.get('roba_id') || p.get('sifra') || p.get('q');
+  if (izLagera && !p.get('sirina') && !p.get('visina') && !p.get('poligon')) {
+    FILTER_ARTIKAL = { roba_id: p.get('roba_id') || null,
+                       sifra: p.get('sifra') || p.get('q') || null };
+    document.querySelector('[data-tab="lista"]').click();
+    await ucitajListu();
+    return;
+  }
+
   if (!p.get('sirina') && !p.get('visina') && !p.get('poligon')) return;
 
   postaviIzURL('t_sirina', p.get('sirina'));
@@ -3692,6 +3762,70 @@ async function ucitajSerije() {
         (!u.stornirano ? '<button class="btn sec mali" onclick="stornirajUvoz(' + u.id + ')">Storno</button>' : '') +
         '</td></tr>').join('') + '</tbody></table></div>';
   } catch (e) { /* nema serija */ }
+}
+
+async function probnoRazdvajanje() {
+  const cilj = document.getElementById('u_razdvajanje');
+  cilj.innerHTML = '<div class="empty-msg">Računam…</div>';
+  try {
+    const d = await api('/razdvajanje/probno');
+    const s = d.sazetak;
+    if (d.vec_razdvojeno) {
+      cilj.innerHTML = '<div class="msg ok"><b>Lager je već razdvojen.</b> ' +
+        'Stanje u lager listi su samo cijele table; restlovi se vode odvojeno. ' +
+        'Ponovno oduzimanje bi ih skinulo dvaput, pa je onemogućeno.</div>';
+      return;
+    }
+
+    let html = '<div class="kartice">' +
+      '<div class="kartica"><div class="v">' + s.artikala + '</div><div class="n">artikala</div></div>' +
+      '<div class="kartica"><div class="v">' + s.restlova + '</div><div class="n">restlova</div></div>' +
+      '<div class="kartica"><div class="v">' + fmt(s.ukupno_m2) + ' m²</div><div class="n">oduzelo bi se</div></div>' +
+      (s.problematicnih ? '<div class="kartica" style="border-left-color:#c0392b"><div class="v">' +
+        s.problematicnih + '</div><div class="n">problematičnih</div></div>' : '') +
+      '</div>';
+
+    if (s.bez_veze_komada) {
+      html += '<div class="msg" style="background:#fff3e0;color:#8a5200">' +
+        '<b>' + s.bez_veze_komada + ' restlova (' + fmt(s.bez_veze_m2) + ' m²) nije vezano za artikal</b> — ' +
+        'oni se ne mogu oduzeti ni od čega i ostaju izvan računa. ' +
+        'Prvo ih poveži kroz Usaglašavanje ispod, pa onda razdvajaj.</div>';
+    }
+
+    html += '<div class="xl-wrap"><table class="xl"><thead><tr><th>Šifra</th><th>Artikal</th><th>PJ</th>' +
+      '<th style="text-align:right">Restlova</th><th style="text-align:right">m² restlova</th>' +
+      '<th style="text-align:right">Lager sada</th><th style="text-align:right">Lager poslije</th>' +
+      '<th>Napomena</th></tr></thead><tbody>' +
+      d.stavke.map(x => '<tr style="background:' + (x.problem ? '#fdf0ef' : '') + '">' +
+        '<td>' + (x.sifra || '') + '</td><td>' + x.artikal + '</td><td>' + (x.objekt_naziv || '') + '</td>' +
+        '<td class="num">' + x.restlova + '</td>' +
+        '<td class="num">' + fmt(x.restlovi_m2) + '</td>' +
+        '<td class="num">' + fmt(x.stanje_prije) + '</td>' +
+        '<td class="num"><b>' + fmt(x.stanje_poslije) + '</b></td>' +
+        '<td>' + (x.problem ? '<b style="color:#c0392b">' + x.problem + ' — preskače se</b>' : '') + '</td>' +
+        '</tr>').join('') + '</tbody></table></div>';
+
+    html += '<div class="msg err" style="margin-top:12px">' +
+      '<b>Ovo se ne može poništiti jednim dugmetom.</b> Provjeri brojeve prije nego što izvršiš. ' +
+      'Poslije razdvajanja uzimanje restla više ne umanjuje lager.</div>' +
+      '<button class="btn zelen" onclick="izvrsiRazdvajanje(' + s.restlova + ',' + s.ukupno_m2 + ')">' +
+      '✓ Izvrši razdvajanje</button>';
+    cilj.innerHTML = html;
+  } catch (e) { cilj.innerHTML = '<div class="msg err">' + e.message + '</div>'; }
+}
+
+async function izvrsiRazdvajanje(restlova, m2) {
+  if (!confirm('Sa lager liste će se oduzeti ' + fmt(m2) + ' m² (' + restlova + ' restlova).\n\n' +
+      'Poslije ovoga lager znači SAMO CIJELE TABLE, a uzimanje restla ga više ne umanjuje.\n\n' +
+      'Ovo se radi jednom i ne poništava se dugmetom. Nastaviti?')) return;
+  try {
+    const d = await api('/razdvajanje/izvrsi', { method: 'POST' });
+    poruka('Razdvojeno: ' + d.promijenjeno + ' artikala ažurirano' +
+      (d.preskoceno.length ? ', preskočeno ' + d.preskoceno.length : '') + '. ' + d.napomena,
+      d.preskoceno.length ? 'greska' : 'uspjeh');
+    if (d.preskoceno.length) console.log('Preskočeno:', d.preskoceno);
+    probnoRazdvajanje(); ucitajSume(); ucitajPostavke();
+  } catch (e) { poruka(e.message, 'greska'); }
 }
 
 async function ucitajUsaglasavanje() {
