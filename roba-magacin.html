@@ -3985,15 +3985,28 @@ function renderLagerRedovi(){
             cijele = stanje − dostupni restlovi.
             Ako ispadne minus, restlova je vise nego sto lager kaze — to je greska u
             podacima koja bi inace ostala neprimijecena, pa se crveni. */''}
-      <td style="padding:1px 5px;text-align:right;${(Number(s.cijele_m2)||0)<0?'color:var(--red,#c0392b);font-weight:700;':'color:#6b7a8d;'}"
-          title="${(Number(s.cijele_m2)||0)<0
-            ? 'Restlovi su veći od ukupnog stanja — provjeri lager ili evidenciju restlova'
-            : `Cijele table = stanje − dostupni restlovi${Number(s.rezervisano_m2)>0?`\nRezervisano ${uPolje(s.rezervisano_m2,2)} je uračunato ovdje, jer još nije izašlo` : ''}`}">
-        ${(Number(s.cijele_m2)||0)<0?'⚠ ':''}${uPolje(s.cijele_m2||0,2)}
+      ${/* Restlovi postoje samo u Aleksandrovcu — u ostalim PJ server vraca NULL,
+            pa celija ostaje prazna umjesto da pokazuje laznu nulu. */''}
+      <td style="padding:1px 5px;text-align:right;${s.cijele_m2==null?'color:#dfe3e8;':(Number(s.cijele_m2)<0?'color:var(--red,#c0392b);font-weight:700;':'color:#6b7a8d;')}"
+          title="${s.cijele_m2==null
+            ? 'Restlovi se vode samo za PJ Aleksandrovac'
+            : (Number(s.cijele_m2)<0
+              ? 'Restlovi su veći od ukupnog stanja — provjeri lager ili evidenciju restlova'
+              : `Cijele table = stanje − dostupni restlovi${Number(s.rezervisano_m2)>0?`\nRezervisano ${uPolje(s.rezervisano_m2,2)} je uračunato ovdje, jer još nije izašlo` : ''}`)}">
+        ${s.cijele_m2==null ? '·' : `${Number(s.cijele_m2)<0?'⚠ ':''}${uPolje(s.cijele_m2,2)}`}
       </td>
-      <td style="padding:1px 5px;text-align:right;color:${Number(s.restlovi_m2)>0?'#6b4fa0':'#c3c9d1'};"
-          title="${Number(s.restlovi_kom)||0} ${(Number(s.restlovi_kom)||0)===1?'dostupan restl':'dostupnih restlova'}${Number(s.rezervisano_m2)>0?`\n+ ${uPolje(s.rezervisano_m2,2)} rezervisano (broji se u „Cijele")`:''}">
-        ${Number(s.restlovi_m2)>0?uPolje(s.restlovi_m2,2):'—'}
+      ${/* Klik otvara restlove filtrirane na TAJ artikal — sa slikama i mjerama.
+            Restlovi vec primaju roba_id iz adrese, pa se nista ne mijenja na njima. */''}
+      <td style="padding:1px 5px;text-align:right;">
+        ${s.restlovi_m2==null ? '<span style="color:#dfe3e8;" title="Restlovi se vode samo za PJ Aleksandrovac">·</span>'
+          : Number(s.restlovi_m2)>0
+          ? `<a href="restlovi.html?roba_id=${s.id}" target="_blank"
+                 title="${Number(s.restlovi_kom)||0} ${(Number(s.restlovi_kom)||0)===1?'dostupan restl':'dostupnih restlova'} — klikni da ih vidiš${Number(s.rezervisano_m2)>0?`\n+ ${uPolje(s.rezervisano_m2,2)} rezervisano (broji se u „Cijele")`:''}"
+                 style="color:#6b4fa0;text-decoration:none;font-weight:700;border-bottom:1px dotted #6b4fa0;">
+               ${uPolje(s.restlovi_m2,2)}
+               <span style="font-size:9px;font-weight:400;opacity:.8;"> (${Number(s.restlovi_kom)||0})</span>
+             </a>`
+          : '<span style="color:#c3c9d1;">—</span>'}
       </td>
       <td style="padding:1px 5px;text-align:right;font-weight:700;">
         ${lagerFmMoney(s.cijena)}

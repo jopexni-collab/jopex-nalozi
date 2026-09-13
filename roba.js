@@ -171,20 +171,30 @@ router.get('/lager', zahtijevaRobaMagacin, async (req, res) => {
               /* RESTLOVI — samo DOSTUPNI, kako je dogovoreno. Rezervisani se ne
                  racunaju ovdje; oni ostaju u "cijele table", jer fizicki jos nisu
                  izasli. Prikazuju se zasebno, da se ne izgube iz vida. */
-              COALESCE((SELECT SUM(rl.povrsina) FROM restlovi rl
-                        WHERE rl.roba_id = r.id AND rl.status = 'dostupan'), 0) AS restlovi_m2,
-              COALESCE((SELECT COUNT(*) FROM restlovi rl
-                        WHERE rl.roba_id = r.id AND rl.status = 'dostupan'), 0)::int AS restlovi_kom,
-              COALESCE((SELECT SUM(rl.povrsina) FROM restlovi rl
-                        WHERE rl.roba_id = r.id AND rl.status = 'rezervisan'), 0) AS rezervisano_m2,
+              /* Restlovi postoje SAMO u Aleksandrovcu — reze se jedino tamo.
+                 U ostalim objektima kolone ostaju prazne (NULL), da se ne oduzima
+                 nesto sto tamo fizicki ne postoji. Objekat se prepoznaje po nazivu,
+                 pa radi i ako mu se promijeni redni broj. */
+              CASE WHEN jeAleks.da THEN COALESCE((SELECT SUM(rl.povrsina) FROM restlovi rl
+                        WHERE rl.roba_id = r.id AND rl.status = 'dostupan'), 0) END AS restlovi_m2,
+              CASE WHEN jeAleks.da THEN COALESCE((SELECT COUNT(*) FROM restlovi rl
+                        WHERE rl.roba_id = r.id AND rl.status = 'dostupan'), 0)::int END AS restlovi_kom,
+              CASE WHEN jeAleks.da THEN COALESCE((SELECT SUM(rl.povrsina) FROM restlovi rl
+                        WHERE rl.roba_id = r.id AND rl.status = 'rezervisan'), 0) END AS rezervisano_m2,
 
               /* CIJELE TABLE = ukupno stanje minus dostupni restlovi.
                  Ne mijenja se nista u bazi — racuna se pri prikazu, pa se model moze
                  odbaciti bez posljedica. */
-              (rp.stanje - COALESCE((SELECT SUM(rl.povrsina) FROM restlovi rl
-                        WHERE rl.roba_id = r.id AND rl.status = 'dostupan'), 0)) AS cijele_m2
+              CASE WHEN jeAleks.da THEN
+                (rp.stanje - COALESCE((SELECT SUM(rl.povrsina) FROM restlovi rl
+                        WHERE rl.roba_id = r.id AND rl.status = 'dostupan'), 0)) END AS cijele_m2
 
-       FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
+       FROM roba r
+       JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
+       CROSS JOIN LATERAL (
+         SELECT EXISTS(SELECT 1 FROM prodajni_objekti po
+                       WHERE po.id = $1 AND po.naziv ILIKE '%aleksandrov%') AS da
+       ) jeAleks
        WHERE ${uslovi.join(' AND ')}
        ORDER BY r.naziv`,
       vals
