@@ -1324,6 +1324,11 @@ const LAGER_KOLONE=[
   {k:'tabla',lbl:'Tabla (mm)',align:'center',tip:'text'},
   {k:'jm',lbl:'JM',align:'center',tip:'select'},
   {k:'stanje',lbl:'Stanje',align:'right',tip:'num'},
+  /* Cijele table i restlovi se NE cuvaju u bazi — racunaju se pri prikazu:
+     cijele = stanje − dostupni restlovi. Rezervisani ostaju u "cijele", jer fizicki
+     jos nisu izasli; vide se u opisu celije. */
+  {k:'cijele_m2',lbl:'Cijele',align:'right',tip:'num'},
+  {k:'restlovi_m2',lbl:'Restlovi',align:'right',tip:'num'},
   {k:'cijena',lbl:'Cijena/JM',align:'right',tip:'num'},
   {k:'ukupno',lbl:'Ukupno',align:'right',tip:'num'},
 ];
@@ -3976,6 +3981,20 @@ function renderLagerRedovi(){
         ${currentUser?.rola==='admin'?`<button onclick="otvoriIzmjenuJedinice(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}','${esc(s.jed_mjera)}')" title="Promijeni jedinicu mjere" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>`:''}
       </td>
       <td style="padding:1px 5px;text-align:right;font-weight:700;background:${s.stanje<0?'#fce8e6':lagerBojaStanja(s.stanje)};color:${s.stanje<0?'#c0392b':'inherit'};text-decoration:underline;cursor:pointer;" onclick="otvoriRobnuKarticu(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}')" title="${s.stanje<0?'⚠ Stanje je u MINUSU':''}">${s.stanje<0?'⚠ ':''}${s.stanje}</td>
+      ${/* CIJELE TABLE i RESTLOVI — ne cuvaju se, racunaju se pri prikazu:
+            cijele = stanje − dostupni restlovi.
+            Ako ispadne minus, restlova je vise nego sto lager kaze — to je greska u
+            podacima koja bi inace ostala neprimijecena, pa se crveni. */''}
+      <td style="padding:1px 5px;text-align:right;${(Number(s.cijele_m2)||0)<0?'color:var(--red,#c0392b);font-weight:700;':'color:#6b7a8d;'}"
+          title="${(Number(s.cijele_m2)||0)<0
+            ? 'Restlovi su veći od ukupnog stanja — provjeri lager ili evidenciju restlova'
+            : `Cijele table = stanje − dostupni restlovi${Number(s.rezervisano_m2)>0?`\nRezervisano ${uPolje(s.rezervisano_m2,2)} je uračunato ovdje, jer još nije izašlo` : ''}`}">
+        ${(Number(s.cijele_m2)||0)<0?'⚠ ':''}${uPolje(s.cijele_m2||0,2)}
+      </td>
+      <td style="padding:1px 5px;text-align:right;color:${Number(s.restlovi_m2)>0?'#6b4fa0':'#c3c9d1'};"
+          title="${Number(s.restlovi_kom)||0} ${(Number(s.restlovi_kom)||0)===1?'dostupan restl':'dostupnih restlova'}${Number(s.rezervisano_m2)>0?`\n+ ${uPolje(s.rezervisano_m2,2)} rezervisano (broji se u „Cijele")`:''}">
+        ${Number(s.restlovi_m2)>0?uPolje(s.restlovi_m2,2):'—'}
+      </td>
       <td style="padding:1px 5px;text-align:right;font-weight:700;">
         ${lagerFmMoney(s.cijena)}
         ${(currentUser?.rola==='admin'||currentUser?.moze_cijene)?`<button onclick="otvoriNivelaciju(${s.id},'${esc(s.naziv).replace(/'/g,"&apos;")}',${s.cijena})" title="Promijeni cijenu (nivelacija)" style="background:none;border:none;cursor:pointer;color:var(--blue);font-size:10px;margin-left:2px;">✎</button>

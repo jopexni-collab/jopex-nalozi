@@ -166,7 +166,24 @@ router.get('/lager', zahtijevaRobaMagacin, async (req, res) => {
                  okom, da se odmah vidi gdje ta slika stoji. */
               EXISTS(SELECT 1 FROM roba_slike WHERE roba_id=r.id AND grupa_glavna=true) AS nosi_grupu,
               rp.cijena, rp.stanje,
-              (rp.cijena * rp.stanje) AS ukupno
+              (rp.cijena * rp.stanje) AS ukupno,
+
+              /* RESTLOVI — samo DOSTUPNI, kako je dogovoreno. Rezervisani se ne
+                 racunaju ovdje; oni ostaju u "cijele table", jer fizicki jos nisu
+                 izasli. Prikazuju se zasebno, da se ne izgube iz vida. */
+              COALESCE((SELECT SUM(rl.povrsina) FROM restlovi rl
+                        WHERE rl.roba_id = r.id AND rl.status = 'dostupan'), 0) AS restlovi_m2,
+              COALESCE((SELECT COUNT(*) FROM restlovi rl
+                        WHERE rl.roba_id = r.id AND rl.status = 'dostupan'), 0)::int AS restlovi_kom,
+              COALESCE((SELECT SUM(rl.povrsina) FROM restlovi rl
+                        WHERE rl.roba_id = r.id AND rl.status = 'rezervisan'), 0) AS rezervisano_m2,
+
+              /* CIJELE TABLE = ukupno stanje minus dostupni restlovi.
+                 Ne mijenja se nista u bazi — racuna se pri prikazu, pa se model moze
+                 odbaciti bez posljedica. */
+              (rp.stanje - COALESCE((SELECT SUM(rl.povrsina) FROM restlovi rl
+                        WHERE rl.roba_id = r.id AND rl.status = 'dostupan'), 0)) AS cijele_m2
+
        FROM roba r JOIN roba_pj rp ON rp.roba_id=r.id AND rp.objekt_id=$1
        WHERE ${uslovi.join(' AND ')}
        ORDER BY r.naziv`,
