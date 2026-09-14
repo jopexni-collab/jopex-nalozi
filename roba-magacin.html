@@ -8826,7 +8826,7 @@ let dokPjLista = [];
 async function dokUcitajPj(){
   if(dokPjLista.length) return;
   try{
-    const r = await fetch(`${API}/api/objekti`);
+    const r = await fetch(`${API}/api/prodajni-objekti`);
     if(!r.ok) return;
     const d = await r.json();
     dokPjLista = (Array.isArray(d) ? d : d.stavke || []).filter(x => x.id);
