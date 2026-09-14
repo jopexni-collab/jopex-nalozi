@@ -44,7 +44,12 @@ router.get('/dokumenti', async (req, res) => {
   if (req.query.nalog) { uslovi.push(`d.nalog_r_br = $${i++}`); vals.push(parseInt(req.query.nalog)); }
   if (req.query.od) { uslovi.push(`d.izdato >= $${i++}::date`); vals.push(req.query.od); }
   if (req.query.do) { uslovi.push(`d.izdato < ($${i++}::date + interval '1 day')`); vals.push(req.query.do); }
-  if (req.query.samo_ceka === '1') uslovi.push(`d.odobreno = 'ceka'`);
+  /* "Nezavrseno" znaci da JOS NESTO treba uraditi — ceka potvrdu ILI ceka knjizenje.
+     Ranije je hvatalo samo prvo, pa je spisak bio prazan iako je 71 dokument cekao
+     prenos u Bluesoft, a znak ih je urednо brojao. */
+  if (req.query.samo_ceka === '1')
+    uslovi.push(`(d.odobreno = 'ceka'
+                  OR (d.proknjizeno = false AND d.vrsta IN ('otpremnica','prijemnica','kalkulacija')))`);
   if (req.query.samo_otvoreni === '1') uslovi.push(`d.presjek_id IS NULL`);
   if (req.query.q) {
     uslovi.push(`(d.broj ILIKE $${i} OR d.primalac ILIKE $${i} OR d.nalog_r_br::text = $${i + 1})`);
@@ -75,9 +80,12 @@ router.get('/dokumenti', async (req, res) => {
     const ulaz = r.rows.filter(x => x.smjer === 'ulaz');
     const zbir = a => Math.round(a.reduce((s, x) => s + (Number(x.ukupno_m2) || 0), 0) * 10000) / 10000;
 
+    /* Kad znak kaze da nesto ceka a spisak je prazan, uzrok je skoro uvijek filter —
+       ovdje se vraca i sta je primijenjeno, da se to vidi umjesto da se nagadja. */
     res.json({
       stavke: r.rows,
       ukupno: r.rows.length,
+      primijenjeni_filteri: uslovi.length ? uslovi : null,
       izlaz_m2: zbir(izlaz),
       ulaz_m2: zbir(ulaz),
       neto_m2: Math.round((zbir(izlaz) - zbir(ulaz)) * 10000) / 10000,
@@ -166,8 +174,9 @@ router.get('/dokumenti/zbirno', async (req, res) => {
          COUNT(*) FILTER (WHERE odobreno = 'ceka' AND stornirano = false)::int AS ceka,
          COUNT(*) FILTER (WHERE presjek_id IS NULL AND stornirano = false)::int AS otvoreno,
          COUNT(*) FILTER (WHERE izdato::date = CURRENT_DATE AND stornirano = false)::int AS danas,
-         COUNT(*) FILTER (WHERE proknjizeno = false AND odobreno = 'odobreno'
-                            AND vrsta IN ('otpremnica','prijemnica') AND stornirano = false)::int AS za_knjizenje
+         COUNT(*) FILTER (WHERE proknjizeno = false
+                            AND vrsta IN ('otpremnica','prijemnica','kalkulacija')
+                            AND stornirano = false)::int AS za_knjizenje
        FROM magacin_dokumenti`
     );
     res.json({ ...r.rows[0], smijem_odobriti: smijeOdobriti(req.session.user) });

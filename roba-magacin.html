@@ -861,7 +861,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
                style="width:100%;font:inherit;font-size:11.5px;padding:4px 7px;border:1px solid #ccc;border-radius:5px;">
       </span>
       <label style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;cursor:pointer;padding-bottom:5px;">
-        <input type="checkbox" id="dok-ceka" onchange="dokUcitaj()"> Samo nezavršeno
+        <input type="checkbox" id="dok-ceka" onchange="dokUcitaj()"> Samo nezavršeno <span style="color:#8b96a5;font-size:10px;">(čeka potvrdu ili knjiženje)</span>
       </label>
       <button onclick="dokNoviDokument()" style="font:inherit;font-size:11.5px;padding:5px 12px;border:none;background:var(--green,#1f8a4c);color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">
         ➕ Nov dokument
@@ -4296,6 +4296,9 @@ function prebaciGlavniTabRM(tab){
     }
   }
   document.querySelectorAll('.glavni-tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+  /* Svaki tab se ovdje NABRAJA rucno — dodat tab mora biti i u ovom spisku, inace
+     dugme radi a sadrzaj ostaje skriven. Tako je "Dokumenti" bio nevidljiv. */
+  document.getElementById('tab-dokumenti').style.display = tab==='dokumenti' ? 'block' : 'none';
   document.getElementById('tab-kalkulacija').style.display = tab==='kalkulacija' ? 'block' : 'none';
   document.getElementById('tab-kalk-spisak').style.display = tab==='kalk-spisak' ? 'block' : 'none';
   if(tab==='kalk-spisak') kspUcitaj();
@@ -8829,6 +8832,20 @@ function dokOdgodi(){
 }
 
 async function dokUcitaj(){
+  /* Spisak objekata se puni jednom — do sad je padajuca lista imala samo "svi",
+     pa se nije moglo filtrirati po PJ. */
+  const sel = document.getElementById('dok-objekt');
+  if(sel && sel.options.length <= 1){
+    try{
+      const r = await fetch(`${API}/api/objekti`);
+      if(r.ok){
+        const o = await r.json();
+        sel.innerHTML = '<option value="">svi</option>' +
+          (Array.isArray(o)?o:o.stavke||[]).map(x=>`<option value="${x.id}">${esc(x.naziv)}</option>`).join('');
+      }
+    }catch(e){ /* bez spiska ostaje "svi" */ }
+  }
+
   const p = new URLSearchParams();
   const v = id => document.getElementById(id)?.value || '';
   if(v('dok-vrsta')) p.set('vrsta', v('dok-vrsta'));
