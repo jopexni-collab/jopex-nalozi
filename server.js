@@ -103,6 +103,7 @@ app.use('/api/restlovi', requireLoginOrApiKey, require('./restlovi'));
 app.use('/api/nalog-stavke', requireLoginOrApiKey, require('./nalog-stavke'));
 app.use('/api/gotovi-proizvodi', requireLoginOrApiKey, require('./gotovi-proizvodi'));
 app.use('/api/prijevodi', requireLoginOrApiKey, require('./prijevodi'));
+app.use('/api/magacin', requireLoginOrApiKey, require('./magacin'));
 // ─── Statički fajlovi ─────────────────────────────────────────────────────
 app.use((req, res, next) => {
   if (req.path.endsWith('.html')) {

@@ -385,6 +385,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <button type="button" class="glavni-tab-btn active" data-tab="lager" onclick="prebaciGlavniTabRM('lager')">📋 Lager lista</button>
   <button type="button" class="glavni-tab-btn" data-tab="kalkulacija" onclick="prebaciGlavniTabRM('kalkulacija')">📦 Kalkulacija</button>
   <button type="button" class="glavni-tab-btn" data-tab="kalk-spisak" onclick="prebaciGlavniTabRM('kalk-spisak')">📋 Spisak kalkulacija</button>
+  <button type="button" class="glavni-tab-btn" data-tab="dokumenti" onclick="prebaciGlavniTabRM('dokumenti')">📑 Dokumenti <span id="dok-znak" style="display:none;background:var(--orange,#b8860b);color:#fff;border-radius:9px;padding:0 6px;font-size:10px;margin-left:3px;"></span></button>
   <button type="button" class="glavni-tab-btn" data-tab="presek" onclick="prebaciGlavniTabRM('presek')">⚖️ Presek / Usaglašavanje</button>
   <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
   <button type="button" class="glavni-tab-btn" data-tab="uporedi" onclick="prebaciGlavniTabRM('uporedi')">⚖️ Uporedi PJ</button>
@@ -788,6 +789,60 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <div class="uzorak-hint">Svaki red predstavlja JEDAN cijeli uvoz fajla — ne pojedinačnu stavku. Ako si nekim slučajem uvezao/la isti fajl dva puta (dupliralo stanje), klikni "Storniraj" na tom uvozu — vraća stanje robe tačno na ono što je bilo pre tog uvoza.</div>
     <select id="uvoz-ist-objekt" onchange="uvozIstorijaUcitaj()" style="margin-bottom:12px;"><option value="">— svi PJ —</option></select>
     <div id="uvoz-ist-lista"></div>
+  </div>
+</div>
+
+<div id="tab-dokumenti" class="glavni-tab-sadrzaj" style="display:none;">
+  <div class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:11px;">
+      <h3 style="margin:0;font-size:15px;">📑 Magacinski dokumenti</h3>
+      <span id="dok-zbirno" style="font-size:11.5px;color:#8b96a5;"></span>
+    </div>
+
+    <div style="font-size:11px;color:#6b7a8d;line-height:1.5;margin-bottom:11px;">
+      Izdatnice i povratnice upisuje modul restlova, otpremnice maloprodaja, prijemnice
+      nabavka. <b>Sadržaj dokumenta se pamti</b> — odštampan i potpisan papir mora sutra
+      izgledati isto.
+    </div>
+
+    <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:end;margin-bottom:11px;">
+      <span>
+        <label style="font-size:10.5px;color:#6b7a8d;display:block;margin-bottom:2px;">Vrsta</label>
+        <select id="dok-vrsta" onchange="dokUcitaj()" style="font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ccc;border-radius:6px;">
+          <option value="">sve</option>
+          <option value="izdatnica">izdatnica</option>
+          <option value="povratnica">povratnica</option>
+          <option value="otpremnica">otpremnica</option>
+          <option value="prijemnica">prijemnica</option>
+        </select>
+      </span>
+      <span>
+        <label style="font-size:10.5px;color:#6b7a8d;display:block;margin-bottom:2px;">Smjer</label>
+        <select id="dok-smjer" onchange="dokUcitaj()" style="font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ccc;border-radius:6px;">
+          <option value="">oba</option>
+          <option value="izlaz">↑ izlaz</option>
+          <option value="ulaz">↓ ulaz</option>
+        </select>
+      </span>
+      <span>
+        <label style="font-size:10.5px;color:#6b7a8d;display:block;margin-bottom:2px;">Od</label>
+        <input type="date" id="dok-od" onchange="dokUcitaj()" style="font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ccc;border-radius:6px;">
+      </span>
+      <span>
+        <label style="font-size:10.5px;color:#6b7a8d;display:block;margin-bottom:2px;">Do</label>
+        <input type="date" id="dok-do" onchange="dokUcitaj()" style="font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ccc;border-radius:6px;">
+      </span>
+      <span style="flex:1;min-width:150px;">
+        <label style="font-size:10.5px;color:#6b7a8d;display:block;margin-bottom:2px;">Traži</label>
+        <input type="text" id="dok-q" placeholder="broj, nalog ili primalac" oninput="dokOdgodi()"
+               style="width:100%;font:inherit;font-size:12px;padding:5px 8px;border:1px solid #ccc;border-radius:6px;">
+      </span>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding-bottom:6px;">
+        <input type="checkbox" id="dok-ceka" onchange="dokUcitaj()"> Samo na čekanju
+      </label>
+    </div>
+
+    <div id="dok-lista" style="overflow:auto;border:1px solid var(--border,#ddd);border-radius:8px;"></div>
   </div>
 </div>
 
@@ -4183,6 +4238,7 @@ document.getElementById('logout').onclick=async e=>{
 };
 
 function prebaciGlavniTabRM(tab){
+  if(tab === 'dokumenti') setTimeout(dokUcitaj, 40);
   document.querySelectorAll('.glavni-tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   document.getElementById('tab-kalkulacija').style.display = tab==='kalkulacija' ? 'block' : 'none';
   document.getElementById('tab-kalk-spisak').style.display = tab==='kalk-spisak' ? 'block' : 'none';
@@ -8576,6 +8632,144 @@ async function pgSacuvaj(){
   }catch(e){
     poruka.textContent = '✗ ' + e.message; poruka.style.color = 'var(--red,#c0392b)';
   }finally{ dugme.disabled = false; }
+}
+
+
+/* ═══ MAGACINSKI DOKUMENTI ═════════════════════════════════════════════════════════
+   Izdatnice i povratnice upisuje modul restlova, otpremnice maloprodaja. Ovdje se
+   samo gledaju i odobravaju. */
+let dokTajmer = null;
+let dokSmijemOdobriti = false;
+
+function dokOdgodi(){
+  clearTimeout(dokTajmer);
+  dokTajmer = setTimeout(dokUcitaj, 350);   // ne zove se na svaki otkucaj
+}
+
+async function dokUcitaj(){
+  const cont = document.getElementById('dok-lista');
+  if(!cont) return;
+  cont.innerHTML = '<div style="padding:16px;text-align:center;color:#8b96a5;font-size:12px;">Učitavanje...</div>';
+
+  const p = new URLSearchParams();
+  const v = id => document.getElementById(id)?.value || '';
+  if(v('dok-vrsta')) p.set('vrsta', v('dok-vrsta'));
+  if(v('dok-smjer')) p.set('smjer', v('dok-smjer'));
+  if(v('dok-od')) p.set('od', v('dok-od'));
+  if(v('dok-do')) p.set('do', v('dok-do'));
+  if(v('dok-q')) p.set('q', v('dok-q'));
+  if(document.getElementById('dok-ceka')?.checked) p.set('samo_ceka','1');
+
+  try{
+    const r = await fetch(`${API}/api/magacin/dokumenti?${p}`);
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    dokSmijemOdobriti = d.smijem_odobriti === true;
+    dokPrikazi(d);
+  }catch(e){
+    cont.innerHTML = `<div style="padding:16px;color:var(--red,#c0392b);font-size:12px;">✗ ${esc(e.message)}</div>`;
+  }
+}
+
+function dokPrikazi(d){
+  const cont = document.getElementById('dok-lista');
+  const zb = document.getElementById('dok-zbirno');
+  if(zb){
+    zb.innerHTML = `${d.ukupno} ${d.ukupno===1?'dokument':'dokumenata'}
+      · <span style="color:var(--orange,#b8860b);">↑ ${uPolje(d.izlaz_m2,2)} m²</span>
+      · <span style="color:var(--green,#1f8a4c);">↓ ${uPolje(d.ulaz_m2,2)} m²</span>
+      · neto <b>${uPolje(d.neto_m2,2)} m²</b>
+      ${d.ceka_odobrenje ? `· <span style="color:var(--orange,#b8860b);">⏳ ${d.ceka_odobrenje} čeka</span>` : ''}`;
+  }
+
+  if(!d.stavke.length){
+    cont.innerHTML = '<div style="padding:20px;text-align:center;color:#8b96a5;font-size:12.5px;">Nema dokumenata za izabrane uslove.</div>';
+    return;
+  }
+
+  cont.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px;white-space:nowrap;">
+      <thead><tr style="background:#1f3864;color:#fff;">
+        <th style="padding:5px 8px;text-align:left;">Broj</th>
+        <th style="padding:5px 8px;text-align:left;">Vrsta</th>
+        <th style="padding:5px 6px;text-align:center;">Smjer</th>
+        <th style="padding:5px 8px;text-align:left;">Datum</th>
+        <th style="padding:5px 8px;text-align:left;">Nalog / Primalac</th>
+        <th style="padding:5px 8px;text-align:right;">m²</th>
+        <th style="padding:5px 8px;text-align:left;">Izdao</th>
+        <th style="padding:5px 8px;text-align:left;">Odobrenje</th>
+        <th style="padding:5px 6px;"></th>
+      </tr></thead>
+      <tbody>${d.stavke.map((x,i)=>{
+        /* Boji se po SMJERU, ne po vrsti — izlaz i ulaz su ono što se prvo traži
+           kad se gleda kretanje magacina. */
+        const izlaz = x.smjer === 'izlaz';
+        const boja = izlaz ? 'var(--orange,#b8860b)' : 'var(--green,#1f8a4c)';
+        return `
+        <tr style="background:${x.stornirano?'#fdecea':(i%2?'#f7f9fb':'#fff')};border-bottom:1px solid #eef0f3;">
+          <td style="padding:3px 8px;font-weight:700;${x.stornirano?'text-decoration:line-through;':''}">${esc(x.broj)}</td>
+          <td style="padding:3px 8px;color:#6b7a8d;">${esc(x.vrsta)}</td>
+          <td style="padding:3px 6px;text-align:center;color:${boja};font-weight:700;font-size:13px;">${izlaz?'↑':'↓'}</td>
+          <td style="padding:3px 8px;color:#6b7a8d;">${x.izdato?new Date(x.izdato).toLocaleString('sr-Latn-BA',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—'}</td>
+          <td style="padding:3px 8px;">${x.nalog_r_br?`<b>#${x.nalog_r_br}</b>`:esc(x.primalac||'—')}</td>
+          <td style="padding:3px 8px;text-align:right;font-weight:700;color:${boja};">${x.ukupno_m2!=null?uPolje(x.ukupno_m2,2):'—'}</td>
+          <td style="padding:3px 8px;color:#6b7a8d;">${esc(x.izdao_ime||'—')}</td>
+          <td style="padding:3px 8px;">${dokOznakaOdobrenja(x)}</td>
+          <td style="padding:3px 6px;text-align:right;white-space:nowrap;">
+            <a href="${API}/api/restlovi/dokument/${encodeURIComponent(x.broj)}" target="_blank"
+               title="Otvori i odštampaj" style="text-decoration:none;font-size:12px;">🖨</a>
+            ${(dokSmijemOdobriti && x.odobreno==='ceka' && !x.stornirano)
+              ? `<button onclick="dokOdluka('${esc(x.broj)}','odobreno')" title="Odobri"
+                         style="background:none;border:none;cursor:pointer;color:var(--green,#1f8a4c);font-size:12px;">✓</button>
+                 <button onclick="dokOdluka('${esc(x.broj)}','osporeno')" title="Ospori"
+                         style="background:none;border:none;cursor:pointer;color:var(--red,#c0392b);font-size:12px;">✗</button>` : ''}
+          </td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+function dokOznakaOdobrenja(x){
+  if(x.stornirano) return '<span style="color:var(--red,#c0392b);font-size:10.5px;">stornirano</span>';
+  if(x.odobreno === 'odobreno')
+    return `<span style="color:var(--green,#1f8a4c);" title="${esc(x.odobrio_ime||'')}">✓ ${esc(x.odobrio_ime||'')}</span>`;
+  if(x.odobreno === 'osporeno')
+    return `<span style="color:var(--red,#c0392b);" title="${esc(x.odobrenje_napomena||'')}">✗ osporeno</span>`;
+  return '<span style="color:var(--orange,#b8860b);">⏳ čeka</span>';
+}
+
+/* Odobrava se CIJELI dokument, ne pojedina stavka — stavke naslijede stanje. */
+async function dokOdluka(brojDok, odluka){
+  let napomena = '';
+  if(odluka === 'osporeno'){
+    napomena = prompt('Razlog osporavanja:') || '';
+    if(!napomena.trim()){ alert('Uz osporavanje treba razlog.'); return; }
+  }
+  try{
+    const r = await fetch(`${API}/api/restlovi/dokument/${encodeURIComponent(brojDok)}/odobri`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ odluka, napomena: napomena.trim() || undefined }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    dokUcitaj();
+    dokZnak();
+  }catch(e){ alert('✗ ' + e.message); }
+}
+
+/* Znak uz naslov taba — koliko dokumenata čeka odluku. */
+async function dokZnak(){
+  const el = document.getElementById('dok-znak');
+  if(!el) return;
+  try{
+    const r = await fetch(`${API}/api/magacin/dokumenti/zbirno`);
+    if(!r.ok) return;
+    const d = await r.json();
+    if(d.smijem_odobriti && d.ceka > 0){
+      el.textContent = d.ceka;
+      el.style.display = 'inline-block';
+    } else el.style.display = 'none';
+  }catch(e){ /* znak je dopuna, ne smije rušiti stranicu */ }
 }
 
 </script>
