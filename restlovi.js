@@ -1797,8 +1797,10 @@ router.get('/nalog/:r_br/materijal', smijeVidjeti, async (req, res) => {
     const r = await pool.query(
       `SELECT nm.*, r.oznaka AS restl_oznaka, r.materijal AS restl_materijal,
               ro.naziv AS artikal_naziv, ro.sifra AS artikal_sifra,
-              po.naziv AS objekt_naziv
+              po.naziv AS objekt_naziv,
+              md.broj AS dokument_broj, md.odobreno AS dokument_odobreno
          FROM nalog_materijal nm
+         LEFT JOIN magacin_dokumenti md ON md.id = nm.dokument_id
          LEFT JOIN restlovi r ON r.id = nm.restl_id
          LEFT JOIN roba ro ON ro.id = nm.roba_id
          LEFT JOIN prodajni_objekti po ON po.id = nm.objekt_id
@@ -1886,8 +1888,20 @@ router.post('/nalog/:r_br/uzmi', smijeUnositi, async (req, res) => {
       });
     }
 
+    // Svako izdavanje pravi dokument — bez njega magacin nema trag šta je izašlo
+    const dok = await napraviDokument(client, {
+      prefiks: 'IZD', vrsta: 'izdatnica', smjer: 'izlaz',
+      objekt_id: red.rows[0].objekt_id, nalog_r_br: brojNaloga(req.params.r_br),
+      primalac: 'Proizvodnja', ukupno_m2: Number(red.rows[0].povrsina) || 0, ukupno_kom: komadaStavke,
+      stavke: [{ vrsta: 'restl', oznaka: red.rows[0].restl_id ? String(red.rows[0].restl_id) : null,
+                 povrsina: red.rows[0].povrsina, dim_a: red.rows[0].dim_a, dim_b: red.rows[0].dim_b,
+                 pozicija: pozicijaNaziv }],
+      user,
+    });
+    await client.query('UPDATE nalog_materijal SET dokument_id=$1 WHERE id=$2', [dok.id, red.rows[0].id]);
+
     await client.query('COMMIT');
-    res.json({ ok: true, stavka: red.rows[0],
+    res.json({ ok: true, stavka: red.rows[0], dokument: dok,
                napomena: 'Lager nije mijenjan — restl se skida tek kad se stvarno isječe.' });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -2481,18 +2495,18 @@ function smijeOdobritiMaterijal(user) {
 }
 
 // GET /api/restlovi/odobrenja — šta čeka odobrenje
+// Odobrava se DOKUMENT kao cjelina, ne stavka po stavka — kao što se i papir
+// potpisuje u cjelini. Stavke unutar dokumenta naslijede njegovo stanje.
 router.get('/odobrenja', smijeVidjeti, async (req, res) => {
   try {
-    const [materijal, povrati] = await Promise.all([
+    const [dokumenti, povrati] = await Promise.all([
       pool.query(
-        `SELECT nm.*, ro.naziv AS artikal, ro.sifra, rs.oznaka AS restl_oznaka,
-                po.naziv AS objekt_naziv
-           FROM nalog_materijal nm
-           LEFT JOIN roba ro ON ro.id = nm.roba_id
-           LEFT JOIN restlovi rs ON rs.id = nm.restl_id
-           LEFT JOIN prodajni_objekti po ON po.id = nm.objekt_id
-          WHERE nm.odobreno = 'ceka' AND nm.stornirano = false
-          ORDER BY nm.uzeto DESC LIMIT 200`),
+        `SELECT d.*, po.naziv AS objekt_naziv,
+                (SELECT COUNT(*)::int FROM nalog_materijal nm WHERE nm.dokument_id = d.id) AS stavki
+           FROM magacin_dokumenti d
+           LEFT JOIN prodajni_objekti po ON po.id = d.objekt_id
+          WHERE d.odobreno = 'ceka' AND d.stornirano = false
+          ORDER BY d.izdato DESC LIMIT 200`),
       pool.query(
         `SELECT r.id, r.oznaka, r.materijal, r.dim_a, r.dim_b, r.povrsina, r.kreirao_ime,
                 r.kreirano, r.nastao_iz_naloga, r.foto_url, ro.naziv AS artikal
@@ -2501,16 +2515,84 @@ router.get('/odobrenja', smijeVidjeti, async (req, res) => {
           ORDER BY r.kreirano DESC LIMIT 200`),
     ]);
     res.json({
-      trebovanja: materijal.rows,
+      dokumenti: dokumenti.rows,
+      trebovanja: dokumenti.rows,     // zadržano ime radi starijeg prikaza
       povrati: povrati.rows,
       smijem: smijeOdobritiMaterijal(req.session?.user),
-      ukupno: materijal.rows.length + povrati.rows.length,
+      ukupno: dokumenti.rows.length + povrati.rows.length,
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// POST /api/restlovi/nalog-materijal/:id/odobri
+/* POST /api/restlovi/dokument/:id/odobri — JEDINO mjesto gdje se odobrava izdavanje.
+   Ranije se odobravala i pojedina stavka u nalog_materijal, pa je ista izdatnica
+   imala dva mjesta za potvrdu i mogla biti odobrena na jednom a ne na drugom.
+   Sad se odobrava dokument, a stavke unutar njega naslijede stanje. */
+router.post('/dokument/:id/odobri', async (req, res) => {
+  const user = req.session?.user;
+  if (!smijeOdobritiMaterijal(user))
+    return res.status(403).json({ error: 'Izdavanje odobravaju ugovaranje i maloprodaja.' });
+
+  const odluka = req.body?.odluka;
+  if (!['odobreno', 'osporeno'].includes(odluka))
+    return res.status(400).json({ error: 'Odluka mora biti "odobreno" ili "osporeno".' });
+  const nap = String(req.body?.napomena || '').trim();
+  if (odluka === 'osporeno' && !nap)
+    return res.status(400).json({ error: 'Uz osporavanje unesite razlog.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const d = await client.query('SELECT * FROM magacin_dokumenti WHERE id=$1 FOR UPDATE', [req.params.id]);
+    if (!d.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Dokument nije pronađen.' }); }
+    if (d.rows[0].odobreno !== 'ceka') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Već je odlučeno.' }); }
+
+    await client.query(
+      `UPDATE magacin_dokumenti SET odobreno=$1, odobrio_id=$2, odobrio_ime=$3,
+              odobreno_kada=now(), odobrenje_napomena=$4 WHERE id=$5`,
+      [odluka, user.id, user.ime_prezime, nap || null, req.params.id]);
+
+    // Stavke naslijeđuju stanje dokumenta — jedno mjesto odluke, jedan rezultat
+    await client.query(
+      `UPDATE nalog_materijal SET odobreno=$1, odobrio_id=$2, odobrio_ime=$3,
+              odobreno_kada=now(), odobrenje_napomena=$4 WHERE dokument_id=$5`,
+      [odluka, user.id, user.ime_prezime, nap || null, req.params.id]);
+
+    await client.query('COMMIT');
+    res.json({ ok: true, odluka, broj: d.rows[0].broj,
+      napomena: odluka === 'osporeno'
+        ? 'Osporeno — materijal NIJE vraćen sam od sebe. Ako treba, vrati ga dugmetom „Vrati".'
+        : null });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+/* POST /api/restlovi/nalog-materijal/:id/odobri — ZASTARJELO.
+   Odobrava se DOKUMENT, ne pojedina stavka: odobrenje stavke bi ostavilo dokument
+   neodobrenim, pa bi ista izdatnica imala dva različita stanja. Ruta je zadržana
+   samo da stariji pozivi ne padnu, i kaže gdje treba ići. */
 router.post('/nalog-materijal/:id/odobri', async (req, res) => {
+  try {
+    const st = await pool.query(
+      `SELECT nm.dokument_id, d.broj FROM nalog_materijal nm
+         LEFT JOIN magacin_dokumenti d ON d.id = nm.dokument_id
+        WHERE nm.id = $1`, [req.params.id]);
+    if (!st.rows.length) return res.status(404).json({ error: 'Stavka nije pronađena.' });
+    if (st.rows[0].dokument_id) {
+      return res.status(409).json({
+        error: 'Odobrava se cijela izdatnica ' + (st.rows[0].broj || '') + ', ne pojedina stavka.',
+        dokument_id: st.rows[0].dokument_id,
+        ruta: '/api/restlovi/dokument/' + st.rows[0].dokument_id + '/odobri',
+      });
+    }
+    // Stavka bez dokumenta — stariji zapisi prije uvođenja dokumenata
+    return staroOdobravanjeStavke(req, res);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+async function staroOdobravanjeStavke(req, res) {
   const user = req.session?.user;
   if (!smijeOdobritiMaterijal(user))
     return res.status(403).json({ error: 'Trebovanje odobravaju samo ovlašćene osobe.' });
@@ -2543,7 +2625,7 @@ router.post('/nalog-materijal/:id/odobri', async (req, res) => {
     await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ error: err.message });
   } finally { client.release(); }
-});
+}
 
 /* POST /api/restlovi/nalog-materijal/:id/vrati
    Vraćanje cijele table ili njenog ostatka u magacin. Za razliku od storna, ovdje se
@@ -2599,8 +2681,19 @@ router.post('/nalog-materijal/:id/vrati', smijeUnositi, async (req, res) => {
               povrsina = GREATEST(0, povrsina - $1) WHERE id=$3`,
       [vraceno, user.ime_prezime, s.id]);
 
+    const dokP = await napraviDokument(client, {
+      prefiks: 'POV', vrsta: 'povratnica', smjer: 'ulaz',
+      objekt_id: s.objekt_id, nalog_r_br: s.nalog_r_br,
+      primalac: 'Magacin', ukupno_m2: vraceno, ukupno_kom: 1,
+      napomena: kaoRestl ? 'Ostatak zaveden kao restl ' + (noviRestl?.oznaka || '') : 'Vraćeno na lager',
+      stavke: [{ vrsta: kaoRestl ? 'ostatak → restl' : 'povrat na lager',
+                 oznaka: noviRestl?.oznaka || null, povrsina: vraceno,
+                 dim_a: req.body.dim_a || null, dim_b: req.body.dim_b || null }],
+      user,
+    });
+
     await client.query('COMMIT');
-    res.json({ ok: true, vraceno, novi_restl: noviRestl, lager,
+    res.json({ ok: true, vraceno, novi_restl: noviRestl, lager, dokument: dokP,
       napomena: kaoRestl ? 'Ostatak je zaveden kao novi restl.' : 'Vraćeno u lager.' });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
@@ -2712,6 +2805,248 @@ router.get('/izdatnica/:id', smijeVidjeti, async (req, res) => {
 </div>
 </body></html>`);
   } catch (err) { res.status(500).send('Greška: ' + err.message); }
+});
+
+
+/* ─────────── MAGACINSKI DOKUMENTI ───────────
+   Svako izdavanje i vraćanje materijala pravi dokument u zajedničkoj tabeli
+   `magacin_dokumenti`, koju čita i lager lista. Sadržaj se PAMTI u trenutku
+   nastanka — dokument koji se štampa i potpisuje mora sutra izgledati isto,
+   i ako se stavke u međuvremenu promijene ili storniraju. */
+
+async function sljedeciBrojDokumenta(client, prefiks) {
+  const god = new Date().getFullYear();
+  const r = await client.query(
+    `SELECT broj FROM magacin_dokumenti WHERE broj LIKE $1 ORDER BY broj DESC LIMIT 1`,
+    [`${prefiks}-${god}-%`]);
+  const n = r.rows.length ? parseInt(r.rows[0].broj.split('-')[2], 10) + 1 : 1;
+  return `${prefiks}-${god}-${String(n).padStart(6, '0')}`;
+}
+
+async function napraviDokument(client, o) {
+  const broj = await sljedeciBrojDokumenta(client, o.prefiks);
+  const r = await client.query(
+    `INSERT INTO magacin_dokumenti
+       (broj, vrsta, smjer, objekt_id, izvor_modul, nalog_r_br, primalac,
+        ukupno_m2, ukupno_kom, vrijednost, napomena, stavke,
+        izdao_id, izdao_ime, preuzeo_ime, odobreno)
+     VALUES ($1,$2,$3,$4,'restlovi',$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,'ceka')
+     RETURNING id, broj`,
+    [broj, o.vrsta, o.smjer, o.objekt_id || null, o.nalog_r_br || null,
+     o.primalac || 'Proizvodnja', o.ukupno_m2 || 0, o.ukupno_kom || 0,
+     o.vrijednost || 0, o.napomena || null, JSON.stringify(o.stavke || []),
+     o.user?.id || null, o.user?.ime_prezime || null, o.preuzeo || null]);
+  return r.rows[0];
+}
+
+// GET /api/restlovi/dokument/:broj — pregled i štampa sačuvanog dokumenta
+router.get('/dokument/:broj', smijeVidjeti, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT d.*, po.naziv AS objekt_naziv
+         FROM magacin_dokumenti d
+         LEFT JOIN prodajni_objekti po ON po.id = d.objekt_id
+        WHERE d.broj = $1`, [req.params.broj]);
+    if (!r.rows.length) return res.status(404).send('Dokument nije pronađen.');
+    const d = r.rows[0];
+    const st = Array.isArray(d.stavke) ? d.stavke : JSON.parse(d.stavke || '[]');
+    const dat = v => v ? new Date(v).toLocaleString('bs-BA') : '';
+    const br = v => (Number(v) || 0).toLocaleString('bs-BA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const esc = v => String(v ?? '').replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
+    const naslov = { izdatnica: 'IZDATNICA MATERIJALA', povratnica: 'POVRATNICA',
+                     prijemnica: 'PRIJEMNICA', otpremnica: 'OTPREMNICA' }[d.vrsta] || d.vrsta.toUpperCase();
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!DOCTYPE html><html lang="bs"><head><meta charset="UTF-8"><title>${esc(d.broj)}</title>
+<style>
+ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#222;max-width:800px;margin:0 auto;padding:24px;}
+ h1{font-size:20px;color:#1f3864;margin:0 0 4px;}
+ .zag{display:flex;justify-content:space-between;border-bottom:2px solid #1f3864;padding-bottom:10px;margin-bottom:16px;}
+ .p{margin:3px 0;} .p b{display:inline-block;min-width:140px;color:#6b7a8d;font-weight:600;}
+ table{width:100%;border-collapse:collapse;margin:16px 0;font-size:12px;}
+ th{background:#1f3864;color:#fff;padding:6px 8px;text-align:left;font-size:11px;}
+ td{padding:6px 8px;border-bottom:1px solid #eee;} td.num,th.num{text-align:right;}
+ tfoot td{font-weight:700;background:#eef4fc;border-top:2px solid #1f3864;}
+ .pot{display:flex;gap:40px;margin-top:48px;}
+ .pot div{flex:1;border-top:1px solid #999;padding-top:6px;font-size:11px;color:#6b7a8d;text-align:center;}
+ .nap{font-size:11px;color:#8b96a5;margin-top:24px;border-top:1px dashed #ccc;padding-top:8px;}
+ .stat{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;}
+ @media print{body{padding:0;} .noprint{display:none;}}
+</style></head><body>
+<div class="zag">
+  <div><h1>${naslov}</h1><div style="font-size:15px;font-weight:700">${esc(d.broj)}</div></div>
+  <div style="text-align:right;font-size:12px"><div><b>JoPeX</b></div><div>${esc(d.objekt_naziv || '')}</div></div>
+</div>
+${d.stornirano ? '<div style="background:#fce8e6;color:#c0392b;padding:8px;border-radius:6px;margin-bottom:12px"><b>STORNIRANO</b> ' + esc(d.stornirao_ime || '') + ' ' + dat(d.stornirano_kada) + '</div>' : ''}
+<div class="p"><b>Datum:</b> ${dat(d.izdato)}</div>
+${d.nalog_r_br ? `<div class="p"><b>Radni nalog:</b> #${esc(d.nalog_r_br)}</div>` : ''}
+<div class="p"><b>Primalac:</b> ${esc(d.primalac || '')}</div>
+<div class="p"><b>Izdao:</b> ${esc(d.izdao_ime || '')}</div>
+<div class="p"><b>Odobrenje:</b> ${
+  d.odobreno === 'odobreno' ? `<span class="stat" style="background:#e6f4ea;color:#1f8a4c">ODOBRENO</span> ${esc(d.odobrio_ime || '')}, ${dat(d.odobreno_kada)}`
+  : d.odobreno === 'osporeno' ? `<span class="stat" style="background:#fce8e6;color:#c0392b">OSPORENO</span> ${esc(d.odobrenje_napomena || '')}`
+  : '<span class="stat" style="background:#fff3e0;color:#8a5200">ČEKA ODOBRENJE</span>'}</div>
+
+<table><thead><tr><th>Vrsta</th><th>Šifra</th><th>Artikal / oznaka</th>
+ <th class="num">Mjere (mm)</th><th class="num">m²</th><th>Pozicija</th></tr></thead><tbody>
+${st.map(y => `<tr><td>${esc(y.vrsta || '')}</td><td>${esc(y.sifra || '')}</td>
+ <td>${esc(y.oznaka ? y.oznaka + ' — ' : '')}${esc(y.artikal || '')}</td>
+ <td class="num">${y.dim_a ? Math.round(y.dim_a) + '×' + Math.round(y.dim_b) : ''}</td>
+ <td class="num">${br(y.povrsina)}</td><td>${esc(y.pozicija || '')}</td></tr>`).join('')}
+</tbody><tfoot><tr><td colspan="4">UKUPNO — ${st.length} stavki</td>
+ <td class="num">${br(d.ukupno_m2)}</td><td></td></tr></tfoot></table>
+
+<div class="pot"><div>Izdao iz magacina</div><div>Preuzeo</div><div>Odobrio</div></div>
+<div class="nap">Dokument prati kretanje materijala <b>unutar firme</b>. Sadržaj je sačuvan
+u trenutku izdavanja i ne mijenja se naknadno.</div>
+<div class="noprint" style="margin-top:20px;text-align:center">
+ <button onclick="window.print()" style="padding:8px 20px;background:#1a5fa8;color:#fff;border:none;border-radius:6px;cursor:pointer">🖨 Štampaj</button>
+</div></body></html>`);
+  } catch (err) { res.status(500).send('Greška: ' + err.message); }
+});
+
+
+/* ─────────── PRESJEK IZDATNICA ───────────
+   Suma svega izdatog od prethodnog presjeka do sada. Presjek ZATVARA dokumente koje
+   obuhvati — sljedeći kreće od tog trenutka, pa se ista izdatnica nikad ne broji
+   dvaput. Granica je vrijeme presjeka, ne kalendarski dan: može se raditi na kraju
+   smjene, na kraju dana ili u bilo kom trenutku. */
+
+// GET /api/restlovi/presjek/probni — šta bi ušlo, bez zatvaranja
+router.get('/presjek/probni', smijeVidjeti, async (req, res) => {
+  try {
+    const objektId = req.query.objekt_id || null;
+    const podaci = await sakupiZaPresjek(pool, objektId);
+    res.json(podaci);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+async function sakupiZaPresjek(izvrsilac, objektId) {
+  const zadnji = await izvrsilac.query(
+    `SELECT do_vremena, broj FROM magacin_presjeci
+      WHERE ($1::int IS NULL OR objekt_id = $1) ORDER BY do_vremena DESC LIMIT 1`, [objektId]);
+  const od = zadnji.rows.length ? zadnji.rows[0].do_vremena : null;
+
+  const d = await izvrsilac.query(
+    `SELECT d.*, po.naziv AS objekt_naziv
+       FROM magacin_dokumenti d
+       LEFT JOIN prodajni_objekti po ON po.id = d.objekt_id
+      WHERE d.presjek_id IS NULL AND d.stornirano = false
+        AND ($1::int IS NULL OR d.objekt_id = $1)
+      ORDER BY d.izdato`, [objektId]);
+
+  const izdato = d.rows.filter(x => x.smjer === 'izlaz');
+  const vraceno = d.rows.filter(x => x.smjer === 'ulaz');
+  const zbir = a => Math.round(a.reduce((z, x) => z + (Number(x.ukupno_m2) || 0), 0) * 10000) / 10000;
+
+  // Razrada po nalozima — da se vidi na šta je materijal otišao
+  const poNalozima = new Map();
+  for (const x of d.rows) {
+    const k = x.nalog_r_br || 0;
+    const t = poNalozima.get(k) || { nalog_r_br: x.nalog_r_br, izdato_m2: 0, vraceno_m2: 0, dokumenata: 0 };
+    if (x.smjer === 'izlaz') t.izdato_m2 += Number(x.ukupno_m2) || 0;
+    else t.vraceno_m2 += Number(x.ukupno_m2) || 0;
+    t.dokumenata++;
+    poNalozima.set(k, t);
+  }
+  const nalozi = [...poNalozima.values()].map(t => ({
+    ...t,
+    izdato_m2: Math.round(t.izdato_m2 * 10000) / 10000,
+    vraceno_m2: Math.round(t.vraceno_m2 * 10000) / 10000,
+    neto_m2: Math.round((t.izdato_m2 - t.vraceno_m2) * 10000) / 10000,
+  })).sort((a, b) => b.neto_m2 - a.neto_m2);
+
+  // Razrada po artiklima — iz sačuvanih stavki dokumenta
+  const poArtiklima = new Map();
+  for (const x of d.rows) {
+    const st = Array.isArray(x.stavke) ? x.stavke : JSON.parse(x.stavke || '[]');
+    for (const y of st) {
+      const k = y.sifra || y.artikal || '(bez artikla)';
+      const t = poArtiklima.get(k) || { sifra: y.sifra || null, artikal: y.artikal || k, m2: 0, komada: 0 };
+      t.m2 += (Number(y.povrsina) || 0) * (x.smjer === 'izlaz' ? 1 : -1);
+      t.komada++;
+      poArtiklima.set(k, t);
+    }
+  }
+
+  return {
+    od_vremena: od,
+    prethodni_presjek: zadnji.rows.length ? zadnji.rows[0].broj : null,
+    do_vremena: new Date().toISOString(),
+    dokumenti: d.rows.map(x => ({
+      id: x.id, broj: x.broj, vrsta: x.vrsta, smjer: x.smjer,
+      nalog_r_br: x.nalog_r_br, ukupno_m2: Number(x.ukupno_m2) || 0,
+      izdato: x.izdato, izdao_ime: x.izdao_ime, odobreno: x.odobreno,
+      objekt_naziv: x.objekt_naziv,
+    })),
+    po_nalozima: nalozi,
+    po_artiklima: [...poArtiklima.values()].map(t => ({ ...t, m2: Math.round(t.m2 * 10000) / 10000 }))
+      .sort((a, b) => b.m2 - a.m2),
+    sazetak: {
+      dokumenata: d.rows.length,
+      izdatnica: izdato.length, povratnica: vraceno.length,
+      izdato_m2: zbir(izdato), vraceno_m2: zbir(vraceno),
+      neto_m2: Math.round((zbir(izdato) - zbir(vraceno)) * 10000) / 10000,
+      naloga: nalozi.length,
+      // Dokumenti koji još čekaju odobrenje ulaze u presjek, ali se broje posebno —
+      // presjek je stanje magacina, a odobrenje je zasebno pitanje.
+      na_cekanju: d.rows.filter(x => x.odobreno === 'ceka').length,
+    },
+  };
+}
+
+// POST /api/restlovi/presjek/napravi — zatvara obuhvaćene dokumente
+router.post('/presjek/napravi', smijeUnositi, async (req, res) => {
+  const user = req.session.user;
+  const client = await pool.connect();
+  try {
+    const objektId = req.body.objekt_id || null;
+    await client.query('BEGIN');
+    const p = await sakupiZaPresjek(client, objektId);
+    if (!p.dokumenti.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Nema novih dokumenata od prethodnog presjeka.' });
+    }
+
+    const god = new Date().getFullYear();
+    const zadnji = await client.query(
+      `SELECT broj FROM magacin_presjeci WHERE broj LIKE $1 ORDER BY broj DESC LIMIT 1`, [`PRS-${god}-%`]);
+    const n = zadnji.rows.length ? parseInt(zadnji.rows[0].broj.split('-')[2], 10) + 1 : 1;
+    const broj = `PRS-${god}-${String(n).padStart(6, '0')}`;
+
+    const ins = await client.query(
+      `INSERT INTO magacin_presjeci
+         (broj, objekt_id, od_vremena, do_vremena, dokumenata, izdato_m2, vraceno_m2,
+          neto_m2, po_nalozima, po_artiklima, na_cekanju, napravio_ime)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$12) RETURNING *`,
+      [broj, objektId, p.od_vremena, p.do_vremena, p.sazetak.dokumenata,
+       p.sazetak.izdato_m2, p.sazetak.vraceno_m2, p.sazetak.neto_m2,
+       JSON.stringify(p.po_nalozima), JSON.stringify(p.po_artiklima),
+       p.sazetak.na_cekanju, user.ime_prezime]);
+
+    // Zatvaranje — od sada ovi dokumenti ne ulaze ni u jedan sljedeći presjek
+    await client.query(
+      `UPDATE magacin_dokumenti SET presjek_id = $1 WHERE id = ANY($2::int[])`,
+      [ins.rows[0].id, p.dokumenti.map(x => x.id)]);
+
+    await client.query('COMMIT');
+    res.json({ ok: true, presjek: ins.rows[0], sazetak: p.sazetak,
+      napomena: p.dokumenti.length + ' dokumenata je zatvoreno — sljedeći presjek kreće od ovog trenutka.' });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
+// GET /api/restlovi/presjek/lista — istorija presjeka
+router.get('/presjek/lista', smijeVidjeti, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT p.*, po.naziv AS objekt_naziv
+         FROM magacin_presjeci p LEFT JOIN prodajni_objekti po ON po.id = p.objekt_id
+        ORDER BY p.do_vremena DESC LIMIT 100`);
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 

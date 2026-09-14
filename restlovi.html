@@ -3477,9 +3477,9 @@ async function prikaziMaterijalNaloga() {
                 (x.odobrio_ime ? '<div class="hint" style="margin:0">' + x.odobrio_ime + '</div>' : ''))) + '</td>' +
         '<td style="white-space:nowrap">' +
           '<button class="btn sec mali" onclick="stornirajMaterijal(' + x.id + ')">Storno</button>' +
-          (x.vrsta === 'tabla' && x.odobreno === 'odobreno'
+          (x.dokument_broj
             ? ' <a class="btn sec mali" style="text-decoration:none;display:inline-block" ' +
-              'href="/api/restlovi/izdatnica/' + x.id + '" target="_blank">📄 Izdatnica</a>' : '') +
+              'href="/api/restlovi/dokument/' + x.dokument_broj + '" target="_blank">📄 ' + x.dokument_broj + '</a>' : '') +
         '</td></tr>').join('') +
       '<tr style="background:#eef4fc;font-weight:700"><td colspan="3">UKUPNO · ' +
         d.restlova + ' restl(ova), ' + d.tabli + ' tabl(i)</td>' +
@@ -3581,27 +3581,29 @@ async function ucitajOdobrenja() {
     }
     let html = '';
 
-    if (d.trebovanja.length) {
-      html += '<h3>Trebovanja materijala (' + d.trebovanja.length + ')</h3>' +
-        '<div class="xl-wrap"><table class="xl"><thead><tr><th>Nalog</th><th>Vrsta</th>' +
-        '<th>Artikal / restl</th><th style="text-align:right">Mjere</th>' +
-        '<th style="text-align:right">m²</th><th>Ko i kada</th><th></th></tr></thead><tbody>' +
-        d.trebovanja.map(x => '<tr>' +
-          '<td><b>#' + x.nalog_r_br + '</b>' + (x.pozicija_naziv ? '<div class="hint">' + x.pozicija_naziv + '</div>' : '') + '</td>' +
-          '<td>' + (x.vrsta === 'tabla'
-            ? '<span class="chip" style="background:#e0e7ff;color:#3730a3">cijela tabla</span>'
-            : '<span class="chip chip-rezervisan">restl</span>') + '</td>' +
-          '<td>' + (x.restl_oznaka ? '<b>' + x.restl_oznaka + '</b> — ' : '') + (x.artikal || '') +
-            (x.sifra ? ' <span class="hint">' + x.sifra + '</span>' : '') + '</td>' +
-          '<td class="num">' + (x.dim_a ? Math.round(x.dim_a) + '×' + Math.round(x.dim_b) : '') + '</td>' +
-          '<td class="num"><b>' + fmt(x.povrsina) + '</b></td>' +
-          '<td class="hint">' + (x.uzeo_ime || '') + '<br>' + new Date(x.uzeto).toLocaleString('bs-BA') + '</td>' +
+    const dok = d.dokumenti || d.trebovanja || [];
+    if (dok.length) {
+      html += '<h3>Izdavanje materijala (' + dok.length + ')</h3>' +
+        '<div class="hint" style="margin-bottom:6px">Odobrava se <b>cijela izdatnica</b>, ne stavka po stavka — ' +
+        'kao što se i papir potpisuje u cjelini.</div>' +
+        '<div class="xl-wrap"><table class="xl"><thead><tr><th>Dokument</th><th>Vrsta</th>' +
+        '<th>Nalog</th><th>Primalac</th><th style="text-align:right">Stavki</th>' +
+        '<th style="text-align:right">m²</th><th>Izdao i kada</th><th></th></tr></thead><tbody>' +
+        dok.map(x => '<tr>' +
+          '<td><a href="/api/restlovi/dokument/' + x.broj + '" target="_blank" ' +
+            'style="font-weight:700;color:#1a5fa8;text-decoration:none">' + x.broj + '</a>' +
+            '<div class="hint" style="margin:0">' + (x.objekt_naziv || '') + '</div></td>' +
+          '<td>' + (x.smjer === 'izlaz'
+            ? '<span class="chip" style="background:#fff3e0;color:#8a5200">↑ ' + x.vrsta + '</span>'
+            : '<span class="chip chip-dostupan">↓ ' + x.vrsta + '</span>') + '</td>' +
+          '<td>' + (x.nalog_r_br ? '<b>#' + x.nalog_r_br + '</b>' : '<span class="hint">—</span>') + '</td>' +
+          '<td>' + (x.primalac || '') + '</td>' +
+          '<td class="num">' + (x.stavki || 1) + '</td>' +
+          '<td class="num"><b>' + fmt(x.ukupno_m2) + '</b></td>' +
+          '<td class="hint">' + (x.izdao_ime || '') + '<br>' + new Date(x.izdato).toLocaleString('bs-BA') + '</td>' +
           '<td style="white-space:nowrap">' + (SMIJEM_ODOBRITI
-            ? '<button class="btn mali" onclick="odluciMaterijal(' + x.id + ',\'odobreno\')">✓ Odobri</button> ' +
-              '<button class="btn sec mali" onclick="odluciMaterijal(' + x.id + ',\'osporeno\')">✗ Ospori</button><br>' +
-              '<button class="btn sec mali" style="margin-top:3px" onclick="vratiTablu(' + x.id + ',' +
-                (Number(x.povrsina) || 0) + ',' + JSON.stringify(JSON.stringify(x.vrsta)) + ')">↩ Vrati ' +
-                (x.vrsta === 'tabla' ? 'tablu' : 'restl') + '</button>'
+            ? '<button class="btn mali" onclick="odluciDokument(' + x.id + ',\'odobreno\')">✓ Odobri</button> ' +
+              '<button class="btn sec mali" onclick="odluciDokument(' + x.id + ',\'osporeno\')">✗ Ospori</button>'
             : '<span class="hint">čeka odobrenje</span>') + '</td></tr>').join('') +
         '</tbody></table></div>';
     }
@@ -3628,6 +3630,24 @@ async function ucitajOdobrenja() {
     }
     cilj.innerHTML = html;
   } catch (e) { cilj.innerHTML = '<div class="msg err">' + e.message + '</div>'; }
+}
+
+/* Odobravanje CIJELE izdatnice. Stavke unutar nje naslijede stanje — jedno mjesto
+   odluke, jedan rezultat. */
+async function odluciDokument(id, odluka) {
+  let nap = '';
+  if (odluka === 'osporeno') {
+    nap = prompt('Razlog osporavanja:') || '';
+    if (!nap.trim()) return;
+  }
+  try {
+    const d = await api('/dokument/' + id + '/odobri', { method: 'POST',
+      body: JSON.stringify({ odluka, napomena: nap }) });
+    poruka((odluka === 'odobreno' ? 'Izdatnica ' + d.broj + ' odobrena.' :
+            'Izdatnica ' + d.broj + ' osporena. ') + (d.napomena || ''),
+           odluka === 'odobreno' ? 'uspjeh' : 'greska');
+    ucitajOdobrenja();
+  } catch (e) { poruka(e.message, 'greska'); }
 }
 
 async function odluciMaterijal(id, odluka) {
