@@ -382,22 +382,39 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 <div id="roba-magacin-glavni-sadrzaj" style="padding:12px;padding-bottom:40px;">
 
 <div class="ce-row traka-tabova" style="margin-bottom:14px;">
-  <button type="button" class="glavni-tab-btn active" data-tab="lager" onclick="prebaciGlavniTabRM('lager')">📋 Lager lista</button>
-  <button type="button" class="glavni-tab-btn" data-tab="kalkulacija" onclick="prebaciGlavniTabRM('kalkulacija')">📦 Kalkulacija</button>
-  <button type="button" class="glavni-tab-btn" data-tab="kalk-spisak" onclick="prebaciGlavniTabRM('kalk-spisak')">📋 Spisak kalkulacija</button>
-  <button type="button" class="glavni-tab-btn" data-tab="dokumenti" onclick="prebaciGlavniTabRM('dokumenti')">📑 Dokumenti <span id="dok-znak" style="display:none;background:var(--orange,#b8860b);color:#fff;border-radius:9px;padding:0 6px;font-size:10px;margin-left:3px;"></span></button>
-  <button type="button" class="glavni-tab-btn" data-tab="presek" onclick="prebaciGlavniTabRM('presek')">⚖️ Presek / Usaglašavanje</button>
-  <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
-  <button type="button" class="glavni-tab-btn" data-tab="uporedi" onclick="prebaciGlavniTabRM('uporedi')">⚖️ Uporedi PJ</button>
-  <button type="button" class="glavni-tab-btn" data-tab="gotovi" onclick="prebaciGlavniTabRM('gotovi')">🍽️ Gotovi proizvodi</button>
-  <a href="prijevodi.html" class="glavni-tab-btn" style="text-decoration:none;display:inline-flex;align-items:center;" title="Prijevodi naziva za katalog na stranom jeziku">🌍 Prijevodi</a>
-  <button type="button" class="glavni-tab-btn" data-tab="akcije" onclick="prebaciGlavniTabRM('akcije')">🏷️ Akcije</button>
-  <button type="button" class="glavni-tab-btn" data-tab="kretanje" onclick="prebaciGlavniTabRM('kretanje')">📈 Kretanje robe</button>
-  <button type="button" class="glavni-tab-btn" data-tab="uvoz" onclick="prebaciGlavniTabRM('uvoz')">📥 Uvoz robe</button>
-  <button type="button" class="glavni-tab-btn" data-tab="uvoz-slike" onclick="prebaciGlavniTabRM('uvoz-slike')">📷 Uvoz slika</button>
-  <button type="button" class="glavni-tab-btn" data-tab="uvoz-istorija" onclick="prebaciGlavniTabRM('uvoz-istorija')">🗂️ Istorija uvoza</button>
-  <button type="button" class="glavni-tab-btn" data-tab="master-grupe" onclick="prebaciGlavniTabRM('master-grupe')">🗂️ Master grupe</button>
-  <button type="button" class="glavni-tab-btn" data-tab="izvoz-log" id="tab-btn-izvoz-log" style="display:none;" onclick="prebaciGlavniTabRM('izvoz-log')">🔐 Izvozi <span id="izvoz-log-badge" style="display:none;background:var(--red,#c0392b);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;"></span></button>
+  <!-- TRI NIVOA: gore glavna podjela, ispod podtabovi izabrane grupe.
+       Petnaest tabova u jednom redu se nije moglo pregledati; ovako se prvo bira
+       oblast pa tek onda ekran. -->
+  <div class="traka-grupa" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;">
+    <button type="button" class="grupa-tab-btn active" data-grupa="lager" onclick="prebaciGrupuRM('lager')"
+            style="font:inherit;font-size:13px;font-weight:700;padding:9px 18px;border:1px solid var(--border,#ddd);border-radius:8px;cursor:pointer;background:#1f3864;color:#fff;">📋 Lager</button>
+    <button type="button" class="grupa-tab-btn" data-grupa="dokumenti" onclick="prebaciGrupuRM('dokumenti')"
+            style="font:inherit;font-size:13px;font-weight:700;padding:9px 18px;border:1px solid var(--border,#ddd);border-radius:8px;cursor:pointer;background:#fff;color:inherit;">📑 Dokumenti<span id="grupa-znak-dokumenti" style="display:none;background:var(--red,#c0392b);color:#fff;border-radius:9px;padding:0 6px;font-size:10px;margin-left:4px;"></span></button>
+    <button type="button" class="grupa-tab-btn" data-grupa="uredjenje" onclick="prebaciGrupuRM('uredjenje')"
+            style="font:inherit;font-size:13px;font-weight:700;padding:9px 18px;border:1px solid var(--border,#ddd);border-radius:8px;cursor:pointer;background:#fff;color:inherit;">⚙️ Uređenje</button>
+  </div>
+
+  <div class="traka-tabova" data-grupa-sadrzaj="lager" style="">
+    <button type="button" class="glavni-tab-btn active" data-tab="lager" onclick="prebaciGlavniTabRM('lager')">📋 Lager lista</button>
+  </div>
+  <div class="traka-tabova" data-grupa-sadrzaj="dokumenti" style="display:none;">
+    <button type="button" class="glavni-tab-btn" data-tab="dokumenti" onclick="prebaciGlavniTabRM('dokumenti')">📑 Dokumenti <span id="dok-znak" style="display:none;background:var(--orange,#b8860b);color:#fff;border-radius:9px;padding:0 6px;font-size:10px;margin-left:3px;"></span></button>
+    <button type="button" class="glavni-tab-btn" data-tab="kalkulacija" onclick="prebaciGlavniTabRM('kalkulacija')">📦 Kalkulacija</button>
+    <button type="button" class="glavni-tab-btn" data-tab="kalk-spisak" onclick="prebaciGlavniTabRM('kalk-spisak')">📋 Spisak kalkulacija</button>
+    <button type="button" class="glavni-tab-btn" data-tab="presek" onclick="prebaciGlavniTabRM('presek')">⚖️ Presek / Usaglašavanje</button>
+    <button type="button" class="glavni-tab-btn" data-tab="uporedi" onclick="prebaciGlavniTabRM('uporedi')">⚖️ Uporedi PJ</button>
+    <button type="button" class="glavni-tab-btn" data-tab="kretanje" onclick="prebaciGlavniTabRM('kretanje')">📈 Kretanje robe</button>
+    <button type="button" class="glavni-tab-btn" data-tab="uvoz" onclick="prebaciGlavniTabRM('uvoz')">📥 Uvoz robe</button>
+    <button type="button" class="glavni-tab-btn" data-tab="uvoz-istorija" onclick="prebaciGlavniTabRM('uvoz-istorija')">🗂️ Istorija uvoza</button>
+    <button type="button" class="glavni-tab-btn" data-tab="izvoz-log" id="tab-btn-izvoz-log" style="display:none;" onclick="prebaciGlavniTabRM('izvoz-log')">🔐 Izvozi <span id="izvoz-log-badge" style="display:none;background:var(--red,#c0392b);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;"></span></button>
+  </div>
+  <div class="traka-tabova" data-grupa-sadrzaj="uredjenje" style="display:none;">
+    <button type="button" class="glavni-tab-btn" data-tab="gotovi" onclick="prebaciGlavniTabRM('gotovi')">🍽️ Gotovi proizvodi</button>
+    <button type="button" class="glavni-tab-btn" data-tab="akcije" onclick="prebaciGlavniTabRM('akcije')">🏷️ Akcije</button>
+    <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
+    <button type="button" class="glavni-tab-btn" data-tab="uvoz-slike" onclick="prebaciGlavniTabRM('uvoz-slike')">📷 Uvoz slika</button>
+    <button type="button" class="glavni-tab-btn" data-tab="master-grupe" onclick="prebaciGlavniTabRM('master-grupe')">🗂️ Master grupe</button>
+  </div>
 </div>
 
 <div id="tab-kalk-spisak" style="display:none;">
@@ -4238,6 +4255,21 @@ document.getElementById('logout').onclick=async e=>{
 
 function prebaciGlavniTabRM(tab){
   if(tab === 'dokumenti') setTimeout(dokUcitaj, 40);
+  /* Tab se moze otvoriti i iz koda — tad se otvara i grupa kojoj pripada. */
+  for(const [g, lista] of Object.entries(GRUPE_TABOVA || {})){
+    if(lista.includes(tab)){
+      document.querySelectorAll('.grupa-tab-btn').forEach(b=>{
+        const akt = b.dataset.grupa === g;
+        b.classList.toggle('active', akt);
+        b.style.background = akt ? '#1f3864' : '#fff';
+        b.style.color = akt ? '#fff' : 'inherit';
+      });
+      document.querySelectorAll('[data-grupa-sadrzaj]').forEach(el=>{
+        el.style.display = el.dataset.grupaSadrzaj === g ? 'flex' : 'none';
+      });
+      break;
+    }
+  }
   document.querySelectorAll('.glavni-tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
   document.getElementById('tab-kalkulacija').style.display = tab==='kalkulacija' ? 'block' : 'none';
   document.getElementById('tab-kalk-spisak').style.display = tab==='kalk-spisak' ? 'block' : 'none';
@@ -8838,6 +8870,65 @@ async function dokZnak(){
   }catch(e){ /* znak je dopuna */ }
 }
 
+
+/* Prebacivanje GRUPE tabova. Petnaest tabova u jednom redu se nije moglo pregledati,
+   pa se prvo bira oblast (Lager / Dokumenti / Uređenje) a tek onda ekran.
+   Kad se grupa otvori, sam se bira njen PRVI tab — inače bi ekran ostao prazan. */
+const GRUPE_TABOVA = {
+  lager:     ['lager'],
+  dokumenti: ['dokumenti','kalkulacija','kalk-spisak','presek','uporedi','kretanje','uvoz','uvoz-istorija','izvoz-log'],
+  uredjenje: ['gotovi','akcije','pj','uvoz-slike','master-grupe'],
+};
+
+function prebaciGrupuRM(grupa){
+  document.querySelectorAll('.grupa-tab-btn').forEach(b=>{
+    const akt = b.dataset.grupa === grupa;
+    b.classList.toggle('active', akt);
+    b.style.background = akt ? '#1f3864' : '#fff';
+    b.style.color = akt ? '#fff' : 'inherit';
+  });
+  document.querySelectorAll('[data-grupa-sadrzaj]').forEach(el=>{
+    el.style.display = el.dataset.grupaSadrzaj === grupa ? 'flex' : 'none';
+  });
+
+  /* Ako je tekući tab van otvorene grupe, prelazi se na prvi iz nje. */
+  const uGrupi = GRUPE_TABOVA[grupa] || [];
+  const tekuci = document.querySelector('.glavni-tab-btn.active')?.dataset.tab;
+  if(!uGrupi.includes(tekuci) && uGrupi.length) prebaciGlavniTabRM(uGrupi[0]);
+
+  try{ localStorage.setItem('rm_grupa', grupa); }catch(e){}
+}
+
+/* Znak uz grupu Dokumenti — koliko čeka potvrdu ili knjiženje. */
+async function rmZnakGrupe(){
+  const el = document.getElementById('grupa-znak-dokumenti');
+  if(!el) return;
+  try{
+    const r = await fetch(`${API}/api/magacin/dokumenti/zbirno`);
+    if(!r.ok) return;
+    const d = await r.json();
+    const n = (d.ceka || 0) + (d.za_knjizenje || 0);
+    if(d.smijem_odobriti && n > 0){ el.textContent = n; el.style.display = 'inline-block'; }
+    else el.style.display = 'none';
+  }catch(e){ /* znak je dopuna, ne smije rušiti stranicu */ }
+}
+
+
+/* Vraca zapamcenu grupu i povlaci znak — bez ovoga se pri svakom ulasku pocinje
+   od Lagera, iako je korisnik zadnje radio u Dokumentima. */
+(function(){
+  function pokreniGrupe(){
+    try{
+      const g = localStorage.getItem('rm_grupa');
+      if(g && GRUPE_TABOVA[g]) prebaciGrupuRM(g);
+    }catch(e){}
+    rmZnakGrupe();
+    setInterval(rmZnakGrupe, 120000);   // osvjezavanje na dva minuta
+  }
+  if(document.readyState === 'loading')
+    document.addEventListener('DOMContentLoaded', ()=>setTimeout(pokreniGrupe, 300));
+  else setTimeout(pokreniGrupe, 300);
+})();
 </script>
 
 
