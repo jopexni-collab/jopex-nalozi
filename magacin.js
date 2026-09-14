@@ -17,6 +17,24 @@ const SMJEROVI = ['ulaz','izlaz','ispravka'];
 
 router.use((req, res, next) => {
   if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+
+/* Zapis u dnevnik. Poziva se pri SVAKOJ promjeni stanja dokumenta — bez toga se ne
+   zna ko je sta uradio, ni sta bi vracanje trebalo da vrati. */
+async function zapisiLog(izv, dok, radnja, polje, staro, novo, user, napomena) {
+  try {
+    await izv.query(
+      `INSERT INTO magacin_dok_log
+         (dokument_id, broj, radnja, polje, staro, novo, napomena, korisnik_id, korisnik_ime)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [dok.id, dok.broj, radnja, polje,
+       staro == null ? null : String(staro), novo == null ? null : String(novo),
+       napomena || null, user?.id || null, user?.ime_prezime || null]
+    );
+  } catch (e) {
+    console.error('magacin_dok_log:', e.message);
+  }
+}
+
   next();
 });
 
@@ -220,8 +238,89 @@ router.post('/dokumenti/:broj/knjizi', async (req, res) => {
        WHERE broj=$3 RETURNING *`,
       [u.id, u.ime_prezime, req.params.broj]
     );
+    await zapisiLog(pool, d, 'knjizenje', 'proknjizeno', 'false', 'true', u,
+                    req.body?.napomena || 'Preneseno u Bluesoft');
     res.json({ ok: true, dokument: r.rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/* GET /dokumenti/:broj/log — istorija izmjena jednog dokumenta */
+router.get('/dokumenti/:broj/log', async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT * FROM magacin_dok_log
+       WHERE broj = $1 ORDER BY kada DESC LIMIT 50`, [req.params.broj]
+    );
+    res.json(r.rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/* POST /dokumenti/:broj/undo/:logId — vracanje jedne izmjene.
+   Vraca se SAMO najnovija izmjena tog polja — inace bi se preskocio korak koji je
+   neko napravio poslije, a da to niko ne primijeti. */
+router.post('/dokumenti/:broj/undo/:logId', async (req, res) => {
+  const u = req.session.user;
+  if (!(u?.rola === 'admin' || u?.moze_ugovarati === true))
+    return res.status(403).json({ error: 'Vraćanje smije samo osoba sa pravom „Ugovara".' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const lg = await client.query('SELECT * FROM magacin_dok_log WHERE id=$1', [req.params.logId]);
+    if (!lg.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Zapis nije pronađen.' }); }
+    const z = lg.rows[0];
+
+    if (z.ponisteno) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Ova izmjena je već vraćena.' }); }
+
+    const zadnji = await client.query(
+      `SELECT id FROM magacin_dok_log
+       WHERE dokument_id=$1 AND polje=$2 AND ponisteno=false ORDER BY kada DESC LIMIT 1`,
+      [z.dokument_id, z.polje]
+    );
+    if (zadnji.rows[0]?.id !== z.id) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        error: `Polje „${z.polje}" je poslije toga ponovo mijenjano — vraćanje bi preskočilo taj korak.`,
+      });
+    }
+
+    /* Vracaju se samo polja stanja. Sadrzaj dokumenta se NE dira — odstampan papir
+       mora ostati isti bez obzira na kasnije odluke. */
+    const DOZVOLJENA = ['odobreno', 'proknjizeno', 'stornirano'];
+    if (!DOZVOLJENA.includes(z.polje)) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: `Polje „${z.polje}" se ne može vratiti.` });
+    }
+
+    const v = z.polje === 'odobreno' ? z.staro : z.staro === 'true';
+    await client.query(`UPDATE magacin_dokumenti SET ${z.polje} = $1 WHERE id = $2`, [v, z.dokument_id]);
+
+    /* Prateca polja se cisti zajedno — inace bi ostalo ime onoga ko je potvrdio
+       dokument koji vise nije potvrdjen. */
+    if (z.polje === 'odobreno')
+      await client.query(
+        `UPDATE magacin_dokumenti SET odobrio_ime=NULL, odobreno_kada=NULL WHERE id=$1`, [z.dokument_id]);
+    if (z.polje === 'proknjizeno' && v === false)
+      await client.query(
+        `UPDATE magacin_dokumenti SET proknjizio_id=NULL, proknjizio_ime=NULL, proknjizeno_kada=NULL WHERE id=$1`,
+        [z.dokument_id]);
+
+    await client.query('UPDATE magacin_dok_log SET ponisteno=true WHERE id=$1', [z.id]);
+    await client.query(
+      `INSERT INTO magacin_dok_log
+         (dokument_id, broj, radnja, polje, staro, novo, napomena, korisnik_id, korisnik_ime)
+       VALUES ($1,$2,'undo',$3,$4,$5,$6,$7,$8)`,
+      [z.dokument_id, z.broj, z.polje, z.novo, z.staro,
+       `Vraćena izmjena od ${new Date(z.kada).toLocaleString('sr-Latn-BA')} (${z.korisnik_ime || ''})`,
+       u.id, u.ime_prezime]
+    );
+
+    await client.query('COMMIT');
+    res.json({ ok: true, polje: z.polje, vraceno_na: z.staro });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
 });
 
 module.exports = router;
