@@ -385,19 +385,19 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   <!-- TRI NIVOA: gore glavna podjela, ispod podtabovi izabrane grupe.
        Petnaest tabova u jednom redu se nije moglo pregledati; ovako se prvo bira
        oblast pa tek onda ekran. -->
-  <div class="traka-grupa" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:7px;">
+  <div class="traka-grupa" style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:0;">
     <button type="button" class="grupa-tab-btn active" data-grupa="lager" onclick="prebaciGrupuRM('lager')"
-            style="font:inherit;font-size:13px;font-weight:700;padding:9px 18px;border:1px solid var(--border,#ddd);border-radius:8px;cursor:pointer;background:#1f3864;color:#fff;">📋 Lager</button>
+            style="font:inherit;font-size:13.5px;font-weight:700;padding:10px 20px;border:1px solid var(--border,#ddd);border-bottom:none;border-radius:9px 9px 0 0;cursor:pointer;margin-bottom:-1px;position:relative;z-index:2;background:#1f3864;color:#fff;border-color:#1f3864;">📋 Lager</button>
     <button type="button" class="grupa-tab-btn" data-grupa="dokumenti" onclick="prebaciGrupuRM('dokumenti')"
-            style="font:inherit;font-size:13px;font-weight:700;padding:9px 18px;border:1px solid var(--border,#ddd);border-radius:8px;cursor:pointer;background:#fff;color:inherit;">📑 Dokumenti<span id="grupa-znak-dokumenti" style="display:none;background:var(--red,#c0392b);color:#fff;border-radius:9px;padding:0 6px;font-size:10px;margin-left:4px;"></span></button>
+            style="font:inherit;font-size:13.5px;font-weight:700;padding:10px 20px;border:1px solid var(--border,#ddd);border-bottom:none;border-radius:9px 9px 0 0;cursor:pointer;margin-bottom:-1px;position:relative;z-index:2;background:#eef0f4;color:#6b7a8d;">📑 Dokumenti<span id="grupa-znak-dokumenti" style="display:none;background:var(--red,#c0392b);color:#fff;border-radius:9px;padding:0 6px;font-size:10px;margin-left:4px;"></span></button>
     <button type="button" class="grupa-tab-btn" data-grupa="uredjenje" onclick="prebaciGrupuRM('uredjenje')"
-            style="font:inherit;font-size:13px;font-weight:700;padding:9px 18px;border:1px solid var(--border,#ddd);border-radius:8px;cursor:pointer;background:#fff;color:inherit;">⚙️ Uređenje</button>
+            style="font:inherit;font-size:13.5px;font-weight:700;padding:10px 20px;border:1px solid var(--border,#ddd);border-bottom:none;border-radius:9px 9px 0 0;cursor:pointer;margin-bottom:-1px;position:relative;z-index:2;background:#eef0f4;color:#6b7a8d;">⚙️ Uređenje</button>
   </div>
 
-  <div class="traka-tabova" data-grupa-sadrzaj="lager" style="">
+  <div class="traka-tabova" data-grupa-sadrzaj="lager" style="display:flex;gap:5px;flex-wrap:wrap;background:#eef0f4;border:1px solid var(--border,#ddd);border-radius:0 9px 9px 9px;padding:8px 10px;margin-bottom:13px;position:relative;z-index:1;">
     <button type="button" class="glavni-tab-btn active" data-tab="lager" onclick="prebaciGlavniTabRM('lager')">📋 Lager lista</button>
   </div>
-  <div class="traka-tabova" data-grupa-sadrzaj="dokumenti" style="display:none;">
+  <div class="traka-tabova" data-grupa-sadrzaj="dokumenti" style="display:none;gap:5px;flex-wrap:wrap;background:#eef0f4;border:1px solid var(--border,#ddd);border-radius:0 9px 9px 9px;padding:8px 10px;margin-bottom:13px;position:relative;z-index:1;">
     <button type="button" class="glavni-tab-btn" data-tab="dokumenti" onclick="prebaciGlavniTabRM('dokumenti')">📑 Dokumenti <span id="dok-znak" style="display:none;background:var(--orange,#b8860b);color:#fff;border-radius:9px;padding:0 6px;font-size:10px;margin-left:3px;"></span></button>
     <button type="button" class="glavni-tab-btn" data-tab="kalkulacija" onclick="prebaciGlavniTabRM('kalkulacija')">📦 Kalkulacija</button>
     <button type="button" class="glavni-tab-btn" data-tab="kalk-spisak" onclick="prebaciGlavniTabRM('kalk-spisak')">📋 Spisak kalkulacija</button>
@@ -408,7 +408,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
     <button type="button" class="glavni-tab-btn" data-tab="uvoz-istorija" onclick="prebaciGlavniTabRM('uvoz-istorija')">🗂️ Istorija uvoza</button>
     <button type="button" class="glavni-tab-btn" data-tab="izvoz-log" id="tab-btn-izvoz-log" style="display:none;" onclick="prebaciGlavniTabRM('izvoz-log')">🔐 Izvozi <span id="izvoz-log-badge" style="display:none;background:var(--red,#c0392b);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;"></span></button>
   </div>
-  <div class="traka-tabova" data-grupa-sadrzaj="uredjenje" style="display:none;">
+  <div class="traka-tabova" data-grupa-sadrzaj="uredjenje" style="display:none;gap:5px;flex-wrap:wrap;background:#eef0f4;border:1px solid var(--border,#ddd);border-radius:0 9px 9px 9px;padding:8px 10px;margin-bottom:13px;position:relative;z-index:1;">
     <button type="button" class="glavni-tab-btn" data-tab="gotovi" onclick="prebaciGlavniTabRM('gotovi')">🍽️ Gotovi proizvodi</button>
     <button type="button" class="glavni-tab-btn" data-tab="akcije" onclick="prebaciGlavniTabRM('akcije')">🏷️ Akcije</button>
     <button type="button" class="glavni-tab-btn" data-tab="pj" onclick="prebaciGlavniTabRM('pj')">🏢 PJ</button>
@@ -4261,8 +4261,9 @@ function prebaciGlavniTabRM(tab){
       document.querySelectorAll('.grupa-tab-btn').forEach(b=>{
         const akt = b.dataset.grupa === g;
         b.classList.toggle('active', akt);
-        b.style.background = akt ? '#1f3864' : '#fff';
-        b.style.color = akt ? '#fff' : 'inherit';
+        b.style.background = akt ? '#1f3864' : '#eef0f4';
+        b.style.color = akt ? '#fff' : '#6b7a8d';
+        b.style.borderColor = akt ? '#1f3864' : 'var(--border,#ddd)';
       });
       document.querySelectorAll('[data-grupa-sadrzaj]').forEach(el=>{
         el.style.display = el.dataset.grupaSadrzaj === g ? 'flex' : 'none';
@@ -8881,11 +8882,14 @@ const GRUPE_TABOVA = {
 };
 
 function prebaciGrupuRM(grupa){
+  /* Aktivna grupa je tamna i "srasla" sa okvirom ispod — tako se vidi da podtabovi
+     pripadaju njoj, a ne da su drugi red istih dugmadi. */
   document.querySelectorAll('.grupa-tab-btn').forEach(b=>{
     const akt = b.dataset.grupa === grupa;
     b.classList.toggle('active', akt);
-    b.style.background = akt ? '#1f3864' : '#fff';
-    b.style.color = akt ? '#fff' : 'inherit';
+    b.style.background = akt ? '#1f3864' : '#eef0f4';
+    b.style.color = akt ? '#fff' : '#6b7a8d';
+    b.style.borderColor = akt ? '#1f3864' : 'var(--border,#ddd)';
   });
   document.querySelectorAll('[data-grupa-sadrzaj]').forEach(el=>{
     el.style.display = el.dataset.grupaSadrzaj === grupa ? 'flex' : 'none';
