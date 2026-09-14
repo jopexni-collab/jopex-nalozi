@@ -813,9 +813,21 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
 
 <div id="tab-dokumenti" class="glavni-tab-sadrzaj" style="display:none;">
   <div class="panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:9px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:7px;">
       <h3 style="margin:0;font-size:15px;">📑 Kretanje robe</h3>
       <span id="dok-zbirno" style="font-size:11px;color:#8b96a5;"></span>
+    </div>
+
+    <!-- Izbor poslovnih jedinica kvadraticima — jedna, vise njih ili sve.
+         Padajuca lista je dozvoljavala samo jednu, a cesto se poredi vise objekata. -->
+    <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:6px 9px;margin-bottom:9px;
+                background:#f7f8fa;border:1px solid var(--border,#ddd);border-radius:7px;">
+      <span style="font-size:10.5px;color:#6b7a8d;font-weight:700;">Poslovne jedinice:</span>
+      <span id="dok-pj-kvadratici" style="display:flex;gap:5px;flex-wrap:wrap;"></span>
+      <span style="display:flex;gap:4px;margin-left:auto;">
+        <button onclick="dokPjSve(true)" style="font-size:10px;padding:2px 9px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;">Sve</button>
+        <button onclick="dokPjSve(false)" style="font-size:10px;padding:2px 9px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;">Ništa</button>
+      </span>
     </div>
 
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:end;margin-bottom:9px;">
@@ -841,12 +853,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
           <option value="ispravka">⇄ ispravka</option>
         </select>
       </span>
-      <span>
-        <label style="font-size:10px;color:#6b7a8d;display:block;">Objekat</label>
-        <select id="dok-objekt" onchange="dokUcitaj()" style="font:inherit;font-size:11.5px;padding:4px 7px;border:1px solid #ccc;border-radius:5px;">
-          <option value="">svi</option>
-        </select>
-      </span>
+
       <span>
         <label style="font-size:10px;color:#6b7a8d;display:block;">Od</label>
         <input type="date" id="dok-od" onchange="dokUcitaj()" style="font:inherit;font-size:11.5px;padding:4px 7px;border:1px solid #ccc;border-radius:5px;">
@@ -8809,6 +8816,52 @@ document.addEventListener('click', e=>{
   if(p && p.style.display !== 'none' && !p.contains(e.target)) p.style.display = 'none';
 });
 
+
+/* Izbor poslovnih jedinica kvadraticima — jedna, vise njih ili sve.
+   Na pocetku su SVE ukljucene. Prazan izbor znaci NISTA — ako se sve odcekira,
+   tabela je prazna i uz nju stoji poruka zasto, da ne izgleda kao greska. */
+let dokPjIzbor = new Set();
+let dokPjLista = [];
+
+async function dokUcitajPj(){
+  if(dokPjLista.length) return;
+  try{
+    const r = await fetch(`${API}/api/objekti`);
+    if(!r.ok) return;
+    const d = await r.json();
+    dokPjLista = (Array.isArray(d) ? d : d.stavke || []).filter(x => x.id);
+    // Podrazumijevano su sve ukljucene
+    if(!dokPjIzbor.size) dokPjIzbor = new Set(dokPjLista.map(o => String(o.id)));
+    dokPjCrtaj();
+  }catch(e){ /* bez spiska se prikazuju svi */ }
+}
+
+function dokPjCrtaj(){
+  const cont = document.getElementById('dok-pj-kvadratici');
+  if(!cont) return;
+  cont.innerHTML = dokPjLista.map(o=>{
+    const akt = dokPjIzbor.has(String(o.id));
+    return `<label style="display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:6px;cursor:pointer;
+                 font-size:11px;border:1px solid ${akt?'#1f3864':'var(--border,#ddd)'};
+                 background:${akt?'#eef2f8':'#fff'};font-weight:${akt?'700':'400'};">
+      <input type="checkbox" value="${o.id}" ${akt?'checked':''} onchange="dokPjPromjena(this)">
+      ${esc(o.naziv)}
+    </label>`;
+  }).join('') || '<span style="font-size:10.5px;color:#8b96a5;">nema objekata</span>';
+}
+
+function dokPjPromjena(el){
+  if(el.checked) dokPjIzbor.add(el.value); else dokPjIzbor.delete(el.value);
+  dokPjCrtaj();
+  dokUcitaj();
+}
+
+function dokPjSve(ukljuci){
+  dokPjIzbor = ukljuci ? new Set(dokPjLista.map(o=>String(o.id))) : new Set();
+  dokPjCrtaj();
+  dokUcitaj();
+}
+
 let dokPodaci = [];
 let dokSort = { kolona:'izdato', smjer:'desc' };
 let dokTajmer = null;
@@ -8832,25 +8885,22 @@ function dokOdgodi(){
 }
 
 async function dokUcitaj(){
-  /* Spisak objekata se puni jednom — do sad je padajuca lista imala samo "svi",
-     pa se nije moglo filtrirati po PJ. */
-  const sel = document.getElementById('dok-objekt');
-  if(sel && sel.options.length <= 1){
-    try{
-      const r = await fetch(`${API}/api/objekti`);
-      if(r.ok){
-        const o = await r.json();
-        sel.innerHTML = '<option value="">svi</option>' +
-          (Array.isArray(o)?o:o.stavke||[]).map(x=>`<option value="${x.id}">${esc(x.naziv)}</option>`).join('');
-      }
-    }catch(e){ /* bez spiska ostaje "svi" */ }
-  }
-
+  await dokUcitajPj();
   const p = new URLSearchParams();
   const v = id => document.getElementById(id)?.value || '';
   if(v('dok-vrsta')) p.set('vrsta', v('dok-vrsta'));
   if(v('dok-smjer')) p.set('smjer', v('dok-smjer'));
-  if(v('dok-objekt')) p.set('objekt_id', v('dok-objekt'));
+  /* Prazan izbor = NISTA. Kad su sve ukljucene, spisak se ne salje — nema svrhe. */
+  if(dokPjLista.length && !dokPjIzbor.size){
+    dokPodaci = [];
+    dokZbirno({ ukupno:0, izlaz_m2:0, ulaz_m2:0, neto_m2:0, ceka_odobrenje:0 });
+    dokCrtaj();
+    const pr = document.getElementById('dok-prazno');
+    if(pr){ pr.textContent = 'Nijedna poslovna jedinica nije izabrana.'; pr.style.display = 'block'; }
+    return;
+  }
+  if(dokPjIzbor.size && dokPjIzbor.size < dokPjLista.length)
+    p.set('objekti', [...dokPjIzbor].join(','));
   if(v('dok-od')) p.set('od', v('dok-od'));
   if(v('dok-do')) p.set('do', v('dok-do'));
   if(v('dok-q')) p.set('q', v('dok-q'));
@@ -8909,7 +8959,10 @@ function dokCrtaj(){
     return String(x??'').localeCompare(String(y??''))*s;
   });
 
-  document.getElementById('dok-prazno').style.display = red.length ? 'none' : 'block';
+  const prazno = document.getElementById('dok-prazno');
+  prazno.style.display = red.length ? 'none' : 'block';
+  if(red.length === 0 && dokPjIzbor.size)
+    prazno.textContent = 'Nema dokumenata za izabrane uslove.';
 
   document.getElementById('dok-tbody').innerHTML = red.map((x,i)=>{
     /* Boji se po SMJERU — izlaz i ulaz su ono sto se prvo trazi kad se gleda

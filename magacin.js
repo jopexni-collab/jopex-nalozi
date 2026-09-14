@@ -40,6 +40,15 @@ router.get('/dokumenti', async (req, res) => {
   if (VRSTE.includes(req.query.vrsta)) { uslovi.push(`d.vrsta = $${i++}`); vals.push(req.query.vrsta); }
   if (SMJEROVI.includes(req.query.smjer)) { uslovi.push(`d.smjer = $${i++}`); vals.push(req.query.smjer); }
   if (req.query.objekt_id) { uslovi.push(`d.objekt_id = $${i++}`); vals.push(parseInt(req.query.objekt_id)); }
+  /* VISE objekata odjednom — cesto se porede dvije PJ. Dokumenti bez objekta ulaze uz
+     izabrane, jer se ne zna gdje bi inace pripali, a sakrivanje bi ih izgubilo. */
+  if (req.query.objekti) {
+    const lista = String(req.query.objekti).split(',').map(x => parseInt(x)).filter(Boolean);
+    if (lista.length) {
+      uslovi.push(`(d.objekt_id = ANY($${i}::int[]) OR d.objekt_id IS NULL)`);
+      vals.push(lista); i++;
+    }
+  }
   if (req.query.izvor_modul) { uslovi.push(`d.izvor_modul = $${i++}`); vals.push(req.query.izvor_modul); }
   if (req.query.nalog) { uslovi.push(`d.nalog_r_br = $${i++}`); vals.push(parseInt(req.query.nalog)); }
   if (req.query.od) { uslovi.push(`d.izdato >= $${i++}::date`); vals.push(req.query.od); }
