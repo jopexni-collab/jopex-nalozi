@@ -323,4 +323,69 @@ router.post('/dokumenti/:broj/undo/:logId', async (req, res) => {
   } finally { client.release(); }
 });
 
+/* POST /dokumenti/grupno — jedna radnja na vise dokumenata odjednom.
+   Kod 71 dokumenta koji cekaju knjizenje, jedan po jedan je 71 klik.
+
+   Grupno idu samo POTVRDA i KNJIZENJE. Osporavanje trazi razlog po dokumentu, a
+   storno mijenja stanje — ni jedno ni drugo ne smije proci u gomili. */
+router.post('/dokumenti/grupno', async (req, res) => {
+  const u = req.session.user;
+  if (!(u?.rola === 'admin' || u?.moze_ugovarati === true))
+    return res.status(403).json({ error: 'Grupnu radnju smije samo osoba sa pravom „Ugovara".' });
+
+  const radnja = req.body?.radnja;
+  if (!['knjizenje', 'potvrda'].includes(radnja))
+    return res.status(400).json({ error: 'Grupno se mogu samo potvrditi ili proknjižiti.' });
+
+  const brojevi = Array.isArray(req.body?.brojevi) ? req.body.brojevi.map(String) : [];
+  if (!brojevi.length) return res.status(400).json({ error: 'Nije izabran nijedan dokument.' });
+  if (brojevi.length > 500)
+    return res.status(400).json({ error: 'Najviše 500 dokumenata odjednom.' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await client.query(
+      'SELECT * FROM magacin_dokumenti WHERE broj = ANY($1::text[])', [brojevi]);
+
+    const obradjeno = [], preskoceno = [];
+    for (const d of r.rows) {
+      /* Preskace se umjesto da cijela radnja padne — inace bi jedan vec proknjizen
+         dokument srusio ostalih pedeset. */
+      if (d.stornirano) { preskoceno.push({ broj: d.broj, razlog: 'stornirano' }); continue; }
+
+      if (radnja === 'potvrda') {
+        if (d.odobreno !== 'ceka') { preskoceno.push({ broj: d.broj, razlog: `već ${d.odobreno}` }); continue; }
+        await client.query(
+          `UPDATE magacin_dokumenti SET odobreno='odobreno', odobrio_ime=$1, odobreno_kada=now()
+           WHERE id=$2`, [u.ime_prezime, d.id]);
+        await zapisiLog(client, d, 'odobrenje', 'odobreno', d.odobreno, 'odobreno', u, 'Grupna potvrda');
+        obradjeno.push(d.broj);
+
+      } else {
+        const treba = ['otpremnica', 'prijemnica', 'kalkulacija'].includes(d.vrsta);
+        if (!treba) { preskoceno.push({ broj: d.broj, razlog: 'ne prenosi se u Bluesoft' }); continue; }
+        if (d.proknjizeno) { preskoceno.push({ broj: d.broj, razlog: 'već proknjiženo' }); continue; }
+        if (d.odobreno !== 'odobreno') { preskoceno.push({ broj: d.broj, razlog: 'nije potvrđeno' }); continue; }
+
+        await client.query(
+          `UPDATE magacin_dokumenti
+           SET proknjizeno=true, proknjizio_id=$1, proknjizio_ime=$2, proknjizeno_kada=now()
+           WHERE id=$3`, [u.id, u.ime_prezime, d.id]);
+        await zapisiLog(client, d, 'knjizenje', 'proknjizeno', 'false', 'true', u, 'Grupno knjiženje');
+        obradjeno.push(d.broj);
+      }
+    }
+
+    const nenadjeni = brojevi.filter(b => !r.rows.some(x => x.broj === b));
+    for (const b of nenadjeni) preskoceno.push({ broj: b, razlog: 'nije pronađen' });
+
+    await client.query('COMMIT');
+    res.json({ ok: true, radnja, obradjeno: obradjeno.length, preskoceno });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally { client.release(); }
+});
+
 module.exports = router;
