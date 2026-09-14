@@ -40,6 +40,51 @@ function trebaObjekat(id) {
 // objekt_id je OPCION: ako je dat, vraća i cijenu/stanje ZA TAJ PJ (koristi prodajni ekran);
 // ako nije dat, vraća samo šifrarnik bez cijene/stanja (koristi "blic izbor" jedinice mjere,
 // jer jed_mjera nije po lokaciji nego zajednička za sve PJ).
+
+/* ═══ MAGACINSKI DOKUMENT ══════════════════════════════════════════════════════════
+   Svaka radnja koja mijenja KOLICINU na lageru ulazi i u `magacin_dokumenti` — jedan
+   spisak na kojem se vidi sav protok robe, bez obzira iz kog modula dolazi.
+
+   Usaglasavanje se radi po JEDNOM artiklu, pa je i dokument po artiklu. Nije ni ulaz
+   ni izlaz nego ISPRAVKA — ne smije se sabirati sa njima, jer ne opisuje kretanje
+   robe nego popravku zatecenog stanja. */
+async function upisiDokumentIspravke(artikal, objektId, staro, novo, user, napomena) {
+  const razlika = +(Number(novo) - Number(staro)).toFixed(4);
+  if (Math.abs(razlika) < 0.001) return;      // nista se nije promijenilo
+
+  try {
+    const g = new Date().getFullYear();
+    const n = await pool.query(
+      `SELECT COUNT(*)::int + 1 AS sl FROM magacin_dokumenti
+       WHERE vrsta='usaglasavanje' AND EXTRACT(YEAR FROM COALESCE(izdato, now())) = $1`, [g]
+    );
+    const broj = `USG-${g}-${String(n.rows[0].sl).padStart(6, '0')}`;
+
+    await pool.query(
+      `INSERT INTO magacin_dokumenti
+         (broj, vrsta, smjer, objekt_id, izvor_modul, roba_id, primalac,
+          ukupno_m2, stavke, izdao_ime, kreator_id, izdato,
+          odobreno, odobrenje_napomena)
+       VALUES ($1,'usaglasavanje','ispravka',$2,'magacin',$3,$4,$5,$6,$7,$8,now(),'ceka',$9)`,
+      [broj, objektId, artikal.id,
+       `${artikal.sifra || ''} ${artikal.naziv || ''}`.trim(),
+       razlika,
+       JSON.stringify([{
+         sifra: artikal.sifra, naziv: artikal.naziv,
+         stanje_prije: Number(staro), stanje_poslije: Number(novo),
+         razlika, povrsina: razlika,
+       }]),
+       user?.ime_prezime || null, user?.id || null,
+       napomena || null]
+    );
+  } catch (e) {
+    /* Dokument je EVIDENCIJA — ako upis padne, usaglasavanje svejedno mora proci.
+       Inace bi se ispravka stanja zaustavila zbog spiska. */
+    console.error('magacin_dokumenti (usaglasavanje):', e.message);
+  }
+}
+
+
 router.get('/', zahtijevaProdaju, async (req, res) => {
   try {
     const { q, limit } = req.query;
@@ -2238,6 +2283,17 @@ router.post('/:id/rucni-unos', preskociAkoNijeArtikal, async (req, res) => {
     );
 
     const razlika = +(stanjeNovo - stanjeStaro).toFixed(3);
+
+    /* Dokument ide u zajednicki spisak — po JEDNOM artiklu, jer se usaglasavanje
+       tako i radi. Ceka odobrenje, jer je rucna ispravka stanja najosjetljivija
+       promjena i treba da je neko drugi pogleda. */
+    {
+      const a = await pool.query('SELECT id, sifra, naziv FROM roba WHERE id=$1', [req.params.id]);
+      if (a.rows.length)
+        await upisiDokumentIspravke(a.rows[0], objektId, stanjeStaro, stanjeNovo,
+                                    req.session?.user, req.body?.razlog || req.body?.napomena);
+    }
+
     if (Math.abs(razlika) > 0.001) {
       await pool.query(
         `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_stara, cijena_nova, napomena, korisnik_id, korisnik_ime)

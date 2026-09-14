@@ -64,6 +64,15 @@ async function posaljiOtpremnicuKnjigovodstvu(otpId) {
         'UPDATE otpremnice SET poslato_knjigovodstvu=true, poslato_knjigovodstvu_vrijeme=now() WHERE id=$1',
         [otpId]
       );
+
+      /* Isto knjizenje i u magacin_dokumenti — jedno mjesto prati sav protok robe,
+         pa se ne smije desiti da je otpremnica poslata a dokument i dalje crven. */
+      await pool.query(
+        `UPDATE magacin_dokumenti
+         SET proknjizeno=true, proknjizio_ime=COALESCE(proknjizio_ime,'poslato knjigovodstvu'),
+             proknjizeno_kada=now()
+         WHERE otpremnica_id=$1 AND proknjizeno=false`, [otpId]
+      ).catch(e => console.error('knjizenje dokumenta:', e.message));
     } else {
       console.error(`Slanje otpremnice ${otp.broj} knjigovodstvu nije uspjelo:`, rezultat.error);
     }
@@ -73,6 +82,47 @@ async function posaljiOtpremnicuKnjigovodstvu(otpId) {
 }
 
 // Admin uvijek prolazi; ostali moraju imati moze_prodavati=true (dozvola iz korisnici.html).
+
+/* ═══ MAGACINSKI DOKUMENT ══════════════════════════════════════════════════════════
+   Svaka otpremnica ulazi i u `magacin_dokumenti` — jedno mjesto na kojem se prati
+   sav protok robe, bez obzira iz kog modula dolazi. To je put prema knjigovodstvu
+   i menadzmentu; strana prema kupcu se ne mijenja.
+
+   POTVRDA je odmah zelena — komercijalista ju je napravio i poslao, to JE potvrda.
+   KNJIZENJE ceka dok papir stvarno ne ode u Bluesoft, pa crvena tacka znaci nesto. */
+async function upisiDokumentOtpremnice(client, otp, stavke, user) {
+  try {
+    const m2 = (stavke || [])
+      .filter(s => ['m2', 'm²'].includes(String(s.jed_mjera || '').toLowerCase()))
+      .reduce((z, s) => z + (parseFloat(s.kolicina) || 0), 0);
+    const kom = (stavke || []).reduce((z, s) => z + (parseInt(s.broj_komada) || 0), 0);
+
+    await client.query(
+      `INSERT INTO magacin_dokumenti
+         (broj, vrsta, smjer, objekt_id, izvor_modul, otpremnica_id, primalac,
+          ukupno_m2, ukupno_kom, vrijednost, stavke,
+          izdao_ime, izdato, odobreno, odobrio_ime, odobreno_kada, proknjizeno)
+       VALUES ($1,'otpremnica','izlaz',$2,'maloprodaja',$3,$4,$5,$6,$7,$8,$9,now(),
+               'odobreno',$9,now(),false)
+       ON CONFLICT (broj) DO NOTHING`,
+      [otp.broj, otp.objekt_id || null, otp.id, otp.kupac_naziv || null,
+       m2 || null, kom || null, otp.ukupan_iznos || null,
+       JSON.stringify((stavke || []).map(s => ({
+         sifra: s.sifra, naziv: s.naziv, jed_mjera: s.jed_mjera,
+         kolicina: s.kolicina, cijena: s.cijena, iznos: s.iznos,
+         povrsina: ['m2', 'm²'].includes(String(s.jed_mjera || '').toLowerCase()) ? s.kolicina : null,
+         komada: s.broj_komada,
+       }))),
+       user?.ime_prezime || null]
+    );
+  } catch (e) {
+    /* Dokument je EVIDENCIJA, ne uslov za otpremnicu. Ako upis padne, otpremnica
+       svejedno mora proci — inace bi se prodaja zaustavila zbog knjigovodstva. */
+    console.error('magacin_dokumenti (otpremnica ' + otp.broj + '):', e.message);
+  }
+}
+
+
 router.use((req, res, next) => {
   const u = req.session?.user;
   if (u?.rola === 'admin' || u?.moze_prodavati) return next();
@@ -829,6 +879,9 @@ router.post('/potvrdi', async (req, res) => {
         [s.kolicina, s.roba_id, objektId]
       );
     }
+    /* Otpremnica ulazi i u magacin_dokumenti — jedno mjesto za sav protok robe. */
+    await upisiDokumentOtpremnice(client, h.rows[0], sastavljene, user);
+
 
     const opisKupca = kupac_naziv ? kupac_naziv.trim() : 'kupac nepoznat';
     const preostaliDug = +(ukupanIznos - iznosPlaceno).toFixed(2);
@@ -1503,6 +1556,13 @@ router.post('/:id/storniraj', async (req, res) => {
        WHERE id=$2`,
       [`STORNO (${user.ime_prezime}, ${new Date().toISOString().split('T')[0]})${napomenaStorno ? ': ' + napomenaStorno : ''}`, otp.id]
     );
+
+    /* Isti storno i u magacin_dokumenti — inace bi se dvije evidencije razisle:
+       otpremnica stornirana, a dokument i dalje stoji kao vazeci. */
+    await client.query(
+      `UPDATE magacin_dokumenti SET stornirano = true WHERE otpremnica_id = $1`,
+      [otp.id]
+    ).catch(e => console.error('storno dokumenta:', e.message));
 
     await client.query('COMMIT');
 

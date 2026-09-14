@@ -12,8 +12,8 @@ const express = require('express');
 const router = express.Router();
 const pool = require('./db');
 
-const VRSTE = ['izdatnica', 'povratnica', 'prijemnica', 'otpremnica'];
-const SMJEROVI = ['ulaz', 'izlaz'];
+const VRSTE = ['izdatnica','povratnica','prijemnica','otpremnica','kalkulacija','presjek','usaglasavanje','uvoz'];
+const SMJEROVI = ['ulaz','izlaz','ispravka'];
 
 router.use((req, res, next) => {
   if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
