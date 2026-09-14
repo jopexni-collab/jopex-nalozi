@@ -165,10 +165,44 @@ router.get('/dokumenti/zbirno', async (req, res) => {
       `SELECT
          COUNT(*) FILTER (WHERE odobreno = 'ceka' AND stornirano = false)::int AS ceka,
          COUNT(*) FILTER (WHERE presjek_id IS NULL AND stornirano = false)::int AS otvoreno,
-         COUNT(*) FILTER (WHERE izdato::date = CURRENT_DATE AND stornirano = false)::int AS danas
+         COUNT(*) FILTER (WHERE izdato::date = CURRENT_DATE AND stornirano = false)::int AS danas,
+         COUNT(*) FILTER (WHERE proknjizeno = false AND odobreno = 'odobreno'
+                            AND vrsta IN ('otpremnica','prijemnica') AND stornirano = false)::int AS za_knjizenje
        FROM magacin_dokumenti`
     );
     res.json({ ...r.rows[0], smijem_odobriti: smijeOdobriti(req.session.user) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/* POST /dokumenti/:broj/knjizi — oznaka da je dokument prenesen u Bluesoft.
+   NE mijenja lager — samo biljezi da je papir otisao u knjigovodstvo, da se dvaput
+   ne prenosi. Knjizi ko ima "Ugovara", isto kao sto i odobrava. */
+router.post('/dokumenti/:broj/knjizi', async (req, res) => {
+  const u = req.session.user;
+  if (!(u?.rola === 'admin' || u?.moze_ugovarati === true))
+    return res.status(403).json({ error: 'Knjiženje smije potvrditi samo osoba sa pravom „Ugovara".' });
+
+  try {
+    const st = await pool.query('SELECT * FROM magacin_dokumenti WHERE broj=$1', [req.params.broj]);
+    if (!st.rows.length) return res.status(404).json({ error: 'Dokument nije pronađen.' });
+    const d = st.rows[0];
+
+    if (d.stornirano) return res.status(400).json({ error: 'Storniran dokument se ne knjiži.' });
+    if (d.proknjizeno)
+      return res.status(400).json({ error: `Već proknjiženo — ${d.proknjizio_ime || ''}.` });
+
+    /* Knjizi se tek POSLIJE potvrde. Neproknjizen a nepotvrdjen dokument znacio bi
+       da je u Bluesoft otislo nesto sto niko nije potvrdio da je izdato. */
+    if (d.odobreno !== 'odobreno')
+      return res.status(400).json({ error: 'Dokument prvo mora biti potvrđen, pa tek onda proknjižen.' });
+
+    const r = await pool.query(
+      `UPDATE magacin_dokumenti
+       SET proknjizeno=true, proknjizio_id=$1, proknjizio_ime=$2, proknjizeno_kada=now()
+       WHERE broj=$3 RETURNING *`,
+      [u.id, u.ime_prezime, req.params.broj]
+    );
+    res.json({ ok: true, dokument: r.rows[0] });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
