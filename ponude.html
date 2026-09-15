@@ -11274,7 +11274,7 @@ function drawSto(ctx,W,H){
   var PAD=110;
   var A=dims.A||1600, B=(shape==='okrugao')?A:(dims.B||900);
   var sc=Math.min((W-PAD*2-90)/Math.max(A,1),(H-PAD*2)/Math.max(B,1))*0.92;
-  ctx.save();ctx.translate(PAD+50,PAD);   // +50 za kotu sirine lijevo
+  ctx.save();ctx.translate(PAD+62,PAD);   // +62 za kotu sirine i naslov lijevo
 
   var rrMM=getTableRadiusMM();
   traceTableShape(ctx,shape,A,B,sc,(shape==='radijus')?_stoRadijusi():rrMM);
@@ -11456,7 +11456,7 @@ function drawSto(ctx,W,H){
   ctx.textAlign='left';ctx.textBaseline='alphabetic';
   ctx.fillText('Stol – '+shLbl+' · '+getMatV()+(gs('mat-naziv')?' – '+gs('mat-naziv'):'')+' · '+getMatD()+' mm',0,-82);
   ctx.font='12px Segoe UI,Arial';ctx.fillStyle='#555';
-  ctx.fillText('Površina (za obračun, max širina × max visina): '+((A*B)/fmtBroj(1e6),4)+' m²',0,-58);
+  ctx.fillText('Površina (za obračun, max širina × max visina): '+fmtBroj((_stoMjere().a*_stoMjere().b)/1e6,4)+' m²',0,-58);
 
   drawLegenda(ctx,W,H);
   _flushKotes();
