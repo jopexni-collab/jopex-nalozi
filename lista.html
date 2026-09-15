@@ -1671,6 +1671,10 @@ function openPop(td,row,editCfg){
       <div id="pop-kal"></div>`;
     setTimeout(()=>{
       kalIscrtaj(dv||new Date().toISOString().split('T')[0], dv);
+      /* Prozorčić se postavlja PRIJE nego što se kalendar iscrta, pa mu visina naraste
+         tek poslije — kod ćelije pri dnu ekrana kalendar je ispadao ispod vidljivog
+         dijela i nije se mogao kliknuti. Zato se položaj računa ponovo. */
+      if(popTd) popPozicioniraj(popTd);
       const txt=document.getElementById('pop-inp');
       txt.focus(); // odmah spremno za kucanje, bez dodatnog klika
       // Text -> kalendar (live preview)
@@ -2090,6 +2094,8 @@ function kalIscrtaj(isoZaPrikaz, isoIzabran){
 }
 
 function kalPomjeriMjesec(smjer){
+  /* Broj redova u mjesecu se mijenja (4, 5 ili 6), pa se polozaj racuna ponovo. */
+  setTimeout(()=>{ if(typeof popTd !== 'undefined' && popTd) popPozicioniraj(popTd); }, 10);
   if(!kalPrikazMjesec) return;
   let {godina,mjesec}=kalPrikazMjesec;
   mjesec+=smjer;

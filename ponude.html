@@ -2187,11 +2187,11 @@ function getTablePerimeter(sh,d){
            _cetvrtElipsaPerim(xMidA,B-yMidB) + _cetvrtElipsaPerim(xMidA,yMidB);
   }
   if(sh==='bure'){
-    var segsBure=getBureSegments(A,B,getTableRadiusMM(),getTableLongRadiusMM(),0);
+    var segsBure=_bureSegsFit(A,B,getTableRadiusMM(),getTableLongRadiusMM(),0);
     return getBurePerimeter(segsBure);
   }
   if(sh==='fbure'){
-    var segsFbure=getBureSegments(A,B,getTableRadiusMM(),getTableLongRadiusMM(),getTableShortRadiusMM());
+    var segsFbure=_bureSegsFit(A,B,getTableRadiusMM(),getTableLongRadiusMM(),getTableShortRadiusMM());
     return getBurePerimeter(segsFbure);
   }
   if(sh==='radijus'){
@@ -2215,6 +2215,29 @@ function getTablePerimeter(sh,d){
 
 // Stvarni bounding box bureta - lukovi se ispupce izvan A x B, pa kota
 // koja pokazuje samo A i B ne kaze koliku tablu treba.
+// A x B su MAKSIMALNE mjere bureta - luk ih dodiruje na sredini, a krajevi
+// su uvuceni. getBureSegments gradi oblik koji se ispupci IZVAN zadatog,
+// pa se ovdje trazi manji ulaz ciji bounding box ispadne tacno A x B.
+function _bureSegsFit(A,B,Rc,Rl,Rs){
+  var ua=A, ub=B;
+  for(var i=0;i<6;i++){
+    var bb=_bureBB(ua,ub,Rc,Rl,Rs);
+    var gw=bb.w-A, gh=bb.h-B;
+    if(Math.abs(gw)<0.5&&Math.abs(gh)<0.5) break;
+    ua=Math.max(1,ua-gw);
+    ub=Math.max(1,ub-gh);
+  }
+  var bb2=_bureBB(ua,ub,Rc,Rl,Rs);
+  var segs=getBureSegments(ua,ub,Rc,Rl,Rs);
+  // pomjeri da pocinje na 0,0
+  var dx=-bb2.mnx, dy=-bb2.mny;
+  return segs.map(function(sg){
+    return {type:sg.type, r:sg.r,
+            cx:sg.cx+dx, cy:sg.cy+dy,
+            p1:[sg.p1[0]+dx, sg.p1[1]+dy],
+            p2:[sg.p2[0]+dx, sg.p2[1]+dy]};
+  });
+}
 function _bureBB(A,B,Rc,Rl,Rs){
   var segs=getBureSegments(A,B,Rc,Rl,Rs);
   var mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9;
@@ -2265,7 +2288,7 @@ function traceTableShape(ctx,sh,A,B,sc,rrMM){
     ctx.closePath();
   } else if(sh==='bure'||sh==='fbure'){
     var RcMM=rrMM||0, RlMM=getTableLongRadiusMM(), RsMM=(sh==='fbure')?getTableShortRadiusMM():0;
-    var segs=getBureSegments(A,B,RcMM,RlMM,RsMM);
+    var segs=_bureSegsFit(A,B,RcMM,RlMM,RsMM);
     ctx.moveTo(segs[0].p1[0]*sc,segs[0].p1[1]*sc);
     segs.forEach(function(seg){
       if(seg.type==='line'){
@@ -3091,19 +3114,6 @@ function _stoMjere(it){
   if(!(A>0)) A=_broj(d&&d.A)||1600;
   if(!(B>0)) B=_broj(d&&d.B)||900;
   if(sh==='okrugao') B=A;
-  // BURE i FULL BURE: lukovi se ispupce IZVAN A x B, pa tabla mora biti
-  // veca. Materijal je uvijek bruto - racuna se po stvarnom okviru.
-  if(sh==='bure'||sh==='fbure'){
-    try{
-      var _rc=(a===items[activeIdx])?getTableRadiusMM():(_broj(inp['sto-r-sel'])||0);
-      var _rl=(a===items[activeIdx])?getTableLongRadiusMM():(_broj(inp['sto-rl'])||0);
-      var _rs=(sh==='fbure')
-        ? ((a===items[activeIdx])?getTableShortRadiusMM():(_broj(inp['sto-rs'])||0))
-        : 0;
-      var bbB=_bureBB(A,B,_rc,_rl,_rs);
-      if(bbB.w>0&&bbB.h>0) return {a:bbB.w, b:bbB.h, nomA:A, nomB:B};
-    }catch(e){}
-  }
   return {a:A, b:B};
 }
 function _bbPolyTj(t){
@@ -11264,7 +11274,7 @@ function drawSto(ctx,W,H){
   var PAD=110;
   var A=dims.A||1600, B=(shape==='okrugao')?A:(dims.B||900);
   var sc=Math.min((W-PAD*2-90)/Math.max(A,1),(H-PAD*2)/Math.max(B,1))*0.92;
-  ctx.save();ctx.translate(PAD,PAD);
+  ctx.save();ctx.translate(PAD+50,PAD);   // +50 za kotu sirine lijevo
 
   var rrMM=getTableRadiusMM();
   traceTableShape(ctx,shape,A,B,sc,(shape==='radijus')?_stoRadijusi():rrMM);
@@ -11423,19 +11433,6 @@ function drawSto(ctx,W,H){
     var _kb=(shape==='bure'||shape==='fbure')?78:28;
     kota(ctx,A*sc+_kb,0,A*sc+_kb,B*sc,B+' mm',_tableDimEditDesc('B'),'#sto-b');
   }
-  // Kod bureta lukovi izlaze izvan A x B - nominalna kota ne kaze koliku
-  // tablu treba. Dodaje se STVARNA mjera preko svega.
-  if(shape==='bure'||shape==='fbure'){
-    try{
-      var _bbB=_bureBB(A,B,rrMM,getTableLongRadiusMM(),
-                       (shape==='fbure')?getTableShortRadiusMM():0);
-      if(_bbB.w>A+2||_bbB.h>B+2){
-        // Bez okvira i natpisa - samo DVIJE kote sa strane:
-        // puna visina (preko ispupcenja) i visina strane (nominalna B).
-        kota(ctx,_bbB.mxx*sc+30,_bbB.mny*sc,_bbB.mxx*sc+30,_bbB.mxy*sc,_bbB.h+' mm');
-      }
-    }catch(e){}
-  }
   }
 
 
@@ -11445,7 +11442,8 @@ function drawSto(ctx,W,H){
     ctx.fillStyle='#1a5fa8';ctx.font='bold 36px Segoe UI,Arial';
     ctx.textAlign='left';ctx.textBaseline='middle';
     var _stoBrY=Math.max(B*sc/2,100);
-    var _brX=(shape==='bure'||shape==='fbure')?(A*sc+118):(A*sc+60);
+    // Desno od ploce stoji kota visine (+28), pa broj komada mora dalje
+    var _brX=A*sc+96;
     ctx.fillText('× '+stoBrCv,_brX,_stoBrY-8);
     ctx.font='18px Segoe UI,Arial';ctx.fillStyle='#555';
     ctx.fillText('komada',_brX+2,_stoBrY+16);
@@ -12884,7 +12882,7 @@ function genDXF(){
           dxfCornerLabels([{x:0,y:0},{x:stoAD,y:0},{x:stoAD,y:stoBD},{x:0,y:stoBD}],_rDN);
       } else if(shape==='bure'||shape==='fbure'){
         var RlD=getTableLongRadiusMM(), RsD=(shape==='fbure')?getTableShortRadiusMM():0;
-        var bureSegs=getBureSegments(stoAD,stoBD,rrD,RlD,RsD);
+        var bureSegs=_bureSegsFit(stoAD,stoBD,rrD,RlD,RsD);
         bureSegs.forEach(function(seg){
           if(seg.type==='line'){
             ln(seg.p1[0],seg.p1[1]+yOff,seg.p2[0],seg.p2[1]+yOff,'KONTURA');
