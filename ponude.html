@@ -14590,16 +14590,26 @@ async function usvojiPonudu(){
         if(_ostaje<0){
           _por+='PREPLATA: '+fmtBroj(-_ostaje,2)+' KM\n\n'
             +'Nova suma je ISPOD napla\u0107enog. Uplate se ne diraju \u2014\n'
-            +'razliku rije\u0161i kroz blagajnu.\n\nNastaviti?';
+            +'razliku rije\u0161i kroz blagajnu.\n\n'
+            +'Napomena o ovome ostaje upisana u nalogu.\n\nNastaviti?';
         } else {
           _por+='ostaje naplatiti: '+fmtBroj(_ostaje,2)+' KM\n\n'
-            +'Uplate se ne diraju. Nastaviti?';
+            +'Uplate se ne diraju. Novu ratu upi\u0161i u nalogu\n'
+            +'preko "+ Dodaj ratu" \u2014 tako ide i u blagajnu.\n\nNastaviti?';
         }
         if(!confirm(_por)){
           if(msg){ msg.style.color='#8a6d3b'; msg.textContent='Izmjena otkazana \u2014 ni\u0161ta nije promijenjeno.'; }
           if(btn){ btn.disabled=false; btn.textContent='Usvoji ponudu \u2192 Nalog'; }
           return;
         }
+        // Blagajnik mora vidjeti U NALOGU sta je naplaceno po staroj ponudi.
+        // Avans se NE dira - server ga ne prima direktnim upisom (dvostruko
+        // knjizenje na nalozima 375 i 377), ispravan put je "+ Dodaj ratu".
+        _upoz+=' \u00b7 \ud83d\udcb0 po v'+(_novaVerzija-1)+' napla\u0107eno '
+          +fmtBroj(_naplaceno,2)+' KM, nova suma '+fmtBroj(ukupno,2)+' KM'
+          +((_ostaje<0)
+            ? (' \u2014 PREPLATA '+fmtBroj(-_ostaje,2)+' KM, rije\u0161iti kroz blagajnu')
+            : (' \u2014 ostaje '+fmtBroj(_ostaje,2)+' KM, upisati kroz "+ Dodaj ratu"'));
       }
       var _novaNap=_staraNap
         ? (_staraNap.indexOf(_upoz)>=0 ? _staraNap : (_staraNap+' | '+_upoz))
