@@ -1742,6 +1742,29 @@ function openPop(td,row,editCfg){
     const banke=[['rfb','rfb (banka)'],['uni','uni (banka)'],['mf','mf (banka)'],['nlb','nlb (banka)'],['uni1','uni1 (banka)']];
     fEl.innerHTML=`
       <div style="font-size:12px;color:#555;margin-bottom:6px;">Trenutni avans: <b>${fm(trenutniAvans)} KM</b></div>
+      ${/* Admin smije ISPRAVITI iznos mimo blagajne — za greske u unosu i zatecene
+            naloge kod kojih se blagajna vise ne moze rekonstruisati. Ostalima ostaje
+            samo "+ Dodaj ratu", jer se tako novac istovremeno knjizi. */''}
+      ${isAdmin?`
+        <details style="margin-bottom:9px;">
+          <summary style="cursor:pointer;font-size:11px;color:var(--orange,#b8860b);">
+            ⚙ Ispravi iznos mimo blagajne (admin)
+          </summary>
+          <div style="padding:7px 8px;margin-top:5px;background:#fff8e6;border:1px solid #f0d9a0;border-radius:6px;">
+            <div style="font-size:10.5px;color:#8b6914;line-height:1.45;margin-bottom:6px;">
+              Ovo <b>ne knjiži novac u blagajnu</b> — samo ispravlja iznos na nalogu.
+              Izmjena se bilježi u istoriju.
+            </div>
+            <div style="display:flex;gap:5px;">
+              <input type="text" id="pop-avans-ispravka" placeholder="npr. 1500"
+                     style="flex:1;font:inherit;font-size:12px;padding:5px 7px;border:1px solid #ccc;border-radius:4px;">
+              <button type="button" onclick="avansIspravi()"
+                      style="font:inherit;font-size:11px;padding:5px 12px;border:none;background:var(--orange,#b8860b);color:#fff;border-radius:5px;cursor:pointer;font-weight:700;">
+                Ispravi
+              </button>
+            </div>
+          </div>
+        </details>`:''}
       ${rate.length?`<div style="background:#f7f8fa;border-radius:6px;padding:6px 8px;margin-bottom:10px;font-size:10.5px;color:#666;max-height:90px;overflow-y:auto;">
         ${rate.map(r=>`<div>• ${esc(r)}</div>`).join('')}
       </div>`:''}
@@ -2775,6 +2798,30 @@ document.addEventListener('keydown', e => {
     else if(otvorenMali) mali.style.display = 'none';
   }
 });
+
+
+/* Ispravka avansa mimo blagajne — samo admin. Za greske u unosu i zatecene naloge
+   kod kojih se uplate vise ne mogu rekonstruisati. Novac se NE knjizi u blagajnu. */
+async function avansIspravi(){
+  const inp = document.getElementById('pop-avans-ispravka');
+  const v = broj((inp?.value||'').replace(',','.'));
+  if(!(v >= 0)){ alert('Unesi iznos.'); return; }
+  if(!popRow) return;
+
+  const stari = broj(popRow.avans||0);
+  if(!confirm(`Ispraviti avans sa ${fm(stari)} na ${fm(v)} KM?\n\nNovac se NE knjiži u blagajnu — ovo je samo ispravka iznosa na nalogu.`)) return;
+
+  try{
+    const r = await fetch(`${API}/api/proizvodnja/${popRow.r_br}`,{
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ avans: v }),
+    });
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    popClose();
+    load();
+  }catch(e){ alert('✗ ' + e.message); }
+}
 
 </script>
 

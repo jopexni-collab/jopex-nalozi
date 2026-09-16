@@ -819,7 +819,10 @@ router.patch('/:r_br', async (req, res) => {
     });
   }
 
-  if ('avans' in req.body) {
+  /* ADMIN smije ispraviti avans direktno — za greske u unosu i zatecene naloge kod
+     kojih blagajna ionako ne moze da se rekonstruise. Ostalima ostaje "+ Dodaj ratu",
+     jer se tako novac istovremeno knjizi i u blagajnu. Ispravka se biljezi. */
+  if ('avans' in req.body && req.session?.user?.rola !== 'admin') {
     const stari = parseFloat(postojeciRes.rows[0].avans || 0);
     const novi = parseFloat(req.body.avans || 0);
     if (Math.abs(stari - novi) > 0.005) {
@@ -830,6 +833,21 @@ router.patch('/:r_br', async (req, res) => {
       });
     }
   }
+  /* Admin ispravlja avans direktno — biljezi se u isti dnevnik kao i ostale izmjene,
+     da se poslije zna ko je i zasto dirao iznos mimo blagajne. */
+  if ('avans' in req.body && req.session?.user?.rola === 'admin') {
+    const stari = parseFloat(postojeciRes.rows[0].avans || 0);
+    const novi = parseFloat(req.body.avans || 0);
+    if (Math.abs(stari - novi) > 0.005) {
+      await pool.query(
+        `INSERT INTO status_promjene_log (r_br, kolona, stara_vrijednost, nova_vrijednost, korisnik_id, korisnik_ime)
+         VALUES ($1,'avans',$2,$3,$4,$5)`,
+        [req.params.r_br, String(stari.toFixed(2)), String(novi.toFixed(2)),
+         req.session.user.id, req.session.user.ime_prezime + ' (ispravka mimo blagajne)']
+      ).catch(e => console.error('log avansa:', e.message));
+    }
+  }
+
   const jeSvoj = postojeciRes.rows[0].ugovorio_id === user?.id;
   const staroSvaPolja = postojeciRes.rows[0];
 
