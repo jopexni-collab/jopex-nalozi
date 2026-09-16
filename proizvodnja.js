@@ -833,18 +833,39 @@ router.patch('/:r_br', async (req, res) => {
       });
     }
   }
-  /* Admin ispravlja avans direktno — biljezi se u isti dnevnik kao i ostale izmjene,
-     da se poslije zna ko je i zasto dirao iznos mimo blagajne. */
+  /* Admin ispravlja avans direktno. Ispravka mora proci i kroz BLAGAJNU — inace bi
+     nalog pokazivao jedan iznos a blagajna drugi, pa se dnevni pazar ne bi slagao.
+     Umjesto mijenjanja starog zapisa upisuje se RAZLIKA, da stari zapisi ostanu
+     netaknuti i da se u blagajni vidi da je bila ispravka. */
   if ('avans' in req.body && req.session?.user?.rola === 'admin') {
     const stari = parseFloat(postojeciRes.rows[0].avans || 0);
     const novi = parseFloat(req.body.avans || 0);
-    if (Math.abs(stari - novi) > 0.005) {
+    const razlika = +(novi - stari).toFixed(2);
+
+    if (Math.abs(razlika) > 0.005) {
       await pool.query(
         `INSERT INTO status_promjene_log (r_br, kolona, stara_vrijednost, nova_vrijednost, korisnik_id, korisnik_ime)
          VALUES ($1,'avans',$2,$3,$4,$5)`,
         [req.params.r_br, String(stari.toFixed(2)), String(novi.toFixed(2)),
-         req.session.user.id, req.session.user.ime_prezime + ' (ispravka mimo blagajne)']
+         req.session.user.id, req.session.user.ime_prezime + ' (ispravka)']
       ).catch(e => console.error('log avansa:', e.message));
+
+      /* U blagajnu ide samo ako je uplata bila GOTOVINSKA — bankovne uplate ne prolaze
+         kroz blagajnu, pa ih ni ispravka ne smije dirati. */
+      const opisAv = String(postojeciRes.rows[0].avans_opis || '').trim();
+      const jeBanka = /\b(banka|rfb|uni|mf|nlb|virman|uplatnic)/i.test(opisAv);
+
+      if (!jeBanka && req.body?.bez_blagajne !== true) {
+        const naziv = postojeciRes.rows[0].narucilac ? ` (${postojeciRes.rows[0].narucilac})` : '';
+        await pool.query(
+          `INSERT INTO gotovina (datum, iznos, primio, izvor, nalog_r_br, opis, objekt_naziv)
+           VALUES (CURRENT_DATE,$1,$2,'Proizvodnja',$3,$4,$5)`,
+          [razlika, req.session.user.ime_prezime, String(req.params.r_br),
+           `ISPRAVKA avansa - nalog #${req.params.r_br}${naziv}: `
+           + `${stari.toFixed(2)} → ${novi.toFixed(2)} KM`,
+           PROIZVODNJA_PJ]
+        ).catch(e => console.error('ispravka u blagajni:', e.message));
+      }
     }
   }
 

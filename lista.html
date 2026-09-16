@@ -1752,8 +1752,8 @@ function openPop(td,row,editCfg){
           </summary>
           <div style="padding:7px 8px;margin-top:5px;background:#fff8e6;border:1px solid #f0d9a0;border-radius:6px;">
             <div style="font-size:10.5px;color:#8b6914;line-height:1.45;margin-bottom:6px;">
-              Ovo <b>ne knjiži novac u blagajnu</b> — samo ispravlja iznos na nalogu.
-              Izmjena se bilježi u istoriju.
+              U blagajnu se upisuje <b>razlika</b>, ne cijeli iznos — stari zapisi ostaju
+              netaknuti. Izmjena se bilježi u istoriju.
             </div>
             <div style="display:flex;gap:5px;">
               <input type="text" id="pop-avans-ispravka" placeholder="npr. 1500"
@@ -1763,6 +1763,10 @@ function openPop(td,row,editCfg){
                 Ispravi
               </button>
             </div>
+            <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:10.5px;color:#8b6914;cursor:pointer;">
+              <input type="checkbox" id="pop-avans-bez-blagajne">
+              Ne diraj blagajnu <span style="color:#a89060;">(samo za zatečene naloge kod kojih uplata nikad nije ni ušla)</span>
+            </label>
           </div>
         </details>`:''}
       ${rate.length?`<div style="background:#f7f8fa;border-radius:6px;padding:6px 8px;margin-bottom:10px;font-size:10.5px;color:#666;max-height:90px;overflow-y:auto;">
@@ -2809,12 +2813,20 @@ async function avansIspravi(){
   if(!popRow) return;
 
   const stari = broj(popRow.avans||0);
-  if(!confirm(`Ispraviti avans sa ${fm(stari)} na ${fm(v)} KM?\n\nNovac se NE knjiži u blagajnu — ovo je samo ispravka iznosa na nalogu.`)) return;
+  const razlika = +(v - stari).toFixed(2);
+  const bezBlagajne = document.getElementById('pop-avans-bez-blagajne')?.checked === true;
+
+  /* Razlika se izricito navodi u potvrdi — kod ispravke naniže u blagajnu ide MINUS,
+     a to je nešto što se mora vidjeti prije nego se potvrdi. */
+  const opisBlag = bezBlagajne
+    ? 'Blagajna se NE dira.'
+    : `U blagajnu ide ${razlika > 0 ? '+' : ''}${fm(razlika)} KM.`;
+  if(!confirm(`Ispraviti avans sa ${fm(stari)} na ${fm(v)} KM?\n\n${opisBlag}`)) return;
 
   try{
     const r = await fetch(`${API}/api/proizvodnja/${popRow.r_br}`,{
       method:'PATCH', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ avans: v }),
+      body: JSON.stringify({ avans: v, bez_blagajne: bezBlagajne }),
     });
     const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
     if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
