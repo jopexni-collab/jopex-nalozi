@@ -14561,14 +14561,46 @@ async function usvojiPonudu(){
       // pregaziti. Cita se postojeci sadrzaj pa se upozorenje DOPISUJE sa "|",
       // isti obrazac koji lista.html vec koristi. Sve verzije ostaju.
       var _staraNap='';
+      var _staraSuma=null, _naplaceno=null;
       try{
         var _gr=await fetch(url+'/api/proizvodnja/'+_nalogInfo.r_br);
         if(_gr.ok){
           var _gd=await _gr.json().catch(function(){return null;});
-          var _n=(_gd&&(_gd.napomena||(_gd.nalog&&_gd.nalog.napomena)))||'';
+          var _nal=(_gd&&_gd.nalog)?_gd.nalog:_gd;
+          var _n=(_nal&&_nal.napomena)||'';
           _staraNap=String(_n||'').trim();
+          if(_nal){
+            _staraSuma=_broj(_nal.ugovorena_suma);
+            _naplaceno=_broj(_nal.avans);
+          }
         }
       }catch(e){ /* ako ne mozemo procitati, radije ne diramo napomenu */ }
+
+      // ── NOVAC PRI IZMJENI ────────────────────────────────────────
+      // Uplate su vec u blagajni i NE diraju se. Ali korisnik mora vidjeti
+      // stanje prije nego potvrdi, a posebno ako nova suma padne ispod
+      // onoga sto je vec naplaceno.
+      if(_naplaceno>0){
+        var _ostaje=Math.round((ukupno-_naplaceno)*100)/100;
+        var _por='Nalog #'+_nalogInfo.r_br+' \u2014 izmjena\n\n'
+          +'ugovoreno prije:  '+fmtBroj(_staraSuma||0,2)+' KM\n'
+          +'napla\u0107eno:        '+fmtBroj(_naplaceno,2)+' KM\n'
+          +'ugovoreno sada:   '+fmtBroj(ukupno,2)+' KM\n'
+          +'\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n';
+        if(_ostaje<0){
+          _por+='PREPLATA: '+fmtBroj(-_ostaje,2)+' KM\n\n'
+            +'Nova suma je ISPOD napla\u0107enog. Uplate se ne diraju \u2014\n'
+            +'razliku rije\u0161i kroz blagajnu.\n\nNastaviti?';
+        } else {
+          _por+='ostaje naplatiti: '+fmtBroj(_ostaje,2)+' KM\n\n'
+            +'Uplate se ne diraju. Nastaviti?';
+        }
+        if(!confirm(_por)){
+          if(msg){ msg.style.color='#8a6d3b'; msg.textContent='Izmjena otkazana \u2014 ni\u0161ta nije promijenjeno.'; }
+          if(btn){ btn.disabled=false; btn.textContent='Usvoji ponudu \u2192 Nalog'; }
+          return;
+        }
+      }
       var _novaNap=_staraNap
         ? (_staraNap.indexOf(_upoz)>=0 ? _staraNap : (_staraNap+' | '+_upoz))
         : _upoz;
