@@ -483,6 +483,18 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       </span>
     </div>
 
+    <!-- Izbor poslovnih jedinica — nivelacija se radi po PJ, pa je poredjenje
+         izmedju objekata cesto ono sto se stvarno trazi. -->
+    <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:6px 9px;margin-bottom:9px;
+                background:#f7f8fa;border:1px solid var(--border,#ddd);border-radius:7px;">
+      <span style="font-size:10.5px;color:#6b7a8d;font-weight:700;">Poslovne jedinice:</span>
+      <span id="kv-pj-kvadratici" style="display:flex;gap:5px;flex-wrap:wrap;"></span>
+      <span style="display:flex;gap:4px;margin-left:auto;">
+        <button onclick="kvPjSve(true)" style="font-size:10px;padding:2px 9px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;">Sve</button>
+        <button onclick="kvPjSve(false)" style="font-size:10px;padding:2px 9px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;">Ništa</button>
+      </span>
+    </div>
+
     <div id="kv-po-osobi" style="margin-bottom:9px;"></div>
 
     <div style="overflow:auto;max-height:min(60vh,560px);border:1px solid var(--border,#ddd);border-radius:8px;">
@@ -9411,6 +9423,66 @@ async function rmZnakGrupe(){
 
 /* ═══ KRETANJE VRIJEDNOSTI LAGERA ══════════════════════════════════════════════════
    Razdvaja dva uzroka rasta: vise robe i skuplja roba. */
+
+/* Poslovne jedinice — nivelacija se radi po PJ, pa je poredjenje izmedju objekata
+   cesto ono sto se stvarno trazi. Na pocetku su sve ukljucene. */
+let kvPjIzbor = new Set();
+let kvPjLista = [];
+
+async function kvUcitajPj(){
+  if(kvPjLista.length) return;
+  try{
+    const r = await fetch(`${API}/api/prodajni-objekti`);
+    if(!r.ok) return;
+    const d = await r.json();
+    kvPjLista = (Array.isArray(d) ? d : d.stavke || []).filter(x => x.id);
+    if(!kvPjIzbor.size) kvPjIzbor = new Set(kvPjLista.map(o => String(o.id)));
+    kvPjCrtaj();
+  }catch(e){ /* bez spiska se prikazuju svi */ }
+}
+
+function kvPjCrtaj(){
+  const cont = document.getElementById('kv-pj-kvadratici');
+  if(!cont) return;
+  cont.innerHTML = kvPjLista.map(o=>{
+    const akt = kvPjIzbor.has(String(o.id));
+    return `<label style="display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:6px;cursor:pointer;
+                 font-size:11px;border:1px solid ${akt?'#1f3864':'var(--border,#ddd)'};
+                 background:${akt?'#eef2f8':'#fff'};font-weight:${akt?'700':'400'};">
+      <input type="checkbox" value="${o.id}" ${akt?'checked':''} onchange="kvPjPromjena(this)">
+      ${esc(o.naziv)}
+    </label>`;
+  }).join('') || '<span style="font-size:10.5px;color:#8b96a5;">nema objekata</span>';
+}
+
+function kvPjPromjena(el){
+  if(el.checked) kvPjIzbor.add(el.value); else kvPjIzbor.delete(el.value);
+  kvPjCrtaj();
+  kvUcitaj();
+}
+
+function kvPjSve(ukljuci){
+  kvPjIzbor = ukljuci ? new Set(kvPjLista.map(o=>String(o.id))) : new Set();
+  kvPjCrtaj();
+  kvUcitaj();
+}
+
+
+/* Strelica uz novu cijenu: zelena gore = poskupilo, crvena dolje = pojeftinilo.
+   Postavlja se samo kad se cijena STVARNO promijenila — kod prijema robe cijena
+   moze ostati ista, pa bi strelica lagala. Uz nju ide i postotak, jer razlika od
+   dva feninga i razlika od pedeset KM ne znace isto. */
+function kvStrelica(x){
+  const st = Number(x.cijena_stara), nv = Number(x.cijena_nova);
+  if(!(st > 0) || !(nv > 0) || Math.abs(nv - st) < 0.005) return '';
+  const gore = nv > st;
+  const pct = Math.round(((nv - st) / st) * 1000) / 10;
+  return `<span title="${gore?'Poskupilo':'Pojeftinilo'} sa ${uPolje(st,2)} na ${uPolje(nv,2)} (${pct>0?'+':''}${String(pct).replace('.',',')}%)"
+     style="margin-left:3px;font-size:10px;color:${gore?'var(--green,#1f8a4c)':'var(--red,#c0392b)'};">
+     ${gore?'▲':'▼'}<span style="font-size:8.5px;opacity:.85;">${Math.abs(pct)>=0.1?Math.abs(pct).toFixed(0)+'%':''}</span>
+   </span>`;
+}
+
 let kvPodaci = [];
 let kvSort = { kolona:'kada', smjer:'desc' };
 let kvKolonaFilteri = {};
@@ -9427,6 +9499,7 @@ const KV_KOLONE = [
   {k:'kolicina_p',   lbl:'Količina', align:'right'},
   {k:'uticaj_cijena',   lbl:'Zbog cijene', align:'right'},
   {k:'uticaj_kolicina', lbl:'Zbog količine', align:'right'},
+  {k:'objekat_naziv', lbl:'PJ', align:'left'},
   {k:'korisnik_ime', lbl:'Ko', align:'left'},
 ];
 
@@ -9445,7 +9518,21 @@ function kvPeriod(dana){
 }
 
 async function kvUcitaj(){
+  await kvUcitajPj();
   const p = new URLSearchParams();
+
+  /* Prazan izbor = NISTA, uz poruku zasto — da prazna tabela ne izgleda kao greska. */
+  if(kvPjLista.length && !kvPjIzbor.size){
+    kvPodaci = [];
+    kvZbirno({ ukupno:0, uticaj_cijena:0, uticaj_kolicina:0 });
+    kvPoOsobi([]);
+    kvCrtaj();
+    const pr = document.getElementById('kv-prazno');
+    if(pr){ pr.textContent = 'Nijedna poslovna jedinica nije izabrana.'; pr.style.display = 'block'; }
+    return;
+  }
+  if(kvPjIzbor.size && kvPjIzbor.size < kvPjLista.length)
+    p.set('objekti', [...kvPjIzbor].join(','));
   const v = id => document.getElementById(id)?.value || '';
   if(v('kv-tip')) p.set('tip', v('kv-tip'));
   if(v('kv-od')) p.set('od', v('kv-od'));
@@ -9592,7 +9679,9 @@ function kvCrtaj(){
       return String(x??'').localeCompare(String(y??''))*s;
     });
 
-  document.getElementById('kv-prazno').style.display = red.length ? 'none' : 'block';
+  const kvPrazno = document.getElementById('kv-prazno');
+  kvPrazno.style.display = red.length ? 'none' : 'block';
+  if(red.length === 0 && kvPjIzbor.size) kvPrazno.textContent = 'Nema zapisa za izabrane uslove.';
 
   document.getElementById('kv-tbody').innerHTML = red.map((x,i)=>{
     const uc = Number(x.uticaj_cijena)||0, uk = Number(x.uticaj_kolicina)||0;
@@ -9604,13 +9693,16 @@ function kvCrtaj(){
       <td style="padding:0 5px;">${esc(x.sifra||'—')}</td>
       <td style="padding:0 5px;max-width:190px;overflow:hidden;text-overflow:ellipsis;">${esc(x.naziv||'—')}</td>
       <td style="padding:0 5px;text-align:right;color:#8b96a5;">${x.cijena_stara!=null?uPolje(x.cijena_stara,2):'—'}</td>
-      <td style="padding:0 5px;text-align:right;font-weight:${x.tip==='nivelacija'?'700':'400'};">${x.cijena_nova!=null?uPolje(x.cijena_nova,2):'—'}</td>
+      <td style="padding:0 5px;text-align:right;font-weight:${x.tip==='nivelacija'?'700':'400'};">
+        ${x.cijena_nova!=null?uPolje(x.cijena_nova,2):'—'}${kvStrelica(x)}
+      </td>
       <td style="padding:0 5px;text-align:right;color:#6b7a8d;">${x.kolicina!=null?uPolje(x.kolicina,3):'—'}</td>
       <td style="padding:0 5px;text-align:right;font-weight:700;color:${boja(uc)};"
           title="${x.procjena?'Stanje u trenutku izmjene nije zapisano — računato po današnjoj količini':''}">
         ${uc?kvZnak(uc):'—'}${x.procjena&&uc?' ~':''}
       </td>
       <td style="padding:0 5px;text-align:right;color:${boja(uk)};">${uk?kvZnak(uk):'—'}</td>
+      <td style="padding:0 5px;color:#6b7a8d;">${esc(x.objekat_naziv||'—')}</td>
       <td style="padding:0 5px;color:#6b7a8d;">${esc(x.korisnik_ime||'—')}</td>
     </tr>`;
   }).join('');
