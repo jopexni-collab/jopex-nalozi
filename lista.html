@@ -1140,7 +1140,7 @@ function getCols(){
     {k:'reklamacija_dodatni_rad',l:'Rek.',w:60,filter:'sel',opts:['DA','NE'],render:r=>`<td class="center">${chipR(r.reklamacija_dodatni_rad)}</td>`,edit:{type:'select',opts:['','NE','DA'],field:'reklamacija_dodatni_rad',label:'Reklamacija'}},
     {k:'napomena',l:'Napomena',w:220,filter:'text',render:r=>`<td class="note-cell${r.napomena?' has-note':''}" data-note="${esc(r.napomena)}"><div class="clamp2-inner">${esc(r.napomena)}</div></td>`,edit:{type:'textarea',field:'napomena',label:'Napomena / upute operateru'}},
     {k:'labele',l:'Labele',w:60,filter:null,render:r=>`<td class="center"><button onclick="otvoriLabele(${r.r_br})" title="Printaj labele za ovaj nalog" style="background:none;border:none;cursor:pointer;font-size:16px;">🏷️</button></td>`},
-    {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center">${lk(r.link_skica, r.r_br, 'link_skica')}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
+    {k:'link_skica',l:'Skica',w:45,filter:null,render:r=>`<td class="center dxf-cilj" data-rbr="${r.r_br}" ondragover="dxfPreko(event)" ondragleave="dxfVan(event)" ondrop="dxfPusti(event,${r.r_br})" title="Prevuci DXF nacrt ovdje">${lk(r.link_skica, r.r_br, 'link_skica')}</td>`,edit:{type:'text',field:'link_skica',label:'Link skica'}},
     {k:'link_ponuda',l:'R.Nalog',w:50,filter:null,render:r=>`<td class="center">${lk(r.link_ponuda, r.r_br, 'link_ponuda')}</td>`,edit:{type:'text',field:'link_ponuda',label:'Link radni nalog'}},
     {k:'slike',l:'📷',w:44,filter:null,render:r=>`<td class="center">
       <div onclick="event.stopPropagation();otvoriKaruselNaloga(${r.r_br})" style="position:relative;display:inline-block;cursor:pointer;" title="Slike naloga">
@@ -2833,6 +2833,54 @@ async function avansIspravi(){
     popClose();
     load();
   }catch(e){ alert('✗ ' + e.message); }
+}
+
+
+/* Prevlacenje DXF nacrta na celiju Skica. Ponude same crtaju DXF; ovdje se prima
+   gotov fajl od kupca, arhitekte ili kooperanta. Dodaje se UZ postojece linkove —
+   nalog moze imati vise nacrta. */
+function dxfPreko(e){
+  e.preventDefault(); e.stopPropagation();
+  e.currentTarget.style.outline = '2px dashed var(--blue,#1a5fa8)';
+  e.currentTarget.style.background = '#eef2f8';
+}
+
+function dxfVan(e){
+  e.currentTarget.style.outline = '';
+  e.currentTarget.style.background = '';
+}
+
+async function dxfPusti(e, rBr){
+  e.preventDefault(); e.stopPropagation();
+  dxfVan(e);
+  const fajlovi = [...(e.dataTransfer?.files || [])];
+  if(!fajlovi.length) return;
+
+  /* Provjera nastavka ide i OVDJE, prije slanja — da se veliki fajl ne otprema
+     uzalud pa tek onda odbije. */
+  const dozvoljeni = ['dxf','dwg','pdf'];
+  const lose = fajlovi.filter(f => !dozvoljeni.includes((f.name.split('.').pop()||'').toLowerCase()));
+  if(lose.length){
+    alert(`Dozvoljeni su samo DXF, DWG i PDF nacrti.\n\nOdbijeno: ${lose.map(f=>f.name).join(', ')}`);
+    if(lose.length === fajlovi.length) return;
+  }
+
+  const zaSlanje = fajlovi.filter(f => dozvoljeni.includes((f.name.split('.').pop()||'').toLowerCase()));
+  let ok = 0; const greske = [];
+
+  for(const f of zaSlanje){
+    try{
+      const fd = new FormData();
+      fd.append('dxf', f);
+      const r = await fetch(`${API}/api/proizvodnja/${rBr}/dxf`, { method:'POST', body:fd });
+      const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+      if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+      ok++;
+    }catch(err){ greske.push(`${f.name}: ${err.message}`); }
+  }
+
+  if(greske.length) alert(`Otpremljeno ${ok}.\n\nNije prošlo:\n${greske.join('\n')}`);
+  load();
 }
 
 </script>

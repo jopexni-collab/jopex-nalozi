@@ -1233,6 +1233,58 @@ router.get('/:r_br/ponuda-json', async (req, res) => {
    tekstualno polje — nepregledno i lako se sudara sa PDF linkom iz velikog naloga. */
 
 // POST /api/proizvodnja/:r_br/slika — dodaje sliku na nalog. Prva ikad dodana postaje glavna.
+/* POST /:r_br/dxf — otpremanje DXF nacrta koji je poslao neko drugi.
+   Ponude same crtaju DXF; ovdje se prima gotov fajl od kupca, arhitekte ili
+   kooperanta. Cuva se kao link u polju `link_skica`, uz eventualne postojece —
+   tako se koristi isti mehanizam koji vec radi za rucno unesene linkove. */
+router.post('/:r_br/dxf', uploadSlika.single('dxf'), async (req, res) => {
+  const user = req.session?.user;
+  if (!user) return res.status(401).json({ error: 'Niste prijavljeni.' });
+
+  const f = req.file;
+  if (!f) return res.status(400).json({ error: 'Nema fajla.' });
+
+  /* DXF i DWG dolaze sa raznim MIME tipovima, cesto i kao octet-stream — zato se
+     gleda NASTAVAK imena, ne tip koji je pregledac prijavio. */
+  const ime = String(f.originalname || '');
+  const nast = (ime.split('.').pop() || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!['dxf', 'dwg', 'pdf'].includes(nast))
+    return res.status(400).json({ error: 'Dozvoljeni su samo DXF, DWG i PDF nacrti.' });
+
+  /* Multer vec odbija preko 15 MB, ali sa nejasnom porukom — ovdje se kaze sta je. */
+  if (f.size > 15 * 1024 * 1024)
+    return res.status(400).json({ error: 'Nacrt je veći od 15 MB.' });
+
+  try {
+    const cisto = ime.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9-_]/g, '-').slice(0, 40) || 'nacrt';
+    const url = await uploadFile(
+      `nalog-nacrti/${req.params.r_br}-${Date.now()}-${cisto}.${nast}`,
+      f.buffer, f.mimetype || 'application/octet-stream'
+    );
+
+    /* Dodaje se UZ postojece linkove, ne umjesto njih — nalog moze imati vise
+       nacrta (npr. prizemlje i sprat). */
+    const st = await pool.query('SELECT link_skica FROM proizvodnja_jopex WHERE r_br=$1', [req.params.r_br]);
+    if (!st.rows.length) return res.status(404).json({ error: 'Nalog nije pronađen.' });
+
+    const postojeci = String(st.rows[0].link_skica || '').split(',').map(s => s.trim()).filter(Boolean);
+    postojeci.push(url);
+    const novo = postojeci.join(', ');
+
+    await pool.query('UPDATE proizvodnja_jopex SET link_skica=$1 WHERE r_br=$2', [novo, req.params.r_br]);
+
+    await pool.query(
+      `INSERT INTO status_promjene_log (r_br, kolona, stara_vrijednost, nova_vrijednost, korisnik_id, korisnik_ime)
+       VALUES ($1,'link_skica',$2,$3,$4,$5)`,
+      [req.params.r_br, st.rows[0].link_skica || null, novo, user.id, user.ime_prezime + ` (nacrt: ${ime})`]
+    ).catch(e => console.error('log nacrta:', e.message));
+
+    res.json({ ok: true, url, naziv: ime, link_skica: novo, ukupno: postojeci.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/:r_br/slika', uploadSlika.fields([{name:'slika',maxCount:1},{name:'thumb',maxCount:1}]), async (req, res) => {
   if (!req.session?.user) return res.status(401).json({ error: 'Niste prijavljeni.' });
   const glavniFajl = req.files?.slika?.[0];
