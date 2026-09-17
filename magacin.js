@@ -398,8 +398,8 @@ router.get('/kretanje', async (req, res) => {
   const vals = [];
   let i = 1;
 
-  if (req.query.od) { uslovi.push(`k.kada >= $${i++}::date`); vals.push(req.query.od); }
-  if (req.query.do) { uslovi.push(`k.kada < ($${i++}::date + interval '1 day')`); vals.push(req.query.do); }
+  if (req.query.od) { uslovi.push(`k.datum >= $${i++}::date`); vals.push(req.query.od); }
+  if (req.query.do) { uslovi.push(`k.datum < ($${i++}::date + interval '1 day')`); vals.push(req.query.do); }
   if (req.query.tip) { uslovi.push(`k.tip = $${i++}`); vals.push(req.query.tip); }
   if (req.query.ko) { uslovi.push(`k.korisnik_ime = $${i++}`); vals.push(req.query.ko); }
   if (req.query.objekti) {
@@ -416,7 +416,7 @@ router.get('/kretanje', async (req, res) => {
 
   try {
     const r = await pool.query(
-      `SELECT k.id, k.kada, k.tip, k.roba_id, k.objekt_id,
+      `SELECT k.id, k.datum AS kada, k.tip, k.roba_id, k.objekt_id,
               k.kolicina, k.cijena_stara, k.cijena_nova, k.stanje_tada,
               k.napomena, k.korisnik_ime,
               r.sifra, r.naziv, r.grupa, r.jed_mjera,
@@ -443,7 +443,7 @@ router.get('/kretanje', async (req, res) => {
        LEFT JOIN prodajni_objekti po ON po.id = k.objekt_id
        LEFT JOIN roba_pj rp ON rp.roba_id = k.roba_id AND rp.objekt_id = k.objekt_id
        ${gdje}
-       ORDER BY k.kada DESC
+       ORDER BY k.datum DESC
        LIMIT ${limit}`,
       vals
     );
