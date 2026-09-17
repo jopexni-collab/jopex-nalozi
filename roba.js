@@ -1350,11 +1350,18 @@ router.post('/:id/nivelacija', preskociAkoNijeArtikal, async (req, res) => {
     if (!staraRes.rows.length) return res.status(404).json({ error: 'Artikal nije pronađen za ovaj PJ.' });
     const staraCijena = parseFloat(staraRes.rows[0].cijena);
 
+    /* Stanje se cita PRIJE izmjene — da se kasnije zna koliko je ta nivelacija
+       stvarno vrijedjela. Bez toga bi se uticaj racunao po danasnjoj kolicini, koja
+       sa tom odlukom nema veze. */
+    const stanjeRes = await pool.query(
+      'SELECT stanje FROM roba_pj WHERE roba_id=$1 AND objekt_id=$2', [req.params.id, objektId]);
+    const stanjeTada = parseFloat(stanjeRes.rows[0]?.stanje || 0);
+
     await pool.query('UPDATE roba_pj SET cijena=$1, azurirano=now() WHERE roba_id=$2 AND objekt_id=$3', [novaCijena, req.params.id, objektId]);
     await pool.query(
-      `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, cijena_stara, cijena_nova, napomena, korisnik_id, korisnik_ime)
-       VALUES ($1,$2,'nivelacija',$3,$4,$5,$6,$7)`,
-      [req.params.id, objektId, staraCijena, novaCijena, napomena, req.session.user.id, req.session.user.ime_prezime]
+      `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, cijena_stara, cijena_nova, stanje_tada, napomena, korisnik_id, korisnik_ime)
+       VALUES ($1,$2,'nivelacija',$3,$4,$5,$6,$7,$8)`,
+      [req.params.id, objektId, staraCijena, novaCijena, stanjeTada, napomena, req.session.user.id, req.session.user.ime_prezime]
     );
     res.json({ ok: true, cijena_stara: staraCijena, cijena_nova: novaCijena });
   } catch (err) {

@@ -401,6 +401,7 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
   </div>
   <div class="traka-tabova" data-grupa-sadrzaj="dokumenti" style="display:none;gap:5px;flex-wrap:wrap;width:100%;margin:0 0 13px;">
     <button type="button" class="glavni-tab-btn" data-tab="dokumenti" onclick="prebaciGlavniTabRM('dokumenti')">📑 Dokumenti <span id="dok-znak" style="display:none;background:var(--orange,#b8860b);color:#fff;border-radius:9px;padding:0 6px;font-size:10px;margin-left:3px;"></span></button>
+    <button type="button" class="glavni-tab-btn" data-tab="kretanje-vrijednosti" onclick="prebaciGlavniTabRM('kretanje-vrijednosti')">📊 Kretanje vrijednosti</button>
     <button type="button" class="glavni-tab-btn" data-tab="kalkulacija" onclick="prebaciGlavniTabRM('kalkulacija')">📦 Kalkulacija</button>
     <button type="button" class="glavni-tab-btn" data-tab="kalk-spisak" onclick="prebaciGlavniTabRM('kalk-spisak')">📋 Spisak kalkulacija</button>
     <button type="button" class="glavni-tab-btn" data-tab="presek" onclick="prebaciGlavniTabRM('presek')">⚖️ Presek / Usaglašavanje</button>
@@ -433,6 +434,64 @@ header nav a{color:#fff;text-decoration:none;font-size:11px;border:1px solid rgb
       <button type="button" class="ce-tip-btn" style="font-size:11.5px;" onclick="kspUcitaj()">↻ Osvježi</button>
     </div>
     <div id="ksp-sadrzaj"></div>
+  </div>
+</div>
+
+<div id="tab-kretanje-vrijednosti" class="glavni-tab-sadrzaj" style="display:none;">
+  <div class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:7px;">
+      <h3 style="margin:0;font-size:15px;">📊 Kretanje vrijednosti lagera</h3>
+      <span id="kv-zbirno" style="font-size:11px;color:#8b96a5;"></span>
+    </div>
+
+    <div style="font-size:11px;color:#6b7a8d;line-height:1.5;margin-bottom:9px;">
+      Vrijednost lagera raste iz dva razloga — <b>više robe</b> ili <b>skuplja roba</b>.
+      Ovdje su razdvojeni, pa se vidi koliko je zaliha promijenjena prodajom i prijemom,
+      a koliko nivelacijom cijena.
+    </div>
+
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:end;margin-bottom:9px;">
+      <span>
+        <label style="font-size:10px;color:#6b7a8d;display:block;">Vrsta</label>
+        <select id="kv-tip" onchange="kvUcitaj()" style="font:inherit;font-size:11.5px;padding:4px 7px;border:1px solid #ccc;border-radius:5px;">
+          <option value="">sve</option>
+          <option value="nivelacija">nivelacija (cijena)</option>
+          <option value="kalkulacija">kalkulacija</option>
+          <option value="uvoz">uvoz</option>
+          <option value="ulaz">ulaz</option>
+          <option value="izlaz">izlaz</option>
+          <option value="admin">ručna ispravka</option>
+        </select>
+      </span>
+      <span>
+        <label style="font-size:10px;color:#6b7a8d;display:block;">Od</label>
+        <input type="date" id="kv-od" onchange="kvUcitaj()" style="font:inherit;font-size:11.5px;padding:4px 7px;border:1px solid #ccc;border-radius:5px;">
+      </span>
+      <span>
+        <label style="font-size:10px;color:#6b7a8d;display:block;">Do</label>
+        <input type="date" id="kv-do" onchange="kvUcitaj()" style="font:inherit;font-size:11.5px;padding:4px 7px;border:1px solid #ccc;border-radius:5px;">
+      </span>
+      <span style="flex:1;min-width:140px;">
+        <label style="font-size:10px;color:#6b7a8d;display:block;">Traži artikal</label>
+        <input type="text" id="kv-q" placeholder="šifra ili naziv" oninput="kvOdgodi()"
+               style="width:100%;font:inherit;font-size:11.5px;padding:4px 7px;border:1px solid #ccc;border-radius:5px;">
+      </span>
+      <span style="display:flex;gap:4px;">
+        <button onclick="kvPeriod(1)" style="font-size:10px;padding:4px 9px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;">Juče i danas</button>
+        <button onclick="kvPeriod(7)" style="font-size:10px;padding:4px 9px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;">7 dana</button>
+        <button onclick="kvPeriod(30)" style="font-size:10px;padding:4px 9px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;">30 dana</button>
+      </span>
+    </div>
+
+    <div id="kv-po-osobi" style="margin-bottom:9px;"></div>
+
+    <div style="overflow:auto;max-height:min(60vh,560px);border:1px solid var(--border,#ddd);border-radius:8px;">
+      <table style="width:100%;border-collapse:collapse;font-size:10.5px;white-space:nowrap;line-height:1.2;">
+        <thead id="kv-thead"></thead>
+        <tbody id="kv-tbody"></tbody>
+      </table>
+    </div>
+    <div id="kv-prazno" class="empty-msg" style="display:none;">Nema zapisa za izabrane uslove.</div>
   </div>
 </div>
 
@@ -4371,6 +4430,8 @@ function prebaciGlavniTabRM(tab){
      dugme radi a sadrzaj ostaje skriven. Tako je "Dokumenti" bio nevidljiv. */
   document.getElementById('tab-dokumenti').style.display = tab==='dokumenti' ? 'block' : 'none';
   document.getElementById('tab-qr-nalepnice').style.display = tab==='qr-nalepnice' ? 'block' : 'none';
+  document.getElementById('tab-kretanje-vrijednosti').style.display = tab==='kretanje-vrijednosti' ? 'block' : 'none';
+  if(tab === 'kretanje-vrijednosti') setTimeout(kvUcitaj, 40);
   document.getElementById('tab-kalkulacija').style.display = tab==='kalkulacija' ? 'block' : 'none';
   document.getElementById('tab-kalk-spisak').style.display = tab==='kalk-spisak' ? 'block' : 'none';
   if(tab==='kalk-spisak') kspUcitaj();
@@ -9291,7 +9352,7 @@ async function dokZnak(){
    Kad se grupa otvori, sam se bira njen PRVI tab — inače bi ekran ostao prazan. */
 const GRUPE_TABOVA = {
   lager:     ['lager'],
-  dokumenti: ['dokumenti','kalkulacija','kalk-spisak','presek','uporedi','kretanje','uvoz','uvoz-istorija','izvoz-log'],
+  dokumenti: ['dokumenti','kretanje-vrijednosti','kalkulacija','kalk-spisak','presek','uporedi','kretanje','uvoz','uvoz-istorija','izvoz-log'],
   uredjenje: ['gotovi','akcije','pj','uvoz-slike','master-grupe','qr-nalepnice'],
 };
 
@@ -9347,6 +9408,219 @@ async function rmZnakGrupe(){
     document.addEventListener('DOMContentLoaded', ()=>setTimeout(pokreniGrupe, 300));
   else setTimeout(pokreniGrupe, 300);
 })();
+
+/* ═══ KRETANJE VRIJEDNOSTI LAGERA ══════════════════════════════════════════════════
+   Razdvaja dva uzroka rasta: vise robe i skuplja roba. */
+let kvPodaci = [];
+let kvSort = { kolona:'kada', smjer:'desc' };
+let kvKolonaFilteri = {};
+let kvFilterKolona = null, kvFilterNacrt = new Set();
+let kvTajmer = null;
+
+const KV_KOLONE = [
+  {k:'kada',    lbl:'Datum',    align:'left'},
+  {k:'tip',     lbl:'Vrsta',    align:'left'},
+  {k:'sifra',   lbl:'Šifra',    align:'left'},
+  {k:'naziv',   lbl:'Artikal',  align:'left'},
+  {k:'cijena_stara', lbl:'Prije', align:'right'},
+  {k:'cijena_nova',  lbl:'Poslije', align:'right'},
+  {k:'kolicina_p',   lbl:'Količina', align:'right'},
+  {k:'uticaj_cijena',   lbl:'Zbog cijene', align:'right'},
+  {k:'uticaj_kolicina', lbl:'Zbog količine', align:'right'},
+  {k:'korisnik_ime', lbl:'Ko', align:'left'},
+];
+
+const KV_BOJE = {
+  nivelacija:'#b8860b', kalkulacija:'#1a5fa8', uvoz:'#1f8a4c',
+  ulaz:'#1f8a4c', izlaz:'#c0392b', admin:'#475569',
+};
+
+function kvOdgodi(){ clearTimeout(kvTajmer); kvTajmer = setTimeout(kvUcitaj, 350); }
+
+function kvPeriod(dana){
+  const d = new Date(); const od = new Date(Date.now() - dana*864e5);
+  document.getElementById('kv-od').value = od.toISOString().split('T')[0];
+  document.getElementById('kv-do').value = d.toISOString().split('T')[0];
+  kvUcitaj();
+}
+
+async function kvUcitaj(){
+  const p = new URLSearchParams();
+  const v = id => document.getElementById(id)?.value || '';
+  if(v('kv-tip')) p.set('tip', v('kv-tip'));
+  if(v('kv-od')) p.set('od', v('kv-od'));
+  if(v('kv-do')) p.set('do', v('kv-do'));
+  if(v('kv-q')) p.set('q', v('kv-q'));
+
+  try{
+    const r = await fetch(`${API}/api/magacin/kretanje?${p}`);
+    const d = await r.json().catch(()=>({ error:`Server je vratio ${r.status}` }));
+    if(!r.ok) throw new Error(d.error || `Server je vratio ${r.status}`);
+    kvPodaci = d.stavke || [];
+    kvZbirno(d);
+    kvPoOsobi(d.po_osobi || []);
+    kvCrtaj();
+  }catch(e){
+    document.getElementById('kv-tbody').innerHTML =
+      `<tr><td colspan="${KV_KOLONE.length}" style="padding:14px;color:var(--red,#c0392b);font-size:12px;">✗ ${esc(e.message)}</td></tr>`;
+  }
+}
+
+function kvZbirno(d){
+  const el = document.getElementById('kv-zbirno');
+  if(!el) return;
+  const uk = (Number(d.uticaj_cijena)||0) + (Number(d.uticaj_kolicina)||0);
+  el.innerHTML = `${d.ukupno} ${d.ukupno===1?'zapis':'zapisa'}
+    · zbog cijene <b style="color:${d.uticaj_cijena>=0?'var(--green,#1f8a4c)':'var(--red,#c0392b)'};">${kvZnak(d.uticaj_cijena)}</b>
+    · zbog količine <b style="color:${d.uticaj_kolicina>=0?'var(--green,#1f8a4c)':'var(--red,#c0392b)'};">${kvZnak(d.uticaj_kolicina)}</b>
+    · ukupno <b>${kvZnak(uk)} KM</b>`;
+}
+
+function kvZnak(n){
+  const v = Number(n)||0;
+  return (v>0?'+':'') + uPolje(v,2);
+}
+
+/* Po osobi — ko je koliko pomjerio vrijednost. Razdvojeno, jer nije isto dovesti
+   robu i podici cijenu. */
+function kvPoOsobi(lista){
+  const cont = document.getElementById('kv-po-osobi');
+  if(!cont) return;
+  if(!lista.length){ cont.innerHTML = ''; return; }
+  cont.innerHTML = `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      ${lista.map(o=>`
+        <div style="padding:6px 11px;background:#f7f8fa;border:1px solid var(--border,#ddd);border-radius:7px;font-size:11px;">
+          <b>${esc(o.ko)}</b>
+          <span style="color:#8b96a5;">· ${o.artikala} ${o.artikala===1?'artikal':'artikala'}</span>
+          ${o.nivelacija ? `<div style="color:${o.nivelacija>=0?'var(--green,#1f8a4c)':'var(--red,#c0392b)'};">
+            cijena: <b>${kvZnak(o.nivelacija)} KM</b></div>` : ''}
+          ${o.kolicina ? `<div style="color:#6b7a8d;">količina: ${kvZnak(o.kolicina)} KM</div>` : ''}
+        </div>`).join('')}
+    </div>`;
+}
+
+function kvVrijednostKolone(x, k){
+  if(k === 'kada') return x.kada ? new Date(x.kada).toLocaleDateString('sr-Latn-BA') : '—';
+  if(k === 'kolicina_p') return x.kolicina != null ? uPolje(x.kolicina,3) : '—';
+  if(['cijena_stara','cijena_nova'].includes(k)) return x[k] != null ? uPolje(x[k],2) : '—';
+  if(['uticaj_cijena','uticaj_kolicina'].includes(k)) return kvZnak(x[k]);
+  return x[k] ?? '—';
+}
+
+function kvFilterDugme(k){
+  const aktivan = kvKolonaFilteri[k] && kvKolonaFilteri[k].size > 0;
+  return `<span onclick="event.stopPropagation();kvOtvoriFilter('${k}',this)"
+                style="cursor:pointer;margin-left:3px;padding:0 3px;border-radius:3px;
+                       background:${aktivan?'#4a90d9':'rgba(255,255,255,.15)'};">▼</span>`;
+}
+
+function kvOtvoriFilter(kolona, dugme){
+  kvFilterKolona = kolona;
+  kvFilterNacrt = new Set(kvKolonaFilteri[kolona] || []);
+  const panel = document.getElementById('kv-filter-panel');
+  const r = dugme.getBoundingClientRect();
+  panel.style.top = (r.bottom + 4) + 'px';
+  panel.style.left = Math.min(r.left, window.innerWidth - 230) + 'px';
+  panel.style.display = 'flex';
+  panel.innerHTML = `
+    <div style="padding:7px;border-bottom:1px solid #eee;">
+      <input type="text" id="kv-filter-trazi" placeholder="Pretraga..."
+             style="width:100%;padding:4px 6px;border:1px solid var(--border,#ddd);border-radius:5px;font-size:11px;box-sizing:border-box;">
+    </div>
+    <div id="kv-filter-lista" style="overflow-y:auto;flex:1;padding:5px 7px;"></div>
+    <div style="padding:7px;border-top:1px solid #eee;display:flex;gap:5px;">
+      <button onclick="kvFilterSve(true)" style="flex:1;padding:4px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;font-size:10.5px;">Sve</button>
+      <button onclick="kvFilterSve(false)" style="flex:1;padding:4px;border:1px solid #ddd;background:#fff;border-radius:5px;cursor:pointer;font-size:10.5px;">Ništa</button>
+      <button onclick="kvFilterPrimijeni()" style="flex:1;padding:4px;border:none;background:var(--blue,#1a5fa8);color:#fff;border-radius:5px;cursor:pointer;font-size:10.5px;font-weight:700;">OK</button>
+    </div>`;
+  const polje = document.getElementById('kv-filter-trazi');
+  polje.oninput = () => kvFilterLista(polje.value);
+  kvFilterLista('');
+  setTimeout(()=>polje.focus(), 30);
+}
+
+function kvFilterLista(q){
+  const k = kvFilterKolona;
+  const sve = [...new Set(kvPodaci.map(x => String(kvVrijednostKolone(x,k))))].sort((a,b)=>a.localeCompare(b));
+  const prikaz = sve.filter(v => !q || v.toLowerCase().includes(q.toLowerCase()));
+  document.getElementById('kv-filter-lista').innerHTML = prikaz.map(v=>`
+    <label style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11px;cursor:pointer;">
+      <input type="checkbox" value="${esc(v)}" ${kvFilterNacrt.has(v)?'checked':''}
+             onchange="this.checked?kvFilterNacrt.add(this.value):kvFilterNacrt.delete(this.value)">
+      <span style="flex:1;">${esc(v)}</span>
+    </label>`).join('') || '<div style="color:#8b96a5;font-size:11px;padding:4px;">Nema vrijednosti.</div>';
+}
+
+function kvFilterSve(ukljuci){
+  document.querySelectorAll('#kv-filter-lista input').forEach(i=>{
+    i.checked = ukljuci;
+    if(ukljuci) kvFilterNacrt.add(i.value); else kvFilterNacrt.delete(i.value);
+  });
+}
+
+function kvFilterPrimijeni(){
+  if(kvFilterNacrt.size) kvKolonaFilteri[kvFilterKolona] = new Set(kvFilterNacrt);
+  else delete kvKolonaFilteri[kvFilterKolona];
+  document.getElementById('kv-filter-panel').style.display = 'none';
+  kvCrtaj();
+}
+
+function kvSortiraj(kolona){
+  if(kvSort.kolona === kolona) kvSort.smjer = kvSort.smjer==='asc' ? 'desc' : 'asc';
+  else { kvSort.kolona = kolona; kvSort.smjer = 'asc'; }
+  kvCrtaj();
+}
+
+function kvCrtaj(){
+  const strelica = k => kvSort.kolona===k ? (kvSort.smjer==='asc'?' ▲':' ▼') : '';
+  document.getElementById('kv-thead').innerHTML = `
+    <tr style="background:#1f3864;color:#fff;">
+      ${KV_KOLONE.map(k=>`
+        <th style="padding:2px 5px;text-align:${k.align};white-space:nowrap;font-size:9.5px;position:sticky;top:0;background:#1f3864;z-index:30;cursor:pointer;"
+            onclick="kvSortiraj('${k.k}')">${k.lbl}${strelica(k.k)}${kvFilterDugme(k.k)}</th>`).join('')}
+    </tr>`;
+
+  const red = kvPodaci
+    .filter(x => Object.entries(kvKolonaFilteri).every(([k,skup]) =>
+      !skup.size || skup.has(String(kvVrijednostKolone(x,k)))))
+    .sort((a,b)=>{
+      const s = kvSort.smjer==='asc' ? 1 : -1;
+      let x = a[kvSort.kolona], y = b[kvSort.kolona];
+      if(kvSort.kolona==='kolicina_p'){ x = a.kolicina; y = b.kolicina; }
+      if(typeof x === 'number' || typeof y === 'number') return ((x||0)-(y||0))*s;
+      return String(x??'').localeCompare(String(y??''))*s;
+    });
+
+  document.getElementById('kv-prazno').style.display = red.length ? 'none' : 'block';
+
+  document.getElementById('kv-tbody').innerHTML = red.map((x,i)=>{
+    const uc = Number(x.uticaj_cijena)||0, uk = Number(x.uticaj_kolicina)||0;
+    const boja = v => v > 0 ? 'var(--green,#1f8a4c)' : v < 0 ? 'var(--red,#c0392b)' : '#c3c9d1';
+    return `
+    <tr style="background:${i%2?'#f5f7fa':'#fff'};border-bottom:1px solid #eee;">
+      <td style="padding:0 5px;color:#6b7a8d;">${x.kada?new Date(x.kada).toLocaleString('sr-Latn-BA',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—'}</td>
+      <td style="padding:0 5px;"><span style="color:${KV_BOJE[x.tip]||'#6b7a8d'};font-weight:700;">${esc(x.tip)}</span></td>
+      <td style="padding:0 5px;">${esc(x.sifra||'—')}</td>
+      <td style="padding:0 5px;max-width:190px;overflow:hidden;text-overflow:ellipsis;">${esc(x.naziv||'—')}</td>
+      <td style="padding:0 5px;text-align:right;color:#8b96a5;">${x.cijena_stara!=null?uPolje(x.cijena_stara,2):'—'}</td>
+      <td style="padding:0 5px;text-align:right;font-weight:${x.tip==='nivelacija'?'700':'400'};">${x.cijena_nova!=null?uPolje(x.cijena_nova,2):'—'}</td>
+      <td style="padding:0 5px;text-align:right;color:#6b7a8d;">${x.kolicina!=null?uPolje(x.kolicina,3):'—'}</td>
+      <td style="padding:0 5px;text-align:right;font-weight:700;color:${boja(uc)};"
+          title="${x.procjena?'Stanje u trenutku izmjene nije zapisano — računato po današnjoj količini':''}">
+        ${uc?kvZnak(uc):'—'}${x.procjena&&uc?' ~':''}
+      </td>
+      <td style="padding:0 5px;text-align:right;color:${boja(uk)};">${uk?kvZnak(uk):'—'}</td>
+      <td style="padding:0 5px;color:#6b7a8d;">${esc(x.korisnik_ime||'—')}</td>
+    </tr>`;
+  }).join('');
+}
+
+document.addEventListener('click', e=>{
+  const p = document.getElementById('kv-filter-panel');
+  if(p && p.style.display !== 'none' && !p.contains(e.target)) p.style.display = 'none';
+});
+
 </script>
 
 
@@ -9731,5 +10005,8 @@ async function rmZnakGrupe(){
     <div id="dok-istorija-lista" style="overflow-y:auto;flex:1;"></div>
   </div>
 </div>
+<div id="kv-filter-panel" style="display:none;position:fixed;z-index:1200;background:#fff;
+     border:1px solid var(--border,#ddd);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.18);
+     width:220px;max-height:330px;flex-direction:column;"></div>
 </body>
 </html>

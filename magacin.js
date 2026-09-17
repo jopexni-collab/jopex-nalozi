@@ -388,4 +388,94 @@ router.post('/dokumenti/grupno', async (req, res) => {
   } finally { client.release(); }
 });
 
+/* ═══ KRETANJE VRIJEDNOSTI LAGERA ══════════════════════════════════════════════════
+   Vrijednost lagera raste iz DVA razloga, i moraju se razdvojiti:
+     KOLICINA — ima vise robe (prijem, kalkulacija, uvoz)
+     CIJENA   — ista roba je skuplja (nivelacija)
+   Ako se pomijesaju, izvjestaj ne odgovara ni na jedno pitanje. */
+router.get('/kretanje', async (req, res) => {
+  const uslovi = [];
+  const vals = [];
+  let i = 1;
+
+  if (req.query.od) { uslovi.push(`k.kada >= $${i++}::date`); vals.push(req.query.od); }
+  if (req.query.do) { uslovi.push(`k.kada < ($${i++}::date + interval '1 day')`); vals.push(req.query.do); }
+  if (req.query.tip) { uslovi.push(`k.tip = $${i++}`); vals.push(req.query.tip); }
+  if (req.query.ko) { uslovi.push(`k.korisnik_ime = $${i++}`); vals.push(req.query.ko); }
+  if (req.query.objekti) {
+    const lista = String(req.query.objekti).split(',').map(x => parseInt(x)).filter(Boolean);
+    if (lista.length) { uslovi.push(`k.objekt_id = ANY($${i}::int[])`); vals.push(lista); i++; }
+  }
+  if (req.query.q) {
+    uslovi.push(`(r.sifra ILIKE $${i} OR r.naziv ILIKE $${i})`);
+    vals.push(`%${req.query.q}%`); i++;
+  }
+
+  const gdje = uslovi.length ? `WHERE ${uslovi.join(' AND ')}` : '';
+  const limit = Math.min(parseInt(req.query.limit) || 400, 2000);
+
+  try {
+    const r = await pool.query(
+      `SELECT k.id, k.kada, k.tip, k.roba_id, k.objekt_id,
+              k.kolicina, k.cijena_stara, k.cijena_nova, k.stanje_tada,
+              k.napomena, k.korisnik_ime,
+              r.sifra, r.naziv, r.grupa, r.jed_mjera,
+              po.naziv AS objekat_naziv,
+              rp.stanje AS stanje_sada, rp.cijena AS cijena_sada,
+
+              /* Uticaj na VRIJEDNOST lagera, razdvojen po uzroku.
+                 Kod nivelacije se uzima stanje U TOM TRENUTKU; ako nije zapisano
+                 (stariji zapisi), pada se na danasnje, uz oznaku da je procjena. */
+              CASE WHEN k.tip = 'nivelacija'
+                   THEN ROUND(((k.cijena_nova - k.cijena_stara)
+                        * COALESCE(k.stanje_tada, rp.stanje, 0))::numeric, 2)
+                   ELSE 0 END AS uticaj_cijena,
+
+              CASE WHEN k.tip <> 'nivelacija'
+                   THEN ROUND((COALESCE(k.kolicina,0)
+                        * COALESCE(k.cijena_nova, rp.cijena, 0))::numeric, 2)
+                   ELSE 0 END AS uticaj_kolicina,
+
+              (k.tip = 'nivelacija' AND k.stanje_tada IS NULL) AS procjena
+
+       FROM roba_kretanja k
+       LEFT JOIN roba r ON r.id = k.roba_id
+       LEFT JOIN prodajni_objekti po ON po.id = k.objekt_id
+       LEFT JOIN roba_pj rp ON rp.roba_id = k.roba_id AND rp.objekt_id = k.objekt_id
+       ${gdje}
+       ORDER BY k.kada DESC
+       LIMIT ${limit}`,
+      vals
+    );
+
+    const zbir = (a, k) => Math.round(a.reduce((s, x) => s + (Number(x[k]) || 0), 0) * 100) / 100;
+    const niv = r.rows.filter(x => x.tip === 'nivelacija');
+
+    /* Po osobi — ko je koliko pomjerio vrijednost. Razdvojeno, jer nije isto
+       dovesti robu i podici cijenu. */
+    const poOsobi = {};
+    for (const x of r.rows) {
+      const ko = x.korisnik_ime || '(nepoznato)';
+      if (!poOsobi[ko]) poOsobi[ko] = { ko, nivelacija: 0, kolicina: 0, zapisa: 0, artikala: new Set() };
+      poOsobi[ko].nivelacija += Number(x.uticaj_cijena) || 0;
+      poOsobi[ko].kolicina += Number(x.uticaj_kolicina) || 0;
+      poOsobi[ko].zapisa++;
+      if (x.roba_id) poOsobi[ko].artikala.add(x.roba_id);
+    }
+
+    res.json({
+      stavke: r.rows,
+      ukupno: r.rows.length,
+      uticaj_cijena: zbir(r.rows, 'uticaj_cijena'),
+      uticaj_kolicina: zbir(r.rows, 'uticaj_kolicina'),
+      nivelacija_broj: niv.length,
+      po_osobi: Object.values(poOsobi)
+        .map(o => ({ ...o, artikala: o.artikala.size,
+                     nivelacija: Math.round(o.nivelacija * 100) / 100,
+                     kolicina: Math.round(o.kolicina * 100) / 100 }))
+        .sort((a, b) => Math.abs(b.nivelacija) - Math.abs(a.nivelacija)),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;
