@@ -57,13 +57,16 @@ router.get('/:token', async (req, res) => {
       (Array.isArray(kat.grupe_samo) ? kat.grupe_samo : []).map(x => String(x).toLowerCase())
     );
     if (grupeSamo.size && stavke.length) {
+      /* Slika grupe stoji na ARTIKLU (roba_slike.roba_id), pa preimenovanje grupe ne
+         kida vezu — grupa se cita iz tog istog artikla, u trenutku pravljenja kataloga.
+         Uz sliku ide i SIFRA, da se u slucaju nejasnoce zna sa kojeg artikla dolazi. */
       const slike = (await pool.query(
-        `SELECT r.grupa, sl.url, sl.thumb_url
+        `SELECT r.sifra, TRIM(LOWER(r.grupa)) AS grupa_kljuc, sl.url, sl.thumb_url
          FROM roba_slike sl JOIN roba r ON r.id = sl.roba_id
          WHERE sl.grupa_glavna = true AND COALESCE(TRIM(r.grupa),'') <> ''`
       )).rows;
       const slikaGrupe = {};
-      for (const s of slike) slikaGrupe[String(s.grupa).toLowerCase()] = s;
+      for (const s of slike) slikaGrupe[s.grupa_kljuc] = s;
 
       const poGrupi = {};
       const pojedinacne = [];
@@ -220,6 +223,31 @@ router.get('/:token', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+/* GET /:token/slike/:roba_id — ostale slike jednog artikla.
+   Dovlace se TEK kad kupac dodirne sliku; kod kataloga od dvjesto artikala
+   ucitavanje svih unaprijed bi ga usporilo bez potrebe.
+
+   Ruta je vezana za TOKEN kataloga — ko nema link, ne moze listati slike. */
+router.get('/:token/slike/:roba_id', async (req, res) => {
+  try {
+    const k = await pool.query(
+      'SELECT id FROM katalozi WHERE token=$1 AND (vazi_do IS NULL OR vazi_do >= CURRENT_DATE)',
+      [req.params.token]
+    );
+    if (!k.rows.length) return res.status(404).json({ error: 'Katalog nije pronađen.' });
+
+    const r = await pool.query(
+      `SELECT url, thumb_url, glavna
+       FROM roba_slike WHERE roba_id=$1
+       ORDER BY glavna DESC NULLS LAST, id`,
+      [req.params.roba_id]
+    );
+    res.json({
+      slike: r.rows.map(x => ({ url: x.url || x.thumb_url, thumb: x.thumb_url || x.url })),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;

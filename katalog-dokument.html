@@ -221,6 +221,36 @@
      prikaza, pa u PDF-u izadje mutna. */
   .poz, .gotov-slika, .gotov-k-slika{ image-rendering:auto; print-color-adjust:exact; -webkit-print-color-adjust:exact; }
 }
+
+.vise-slika{
+  position:absolute;top:7px;right:7px;z-index:3;
+  background:rgba(0,0,0,.55);color:#fff;font-size:10.5px;font-weight:700;
+  padding:2px 8px;border-radius:11px;cursor:pointer;backdrop-filter:blur(2px);
+}
+.vise-slika:hover{background:rgba(0,0,0,.75);}
+
+/* Pregled preko cijelog ekrana — zaseban sloj, pri stampi ga nema. */
+#gal{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9000;display:none;
+     flex-direction:column;align-items:center;justify-content:center;}
+#gal-slika{max-width:94vw;max-height:78vh;object-fit:contain;border-radius:6px;
+     user-select:none;-webkit-user-drag:none;}
+#gal-naslov{color:#fff;font-size:13px;margin-bottom:9px;text-align:center;padding:0 40px;}
+#gal-brojac{color:#bbb;font-size:11.5px;margin-top:9px;}
+#gal-zatvori{position:absolute;top:14px;right:18px;color:#fff;font-size:27px;
+     cursor:pointer;line-height:1;background:none;border:none;}
+.gal-strelica{position:absolute;top:50%;transform:translateY(-50%);color:#fff;
+     font-size:38px;cursor:pointer;background:none;border:none;padding:10px 16px;
+     opacity:.7;line-height:1;}
+.gal-strelica:hover{opacity:1;}
+#gal-prethodna{left:4px;} #gal-sljedeca{right:4px;}
+#gal-tacke{display:flex;gap:6px;margin-top:11px;flex-wrap:wrap;justify-content:center;max-width:80vw;}
+.gal-tacka{width:8px;height:8px;border-radius:50%;background:#666;cursor:pointer;}
+.gal-tacka.akt{background:#fff;}
+
+@media print{
+  /* U stampanoj verziji ostaje SAMO glavna slika — znak i pregled nestaju. */
+  .vise-slika, #gal{display:none !important;}
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -789,6 +819,9 @@ function kartica(s){
     ${/* PUNA slika ima prednost nad slicicom — sicica je oko 200px, pa se pri stampi
           i cuvanju u PDF razvlaci i muti. Sicica ostaje kao rezerva. */''}
     ${(s.slika_puna||s.slika)?`<img class="poz" src="${esc(s.slika_puna||s.slika)}" data-puna="${esc(s.slika_puna||'')}" loading="lazy" alt="${esc(s.naziv)}">`:''}
+    ${/* Znak stoji SAMO kod artikala koji stvarno imaju vise slika — inace bi dodir
+          otvarao praznu galeriju. Pri stampi se ne vidi. */''}
+    ${(s.broj_slika>1 && s.roba_id)?`<div class="vise-slika" onclick="event.stopPropagation();galerija(${s.roba_id},'${esc(s.naziv).replace(/'/g,"&apos;")}')">📷 ${s.broj_slika}</div>`:''}
     <div class="sjena"></div>
     <div class="znacka"${s.je_grupa?' style="background:#6b4fa0;"':''}>${s.je_grupa?'🗂 '+esc(s.naziv):esc(s.grupa||'—')}</div>
     <div class="dno">
@@ -850,6 +883,94 @@ function nacrtajQR(){
   }catch(e){ /* ostaje veza ispod */ }
 }
 
+
+/* ═══ PREGLED SLIKA ════════════════════════════════════════════════════════════════
+   Elektronski katalog dobija ono što štampani ne može — listanje svih slika artikla.
+   Slike se dovlače TEK pri dodiru; kod kataloga od dvjesto artikala učitavanje svih
+   unaprijed bi ga usporilo bez potrebe. */
+var galSlike = [], galI = 0, galKes = {};
+
+async function galerija(robaId, naziv){
+  var el = document.getElementById('gal');
+  document.getElementById('gal-naslov').textContent = naziv || '';
+  document.getElementById('gal-brojac').textContent = 'Učitavanje...';
+  document.getElementById('gal-slika').removeAttribute('src');
+  el.style.display = 'flex';
+
+  try{
+    if(!galKes[robaId]){
+      var r = await fetch(location.pathname.replace(/\/$/,'') + '/slike/' + robaId);
+      if(!r.ok) throw new Error('nije uspjelo');
+      var d = await r.json();
+      galKes[robaId] = (d.slike || []).map(function(x){ return x.url; }).filter(Boolean);
+    }
+    galSlike = galKes[robaId];
+    if(!galSlike.length) throw new Error('nema slika');
+    galI = 0;
+    galPrikazi();
+  }catch(e){
+    document.getElementById('gal-brojac').textContent = 'Slike trenutno nisu dostupne.';
+  }
+}
+
+function galPrikazi(){
+  var img = document.getElementById('gal-slika');
+  img.src = galSlike[galI];
+  document.getElementById('gal-brojac').textContent = (galI+1) + ' / ' + galSlike.length;
+
+  /* Strelice se kriju kad ima samo jedna slika — inace bi klik na njih ništa ne radio. */
+  var vise = galSlike.length > 1;
+  document.getElementById('gal-prethodna').style.display = vise ? '' : 'none';
+  document.getElementById('gal-sljedeca').style.display = vise ? '' : 'none';
+
+  document.getElementById('gal-tacke').innerHTML = vise
+    ? galSlike.map(function(_, i){
+        return '<div class="gal-tacka' + (i===galI?' akt':'') + '" onclick="galIdi(' + i + ')"></div>';
+      }).join('')
+    : '';
+}
+
+function galPomjeri(smjer){
+  if(!galSlike.length) return;
+  galI = (galI + smjer + galSlike.length) % galSlike.length;   // kruži
+  galPrikazi();
+}
+
+function galIdi(i){ galI = i; galPrikazi(); }
+
+function galZatvori(){ document.getElementById('gal').style.display = 'none'; }
+
+document.addEventListener('keydown', function(e){
+  if(document.getElementById('gal').style.display !== 'flex') return;
+  if(e.key === 'Escape') galZatvori();
+  if(e.key === 'ArrowLeft') galPomjeri(-1);
+  if(e.key === 'ArrowRight') galPomjeri(1);
+});
+
+/* Prevlačenje prstom — na telefonu je to prirodnije od strelica. */
+(function(){
+  var x0 = null;
+  var el = document.getElementById('gal');
+  if(!el) return;
+  el.addEventListener('touchstart', function(e){ x0 = e.touches[0].clientX; }, {passive:true});
+  el.addEventListener('touchend', function(e){
+    if(x0 === null) return;
+    var d = e.changedTouches[0].clientX - x0;
+    if(Math.abs(d) > 45) galPomjeri(d > 0 ? -1 : 1);
+    x0 = null;
+  }, {passive:true});
+  el.addEventListener('click', function(e){ if(e.target === el) galZatvori(); });
+})();
+
 </script>
+<div id="gal">
+  <button id="gal-zatvori" onclick="galZatvori()">✕</button>
+  <div id="gal-naslov"></div>
+  <button class="gal-strelica" id="gal-prethodna" onclick="galPomjeri(-1)">‹</button>
+  <img id="gal-slika" alt="">
+  <button class="gal-strelica" id="gal-sljedeca" onclick="galPomjeri(1)">›</button>
+  <div id="gal-brojac"></div>
+  <div id="gal-tacke"></div>
+</div>
 </body>
 </html>

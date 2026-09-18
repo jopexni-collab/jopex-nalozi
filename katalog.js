@@ -253,6 +253,7 @@ async function ucitajStavke({ grupe, objekt_id, tip_kupca_id, samo_dostupno, deb
             rp.cijena AS osnovica, rp.stanje,
             (SELECT COALESCE(thumb_url, url) FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS slika,
             (SELECT url FROM roba_slike WHERE roba_id=r.id AND glavna=true LIMIT 1) AS slika_puna,
+            (SELECT COUNT(*)::int FROM roba_slike WHERE roba_id=r.id) AS broj_slika,
             mg.naziv AS master_naziv
      FROM roba r
      JOIN roba_pj rp ON rp.roba_id = r.id ${objektUslov}
@@ -278,7 +279,7 @@ async function ucitajStavke({ grupe, objekt_id, tip_kupca_id, samo_dostupno, deb
     return {
       id: s.id, sifra: s.sifra, naziv: s.naziv, jed_mjera: s.jed_mjera,
       grupa: s.grupa, master_naziv: s.master_naziv, debljina_cm: s.debljina_cm,
-      slika: s.slika, slika_puna: s.slika_puna,
+      slika: s.slika, slika_puna: s.slika_puna, broj_slika: s.broj_slika, roba_id: s.id,
       dostupno: parseFloat(s.stanje) > 0,
       /* Sama kolicina — pri pravljenju kataloga se vidi koliko cega ima, pa se ne
          odstampa artikal kojeg nema. Ranije se slalo samo da/ne. */
