@@ -902,7 +902,11 @@ async function galerija(robaId, naziv){
       /* Ista adresa kao za sam katalog — `location.pathname` je putanja STRANICE,
          ne API-ja, pa je ranije vodila nikuda. */
       if(!robaId) throw new Error('artikal nije povezan sa šifrom');
-      var r = await fetch(API + '/api/katalog-javno/' + encodeURIComponent(token) + '/slike/' + robaId);
+      /* `token` je deklarisan UNUTAR druge funkcije, pa se ovdje ne vidi — cita se
+         iz adrese isto kao i tamo. */
+      var tok = new URLSearchParams(location.search).get('token');
+      if(!tok) throw new Error('nema tokena u adresi');
+      var r = await fetch(API + '/api/katalog-javno/' + encodeURIComponent(tok) + '/slike/' + robaId);
       if(!r.ok){
         var g = await r.json().catch(function(){ return {}; });
         throw new Error(g.error || ('server je vratio ' + r.status));
