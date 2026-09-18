@@ -47,6 +47,8 @@ router.get('/:token', async (req, res) => {
     let stavke = kat.sa_cijenama
       ? podaci.stavke
       : podaci.stavke.map(({ cijena, cijena_bez_pdv, pdv_iznos, ...ostalo }) => ostalo);
+
+
     // Katalog samo sa gotovim proizvodima ne salje materijale
     /* PRIKAZ PO GRUPAMA — umjesto svakog artikla posebno, jedna stavka po grupi sa
        spiskom dostupnih debljina. Za kamen je to prirodnije: kupac prvo bira
