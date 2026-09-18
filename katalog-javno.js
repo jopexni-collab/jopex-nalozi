@@ -232,10 +232,8 @@ router.get('/:token', async (req, res) => {
    Ruta je vezana za TOKEN kataloga — ko nema link, ne moze listati slike. */
 router.get('/:token/slike/:roba_id', async (req, res) => {
   try {
-    const k = await pool.query(
-      'SELECT id FROM katalozi WHERE token=$1 AND (vazi_do IS NULL OR vazi_do >= CURRENT_DATE)',
-      [req.params.token]
-    );
+    /* Isti nacin kao glavna ruta — kolona je `javni_token`. */
+    const k = await pool.query('SELECT id FROM katalozi WHERE javni_token=$1', [req.params.token]);
     if (!k.rows.length) return res.status(404).json({ error: 'Katalog nije pronađen.' });
 
     const r = await pool.query(
