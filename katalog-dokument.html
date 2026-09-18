@@ -899,7 +899,9 @@ async function galerija(robaId, naziv){
 
   try{
     if(!galKes[robaId]){
-      var r = await fetch(location.pathname.replace(/\/$/,'') + '/slike/' + robaId);
+      /* Ista adresa kao za sam katalog — `location.pathname` je putanja STRANICE,
+         ne API-ja, pa je ranije vodila nikuda. */
+      var r = await fetch(API + '/api/katalog-javno/' + encodeURIComponent(token) + '/slike/' + robaId);
       if(!r.ok) throw new Error('nije uspjelo');
       var d = await r.json();
       galKes[robaId] = (d.slike || []).map(function(x){ return x.url; }).filter(Boolean);
