@@ -9472,14 +9472,21 @@ function kvPjSve(ukljuci){
    Postavlja se samo kad se cijena STVARNO promijenila — kod prijema robe cijena
    moze ostati ista, pa bi strelica lagala. Uz nju ide i postotak, jer razlika od
    dva feninga i razlika od pedeset KM ne znace isto. */
+/* Postotak promjene cijene; 0 kad se nije mijenjala. */
+function kvPct(x){
+  const st = Number(x.cijena_stara), nv = Number(x.cijena_nova);
+  if(!(st > 0) || !(nv > 0)) return 0;
+  return ((nv - st) / st) * 100;
+}
+
 function kvStrelica(x){
   const st = Number(x.cijena_stara), nv = Number(x.cijena_nova);
   if(!(st > 0) || !(nv > 0) || Math.abs(nv - st) < 0.005) return '';
   const gore = nv > st;
   const pct = Math.round(((nv - st) / st) * 1000) / 10;
-  return `<span title="${gore?'Poskupilo':'Pojeftinilo'} sa ${uPolje(st,2)} na ${uPolje(nv,2)} (${pct>0?'+':''}${String(pct).replace('.',',')}%)"
-     style="margin-left:3px;font-size:10px;color:${gore?'var(--green,#1f8a4c)':'var(--red,#c0392b)'};">
-     ${gore?'▲':'▼'}<span style="font-size:8.5px;opacity:.85;">${Math.abs(pct)>=0.1?Math.abs(pct).toFixed(0)+'%':''}</span>
+  return `<span title="${gore?'Poskupilo':'Pojeftinilo'} sa ${uPolje(st,2)} na ${uPolje(nv,2)}"
+     style="font-size:10px;font-weight:700;white-space:nowrap;color:${gore?'var(--green,#1f8a4c)':'var(--red,#c0392b)'};">
+     ${gore?'▲':'▼'}${Math.abs(pct)>=0.05?String(Math.abs(pct)).replace('.',',')+'%':''}
    </span>`;
 }
 
@@ -9496,6 +9503,7 @@ const KV_KOLONE = [
   {k:'naziv',   lbl:'Artikal',  align:'left'},
   {k:'cijena_stara', lbl:'Prije', align:'right'},
   {k:'cijena_nova',  lbl:'Poslije', align:'right'},
+  {k:'promjena_pct', lbl:'%', align:'right'},
   {k:'kolicina_p',   lbl:'Količina', align:'right'},
   {k:'uticaj_cijena',   lbl:'Zbog cijene', align:'right'},
   {k:'uticaj_kolicina', lbl:'Zbog količine', align:'right'},
@@ -9587,12 +9595,59 @@ function kvPoOsobi(lista){
     </div>`;
 }
 
+/* Vrijednost po kojoj se FILTRIRA. Kod brojcanih kolona se ne filtrira po tacnom
+   iznosu — svaki je drugaciji, pa bi spisak imao stotinu stavki od kojih svaka hvata
+   jedan red. Umjesto toga idu RASPONI, koji odgovaraju na pitanje koje se stvarno
+   postavlja: je li poraslo ili palo, i koliko. */
 function kvVrijednostKolone(x, k){
   if(k === 'kada') return x.kada ? new Date(x.kada).toLocaleDateString('sr-Latn-BA') : '—';
   if(k === 'kolicina_p') return x.kolicina != null ? uPolje(x.kolicina,3) : '—';
-  if(['cijena_stara','cijena_nova'].includes(k)) return x[k] != null ? uPolje(x[k],2) : '—';
-  if(['uticaj_cijena','uticaj_kolicina'].includes(k)) return kvZnak(x[k]);
+  if(k === 'cijena_stara') return x.cijena_stara != null ? uPolje(x.cijena_stara,2) : '—';
+
+  if(k === 'cijena_nova') return kvRasponCijene(x.cijena_nova);
+  if(k === 'promjena_pct') return kvRasponPct(x);
+
+  if(k === 'uticaj_cijena') return kvRasponIznos(x.uticaj_cijena);
+  if(k === 'uticaj_kolicina') return kvRasponIznos(x.uticaj_kolicina);
   return x[k] ?? '—';
+}
+
+/* Cijena se filtrira po RASPONU iznosa — tacne cijene su skoro sve razlicite, pa bi
+   spisak imao stotinu stavki od kojih svaka hvata jedan red. */
+function kvRasponCijene(v){
+  const n = Number(v);
+  if(!(n > 0)) return '—';
+  if(n < 50)   return 'do 50';
+  if(n < 100)  return '50–100';
+  if(n < 200)  return '100–200';
+  if(n < 500)  return '200–500';
+  if(n < 1000) return '500–1.000';
+  return 'preko 1.000';
+}
+
+function kvRasponPct(x){
+  const st = Number(x.cijena_stara), nv = Number(x.cijena_nova);
+  if(!(nv > 0)) return '—';
+  if(!(st > 0) || Math.abs(nv - st) < 0.005) return 'bez promjene';
+  const p = ((nv - st) / st) * 100;
+  const a = Math.abs(p), smjer = p > 0 ? '▲' : '▼';
+  if(a < 5)  return `${smjer} do 5%`;
+  if(a < 10) return `${smjer} 5–10%`;
+  if(a < 20) return `${smjer} 10–20%`;
+  if(a < 50) return `${smjer} 20–50%`;
+  return `${smjer} preko 50%`;
+}
+
+function kvRasponIznos(v){
+  const n = Number(v) || 0;
+  if(!n) return '—';
+  const a = Math.abs(n), smjer = n > 0 ? '+' : '−';
+  if(a < 100)   return `${smjer} do 100`;
+  if(a < 500)   return `${smjer} 100–500`;
+  if(a < 1000)  return `${smjer} 500–1.000`;
+  if(a < 5000)  return `${smjer} 1.000–5.000`;
+  if(a < 20000) return `${smjer} 5.000–20.000`;
+  return `${smjer} preko 20.000`;
 }
 
 function kvFilterDugme(k){
@@ -9627,9 +9682,25 @@ function kvOtvoriFilter(kolona, dugme){
   setTimeout(()=>polje.focus(), 30);
 }
 
+const KV_RED_RASPONA = [
+  'preko 1.000','500–1.000','200–500','100–200','50–100','do 50',
+  '▲ preko 50%','▲ 20–50%','▲ 10–20%','▲ 5–10%','▲ do 5%','bez promjene',
+  '▼ do 5%','▼ 5–10%','▼ 10–20%','▼ 20–50%','▼ preko 50%',
+  '+ preko 20.000','+ 5.000–20.000','+ 1.000–5.000','+ 500–1.000','+ 100–500','+ do 100',
+  '− do 100','− 100–500','− 500–1.000','− 1.000–5.000','− 5.000–20.000','− preko 20.000',
+];
+
 function kvFilterLista(q){
   const k = kvFilterKolona;
-  const sve = [...new Set(kvPodaci.map(x => String(kvVrijednostKolone(x,k))))].sort((a,b)=>a.localeCompare(b));
+  /* Rasponi se rede od najveceg rasta do najveceg pada — abecedni red bi ih
+     izmijesao, pa se ne bi vidjelo gdje je sta. */
+  const sve = [...new Set(kvPodaci.map(x => String(kvVrijednostKolone(x,k))))].sort((a,b)=>{
+    const ia = KV_RED_RASPONA.indexOf(a), ib = KV_RED_RASPONA.indexOf(b);
+    if(ia >= 0 && ib >= 0) return ia - ib;
+    if(ia >= 0) return -1;
+    if(ib >= 0) return 1;
+    return a.localeCompare(b);
+  });
   const prikaz = sve.filter(v => !q || v.toLowerCase().includes(q.toLowerCase()));
   document.getElementById('kv-filter-lista').innerHTML = prikaz.map(v=>`
     <label style="display:flex;align-items:center;gap:6px;padding:2px 0;font-size:11px;cursor:pointer;">
@@ -9675,6 +9746,8 @@ function kvCrtaj(){
       const s = kvSort.smjer==='asc' ? 1 : -1;
       let x = a[kvSort.kolona], y = b[kvSort.kolona];
       if(kvSort.kolona==='kolicina_p'){ x = a.kolicina; y = b.kolicina; }
+      /* Postotak se racuna pri sortiranju — nije polje u podacima. */
+      if(kvSort.kolona==='promjena_pct'){ x = kvPct(a); y = kvPct(b); }
       if(typeof x === 'number' || typeof y === 'number') return ((x||0)-(y||0))*s;
       return String(x??'').localeCompare(String(y??''))*s;
     });
@@ -9694,8 +9767,11 @@ function kvCrtaj(){
       <td style="padding:0 5px;max-width:190px;overflow:hidden;text-overflow:ellipsis;">${esc(x.naziv||'—')}</td>
       <td style="padding:0 5px;text-align:right;color:#8b96a5;">${x.cijena_stara!=null?uPolje(x.cijena_stara,2):'—'}</td>
       <td style="padding:0 5px;text-align:right;font-weight:${x.tip==='nivelacija'?'700':'400'};">
-        ${x.cijena_nova!=null?uPolje(x.cijena_nova,2):'—'}${kvStrelica(x)}
+        ${x.cijena_nova!=null?uPolje(x.cijena_nova,2):'—'}
       </td>
+      ${/* Postotak je ZASEBNA kolona — tako se moze i sortirati i filtrirati po
+            njemu, sto nije bilo moguce dok je stajao uz cijenu. */''}
+      <td style="padding:0 5px;text-align:right;">${kvStrelica(x)}</td>
       <td style="padding:0 5px;text-align:right;color:#6b7a8d;">${x.kolicina!=null?uPolje(x.kolicina,3):'—'}</td>
       <td style="padding:0 5px;text-align:right;font-weight:700;color:${boja(uc)};"
           title="${x.procjena?'Stanje u trenutku izmjene nije zapisano — računato po današnjoj količini':''}">
