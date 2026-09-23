@@ -878,6 +878,18 @@ router.post('/potvrdi', async (req, res) => {
         'UPDATE roba_pj SET stanje = stanje - $1, azurirano = now() WHERE roba_id=$2 AND objekt_id=$3',
         [s.kolicina, s.roba_id, objektId]
       );
+
+      /* Svaka promjena lagera ostavlja trag u roba_kretanja — inace se u pregledu
+         "Kretanje vrijednosti" vidi samo poskupljenje, a ne i smanjenje zbog prodaje,
+         pa se ne moze reci koliko se zaliha promijenila prodajom a koliko cijenom.
+         Kolicina ide kao MINUS, jer roba izlazi. */
+      await client.query(
+        `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_nova, napomena, korisnik_id, korisnik_ime)
+         VALUES ($1,$2,'izlaz',$3,$4,$5,$6,$7)`,
+        [s.roba_id, objektId, -Math.abs(Number(s.kolicina) || 0), s.cijena || null,
+         `Otpremnica ${broj}${kupac_naziv ? ' — ' + kupac_naziv : ''}`,
+         user.id, user.ime_prezime]
+      ).catch(e => console.error('kretanje (otpremnica):', e.message));
     }
     /* Otpremnica ulazi i u magacin_dokumenti — jedno mjesto za sav protok robe. */
     await upisiDokumentOtpremnice(client, h.rows[0], sastavljene, user);
@@ -1515,6 +1527,15 @@ router.post('/:id/storniraj', async (req, res) => {
         'UPDATE roba_pj SET stanje = stanje + $1, azurirano = now() WHERE roba_id=$2 AND objekt_id=$3',
         [s.kolicina, s.roba_id, otp.objekt_id]
       );
+
+      /* Storno vraca robu — i to je promjena lagera, pa i ona mora ostaviti trag.
+         Bez toga bi zbir izlaza bio veci nego sto je stvarno otislo. */
+      await client.query(
+        `INSERT INTO roba_kretanja (roba_id, objekt_id, tip, kolicina, cijena_nova, napomena, korisnik_id, korisnik_ime)
+         VALUES ($1,$2,'ulaz',$3,$4,$5,$6,$7)`,
+        [s.roba_id, otp.objekt_id, Math.abs(Number(s.kolicina) || 0), s.cijena || null,
+         `STORNO otpremnice ${otp.broj}`, user.id, user.ime_prezime]
+      ).catch(e => console.error('kretanje (storno):', e.message));
     }
 
     // 2) Poništi SVE gotovinske zapise vezane za ovu otpremnicu (i inicijalnu prodaju/dug,
